@@ -32,6 +32,11 @@ const appSections = <AppSection>[
   AppSection('/tornei', 'Tornei', Icons.leaderboard_rounded),
   AppSection('/rosa', 'Rosa completa', Icons.groups_rounded),
   AppSection('/carta', 'La mia carta', Icons.style_rounded),
+  AppSection(
+    '/squadra-settimana',
+    'Squadra della settimana',
+    Icons.workspace_premium_rounded,
+  ),
   AppSection('/tattiche', 'Tattiche & Build', Icons.draw_rounded),
   AppSection('/albo-doro', "Albo d'oro", Icons.emoji_events_rounded),
   AppSection('/regolamento', 'Regolamento & Storia', Icons.menu_book_rounded),

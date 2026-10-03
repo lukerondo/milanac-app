@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth/providers.dart';
@@ -12,6 +13,7 @@ import '../risultati/matches_repository.dart';
 import '../rosa/member.dart';
 import '../rosa/member_editor.dart';
 import '../rosa/rosa_repository.dart';
+import '../voti/ratings_repository.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
 
@@ -63,6 +65,9 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
   final _cardKey = GlobalKey();
   bool _sharing = false;
 
+  /// Mostra la carta base anche se c'è quella speciale di Uomo partita.
+  bool _baseCard = false;
+
   Future<void> _share(Member m) async {
     setState(() => _sharing = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -102,6 +107,7 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
       return const Center(child: CircularProgressIndicator());
     }
     final isMine = me?.id == member.id;
+    final motm = ref.watch(recentMvpProvider(member.id));
     final isDirettivo = me?.isDirettivo ?? false;
 
     return ListView(
@@ -115,11 +121,38 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
               child: Padding(
                 // Margine per l'ombra nell'immagine condivisa.
                 padding: const EdgeInsets.all(8),
-                child: FutCard(member: member, stats: stats),
+                child: FutCard(
+                  member: member,
+                  stats: stats,
+                  special: motm != null && !_baseCard ? CardSpecial.motm : null,
+                ),
               ),
             ),
           ),
         ),
+        if (motm != null) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Uomo partita')),
+                ButtonSegment(value: true, label: Text('Carta base')),
+              ],
+              selected: {_baseCard},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) => setState(() => _baseCard = s.first),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Uomo partita il ${DateFormat('d MMMM', 'it').format(motm.playedAt)} '
+              '(media ${motm.average.toStringAsFixed(1)})',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: MilanacColors.gold),
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         if (isMine && member.overall == null)
           const Padding(

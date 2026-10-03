@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/theme.dart';
+import '../voti/match_ratings_section.dart';
 import 'clip_service.dart';
 import 'clip_trim_page.dart';
 import 'match.dart';
@@ -81,6 +82,7 @@ class MatchDetailPage extends ConsumerWidget {
                 child: Text(match.notes!, style: const TextStyle(height: 1.4)),
               ),
             ),
+          MatchRatingsSection(match: match),
           const Padding(
             padding: EdgeInsets.fromLTRB(4, 16, 4, 8),
             child: Text(

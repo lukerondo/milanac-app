@@ -6,18 +6,38 @@ import '../../shared/member_photo.dart';
 import '../rosa/member.dart';
 import 'card_stats.dart';
 
+/// Versioni speciali della carta, come le carte "in forma" di FUT.
+enum CardSpecial {
+  motm('UOMO PARTITA'),
+  totw('SQUADRA DELLA SETTIMANA');
+
+  const CardSpecial(this.label);
+  final String label;
+}
+
 /// Carta in stile FUT del giocatore. Disegnata a 300×428 e scalata alla larghezza disponibile.
 class FutCard extends StatelessWidget {
-  const FutCard({super.key, required this.member, required this.stats});
+  const FutCard({
+    super.key,
+    required this.member,
+    required this.stats,
+    this.special,
+  });
   final Member member;
   final CardStats stats;
+
+  /// Carta speciale (Uomo partita, Squadra della settimana) al posto di quella base.
+  final CardSpecial? special;
 
   static const _w = 300.0, _h = 428.0;
 
   @override
   Widget build(BuildContext context) {
-    final tier = tierOf(member.overall);
-    final palette = _Palette.of(tier);
+    final palette = switch (special) {
+      CardSpecial.motm => _Palette.motm,
+      CardSpecial.totw => _Palette.totw,
+      null => _Palette.of(tierOf(member.overall)),
+    };
     return AspectRatio(
       aspectRatio: _w / _h,
       child: FittedBox(
@@ -32,6 +52,7 @@ class FutCard extends StatelessWidget {
                 member: member,
                 stats: stats,
                 palette: palette,
+                special: special,
               ),
             ),
           ),
@@ -44,6 +65,22 @@ class FutCard extends StatelessWidget {
 class _Palette {
   const _Palette(this.top, this.bottom, this.text, this.line);
   final Color top, bottom, text, line;
+
+  /// Uomo partita: nera e oro.
+  static const motm = _Palette(
+    Color(0xFF2B2B2E),
+    Color(0xFF050505),
+    Color(0xFFF3D27A),
+    Color(0xAAF3D27A),
+  );
+
+  /// Squadra della settimana: nera con riflessi rossi e oro.
+  static const totw = _Palette(
+    Color(0xFF3A0A12),
+    Color(0xFF050505),
+    Color(0xFFF6D77F),
+    Color(0xAAF6D77F),
+  );
 
   static _Palette of(CardTier tier) => switch (tier) {
     CardTier.vuota => const _Palette(
@@ -147,10 +184,12 @@ class _CardContent extends StatelessWidget {
     required this.member,
     required this.stats,
     required this.palette,
+    this.special,
   });
   final Member member;
   final CardStats stats;
   final _Palette palette;
+  final CardSpecial? special;
 
   @override
   Widget build(BuildContext context) {
@@ -169,6 +208,23 @@ class _CardContent extends StatelessWidget {
 
     return Stack(
       children: [
+        if (special != null)
+          Positioned(
+            top: 22,
+            left: 60,
+            right: 60,
+            child: Text(
+              special!.label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.6,
+              ),
+            ),
+          ),
         // Overall, ruolo, stemma, piattaforma.
         Positioned(
           left: 34,

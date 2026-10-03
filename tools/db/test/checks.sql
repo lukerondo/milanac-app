@@ -346,3 +346,53 @@ reset role;
 do $$ begin
   assert (select count(*) from channels where direttivo_only) = 1, 'canale Sala Direttivo creato';
 end $$;
+
+-- Voti: segreti, niente autovoto, solo a partita finita; medie, Uomo partita e TOTW dalle funzioni.
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against)
+values ('00000000-0000-0000-0000-0000000000b1', 'torneo', 'Dinamo', now(), 'milanac', 2, 1),
+       ('00000000-0000-0000-0000-0000000000b2', 'torneo', 'Futura', now() + interval '1 day', 'milanac', null, null);
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+insert into match_ratings (match_id, player_id, rating) values
+  ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-00000000000d', 8),
+  ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000e2', 6);
+select pg_temp.expect_error(
+  $q$insert into match_ratings (match_id, player_id, rating) values ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000e1', 10)$q$,
+  'match_ratings_check');
+select pg_temp.expect_error(
+  $q$insert into match_ratings (match_id, player_id, rating) values ('00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-00000000000d', 7)$q$,
+  'row-level security');
+select pg_temp.expect_error(
+  $q$insert into match_ratings (match_id, player_id, rating) values ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000e2', 11)$q$,
+  'match_ratings_rating_check');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+insert into match_ratings (match_id, player_id, rating) values
+  ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-00000000000d', 9);
+do $$
+declare s record;
+begin
+  assert (select count(*) from match_ratings) = 1, 'si vedono solo i propri voti';
+  select * into s from match_rating_summary('00000000-0000-0000-0000-0000000000b1') limit 1;
+  assert s.player_id = '00000000-0000-0000-0000-00000000000d' and s.avg_rating = 8.5 and s.votes = 2 and s.is_mvp,
+    'Uomo partita: media 8,5 con 2 voti';
+  assert (select count(*) from match_mvps()) = 1, 'un Uomo partita';
+  assert (select count(*) from team_of_the_week(current_date, 'milanac')) = 1, 'squadra della settimana';
+  assert (player_stats('00000000-0000-0000-0000-00000000000d')->>'mvp')::int = 1, 'mvp nelle statistiche';
+  assert (player_stats('00000000-0000-0000-0000-00000000000d')->>'totw')::int = 1, 'totw nelle statistiche';
+  assert (player_stats('00000000-0000-0000-0000-0000000000e1')->>'presences')::int = 1, 'presenze di sempre';
+end $$;
+-- Risultato inserito → una notifica "vota i compagni".
+reset role;
+delete from net.calls;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update matches set goals_for = 1, goals_against = 1 where id = '00000000-0000-0000-0000-0000000000b2';
+update matches set notes = 'bella partita' where id = '00000000-0000-0000-0000-0000000000b2';
+reset role;
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' = 'match_result') = 1,
+    'una sola notifica per risultato';
+end $$;

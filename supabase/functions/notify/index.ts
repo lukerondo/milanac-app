@@ -4,6 +4,7 @@
 // Eventi gestiti:
 //   { kind: "formation", id }     → ai membri della squadra: titolare (con ruolo) o panchina
 //   { kind: "chat_message", id }  → ai membri del canale, escluso l'autore e chi l'ha silenziato
+//   { kind: "match_result", id }  → ai giocatori della squadra: "vota i compagni"
 //
 // Variabili (impostate dal workflow "Funzioni"):
 //   WEBHOOK_SECRET, FIREBASE_SERVICE_ACCOUNT (JSON; se manca le notifiche sono disattivate)
@@ -23,6 +24,7 @@ Deno.serve(async (req) => {
   let pushes: Push[] = [];
   if (kind === "formation") pushes = await formationPushes(db, id);
   else if (kind === "chat_message") pushes = await chatPushes(db, id);
+  else if (kind === "match_result") pushes = await matchResultPushes(db, id);
   else return new Response("unknown kind", { status: 400 });
 
   const account = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
@@ -60,6 +62,29 @@ async function formationPushes(db: SupabaseClient, formationId: string): Promise
 }
 
 const TEAM_NAMES: Record<string, string> = { milanac: "MILANAC", futuro: "MILANAC FUTURO" };
+
+// ------------------------------------------------------------------ risultato
+
+async function matchResultPushes(db: SupabaseClient, matchId: string): Promise<Push[]> {
+  const { data: match } = await db
+    .from("matches").select("id, team, opponent, home, goals_for, goals_against").eq("id", matchId).single();
+  if (!match || match.goals_for == null || match.goals_against == null) return [];
+  const team = match.team ?? "milanac";
+  const us = TEAM_NAMES[team] ?? "MILANAC";
+  const score = match.home
+    ? `${us} ${match.goals_for}–${match.goals_against} ${match.opponent}`
+    : `${match.opponent} ${match.goals_against}–${match.goals_for} ${us}`;
+  const { data: members } = await db
+    .from("profiles").select("id").eq("active", true).neq("club_role", "pending")
+    .contains("teams", [team]);
+  return (members ?? []).map((m) => ({
+    userId: m.id,
+    title: `⚽ ${score}`,
+    body: "Vota i compagni: chi è l'Uomo partita?",
+    route: `/partita/${match.id}`,
+    data: { match: match.id },
+  }));
+}
 
 // ------------------------------------------------------------------ chat
 
