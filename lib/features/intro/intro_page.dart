@@ -108,49 +108,18 @@ class _IntroPageState extends ConsumerState<IntroPage>
             ),
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(32, 0, 32, 40),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    // Stemma del Milano FC (versione non ufficiale di EA SPORTS FC 27),
-                    // che compare in dissolvenza all'inizio del caricamento.
+                    // Riquadro di caricamento: stemma Milano FC (versione non ufficiale di
+                    // EA SPORTS FC 27) e barra che si riempie in sincronia con il video.
                     FadeTransition(
                       opacity: CurvedAnimation(
                         parent: _progress,
-                        curve: const Interval(0, .2, curve: Curves.easeOut),
+                        curve: const Interval(0, .12, curve: Curves.easeOut),
                       ),
-                      child: Image.asset(
-                        'assets/images/stemma_milano_fc.png',
-                        height: 120,
-                        filterQuality: FilterQuality.high,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    AnimatedBuilder(
-                      animation: _progress,
-                      builder: (context, _) => Column(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(
-                              value: _progress.value,
-                              minHeight: 8,
-                              backgroundColor: Colors.white24,
-                              valueColor: const AlwaysStoppedAnimation(
-                                MilanacColors.red,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Caricamento… ${(_progress.value * 100).round()}%',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ],
-                      ),
+                      child: _LoadingPanel(progress: _progress),
                     ),
                     const SizedBox(height: 6),
                     const Text(
@@ -163,6 +132,75 @@ class _IntroPageState extends ConsumerState<IntroPage>
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Riquadro scuro arrotondato con lo stemma a sinistra e la barra di caricamento.
+class _LoadingPanel extends StatelessWidget {
+  const _LoadingPanel({required this.progress});
+  final Animation<double> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 18, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xE61C1C1F),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white12),
+        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 18)],
+      ),
+      child: Row(
+        children: [
+          Image.asset(
+            'assets/images/stemma_milano_fc.png',
+            height: 64,
+            filterQuality: FilterQuality.high,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: AnimatedBuilder(
+              animation: progress,
+              builder: (context, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'MILANAC PRO CLUB',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: progress.value,
+                      minHeight: 8,
+                      backgroundColor: Colors.white12,
+                      valueColor: const AlwaysStoppedAnimation(
+                        MilanacColors.red,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Caricamento… ${(progress.value * 100).round()}%',
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
