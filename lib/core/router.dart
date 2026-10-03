@@ -20,6 +20,7 @@ import '../features/regolamento/regolamento_page.dart';
 import '../features/risultati/risultati_page.dart';
 import '../features/rosa/rosa_page.dart';
 import '../features/tattiche/tattiche_page.dart';
+import '../features/tornei/tornei_page.dart';
 import '../shared/app_shell.dart';
 import '../shared/sections.dart';
 import 'auth/providers.dart';
@@ -92,6 +93,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/carta' => const MyCardPage(),
                   '/tattiche' => const TattichePage(),
                   '/chat' => const ChatListPage(),
+                  '/tornei' => const TorneiPage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

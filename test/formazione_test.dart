@@ -6,6 +6,8 @@ import 'package:milanac/features/formazione/modules.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 
+import 'helpers.dart';
+
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
@@ -43,10 +45,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Formazione'));
-    await tester.pumpAndSettle();
+    await goToSection(tester, 'Formazione');
 
     // In demo: Neri (POR), Bianchi, Demo, Rossi in campo. Nessuno in panchina.
     expect(find.text('Neri'), findsOneWidget);
@@ -106,10 +105,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Formazione'));
-    await tester.pumpAndSettle();
+    await goToSection(tester, 'Formazione');
 
     expect(find.text('Rossi'), findsOneWidget);
     await tester.tap(find.text('FUTURO'));

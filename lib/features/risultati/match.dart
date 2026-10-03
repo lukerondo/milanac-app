@@ -26,6 +26,7 @@ class ClubMatch {
     this.scorers,
     this.notes,
     this.team = Team.milanac,
+    this.tournamentId,
   });
 
   final String id;
@@ -33,6 +34,9 @@ class ClubMatch {
 
   /// Squadra del club che ha giocato.
   final Team team;
+
+  /// Torneo di appartenenza (facoltativo).
+  final String? tournamentId;
   final String opponent;
   final DateTime playedAt;
   final String? competition;
@@ -61,6 +65,7 @@ class ClubMatch {
     scorers: m['scorers'] as String?,
     notes: m['notes'] as String?,
     team: Team.parse(m['team']) ?? Team.milanac,
+    tournamentId: m['tournament_id'] as String?,
   );
 
   Map<String, dynamic> toMap() => {
@@ -74,6 +79,7 @@ class ClubMatch {
     'scorers': scorers,
     'notes': notes,
     'team': team.name,
+    'tournament_id': kind == MatchKind.torneo ? tournamentId : null,
   };
 }
 

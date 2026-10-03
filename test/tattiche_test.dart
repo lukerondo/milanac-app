@@ -5,6 +5,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 
+import 'helpers.dart';
+
 Future<void> openTattiche(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2340);
   tester.view.devicePixelRatio = 3;
@@ -16,19 +18,7 @@ Future<void> openTattiche(WidgetTester tester) async {
     UncontrolledProviderScope(container: container, child: const MilanacApp()),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.byIcon(Icons.menu));
-  await tester.pumpAndSettle();
-  await tester.scrollUntilVisible(
-    find.text('Tattiche & Build'),
-    100,
-    scrollable: find.descendant(
-      of: find.byType(Drawer),
-      matching: find.byType(Scrollable),
-    ),
-  );
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Tattiche & Build'));
-  await tester.pumpAndSettle();
+  await goToSection(tester, 'Tattiche & Build');
 }
 
 void main() {

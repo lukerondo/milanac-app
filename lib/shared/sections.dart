@@ -15,6 +15,7 @@ const appSections = <AppSection>[
   AppSection('/formazione', 'Formazione', Icons.sports_soccer_rounded),
   AppSection('/calendario', 'Calendario partite', Icons.calendar_month_rounded),
   AppSection('/risultati', 'Risultati partite', Icons.scoreboard_rounded),
+  AppSection('/tornei', 'Tornei', Icons.leaderboard_rounded),
   AppSection('/rosa', 'Rosa completa', Icons.groups_rounded),
   AppSection('/carta', 'La mia carta', Icons.style_rounded),
   AppSection('/tattiche', 'Tattiche & Build', Icons.draw_rounded),

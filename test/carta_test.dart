@@ -11,6 +11,8 @@ import 'package:milanac/features/risultati/match.dart';
 import 'package:milanac/features/rosa/member.dart';
 import 'package:milanac/main.dart';
 
+import 'helpers.dart';
+
 final rossi = Member(
   id: 'r',
   displayName: 'Marco Rossi',
@@ -118,10 +120,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('La mia carta'));
-    await tester.pumpAndSettle();
+    await goToSection(tester, 'La mia carta');
 
     expect(find.text('??'), findsOneWidget);
     expect(find.textContaining('Completa la tua carta'), findsOneWidget);
@@ -151,10 +150,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rosa completa'));
-    await tester.pumpAndSettle();
+    await goToSection(tester, 'Rosa completa');
     await tester.tap(find.text('Carte'));
     await tester.pumpAndSettle();
 

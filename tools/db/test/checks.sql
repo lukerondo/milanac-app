@@ -275,3 +275,25 @@ do $$ begin
   assert (select count(*) from messages where body = 'Ciao a tutti') = 0, 'il Direttivo elimina';
   assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 3, 'una notifica per messaggio';
 end $$;
+
+-- Tornei: li gestisce il Direttivo; eliminando un torneo le partite restano.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$insert into tournaments (name) values ('Coppa finta')$q$, 'row-level security');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into tournaments (id, name, organizer, url, team)
+values ('00000000-0000-0000-0000-0000000000a1', 'FVPA Serie B', 'FVPA', 'https://fvpa.it', 'milanac');
+insert into tournament_standings (tournament_id, team_name, won, drawn, lost, is_us)
+values ('00000000-0000-0000-0000-0000000000a1', 'MILANAC', 3, 1, 0, true);
+select pg_temp.expect_error(
+  $q$insert into tournaments (name, url) values ('X', 'ftp://x')$q$, 'tournaments_url_check');
+insert into matches (kind, opponent, played_at, tournament_id)
+values ('torneo', 'Dinamo', now(), '00000000-0000-0000-0000-0000000000a1');
+delete from tournaments where id = '00000000-0000-0000-0000-0000000000a1';
+reset role;
+do $$ begin
+  assert (select count(*) from tournament_standings) = 0, 'classifica eliminata con il torneo';
+  assert (select count(*) from matches where opponent = 'Dinamo' and tournament_id is null) = 1,
+    'la partita resta senza torneo';
+end $$;

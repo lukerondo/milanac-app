@@ -5,21 +5,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 
-Future<void> openSection(WidgetTester tester, String title) async {
-  await tester.tap(find.byIcon(Icons.menu));
-  await tester.pumpAndSettle();
-  await tester.scrollUntilVisible(
-    find.text(title),
-    100,
-    scrollable: find.descendant(
-      of: find.byType(Drawer),
-      matching: find.byType(Scrollable),
-    ),
-  );
-  await tester.pumpAndSettle();
-  await tester.tap(find.text(title));
-  await tester.pumpAndSettle();
-}
+import 'helpers.dart';
+
+Future<void> openSection(WidgetTester tester, String title) =>
+    goToSection(tester, title);
 
 Future<void> startApp(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2340);
