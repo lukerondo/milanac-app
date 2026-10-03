@@ -22,12 +22,16 @@ class FutCard extends StatelessWidget {
     required this.member,
     required this.stats,
     this.special,
+    this.badges = const [],
   });
   final Member member;
   final CardStats stats;
 
   /// Carta speciale (Uomo partita, Squadra della settimana) al posto di quella base.
   final CardSpecial? special;
+
+  /// Badge dei traguardi da mostrare sulla carta (icona, colore), al massimo 3.
+  final List<(IconData, Color)> badges;
 
   static const _w = 300.0, _h = 428.0;
 
@@ -53,6 +57,7 @@ class FutCard extends StatelessWidget {
                 stats: stats,
                 palette: palette,
                 special: special,
+                badges: badges,
               ),
             ),
           ),
@@ -185,11 +190,13 @@ class _CardContent extends StatelessWidget {
     required this.stats,
     required this.palette,
     this.special,
+    this.badges = const [],
   });
   final Member member;
   final CardStats stats;
   final _Palette palette;
   final CardSpecial? special;
+  final List<(IconData, Color)> badges;
 
   @override
   Widget build(BuildContext context) {
@@ -326,6 +333,30 @@ class _CardContent extends StatelessWidget {
             ],
           ),
         ),
+        // Badge dei traguardi più rari.
+        if (badges.isNotEmpty)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 46,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (final (icon, color) in badges)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color,
+                      border: Border.all(color: palette.text, width: 1),
+                    ),
+                    child: Icon(icon, size: 12, color: Colors.white),
+                  ),
+              ],
+            ),
+          ),
         // Squadre e numero di maglia.
         Positioned(
           left: 60,

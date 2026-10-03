@@ -7,13 +7,18 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/local_flags.dart';
 import '../../core/theme.dart';
 import '../presenze/attendance_repository.dart';
 import '../risultati/matches_repository.dart';
 import '../rosa/member.dart';
 import '../rosa/member_editor.dart';
 import '../rosa/rosa_repository.dart';
+import '../traguardi/achievements.dart';
+import '../traguardi/achievements_view.dart';
 import '../voti/ratings_repository.dart';
+import '../walkout/celebrations.dart';
+import '../walkout/walkout_page.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
 
@@ -125,6 +130,12 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                   member: member,
                   stats: stats,
                   special: motm != null && !_baseCard ? CardSpecial.motm : null,
+                  badges: [
+                    for (final a in topBadges(
+                      ref.watch(achievementsProvider(member.id)) ?? const [],
+                    ))
+                      (a.icon, a.level.color),
+                  ],
                 ),
               ),
             ),
@@ -181,6 +192,12 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
               icon: const Icon(Icons.ios_share_rounded),
               label: const Text('Condividi'),
             ),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  showWalkout(context, member: member, stats: stats),
+              icon: const Icon(Icons.auto_awesome_rounded),
+              label: const Text('Walkout'),
+            ),
             if (isDirettivo && !isMine)
               TextButton.icon(
                 onPressed: () => showMemberEditor(context, member),
@@ -189,6 +206,7 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
               ),
           ],
         ),
+        AchievementsGrid(memberId: member.id),
         const SizedBox(height: 20),
         for (final MapEntry(:key, :value) in cardStatLegend.entries)
           Padding(
@@ -286,8 +304,28 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       preferredFoot: widget.member.preferredFoot,
     );
     try {
+      final rootContext = Navigator.of(context, rootNavigator: true).context;
+      final before = widget.member.overall;
       await ref.read(rosaRepositoryProvider).saveCard(updated);
       if (mounted) Navigator.of(context).pop();
+      // Overall salito: walkout subito (e segnato come visto su questo telefono).
+      if (before != null && _overall > before && rootContext.mounted) {
+        final me = ref.read(profileProvider).value;
+        if (me?.id == updated.id) {
+          await ref
+              .read(localFlagsProvider)
+              .setString(walkoutKey(updated.id), '$_overall');
+        }
+        final stats = ref.read(cardStatsProvider(updated.id));
+        if (stats != null && rootContext.mounted) {
+          await showWalkout(
+            rootContext,
+            member: updated,
+            stats: stats,
+            previousOverall: before,
+          );
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
