@@ -19,9 +19,11 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN || secrets.MILANACAPP }}
     steps:
       - uses: actions/checkout@v4
+      # Versione fissa: con "latest" l'azione interroga l'API di GitHub e può
+      # fallire per limite di richieste ("rate limit exceeded").
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.119.0
       - name: Progetto
         run: |
           echo "REF=$(python3 -c "import json,re;print(re.search(r'https://([a-z0-9]+)\.supabase\.co', json.load(open('env/prod.json'))['SUPABASE_URL']).group(1))")" >> "$GITHUB_ENV"
