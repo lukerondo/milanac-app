@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 
 enum EventType {
@@ -26,6 +27,7 @@ class ClubEvent {
     required this.startsAt,
     this.description,
     this.location,
+    this.team,
   });
 
   final String id;
@@ -35,6 +37,12 @@ class ClubEvent {
   final String? description;
   final String? location;
 
+  /// Squadra interessata (null = tutto il club).
+  final Team? team;
+
+  /// L'evento riguarda chi gioca in [teams]?
+  bool concerns(Set<Team> teams) => team == null || teams.contains(team);
+
   factory ClubEvent.fromMap(Map<String, dynamic> m) => ClubEvent(
     id: m['id'] as String,
     type: EventType.values.byName(m['type'] as String),
@@ -42,6 +50,7 @@ class ClubEvent {
     startsAt: DateTime.parse(m['starts_at'] as String).toLocal(),
     description: m['description'] as String?,
     location: m['location'] as String?,
+    team: Team.parse(m['team']),
   );
 
   Map<String, dynamic> toMap() => {
@@ -50,5 +59,6 @@ class ClubEvent {
     'starts_at': startsAt.toUtc().toIso8601String(),
     'description': description,
     'location': location,
+    'team': team?.name,
   };
 }

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../calendario/club_event.dart';
 import '../calendario/events_repository.dart';
@@ -15,8 +16,13 @@ import '../presenze/attendance_repository.dart';
 import '../presenze/presenze_page.dart';
 import '../rosa/rosa_repository.dart';
 
-/// Evento della serata: il primo in calendario oggi, altrimenti l'allenamento delle 21:30.
-ClubEvent tonightEvent(List<ClubEvent> events, DateTime now) {
+/// Evento della serata: il primo in calendario oggi (tra quelli delle [teams]
+/// del giocatore), altrimenti l'allenamento delle 21:30.
+ClubEvent tonightEvent(
+  List<ClubEvent> events,
+  DateTime now, {
+  Set<Team> teams = const {Team.milanac, Team.futuro},
+}) {
   final today =
       events
           .where(
@@ -24,7 +30,8 @@ ClubEvent tonightEvent(List<ClubEvent> events, DateTime now) {
                 e.startsAt.year == now.year &&
                 e.startsAt.month == now.month &&
                 e.startsAt.day == now.day &&
-                e.type != EventType.riunione,
+                e.type != EventType.riunione &&
+                e.concerns(teams),
           )
           .toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
@@ -57,10 +64,14 @@ class TonightCard extends ConsumerWidget {
     final members = (ref.watch(rosaProvider).value ?? const [])
         .where((m) => m.active && m.role != ClubRole.pending)
         .toList();
-    final formation = ref.watch(formationProvider).value;
+    final myTeams = me?.teams ?? const {Team.milanac};
+    final formations = [
+      for (final t in Team.values)
+        if (myTeams.contains(t)) ref.watch(formationProvider(t)).value,
+    ].nonNulls.toList();
 
     final now = DateTime.now();
-    final event = tonightEvent(events, now);
+    final event = tonightEvent(events, now, teams: myTeams);
     final day = dayOnly(now);
     final tonight = {
       for (final e in entries.where((e) => e.date == day)) e.playerId: e,
@@ -196,10 +207,13 @@ class TonightCard extends ConsumerWidget {
               ),
             ),
             const Divider(height: 20),
-            _FormationLine(
-              published: formation != null && formation.isPublishedToday,
-              position: me == null ? null : formation?.positionOf(me.id),
-            ),
+            for (final f in formations)
+              _FormationLine(
+                // Il nome della squadra serve solo a chi gioca in entrambe.
+                team: formations.length > 1 ? f.team : null,
+                published: f.isPublishedToday,
+                position: me == null ? null : f.positionOf(me.id),
+              ),
           ],
         ),
       ),
@@ -231,17 +245,25 @@ class _Count extends StatelessWidget {
 }
 
 class _FormationLine extends StatelessWidget {
-  const _FormationLine({required this.published, required this.position});
+  const _FormationLine({
+    required this.team,
+    required this.published,
+    required this.position,
+  });
+  final Team? team;
   final bool published;
   final String? position;
 
   @override
   Widget build(BuildContext context) {
-    final text = !published
-        ? 'Formazione non ancora pubblicata'
-        : position != null
-        ? 'Formazione pubblicata · tu giochi $position titolare'
-        : 'Formazione pubblicata · parti dalla panchina';
+    final prefix = team == null ? '' : '${team!.short}: ';
+    final text =
+        prefix +
+        (!published
+            ? 'Formazione non ancora pubblicata'
+            : position != null
+            ? 'Formazione pubblicata · tu giochi $position titolare'
+            : 'Formazione pubblicata · parti dalla panchina');
     return InkWell(
       onTap: () => context.go('/formazione'),
       child: Row(

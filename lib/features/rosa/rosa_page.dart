@@ -4,16 +4,25 @@ import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 import 'member.dart';
 import 'member_editor.dart';
 import 'rosa_repository.dart';
 
-class RosaPage extends ConsumerWidget {
+class RosaPage extends ConsumerStatefulWidget {
   const RosaPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RosaPage> createState() => _RosaPageState();
+}
+
+class _RosaPageState extends ConsumerState<RosaPage> {
+  /// Squadra mostrata (null = tutte).
+  Team? _team;
+
+  @override
+  Widget build(BuildContext context) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final rosa = ref.watch(rosaProvider);
 
@@ -26,10 +35,12 @@ class RosaPage extends ConsumerWidget {
         final pending = active
             .where((m) => m.role == ClubRole.pending)
             .toList();
-        final direttivo = active
+        final members = active.where((m) => m.role != ClubRole.pending);
+        final shown = members.where((m) => m.inTeam(_team));
+        final direttivo = shown
             .where((m) => m.role == ClubRole.direttivo)
             .toList();
-        final giocatori = active
+        final giocatori = shown
             .where((m) => m.role == ClubRole.giocatore)
             .toList();
 
@@ -39,6 +50,16 @@ class RosaPage extends ConsumerWidget {
             _Summary(
               total: direttivo.length + giocatori.length,
               direttivo: direttivo.length,
+            ),
+            const SizedBox(height: 8),
+            TeamFilter(
+              value: _team,
+              onChanged: (t) => setState(() => _team = t),
+              counts: {
+                null: members.length,
+                for (final t in Team.values)
+                  t: members.where((m) => m.teams.contains(t)).length,
+              },
             ),
             if (isDirettivo && pending.isNotEmpty) ...[
               const _Header(
@@ -168,11 +189,25 @@ class _MemberTile extends ConsumerWidget {
           member.displayName,
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        subtitle: Text(
-          [
-            if (member.gamertag != null) member.gamertag!,
-            'Dal $joined',
-          ].join(' · '),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              [
+                if (member.gamertag != null) member.gamertag!,
+                'Dal $joined',
+              ].join(' · '),
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              runSpacing: 2,
+              children: [
+                for (final t in Team.values)
+                  if (member.teams.contains(t)) TeamBadge(t, small: true),
+              ],
+            ),
+          ],
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -211,6 +246,7 @@ class _PendingTile extends ConsumerStatefulWidget {
 
 class _PendingTileState extends ConsumerState<_PendingTile> {
   bool _busy = false;
+  late Set<Team> _teams = widget.member.teams;
 
   static String _label(ClubRole r) =>
       r == ClubRole.direttivo ? 'Direttivo' : 'Giocatore';
@@ -235,8 +271,11 @@ class _PendingTileState extends ConsumerState<_PendingTile> {
     _run(
       () => ref
           .read(rosaRepositoryProvider)
-          .save(m.copyWith(role: role, joinedAt: DateTime.now())),
-      '${m.displayName} approvato come ${_label(role)}.',
+          .save(
+            m.copyWith(role: role, joinedAt: DateTime.now(), teams: _teams),
+          ),
+      '${m.displayName} approvato come ${_label(role)} '
+      '(${_teams.map((t) => t.label).join(' e ')}).',
     );
   }
 
@@ -318,6 +357,16 @@ class _PendingTileState extends ConsumerState<_PendingTile> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
               ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Squadra',
+              style: TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            TeamsPicker(
+              value: _teams,
+              onChanged: (t) => setState(() => _teams = t),
             ),
             const SizedBox(height: 8),
             Wrap(

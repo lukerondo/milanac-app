@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/teams.dart';
 import 'match.dart';
 
 const mediaBucket = 'match-media';
@@ -167,6 +168,7 @@ class DemoMatchesRepository implements MatchesRepository {
       ),
       ClubMatch(
         id: 'm2',
+        team: Team.futuro,
         kind: MatchKind.amichevole,
         opponent: 'Real Brianza',
         playedAt: ago(9),
@@ -227,6 +229,7 @@ class DemoMatchesRepository implements MatchesRepository {
         goalsAgainst: m.goalsAgainst,
         scorers: m.scorers,
         notes: m.notes,
+        team: m.team,
       ),
     );
     _matchesCtrl.add(_sorted);

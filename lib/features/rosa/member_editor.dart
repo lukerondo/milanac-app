@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
+import '../../core/teams.dart';
 import 'member.dart';
 import 'rosa_repository.dart';
 
@@ -32,6 +33,7 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
   late ClubRole _role = widget.member.role;
   late String? _position = widget.member.fieldPosition;
   late DateTime _joinedAt = widget.member.joinedAt;
+  late Set<Team> _teams = widget.member.teams;
   bool _saving = false;
 
   @override
@@ -54,6 +56,7 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
       shirtNumber: int.tryParse(_number.text),
       joinedAt: _joinedAt,
       active: active,
+      teams: _teams,
     );
     try {
       await ref.read(rosaRepositoryProvider).save(updated);
@@ -141,6 +144,13 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
                 _role == ClubRole.pending ? ClubRole.giocatore : _role,
               },
               onSelectionChanged: (s) => setState(() => _role = s.first),
+            ),
+            const SizedBox(height: 16),
+            const Text('Squadra (una o entrambe)'),
+            const SizedBox(height: 8),
+            TeamsPicker(
+              value: _teams,
+              onChanged: (t) => setState(() => _teams = t),
             ),
             const SizedBox(height: 12),
             ListTile(

@@ -102,3 +102,47 @@ do $$ begin
   assert (select count(*) from device_tokens) = 0, 'token rimossi con l''account';
   assert (select player_id from formation_slots) is null, 'posto in formazione liberato';
 end $$;
+
+-- Squadre: le decide il Direttivo; il giocatore non può cambiarle né riattivarsi.
+select pg_temp.as_user(null);
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000c', 'c@example.com');
+update profiles set club_role = 'giocatore' where id = '00000000-0000-0000-0000-00000000000c';
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000c');
+do $$ begin
+  assert (select teams from profiles where id = '00000000-0000-0000-0000-00000000000c') = array['milanac'],
+    'squadra predefinita MILANAC';
+end $$;
+select pg_temp.expect_error(
+  $q$update profiles set teams = array['milanac', 'futuro'] where id = '00000000-0000-0000-0000-00000000000c'$q$,
+  'Solo il Direttivo');
+update profiles set gamertag = 'Nuovo_Tag' where id = '00000000-0000-0000-0000-00000000000c';
+
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update profiles set teams = array['futuro'], active = false where id = '00000000-0000-0000-0000-00000000000c';
+select pg_temp.expect_error(
+  $q$update profiles set teams = array['primavera'] where id = '00000000-0000-0000-0000-00000000000c'$q$,
+  'profiles_teams_check');
+select pg_temp.expect_error(
+  $q$update profiles set teams = '{}' where id = '00000000-0000-0000-0000-00000000000c'$q$,
+  'profiles_teams_check');
+
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000c');
+select pg_temp.expect_error(
+  $q$update profiles set active = true where id = '00000000-0000-0000-0000-00000000000c'$q$,
+  'Solo il Direttivo');
+
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into formations (module, is_current, team) values ('4-4-2', true, 'futuro');
+insert into events (type, title, starts_at, team) values ('torneo', 'Coppa', now(), 'futuro');
+insert into events (type, title, starts_at) values ('allenamento', 'Allenamento', now());
+insert into matches (kind, opponent, played_at, team) values ('amichevole', 'Rivali', now(), 'futuro');
+select pg_temp.expect_error(
+  $q$insert into matches (kind, opponent, played_at, team) values ('amichevole', 'X', now(), 'altro')$q$,
+  'matches_team_check');
+reset role;
+do $$ begin
+  assert (select gamertag from profiles where id = '00000000-0000-0000-0000-00000000000c') = 'Nuovo_Tag',
+    'il giocatore modifica i propri dati personali';
+  assert (select count(*) from formations where team = 'milanac') = 1, 'formazione esistente in MILANAC';
+end $$;

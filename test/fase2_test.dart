@@ -44,7 +44,7 @@ void main() {
     await tester.tap(find.text('Approva come Giocatore'));
     await tester.pumpAndSettle();
     expect(
-      find.text('Nuovo Iscritto approvato come Giocatore.'),
+      find.text('Nuovo Iscritto approvato come Giocatore (MILANAC).'),
       findsOneWidget,
     );
 
@@ -75,15 +75,40 @@ void main() {
     await startApp(tester);
     await openSection(tester, 'Rosa completa');
 
-    await tester.ensureVisible(find.text('Marco Rossi'));
+    await tester.scrollUntilVisible(find.text('Marco Rossi'), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Marco Rossi'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Numero'), '11');
+    await tester.ensureVisible(find.text('Salva'));
     await tester.tap(find.text('Salva'));
     await tester.pumpAndSettle();
 
     expect(find.text('11'), findsOneWidget);
+  });
+
+  testWidgets('Rosa: squadre MILANAC e FUTURO', (tester) async {
+    await startApp(tester);
+    await openSection(tester, 'Rosa completa');
+
+    // Richiesta approvata direttamente in MILANAC FUTURO.
+    await tester.tap(find.widgetWithText(FilterChip, 'MILANAC FUTURO'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, 'MILANAC'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Approva come Giocatore'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Nuovo Iscritto approvato come Giocatore (MILANAC FUTURO).'),
+      findsOneWidget,
+    );
+
+    // Filtro FUTURO: Neri (entrambe), Verdi e il nuovo iscritto; non Rossi.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO (3)'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Paolo Verdi'), 200);
+    expect(find.text('Andrea Neri'), findsOneWidget);
+    expect(find.text('Marco Rossi'), findsNothing);
   });
 
   testWidgets('Regolamento: mostra il testo e permette la modifica', (

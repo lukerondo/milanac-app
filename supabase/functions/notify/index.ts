@@ -2,7 +2,7 @@
 // Viene chiamata dal database (trigger + pg_net) con l'intestazione x-milanac-secret.
 //
 // Eventi gestiti:
-//   { kind: "formation", id }     → a ogni membro: titolare (con ruolo) o panchina
+//   { kind: "formation", id }     → ai membri della squadra: titolare (con ruolo) o panchina
 //   { kind: "chat_message", id }  → ai membri del canale, escluso l'autore e chi l'ha silenziato
 //
 // Variabili (impostate dal workflow "Funzioni"):
@@ -36,21 +36,30 @@ Deno.serve(async (req) => {
 // ------------------------------------------------------------------ formazione
 
 async function formationPushes(db: SupabaseClient, formationId: string): Promise<Push[]> {
+  const { data: formation } = await db
+    .from("formations").select("team").eq("id", formationId).single();
+  const team = formation?.team ?? "milanac";
+  const teamName = TEAM_NAMES[team] ?? "MILANAC";
   const { data: slots } = await db
     .from("formation_slots").select("label, player_id").eq("formation_id", formationId);
+  // Solo i giocatori di quella squadra (chi è in entrambe riceve entrambe le formazioni).
   const { data: members } = await db
-    .from("profiles").select("id").eq("active", true).neq("club_role", "pending");
+    .from("profiles").select("id").eq("active", true).neq("club_role", "pending")
+    .contains("teams", [team]);
   const starters = new Map((slots ?? []).filter((s) => s.player_id).map((s) => [s.player_id, s.label]));
   return (members ?? []).map((m) => {
     const role = starters.get(m.id);
     return {
       userId: m.id,
-      title: "📋 Formazione di stasera pubblicata",
-      body: role ? `Stasera giochi ${role} titolare. Forza MILANAC!` : "Stasera parti dalla panchina: tieniti pronto!",
+      title: `📋 ${teamName}: formazione pubblicata`,
+      body: role ? `Stasera giochi ${role} titolare. Forza ${teamName}!` : "Stasera parti dalla panchina: tieniti pronto!",
       route: "/formazione",
+      data: { team },
     };
   });
 }
+
+const TEAM_NAMES: Record<string, string> = { milanac: "MILANAC", futuro: "MILANAC FUTURO" };
 
 // ------------------------------------------------------------------ chat
 

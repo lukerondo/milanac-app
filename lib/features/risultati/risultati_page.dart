@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 import 'match.dart';
 import 'match_detail_page.dart';
@@ -25,6 +26,7 @@ class RisultatiPage extends ConsumerStatefulWidget {
 
 class _RisultatiPageState extends ConsumerState<RisultatiPage> {
   MatchKind? _filter;
+  Team? _team;
 
   @override
   Widget build(BuildContext context) {
@@ -45,9 +47,13 @@ class _RisultatiPageState extends ConsumerState<RisultatiPage> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Errore nel caricamento: $e')),
         data: (all) {
-          final list = _filter == null
-              ? all
-              : all.where((m) => m.kind == _filter).toList();
+          final list = all
+              .where(
+                (m) =>
+                    (_filter == null || m.kind == _filter) &&
+                    (_team == null || m.team == _team),
+              )
+              .toList();
           final record = MatchRecord(list);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
@@ -68,6 +74,11 @@ class _RisultatiPageState extends ConsumerState<RisultatiPage> {
                       ),
                     ),
                 ],
+              ),
+              const SizedBox(height: 6),
+              TeamFilter(
+                value: _team,
+                onChanged: (t) => setState(() => _team = t),
               ),
               const SizedBox(height: 8),
               _RecordCard(record: record),
@@ -155,8 +166,9 @@ class MatchCard extends ConsumerWidget {
         : match.home
         ? '${match.goalsFor} : ${match.goalsAgainst}'
         : '${match.goalsAgainst} : ${match.goalsFor}';
-    final home = match.home ? 'MILANAC' : match.opponent;
-    final away = match.home ? match.opponent : 'MILANAC';
+    final us = match.team.label;
+    final home = match.home ? us : match.opponent;
+    final away = match.home ? match.opponent : us;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -229,7 +241,7 @@ class MatchCard extends ConsumerWidget {
                       home,
                       textAlign: TextAlign.right,
                       overflow: TextOverflow.ellipsis,
-                      style: _teamStyle(home == 'MILANAC'),
+                      style: _teamStyle(match.home),
                     ),
                   ),
                   Container(
@@ -256,7 +268,7 @@ class MatchCard extends ConsumerWidget {
                     child: Text(
                       away,
                       overflow: TextOverflow.ellipsis,
-                      style: _teamStyle(away == 'MILANAC'),
+                      style: _teamStyle(!match.home),
                     ),
                   ),
                 ],

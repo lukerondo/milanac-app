@@ -91,4 +91,32 @@ void main() {
     );
     expect(find.textContaining('Pubblicata oggi'), findsOneWidget);
   });
+
+  testWidgets('Formazione: una per squadra (MILANAC / FUTURO)', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container.read(introDoneProvider.notifier).complete();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MilanacApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.menu));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Formazione'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rossi'), findsOneWidget);
+    await tester.tap(find.text('FUTURO'));
+    await tester.pumpAndSettle();
+    // Formazione FUTURO: Neri in porta e Verdi; Rossi non c'è.
+    expect(find.text('Verdi'), findsOneWidget);
+    expect(find.text('Neri'), findsOneWidget);
+    expect(find.text('Rossi'), findsNothing);
+  });
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/teams.dart';
 import 'member.dart';
 
 abstract class RosaRepository {
@@ -101,6 +102,17 @@ class DemoRosaRepository implements RosaRepository {
       fieldPosition: 'POR',
       shirtNumber: 1,
       joinedAt: DateTime(2025, 4, 20),
+      teams: {Team.milanac, Team.futuro},
+    ),
+    Member(
+      id: 'p6',
+      displayName: 'Paolo Verdi',
+      gamertag: 'Futuro_23',
+      role: ClubRole.giocatore,
+      fieldPosition: 'CC',
+      shirtNumber: 23,
+      joinedAt: DateTime(2025, 9, 1),
+      teams: {Team.futuro},
     ),
     Member(
       id: 'p5',

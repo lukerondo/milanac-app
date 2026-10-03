@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
@@ -21,6 +22,12 @@ class FormazionePage extends ConsumerStatefulWidget {
 class _FormazionePageState extends ConsumerState<FormazionePage> {
   /// Copia locale modificata dal Direttivo (null = usa quella salvata).
   Formation? _draft;
+
+  /// Squadra mostrata: all'apertura quella del giocatore (MILANAC se è in entrambe).
+  late Team _team = () {
+    final mine = ref.read(profileProvider).value?.teams ?? const {Team.milanac};
+    return mine.contains(Team.milanac) ? Team.milanac : Team.futuro;
+  }();
 
   Future<void> _update(Formation f) async {
     final previous = _draft;
@@ -44,8 +51,9 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Pubblicare la formazione?'),
-        content: const Text(
-          'Ogni giocatore riceverà una notifica: titolare (con il suo ruolo) o panchina.',
+        content: Text(
+          'Ogni giocatore di ${f.team.label} riceverà una notifica: '
+          'titolare (con il suo ruolo) o panchina.',
         ),
         actions: [
           TextButton(
@@ -81,7 +89,7 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
   @override
   Widget build(BuildContext context) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    final saved = ref.watch(formationProvider);
+    final saved = ref.watch(formationProvider(_team));
     final rosa = ref.watch(rosaProvider);
 
     if (saved.isLoading || rosa.isLoading) {
@@ -93,10 +101,18 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
       );
     }
 
-    final formation = _draft ?? saved.value!;
-    final members = {
+    final draft = _draft;
+    final formation = draft != null && draft.team == _team
+        ? draft
+        : saved.value!;
+    // Tutti i membri (per mostrare chi è già schierato) e quelli della squadra (per le scelte).
+    final allMembers = {
       for (final m in rosa.value!)
         if (m.active && m.role != ClubRole.pending) m.id: m,
+    };
+    final members = {
+      for (final m in allMembers.values)
+        if (m.teams.contains(_team)) m.id: m,
     };
     final bench =
         members.values
@@ -107,6 +123,19 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 32),
       children: [
+        SegmentedButton<Team>(
+          segments: [
+            for (final t in Team.values)
+              ButtonSegment(value: t, label: Text(t.short)),
+          ],
+          selected: {_team},
+          showSelectedIcon: false,
+          onSelectionChanged: (s) => setState(() {
+            _team = s.first;
+            _draft = null;
+          }),
+        ),
+        const SizedBox(height: 10),
         _PublishStatus(formation: formation),
         const SizedBox(height: 8),
         Wrap(
@@ -151,13 +180,13 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
                       width: 80,
                       child: _PlayerToken(
                         slot: slot,
-                        member: members[formation.players[i]],
+                        member: allMembers[formation.players[i]],
                         onTap: isDirettivo
                             ? () async {
                                 final choice = await _pickPlayer(
                                   context,
                                   slot: slot,
-                                  current: members[formation.players[i]],
+                                  current: allMembers[formation.players[i]],
                                   members: members.values.toList(),
                                   formation: formation,
                                 );

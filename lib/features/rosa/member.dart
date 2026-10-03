@@ -1,4 +1,5 @@
 import '../../core/auth/profile.dart';
+import '../../core/teams.dart';
 
 /// Un membro della rosa (riga della tabella `profiles`).
 class Member {
@@ -13,6 +14,7 @@ class Member {
     this.avatarUrl,
     this.active = true,
     this.requestedRole = ClubRole.giocatore,
+    this.teams = const {Team.milanac},
   });
 
   final String id;
@@ -28,6 +30,11 @@ class Member {
   /// Ruolo chiesto dall'utente al primo accesso.
   final ClubRole requestedRole;
 
+  /// Squadre in cui gioca: le assegna il Direttivo.
+  final Set<Team> teams;
+
+  bool inTeam(Team? team) => team == null || teams.contains(team);
+
   String get roleLabel => switch (role) {
     ClubRole.direttivo => 'Direttivo',
     ClubRole.giocatore => 'Giocatore',
@@ -42,6 +49,7 @@ class Member {
     String? fieldPosition,
     int? shirtNumber,
     bool? active,
+    Set<Team>? teams,
   }) => Member(
     id: id,
     displayName: displayName ?? this.displayName,
@@ -53,6 +61,7 @@ class Member {
     avatarUrl: avatarUrl,
     active: active ?? this.active,
     requestedRole: requestedRole,
+    teams: teams ?? this.teams,
   );
 
   factory Member.fromMap(Map<String, dynamic> m) => Member(
@@ -66,6 +75,7 @@ class Member {
     active: (m['active'] as bool?) ?? true,
     role: parseRole(m['club_role'], ClubRole.pending),
     requestedRole: parseRole(m['requested_role'], ClubRole.giocatore),
+    teams: Team.parseSet(m['teams']),
   );
 
   /// Campi modificabili dal Direttivo.
@@ -77,6 +87,7 @@ class Member {
     'shirt_number': shirtNumber,
     'joined_at': joinedAt.toIso8601String().substring(0, 10),
     'active': active,
+    'teams': teamsToJson(teams),
   };
 }
 

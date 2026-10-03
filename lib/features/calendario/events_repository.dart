@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/teams.dart';
 import 'club_event.dart';
 
 abstract class EventsRepository {
@@ -76,6 +77,7 @@ class DemoEventsRepository implements EventsRepository {
       ),
       ClubEvent(
         id: 'e3',
+        team: Team.futuro,
         type: EventType.amichevole,
         title: 'Amichevole vs Real Brianza',
         startsAt: at(6),
@@ -121,6 +123,7 @@ class DemoEventsRepository implements EventsRepository {
               startsAt: e.startsAt,
               description: e.description,
               location: e.location,
+              team: e.team,
             )
           : e,
     );

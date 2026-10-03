@@ -2,10 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/teams.dart';
 import 'modules.dart';
 
 abstract class FormationRepository {
-  Future<Formation> loadCurrent();
+  /// Formazione attuale della squadra (vuota se non ancora creata).
+  Future<Formation> loadCurrent(Team team);
   Future<Formation> save(Formation formation);
 
   /// Pubblica la formazione: parte la notifica personale a ogni membro.
@@ -17,8 +19,8 @@ final formationRepositoryProvider = Provider<FormationRepository>((ref) {
   return _SupabaseFormationRepository(ref);
 });
 
-final formationProvider = FutureProvider<Formation>(
-  (ref) => ref.watch(formationRepositoryProvider).loadCurrent(),
+final formationProvider = FutureProvider.family<Formation, Team>(
+  (ref, team) => ref.watch(formationRepositoryProvider).loadCurrent(team),
 );
 
 class _SupabaseFormationRepository implements FormationRepository {
@@ -26,7 +28,7 @@ class _SupabaseFormationRepository implements FormationRepository {
   final Ref _ref;
 
   @override
-  Future<Formation> loadCurrent() async {
+  Future<Formation> loadCurrent(Team team) async {
     final client = _ref.read(supabaseProvider);
     final row = await client
         .from('formations')
@@ -34,13 +36,15 @@ class _SupabaseFormationRepository implements FormationRepository {
           'id, module, published_at, updated_at, formation_slots(slot_index, player_id)',
         )
         .eq('is_current', true)
+        .eq('team', team.name)
         .order('updated_at', ascending: false)
         .limit(1)
         .maybeSingle();
-    if (row == null) return const Formation();
+    if (row == null) return Formation(team: team);
     DateTime? date(Object? v) => v == null ? null : DateTime.parse(v as String);
     return Formation(
       id: row['id'] as String,
+      team: team,
       module: row['module'] as String,
       publishedAt: date(row['published_at']),
       updatedAt: date(row['updated_at']),
@@ -58,6 +62,7 @@ class _SupabaseFormationRepository implements FormationRepository {
     final client = _ref.read(supabaseProvider);
     final values = {
       'module': f.module,
+      'team': f.team.name,
       'is_current': true,
       'updated_by': client.auth.currentUser?.id,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
@@ -106,21 +111,36 @@ class _SupabaseFormationRepository implements FormationRepository {
 }
 
 class DemoFormationRepository implements FormationRepository {
-  Formation _current = const Formation(
-    id: 'demo',
-    players: {0: 'p4', 2: 'p3', 6: 'demo', 9: 'p2'},
+  final _current = <Team, Formation>{
+    Team.milanac: const Formation(
+      id: 'demo',
+      players: {0: 'p4', 2: 'p3', 6: 'demo', 9: 'p2'},
+    ),
+    Team.futuro: const Formation(
+      id: 'demo-futuro',
+      team: Team.futuro,
+      module: '4-4-2',
+      players: {0: 'p4', 6: 'p6'},
+    ),
+  };
+
+  @override
+  Future<Formation> loadCurrent(Team team) async =>
+      _current[team] ?? Formation(team: team);
+
+  @override
+  Future<Formation> save(Formation f) async => _current[f.team] = f.copyWith(
+    id: 'demo-${f.team.name}',
+    updatedAt: DateTime.now().toUtc(),
   );
-
-  @override
-  Future<Formation> loadCurrent() async => _current;
-
-  @override
-  Future<Formation> save(Formation f) async =>
-      _current = f.copyWith(id: 'demo', updatedAt: DateTime.now().toUtc());
 
   @override
   Future<Formation> publish(Formation f) async {
     final now = DateTime.now().toUtc();
-    return _current = f.copyWith(id: 'demo', publishedAt: now, updatedAt: now);
+    return _current[f.team] = f.copyWith(
+      id: 'demo-${f.team.name}',
+      publishedAt: now,
+      updatedAt: now,
+    );
   }
 }
