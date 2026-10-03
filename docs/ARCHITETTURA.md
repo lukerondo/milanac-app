@@ -41,7 +41,11 @@ il ruolo. Così nessun estraneo vede i dati del club.
 
 - **Direttivo** (= Esecutivo): crea/modifica rosa, formazione, calendario, risultati e media,
   albo d'oro, regolamento/storia, contatti social.
-- **Giocatore**: legge tutto, gestisce **solo le proprie** presenze.
+- **Giocatore**: legge tutto, gestisce **solo le proprie** presenze, la propria carta FUT
+  (overall, ruolo, stile, piattaforma), scrive in chat e aggiunge link (build, playlist).
+  Non può cambiarsi ruolo, squadra, stato o data d'ingresso (lo impedisce un trigger).
+- **Squadre**: ogni membro è in **MILANAC**, in **MILANAC FUTURO** (riserve) o in entrambe;
+  le assegna il Direttivo all'approvazione o dalla scheda del membro.
 - **In attesa**: vede solo la schermata "account in approvazione".
 
 I permessi sono applicati nel database con **Row Level Security** (non solo nell'interfaccia).
@@ -55,7 +59,8 @@ I permessi sono applicati nel database con **Row Level Security** (non solo nell
    *Ultimate Team*, *Pro Clubs*. Banner in evidenza quando esce un nuovo **Title Update**
    ("Aggiorna il gioco prima del match!") + notifica push.
 3. **Menu laterale** (drawer):
-   - Rosa completa · Formazione · Calendario · Risultati · Albo d'oro · Regolamento & Storia · Presenze
+   - Notizie · Chat · Presenze · Formazione · Calendario · Risultati · Tornei · Rosa completa ·
+     La mia carta · Tattiche & Build · Albo d'oro · Regolamento & Storia · Colonna sonora
    - in fondo: icone social + sito web (modificabili dal Direttivo)
 4. **Rosa completa** – foto, nome/gamertag, ruolo nel club (*Direttivo* / *Giocatore*),
    ruolo in campo, numero, data di ingresso.
@@ -79,6 +84,23 @@ I permessi sono applicati nel database con **Row Level Security** (non solo nell
     Lista del giorno con lo stato di tutti; accanto a ogni giocatore lo **storico**
     (ultime presenze, % presenze, ritardi). Promemoria push il giorno della partita.
 
+11. **Stasera** (in cima alla Home) – evento della serata delle proprie squadre (o allenamento
+    delle 21:30), risposta rapida alla presenza, conteggi, formazione pubblicata (titolare/panchina).
+12. **Formazione pubblicata** – una formazione per squadra; resta in bozza finché il Direttivo non
+    la pubblica, poi ogni giocatore della squadra riceve la notifica personale.
+13. **Carta FUT** – "La mia carta" e carte in Rosa: overall scelto dal giocatore (livelli bronzo,
+    argento, oro, rossonera 85+), statistiche dal club (presenze, puntualità, serate, gol dai
+    marcatori, mesi nel club, % vittorie), condivisione come immagine.
+14. **Tattiche & Build** – video dei creator con le build per ruolo (chiunque aggiunge) e schemi
+    del club con immagine e spiegazione (Direttivo).
+15. **Chat** – canali MILANAC Main, Presenze (ritardi/assenze automatici), Fantacalcio,
+    Tattiche & Schemi; foto, non letti, canali silenziabili, notifiche.
+16. **Tornei** – link al sito, squadra, stato, classifica facoltativa compilata dal Direttivo,
+    partite collegate.
+17. **Colonna sonora** – ognuno sceglie un file audio dal proprio telefono (es. compilation
+    FIFA): suona in loop, muto sempre in alto. Nessuna canzone è inclusa nell'app (diritti);
+    playlist e video ufficiali su YouTube/Spotify condivisi come link.
+
 ## 5. Modello dati (Supabase / PostgreSQL)
 
 ```
@@ -97,9 +119,28 @@ attendance    id, player_id, date, status(presente|ritardo|assente), arrival_tim
               UNIQUE(player_id, date)
 news          id, source, category, title, summary(<=300 car.), url UNIQUE, image_url, published_at
 club_links    id, kind(instagram|whatsapp|tiktok|youtube|twitch|sito), url, order
+-- dalla migrazione 0006 in poi
+profiles      + teams(text[] milanac|futuro), overall(40-99), play_style, platform(ps5|xbox|pc)
+formations    + team, published_at, published_by
+events        + team (null = tutto il club)      matches + team, tournament_id
+device_tokens token, user_id, platform            app_config  key, value (solo server)
+shared_links  id, category(musica|build), title, url, note, tag(ruolo), created_by
+tactics       id, title, module, description, image_path
+channels      id, slug, name, description, icon   messages  id, channel_id, author_id, kind(user|system),
+              body, image_path, meta              channel_mutes / channel_reads (per utente)
+tournaments   id, name, organizer, url, team, status, starts_on, ends_on, notes
+tournament_standings  tournament_id, team_name, won, drawn, lost, goals_for, goals_against, is_us
 ```
 
-Storage buckets: `avatars`, `trophies`, `match-media` (tutti privati, letti tramite URL firmati).
+Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
+pubblicazione formazione → notifica, nuovo messaggio → notifica, presenze → messaggio in *Presenze*,
+`chat_overview()` (non letti + ultimo messaggio per canale).
+
+Storage buckets: `avatars`, `trophies`, `match-media`, `tactics`, `chat` (tutti privati, letti
+tramite URL firmati, con limiti di dimensione e tipo di file).
+
+Ogni migrazione è provata in CI su un PostgreSQL vuoto (`tools/db/test/`: parti di Supabase
+simulate + controlli su RLS e trigger) prima di essere applicata al database vero.
 
 ## 6. Notizie – raccolta automatica
 
@@ -158,3 +199,5 @@ milanac-app/
 6. Notizie (job automatico)
 7. Albo d'oro 2.5D
 8. Icone, store listing, privacy policy, pubblicazione Play Store / App Store
+9. Stasera e formazione pubblicata · squadre MILANAC/FUTURO · carta FUT · Tattiche & Build ·
+   chat a canali · tornei · colonna sonora

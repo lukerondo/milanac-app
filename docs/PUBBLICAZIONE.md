@@ -29,10 +29,19 @@ Nome: **MILANAC** · Versione: in `pubspec.yaml` (`version: 1.0.0+1`)
    scarica il `.p8` → Firebase → Impostazioni → **Cloud Messaging** → *Configurazione app Apple* → carica la chiave
    (Key ID e Team ID).
 
-Notifiche inviate (argomento `milanac`, solo ai membri approvati):
+7. **Notifiche personali** (formazione, chat): dopo aver creato il secret `FIREBASE_SERVICE_ACCOUNT`
+   vai su GitHub → **Actions → Funzioni → Run workflow**. Il workflow passa la chiave alla funzione
+   Supabase `notify` e la collega al database. Da quel momento le notifiche personali partono da sole.
+
+Notifiche a tutto il club (argomento `milanac`, solo ai membri approvati):
 - **Nuovo aggiornamento FC 27** – dopo la raccolta notizie (ogni 3 ore)
 - **Nuovo evento in calendario** – entro 3 ore dalla creazione
 - **Promemoria presenze** – ogni giorno alle ~15:45 se in serata c'è partita/allenamento
+
+Notifiche personali (funzione `notify`, a ogni telefono registrato):
+- **Formazione pubblicata** – ai giocatori di quella squadra: "giochi DC titolare" o "parti dalla panchina"
+- **Messaggi in chat** – a tutti tranne l'autore e chi ha silenziato il canale; ritardi e assenze
+  arrivano in automatico nel canale *Presenze*
 
 Prove manuali: Actions → *Notizie* o *Promemoria presenze* → Run workflow con "Prova".
 

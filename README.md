@@ -19,6 +19,13 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | 6 | Notizie automatiche ogni 3 ore (GitHub Actions + Supabase) | ✅ |
 | 7 | Albo d'oro: sala trofei 2.5D, scelta stagione, trofei del Direttivo | ✅ |
 | 8 | Icona, avvio, notifiche push, privacy, eliminazione account, build firmate | ✅ (configurazione account: `docs/PUBBLICAZIONE.md`) |
+| A | Riquadro "Stasera" in Home, formazione pubblicata con notifica personale | ✅ |
+| – | Squadre MILANAC e MILANAC FUTURO (assegnate dal Direttivo, una o entrambe) | ✅ |
+| B | Carta FUT del giocatore (overall, stile, statistiche del club, condivisione) | ✅ |
+| C | Tattiche & Build (video dei creator per ruolo, schemi del Direttivo) | ✅ |
+| D | Chat a canali (Main, Presenze automatiche, Fantacalcio, Tattiche) | ✅ |
+| E | Tornei (link, classifica facoltativa, partite collegate) | ✅ |
+| – | Colonna sonora: musica di sottofondo scelta dal telefono, con muto | ✅ |
 
 ## Provare l'app subito (modalità demo)
 
@@ -73,7 +80,10 @@ e link nella tabella `news` e cancella quelle più vecchie di 60 giorni.
 
 ## Build
 
-- **CI**: ad ogni push GitHub Actions esegue `flutter analyze` e `flutter test`.
+- **CI**: ad ogni push GitHub Actions esegue `flutter analyze`, `flutter test` e la prova delle
+  migrazioni su un PostgreSQL vuoto con i controlli di sicurezza (`tools/db/test/run.sh`).
+- **Database**: il workflow *Database* applica le nuove migrazioni solo se quella prova passa.
+- **Funzioni**: il workflow *Funzioni* pubblica la funzione Supabase `notify` (notifiche personali).
 - **APK**: Actions → *CI* → *Run workflow* → scarica l'artifact `milanac-apk` (usa `env/prod.json`).
 - **Rilascio Android (.aab firmato)**: Actions → *Rilascio Android*.
 - **iOS**: Codemagic (`codemagic.yaml`) → TestFlight.
