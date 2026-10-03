@@ -16,7 +16,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | 3 | Presenze con storico (notifiche push nella fase 8) | ✅ |
 | 4 | Calendario, Risultati + media (link / foto / clip 15s) | ✅ |
 | 5 | Formazione (campo San Siro, 7 moduli, panchina) | ✅ |
-| 6 | Notizie automatiche (GitHub Actions) | ⏳ |
+| 6 | Notizie automatiche ogni 3 ore (GitHub Actions + Supabase) | ✅ |
 | 7 | Albo d'oro 2.5D | ⏳ |
 | 8 | Pubblicazione Play Store / App Store | ⏳ |
 
@@ -60,6 +60,16 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
    update profiles set club_role = 'direttivo' where display_name = 'Il tuo nome';
    ```
    Da lì in poi è il Direttivo ad approvare gli altri dall'app.
+
+## Notizie automatiche
+
+Il workflow **Notizie** (`.github/workflows/news.yml`) gira ogni 3 ore: legge le fonti in
+`tools/news_fetcher/sources.json`, filtra le notizie pertinenti, salva titolo, breve descrizione
+e link nella tabella `news` e cancella quelle più vecchie di 60 giorni.
+
+- Serve il secret **`SUPABASE_SECRET_KEY`** nel repository (vedi `docs/SETUP_SUPABASE.md`).
+- Prova manuale: Actions → *Notizie* → *Run workflow* (spunta "Prova senza salvare" per un test).
+- Aggiungere/togliere fonti: modifica `sources.json` (RSS o Atom; le fonti che non rispondono vengono saltate).
 
 ## Build
 

@@ -107,21 +107,22 @@ Script (Dart o Python) eseguito da **GitHub Actions ogni 3 ore**:
 1. legge le fonti (RSS dove esiste, altrimenti pagina HTML o JSON pubblico);
 2. estrae **titolo, data, link, immagine e una descrizione breve** (max ~300 caratteri, mai l'articolo intero);
 3. classifica per categoria con parole chiave; scarta duplicati (`url` unico);
-4. salva in `news` e, se è un Title Update, invia la notifica push;
+4. salva in `news` (la notifica push per i Title Update arriverà con la fase 8);
 5. cancella le notizie più vecchie di 60 giorni.
 
 L'esecuzione regolare tiene anche **attivo** il progetto Supabase Free (che va in pausa dopo 7 giorni di inattività).
 
-### Fonti iniziali (modificabili da tabella `news_sources`)
+### Fonti iniziali (modificabili in `tools/news_fetcher/sources.json`)
 | Categoria | Fonte |
 |---|---|
-| Tornei | FVPA – fvpa.net (sito + X @FVPA_net) |
-| Tornei | Virtual Pro League Italy – virtualproleague.com (X @VPLItaly) |
-| Aggiornamenti | EA SPORTS FC 27 – ea.com/it/games/ea-sports-fc/fc-27/news |
-| Aggiornamenti | Patchbot – patchbot.io/games/ea-sports-fc-27 |
-| Aggiornamenti / UT | Everyeye.it – sezione EA Sports FC |
-| Ultimate Team | FifaUltimateTeam.it |
-| Pro Clubs / community | Reddit r/EASportsFC e r/FIFAProClubs (feed `.rss`) |
+| Tornei | FVPA – feed del sito fvpa.net |
+| Tornei | Google News: "FVPA" / "Virtual Pro League" |
+| Aggiornamenti | Google News IT + EN: "FC 27" + title update / aggiornamento / patch |
+| Ultimate Team | Google News: "FC 27" + "Ultimate Team" · FifaUltimateTeam.it (feed) |
+| Pro Clubs | Google News: "FC 27" + Pro Clubs / The Grounds · Reddit r/FIFAProClubs (top del giorno) |
+
+Google News raccoglie anche EA SPORTS, Everyeye, FUTBIN e le altre testate: per queste mostriamo
+la testata e il link, la descrizione rimanda all'articolo originale.
 
 ## 7. Limiti del piano gratuito e come li gestiamo
 

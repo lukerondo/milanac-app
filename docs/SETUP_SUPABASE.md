@@ -64,6 +64,18 @@ com.milanacproclub.milanac://login-callback
    ```
 3. L'app si sblocca da sola. Da qui in poi gli altri li approva il Direttivo.
 
+## 8. Notizie automatiche (GitHub Actions)
+1. Su GitHub apri il repository **milanac-app** → **Settings → Secrets and variables → Actions**
+2. **New repository secret**
+   - Name: `SUPABASE_SECRET_KEY`
+   - Secret: la chiave `sb_secret_…` (Supabase → Settings → API Keys)
+3. Vai su **Actions → Notizie → Run workflow** per la prima raccolta.
+   Nel log vedi, fonte per fonte, quante notizie sono arrivate (✓) o se è stata saltata (✗).
+4. Da lì in poi parte da solo ogni 3 ore (alle :17).
+
+> Nota: le esecuzioni programmate partono solo dal branch principale (`main`):
+> il workflow si attiva da solo dopo il merge della pull request.
+
 ## Sicurezza
 - La chiave **publishable** (`sb_publishable_…`) è nel repository: va bene, è pensata per stare nell'app.
 - La chiave **secret** (`sb_secret_…`) NON va mai messa nell'app né nel repository:

@@ -23,6 +23,8 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      - name: Test raccoglitore notizie
+        run: python3 -m unittest discover -s tools/news_fetcher/tests
 
   apk:
     if: github.event_name == 'workflow_dispatch' && inputs.build_apk

@@ -1,0 +1,34 @@
+name: Notizie
+
+# Raccoglie le notizie ogni 3 ore e le salva su Supabase.
+# Tiene anche attivo il progetto Supabase Free (che va in pausa dopo 7 giorni senza traffico).
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Prova senza salvare (mostra solo le notizie trovate)"
+        type: boolean
+        default: false
+
+concurrency: news
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test del raccoglitore
+        run: python -m unittest discover -s tools/news_fetcher/tests
+      - name: Raccolta notizie
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: |
+          export SUPABASE_URL=$(python -c "import json;print(json.load(open('env/prod.json'))['SUPABASE_URL'])")
+          python tools/news_fetcher/fetch_news.py

@@ -1,0 +1,52 @@
+{
+  "_info": "Fonti delle notizie. type: rss (RSS o Atom). category: categoria predefinita (tornei, aggiornamenti, ultimate_team, pro_clubs). require: almeno una di queste parole deve comparire in titolo o descrizione (filtro di pertinenza). Le fonti che non rispondono vengono saltate.",
+  "sources": [
+    {
+      "name": "FVPA",
+      "category": "tornei",
+      "url": "https://www.fvpa.net/feed/"
+    },
+    {
+      "name": "Google News · FVPA",
+      "category": "tornei",
+      "url": "https://news.google.com/rss/search?q=FVPA+OR+%22Virtual+Pro+League%22+pro+club&hl=it&gl=IT&ceid=IT:it",
+      "require": ["fvpa", "virtual pro", "vpl", "pro club", "proclub"]
+    },
+    {
+      "name": "Google News · Aggiornamenti FC 27",
+      "category": "aggiornamenti",
+      "url": "https://news.google.com/rss/search?q=%22FC+27%22+(%22title+update%22+OR+aggiornamento+OR+patch)&hl=it&gl=IT&ceid=IT:it",
+      "require": ["fc 27", "fc27"]
+    },
+    {
+      "name": "Google News · Title Update (EN)",
+      "category": "aggiornamenti",
+      "url": "https://news.google.com/rss/search?q=%22FC+27%22+%22title+update%22&hl=en-GB&gl=GB&ceid=GB:en",
+      "require": ["fc 27", "fc27"]
+    },
+    {
+      "name": "Google News · Ultimate Team",
+      "category": "ultimate_team",
+      "url": "https://news.google.com/rss/search?q=%22FC+27%22+%22Ultimate+Team%22&hl=it&gl=IT&ceid=IT:it",
+      "require": ["fc 27", "fc27", "ultimate team"]
+    },
+    {
+      "name": "Google News · Pro Clubs",
+      "category": "pro_clubs",
+      "url": "https://news.google.com/rss/search?q=%22FC+27%22+(%22Pro+Clubs%22+OR+Clubs+OR+%22The+Grounds%22)&hl=it&gl=IT&ceid=IT:it",
+      "require": ["fc 27", "fc27"]
+    },
+    {
+      "name": "FifaUltimateTeam.it",
+      "category": "ultimate_team",
+      "url": "https://fifaultimateteam.it/feed/",
+      "require": ["fc 27", "fc27", "ultimate team", "sbc", "evoluzion"]
+    },
+    {
+      "name": "Reddit r/FIFAProClubs",
+      "category": "pro_clubs",
+      "url": "https://www.reddit.com/r/FIFAProClubs/top/.rss?t=day",
+      "max_items": 5
+    }
+  ]
+}
