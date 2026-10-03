@@ -72,20 +72,32 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build apk --release --dart-define-from-file=env/prod.json
+      # Sempre la stessa chiave di prova: ogni nuovo APK si installa sopra quello vecchio.
+      - name: Chiave fissa per gli APK di prova
+        run: mkdir -p ~/.android && cp android/app/apk-di-prova.keystore ~/.android/debug.keystore
+      - name: APK per tutti i telefoni
+        run: |
+          flutter build apk --release --dart-define-from-file=env/prod.json
+          cp build/app/outputs/flutter-apk/app-release.apk MILANAC.apk
+      # Versione leggera (circa metà) per i telefoni moderni, comoda da mandare in chat.
+      - name: APK solo arm64
+        run: |
+          flutter build apk --release --target-platform android-arm64 --dart-define-from-file=env/prod.json
+          cp build/app/outputs/flutter-apk/app-release.apk MILANAC-arm64.apk
       - uses: actions/upload-artifact@v4
         with:
           name: milanac-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            MILANAC.apk
+            MILANAC-arm64.apk
       - name: Pubblica nella release "APK di prova"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk MILANAC.apk
-          NOTES="APK di prova (Android) – compilato il $(date -u '+%d/%m/%Y %H:%M') UTC dal commit ${GITHUB_SHA::7}. Scarica MILANAC.apk dal telefono e installalo."
+          NOTES="APK di prova (Android) – compilato il $(date -u '+%d/%m/%Y %H:%M') UTC dal commit ${GITHUB_SHA::7}. Scarica MILANAC.apk dal telefono e installalo (MILANAC-arm64.apk è la versione leggera per i telefoni moderni)."
           if gh release view apk-di-prova >/dev/null 2>&1; then
             gh release edit apk-di-prova --notes "$NOTES"
           else
             gh release create apk-di-prova --prerelease --title "APK di prova" --notes "$NOTES" --target "$GITHUB_SHA"
           fi
-          gh release upload apk-di-prova MILANAC.apk --clobber
+          gh release upload apk-di-prova MILANAC.apk MILANAC-arm64.apk --clobber

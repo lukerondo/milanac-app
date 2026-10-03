@@ -12,3 +12,7 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# Eccezione: chiave di prova (equivalente a quella di debug, password "android") usata solo
+# per gli APK di prova della CI, così si aggiornano sopra la versione installata.
+# La chiave vera per Google Play resta nei secret di GitHub.
+!app/apk-di-prova.keystore
