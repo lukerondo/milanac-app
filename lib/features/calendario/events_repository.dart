@@ -49,8 +49,9 @@ class _SupabaseEventsRepository implements EventsRepository {
   }
 
   @override
-  Future<void> delete(String id) =>
-      _ref.read(supabaseProvider).from('events').delete().eq('id', id);
+  Future<void> delete(String id) async {
+    await _ref.read(supabaseProvider).from('events').delete().eq('id', id);
+  }
 }
 
 class DemoEventsRepository implements EventsRepository {

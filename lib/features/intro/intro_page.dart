@@ -8,8 +8,7 @@ import 'package:video_player/video_player.dart';
 import '../../core/theme.dart';
 import 'intro_state.dart';
 
-/// Intro: video del club (se presente in assets/video/intro.mp4, altrimenti immagine
-/// di sfondo), stemma del Milano FC e barra di caricamento. Tocca per saltare.
+/// Intro: video del club (assets/video/intro.mp4; se manca, sfondo nero), stemma del Milano FC e barra di caricamento. Tocca per saltare.
 class IntroPage extends ConsumerStatefulWidget {
   const IntroPage({super.key});
 
@@ -93,9 +92,9 @@ class _IntroPageState extends ConsumerState<IntroPage>
                   height: video.value.size.height,
                   child: VideoPlayer(video),
                 ),
-              )
-            else
-              Image.asset('assets/images/intro_bg.png', fit: BoxFit.cover),
+              ),
+            // Finché il video non è pronto (o se manca) lo sfondo resta nero:
+            // nessuna immagine intermedia.
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(

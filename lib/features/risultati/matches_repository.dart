@@ -96,14 +96,15 @@ class _SupabaseMatchesRepository implements MatchesRepository {
       .map((rows) => rows.map(MatchMedia.fromMap).toList());
 
   @override
-  Future<void> addLink(String matchId, String url, {String? caption}) =>
-      _client.from('match_media').insert({
-        'match_id': matchId,
-        'type': MediaType.link.name,
-        'url': url,
-        'caption': caption,
-        'uploaded_by': _client.auth.currentUser?.id,
-      });
+  Future<void> addLink(String matchId, String url, {String? caption}) async {
+    await _client.from('match_media').insert({
+      'match_id': matchId,
+      'type': MediaType.link.name,
+      'url': url,
+      'caption': caption,
+      'uploaded_by': _client.auth.currentUser?.id,
+    });
+  }
 
   @override
   Future<void> uploadMedia(

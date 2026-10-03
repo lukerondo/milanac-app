@@ -39,10 +39,12 @@ class _SupabaseAttendanceRepository implements AttendanceRepository {
       .map((rows) => rows.map(AttendanceEntry.fromMap).toList());
 
   @override
-  Future<void> save(AttendanceEntry e) => _ref
-      .read(supabaseProvider)
-      .from('attendance')
-      .upsert(e.toMap(), onConflict: 'player_id,date');
+  Future<void> save(AttendanceEntry e) async {
+    await _ref
+        .read(supabaseProvider)
+        .from('attendance')
+        .upsert(e.toMap(), onConflict: 'player_id,date');
+  }
 }
 
 /// Storico di esempio in memoria (modalità demo e test).

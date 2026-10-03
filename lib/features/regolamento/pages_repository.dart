@@ -36,9 +36,9 @@ class _SupabasePagesRepository implements PagesRepository {
   }
 
   @override
-  Future<void> save(ClubPage page, String content) {
+  Future<void> save(ClubPage page, String content) async {
     final client = _ref.read(supabaseProvider);
-    return client.from('pages').upsert({
+    await client.from('pages').upsert({
       'slug': page.name,
       'content': content,
       'updated_by': client.auth.currentUser?.id,

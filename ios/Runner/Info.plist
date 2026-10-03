@@ -9,10 +9,10 @@
 		<key>CFBundleDisplayName</key>
 		<string>MILANAC</string>
 		<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
-	<key>NSPhotoLibraryUsageDescription</key>
+		<array>
+			<string>remote-notification</string>
+		</array>
+		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Serve per caricare foto e clip delle partite.</string>
 		<key>NSCameraUsageDescription</key>
 		<string>Serve per registrare le clip degli highlights.</string>

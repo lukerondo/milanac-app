@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
+import 'profile.dart';
 
 /// Metodi di accesso offerti nella schermata di login.
 enum LoginMethod { google, microsoft, yahoo, apple }
@@ -42,6 +43,23 @@ class AuthRepository {
   }
 
   Future<void> signOut() => _client.auth.signOut();
+
+  /// Al primo accesso: ruolo richiesto (Giocatore/Direttivo) e gamertag.
+  Future<void> updateMyRequest({
+    required ClubRole role,
+    String? gamertag,
+  }) async {
+    final id = _client.auth.currentUser?.id;
+    if (id == null) return;
+    await _client
+        .from('profiles')
+        .update({
+          'requested_role': role.name,
+          if (gamertag != null && gamertag.trim().isNotEmpty)
+            'gamertag': gamertag.trim(),
+        })
+        .eq('id', id);
+  }
 
   /// Elimina definitivamente l'account (funzione `delete_my_account` nel database).
   Future<void> deleteAccount() async {
