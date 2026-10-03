@@ -27,7 +27,7 @@ void main() {
     // Apre il menu e va alla Rosa.
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
-    expect(find.text("Albo d'oro"), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
     await tester.tap(find.text('Rosa completa'));
     await tester.pumpAndSettle();
     expect(find.text('ROSA COMPLETA'), findsOneWidget);

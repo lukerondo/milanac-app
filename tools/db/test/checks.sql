@@ -221,3 +221,57 @@ do $$ begin
   assert (select count(*) from storage.objects where bucket_id = 'tactics') = 1, 'il membro vede le immagini';
 end $$;
 reset role;
+
+-- Chat: lettura/scrittura dei membri, messaggi di sistema dalle presenze, non letti.
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+insert into messages (channel_id, body) select id, 'Ciao a tutti' from channels where slug = 'main';
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body, kind) select id, 'finto', 'system' from channels where slug = 'main'$q$,
+  'row-level security');
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body, author_id) select id, 'a nome di altri', '00000000-0000-0000-0000-00000000000d' from channels where slug = 'main'$q$,
+  'row-level security');
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body) select id, '   ' from channels where slug = 'main'$q$,
+  'messages_check');
+-- Ritardo di stasera → messaggio automatico in Presenze.
+insert into attendance (player_id, date, status, arrival_time, note)
+values ('00000000-0000-0000-0000-0000000000e1', (now() at time zone 'Europe/Rome')::date, 'ritardo', '21:50', 'Traffico');
+update attendance set note = 'Traffico' where player_id = '00000000-0000-0000-0000-0000000000e1';
+update attendance set status = 'presente' where player_id = '00000000-0000-0000-0000-0000000000e1';
+insert into channel_mutes (channel_id) select id from channels where slug = 'fantacalcio';
+
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$
+declare o record;
+begin
+  assert (select count(*) from messages m join channels c on c.id = m.channel_id
+          where c.slug = 'presenze' and m.kind = 'system') = 2, 'ritardo + "alla fine ci sarà" (nota invariata ignorata)';
+  assert (select body from messages where kind = 'system' order by created_at limit 1)
+         like '% stasera arriva in ritardo, alle 21:50 · Traffico', 'testo del ritardo';
+  select * into o from chat_overview() where channel_id = (select id from channels where slug = 'main');
+  assert o.unread = 1 and o.last_body = 'Ciao a tutti', 'non letti e ultimo messaggio per il Direttivo';
+  assert (select count(*) from channel_mutes) = 0, 'i silenziati altrui non sono visibili';
+end $$;
+insert into channel_reads (channel_id) select id from channels where slug = 'main';
+do $$ begin
+  assert (select unread from chat_overview() where channel_id = (select id from channels where slug = 'main')) = 0,
+    'letto dopo channel_reads';
+end $$;
+-- Il Direttivo può eliminare i messaggi altrui; l'autore solo i propri.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+delete from messages where body = 'Ciao a tutti';
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select count(*) from messages where body = 'Ciao a tutti') = 1, 'un altro membro non elimina';
+end $$;
+delete from messages where body = 'Ciao a tutti';
+reset role;
+do $$ begin
+  assert (select count(*) from messages where body = 'Ciao a tutti') = 0, 'il Direttivo elimina';
+  assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 3, 'una notifica per messaggio';
+end $$;

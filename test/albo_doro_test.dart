@@ -19,6 +19,15 @@ Future<void> openAlbo(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.byIcon(Icons.menu));
   await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
+    find.text("Albo d'oro"),
+    100,
+    scrollable: find.descendant(
+      of: find.byType(Drawer),
+      matching: find.byType(Scrollable),
+    ),
+  );
+  await tester.pumpAndSettle();
   await tester.tap(find.text("Albo d'oro"));
   await tester.pumpAndSettle();
 }

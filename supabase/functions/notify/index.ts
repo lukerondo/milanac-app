@@ -66,7 +66,7 @@ const TEAM_NAMES: Record<string, string> = { milanac: "MILANAC", futuro: "MILANA
 async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]> {
   const { data: msg } = await db
     .from("messages")
-    .select("id, body, image_path, author_id, channel_id, channels(name, slug), profiles(display_name)")
+    .select("id, kind, body, image_path, author_id, channel_id, channels(name, slug), profiles(display_name)")
     .eq("id", messageId).single();
   if (!msg) return [];
   // deno-lint-ignore no-explicit-any
@@ -83,7 +83,8 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
     .filter((m) => m.id !== msg.author_id && !muted.has(m.id))
     .map((m) => ({
       userId: m.id,
-      title: `#${channel?.name ?? "chat"} · ${author}`,
+      // I messaggi automatici (ritardi, assenze) contengono già il nome.
+      title: msg.kind === "system" ? `#${channel?.name ?? "chat"}` : `#${channel?.name ?? "chat"} · ${author}`,
       body: text.length > 140 ? text.slice(0, 137) + "…" : text,
       route: `/chat/${channel?.slug ?? ""}`,
       data: { channel: channel?.slug ?? "" },
