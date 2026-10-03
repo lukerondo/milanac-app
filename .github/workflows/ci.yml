@@ -28,6 +28,27 @@ jobs:
           python3 -m unittest discover -s tools/news_fetcher/tests
           python3 -m unittest discover -s tools/notifier/tests
 
+  # Prova le migrazioni su un PostgreSQL vuoto (con le parti di Supabase simulate) e
+  # verifica le regole di sicurezza: un errore qui blocca l'applicazione al database vero.
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/db/test/run.sh
+
   # APK di prova: a ogni pull request, a ogni modifica di main o a mano.
   # Viene pubblicato come file .apk nella release "APK di prova" (comodo da scaricare dal telefono).
   apk:
@@ -35,7 +56,7 @@ jobs:
       github.event_name == 'pull_request' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.build_apk)
-    needs: check
+    needs: [check, sql]
     runs-on: ubuntu-latest
     permissions:
       contents: write

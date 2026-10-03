@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
+import '../../core/push/device_tokens.dart';
 import '../../core/theme.dart';
 
 /// Primo accesso: l'utente sceglie se entrare come Giocatore o Direttivo e attende
@@ -143,7 +144,7 @@ class _PendingPageState extends ConsumerState<PendingPage> {
                   ],
                   const SizedBox(height: 16),
                   TextButton.icon(
-                    onPressed: () => ref.read(authRepositoryProvider).signOut(),
+                    onPressed: () => logout(ref),
                     icon: const Icon(Icons.logout_rounded),
                     label: const Text('Esci'),
                   ),

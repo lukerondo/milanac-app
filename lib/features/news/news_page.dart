@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
 import 'news_cover.dart';
 import 'news_item.dart';
+import 'tonight_card.dart';
 import 'news_repository.dart';
 
 class NewsPage extends ConsumerStatefulWidget {
@@ -48,6 +49,7 @@ class _NewsPageState extends ConsumerState<NewsPage> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
+              const TonightCard(),
               if (latestUpdate != null) _UpdateBanner(item: latestUpdate),
               SizedBox(
                 height: 48,

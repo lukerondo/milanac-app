@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
@@ -27,12 +28,53 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
     try {
       final saved = await ref.read(formationRepositoryProvider).save(f);
       if (mounted) setState(() => _draft = saved);
+      ref.invalidate(formationProvider);
     } catch (e) {
       if (!mounted) return;
       setState(() => _draft = previous);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+    }
+  }
+
+  Future<void> _publish(Formation f) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Pubblicare la formazione?'),
+        content: const Text(
+          'Ogni giocatore riceverà una notifica: titolare (con il suo ruolo) o panchina.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Pubblica'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final published = await ref.read(formationRepositoryProvider).publish(f);
+      if (mounted) setState(() => _draft = published);
+      ref.invalidate(formationProvider);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Formazione pubblicata: notifiche inviate ai giocatori.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Pubblicazione non riuscita: $e')),
+      );
     }
   }
 
@@ -65,6 +107,8 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 32),
       children: [
+        _PublishStatus(formation: formation),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -133,15 +177,27 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
             },
           ),
         ),
-        if (isDirettivo)
+        if (isDirettivo) ...[
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-              'Tocca un bollino per scegliere il giocatore. Le modifiche si salvano da sole.',
+              'Tocca un bollino per scegliere il giocatore. Le modifiche restano in bozza '
+              'finché non pubblichi.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: () => _publish(formation),
+            icon: const Icon(Icons.campaign_rounded),
+            label: Text(
+              formation.isPublished && !formation.hasUnpublishedChanges
+                  ? 'Ripubblica e avvisa i giocatori'
+                  : 'Pubblica la formazione di stasera',
+            ),
+          ),
+        ],
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 20, 4, 8),
           child: Text(
@@ -323,6 +379,43 @@ class _PlayerToken extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Stato della formazione: bozza, pubblicata, oppure modificata dopo la pubblicazione.
+class _PublishStatus extends StatelessWidget {
+  const _PublishStatus({required this.formation});
+  final Formation formation;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color, text) = !formation.isPublished
+        ? (
+            Icons.edit_note_rounded,
+            Colors.white54,
+            'Bozza: non ancora pubblicata',
+          )
+        : formation.hasUnpublishedChanges
+        ? (
+            Icons.warning_amber_rounded,
+            MilanacColors.gold,
+            'Modificata dopo la pubblicazione: ripubblica per avvisare i giocatori',
+          )
+        : (
+            Icons.verified_rounded,
+            const Color(0xFF2E9E5B),
+            'Pubblicata ${formation.isPublishedToday ? 'oggi' : 'il ${DateFormat('d MMM', 'it').format(formation.publishedAt!.toLocal())}'}'
+                ' alle ${DateFormat('HH:mm').format(formation.publishedAt!.toLocal())}',
+          );
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(text, style: TextStyle(color: color, fontSize: 13)),
+        ),
+      ],
     );
   }
 }

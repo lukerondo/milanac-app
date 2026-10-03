@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/auth/providers.dart';
+import '../core/push/device_tokens.dart';
 import '../core/config.dart';
 import '../core/theme.dart';
 import '../features/privacy/privacy_page.dart';
@@ -94,7 +95,7 @@ class AppDrawer extends ConsumerWidget {
                     ListTile(
                       leading: const Icon(Icons.logout_rounded),
                       title: const Text('Esci'),
-                      onTap: () => ref.read(authRepositoryProvider).signOut(),
+                      onTap: () => logout(ref),
                     ),
                     ListTile(
                       leading: const Icon(

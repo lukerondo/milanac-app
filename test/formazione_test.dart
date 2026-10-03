@@ -68,8 +68,27 @@ void main() {
     ); // chip in panchina
 
     // Cambio modulo: i giocatori restano schierati.
+    await tester.scrollUntilVisible(find.text('3-5-2'), -200);
     await tester.tap(find.text('3-5-2'));
     await tester.pumpAndSettle();
     expect(find.text('Rossi'), findsOneWidget);
+
+    // Pubblicazione: conferma, poi lo stato diventa "Pubblicata oggi".
+    await tester.scrollUntilVisible(find.textContaining('Bozza'), -200);
+    expect(find.textContaining('Bozza'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Pubblica la formazione di stasera'),
+      200,
+    );
+    await tester.tap(find.text('Pubblica la formazione di stasera'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Pubblica'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ripubblica e avvisa i giocatori'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('Pubblicata oggi'),
+      -200,
+    );
+    expect(find.textContaining('Pubblicata oggi'), findsOneWidget);
   });
 }

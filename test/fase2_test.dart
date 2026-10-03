@@ -37,10 +37,16 @@ void main() {
     expect(find.text('RICHIESTE DI ACCESSO'), findsOneWidget);
     expect(find.text('Nuovo Iscritto'), findsOneWidget);
 
-    expect(find.textContaining('Chiede di entrare come Giocatore'), findsOneWidget);
+    expect(
+      find.textContaining('Chiede di entrare come Giocatore'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Approva come Giocatore'));
     await tester.pumpAndSettle();
-    expect(find.text('Nuovo Iscritto approvato come Giocatore.'), findsOneWidget);
+    expect(
+      find.text('Nuovo Iscritto approvato come Giocatore.'),
+      findsOneWidget,
+    );
 
     expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
     expect(find.text('Diavolo_9 · Dal 3 feb 2025'), findsOneWidget);
@@ -49,7 +55,9 @@ void main() {
     expect(find.text('Nuovo Iscritto'), findsOneWidget);
   });
 
-  testWidgets('Rosa: il Direttivo rifiuta una richiesta (con conferma)', (tester) async {
+  testWidgets('Rosa: il Direttivo rifiuta una richiesta (con conferma)', (
+    tester,
+  ) async {
     await startApp(tester);
     await openSection(tester, 'Rosa completa');
 

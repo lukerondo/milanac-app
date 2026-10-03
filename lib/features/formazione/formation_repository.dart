@@ -7,6 +7,9 @@ import 'modules.dart';
 abstract class FormationRepository {
   Future<Formation> loadCurrent();
   Future<Formation> save(Formation formation);
+
+  /// Pubblica la formazione: parte la notifica personale a ogni membro.
+  Future<Formation> publish(Formation formation);
 }
 
 final formationRepositoryProvider = Provider<FormationRepository>((ref) {
@@ -27,15 +30,20 @@ class _SupabaseFormationRepository implements FormationRepository {
     final client = _ref.read(supabaseProvider);
     final row = await client
         .from('formations')
-        .select('id, module, formation_slots(slot_index, player_id)')
+        .select(
+          'id, module, published_at, updated_at, formation_slots(slot_index, player_id)',
+        )
         .eq('is_current', true)
         .order('updated_at', ascending: false)
         .limit(1)
         .maybeSingle();
     if (row == null) return const Formation();
+    DateTime? date(Object? v) => v == null ? null : DateTime.parse(v as String);
     return Formation(
       id: row['id'] as String,
       module: row['module'] as String,
+      publishedAt: date(row['published_at']),
+      updatedAt: date(row['updated_at']),
       players: {
         for (final s
             in (row['formation_slots'] as List).cast<Map<String, dynamic>>())
@@ -78,7 +86,22 @@ class _SupabaseFormationRepository implements FormationRepository {
           'player_id': f.players[i],
         },
     ]);
-    return f.copyWith(id: id);
+    return f.copyWith(id: id, updatedAt: DateTime.now().toUtc());
+  }
+
+  @override
+  Future<Formation> publish(Formation f) async {
+    final saved = f.id.isEmpty ? await save(f) : f;
+    final client = _ref.read(supabaseProvider);
+    final now = DateTime.now().toUtc();
+    await client
+        .from('formations')
+        .update({
+          'published_at': now.toIso8601String(),
+          'published_by': client.auth.currentUser?.id,
+        })
+        .eq('id', saved.id);
+    return saved.copyWith(publishedAt: now, updatedAt: now);
   }
 }
 
@@ -93,5 +116,11 @@ class DemoFormationRepository implements FormationRepository {
 
   @override
   Future<Formation> save(Formation f) async =>
-      _current = f.copyWith(id: 'demo');
+      _current = f.copyWith(id: 'demo', updatedAt: DateTime.now().toUtc());
+
+  @override
+  Future<Formation> publish(Formation f) async {
+    final now = DateTime.now().toUtc();
+    return _current = f.copyWith(id: 'demo', publishedAt: now, updatedAt: now);
+  }
 }
