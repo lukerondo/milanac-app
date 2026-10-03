@@ -22,9 +22,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       await ref.read(authRepositoryProvider).signIn(method);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Accesso non riuscito: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Accesso non riuscito: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = null);
@@ -34,7 +33,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     // "Accedi con Apple" è obbligatorio su iOS quando si offrono altri login social.
-    final showApple = kIsWeb || defaultTargetPlatform == TargetPlatform.iOS ||
+    final showApple =
+        kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS;
 
     return Scaffold(
@@ -58,32 +59,43 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text('Milano siamo noi!', style: TextStyle(color: Colors.white70)),
+                  const Text(
+                    'Milano siamo noi!',
+                    style: TextStyle(color: Colors.white70),
+                  ),
                   const SizedBox(height: 36),
                   _LoginButton(
                     label: 'Continua con Google',
                     icon: Icons.g_mobiledata_rounded,
                     busy: _busy == LoginMethod.google,
-                    onPressed: _busy == null ? () => _signIn(LoginMethod.google) : null,
+                    onPressed: _busy == null
+                        ? () => _signIn(LoginMethod.google)
+                        : null,
                   ),
                   _LoginButton(
                     label: 'Continua con Microsoft (Hotmail/Outlook)',
                     icon: Icons.window_rounded,
                     busy: _busy == LoginMethod.microsoft,
-                    onPressed: _busy == null ? () => _signIn(LoginMethod.microsoft) : null,
+                    onPressed: _busy == null
+                        ? () => _signIn(LoginMethod.microsoft)
+                        : null,
                   ),
                   _LoginButton(
                     label: 'Continua con Yahoo',
                     icon: Icons.alternate_email_rounded,
                     busy: _busy == LoginMethod.yahoo,
-                    onPressed: _busy == null ? () => _signIn(LoginMethod.yahoo) : null,
+                    onPressed: _busy == null
+                        ? () => _signIn(LoginMethod.yahoo)
+                        : null,
                   ),
                   if (showApple)
                     _LoginButton(
                       label: 'Continua con Apple',
                       icon: Icons.apple_rounded,
                       busy: _busy == LoginMethod.apple,
-                      onPressed: _busy == null ? () => _signIn(LoginMethod.apple) : null,
+                      onPressed: _busy == null
+                          ? () => _signIn(LoginMethod.apple)
+                          : null,
                     ),
                   const SizedBox(height: 20),
                   const Text(
@@ -126,11 +138,16 @@ class _LoginButton extends StatelessWidget {
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.white,
             side: const BorderSide(color: Colors.white24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
           icon: busy
               ? const SizedBox(
-                  width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : Icon(icon),
           label: Text(label),
         ),

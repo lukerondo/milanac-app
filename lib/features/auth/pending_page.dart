@@ -21,11 +21,17 @@ class PendingPage extends ConsumerWidget {
               children: [
                 Image.asset('assets/images/stemma.png', height: 110),
                 const SizedBox(height: 24),
-                const Icon(Icons.hourglass_top_rounded, color: MilanacColors.gold, size: 40),
+                const Icon(
+                  Icons.hourglass_top_rounded,
+                  color: MilanacColors.gold,
+                  size: 40,
+                ),
                 const SizedBox(height: 12),
-                Text('Account in attesa di approvazione',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  'Account in attesa di approvazione',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
                 const SizedBox(height: 8),
                 const Text(
                   'Un membro del Direttivo deve approvare il tuo accesso. '

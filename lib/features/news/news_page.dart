@@ -30,7 +30,12 @@ class _NewsPageState extends ConsumerState<NewsPage> {
             const SizedBox(height: 120),
             const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.white38),
             const SizedBox(height: 12),
-            Center(child: Text('Impossibile caricare le notizie.\n$e', textAlign: TextAlign.center)),
+            Center(
+              child: Text(
+                'Impossibile caricare le notizie.\n$e',
+                textAlign: TextAlign.center,
+              ),
+            ),
           ],
         ),
         data: (items) {
@@ -64,7 +69,9 @@ class _NewsPageState extends ConsumerState<NewsPage> {
               if (filtered.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 48),
-                  child: Center(child: Text('Nessuna notizia in questa categoria.')),
+                  child: Center(
+                    child: Text('Nessuna notizia in questa categoria.'),
+                  ),
                 ),
               for (final n in filtered) NewsCard(item: n),
             ],
@@ -87,9 +94,14 @@ class _UpdateBanner extends StatelessWidget {
       color: MilanacColors.redDark,
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
-        leading: const Icon(Icons.system_update_rounded, color: MilanacColors.gold),
-        title: const Text('Nuovo aggiornamento FC 27',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        leading: const Icon(
+          Icons.system_update_rounded,
+          color: MilanacColors.gold,
+        ),
+        title: const Text(
+          'Nuovo aggiornamento FC 27',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         subtitle: Text('Aggiorna il gioco prima del match! · ${item.title}'),
         onTap: () => openNews(item.url),
       ),
@@ -115,19 +127,24 @@ class NewsCard extends StatelessWidget {
             Text(
               '${item.source.toUpperCase()} · $date',
               style: const TextStyle(
-                  color: MilanacColors.gold, fontSize: 12, fontWeight: FontWeight.w700),
+                color: MilanacColors.gold,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 6),
-            Text(item.title,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800)),
+            Text(
+              item.title,
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 6),
-            Text(item.summary,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70)),
+            Text(
+              item.summary,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70),
+            ),
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,

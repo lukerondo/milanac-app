@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/login_page.dart';
+import '../features/calendario/calendario_page.dart';
 import '../features/auth/pending_page.dart';
 import '../features/common/coming_soon_page.dart';
 import '../features/intro/intro_page.dart';
@@ -10,6 +11,7 @@ import '../features/intro/intro_state.dart';
 import '../features/news/news_page.dart';
 import '../features/presenze/presenze_page.dart';
 import '../features/regolamento/regolamento_page.dart';
+import '../features/risultati/risultati_page.dart';
 import '../features/rosa/rosa_page.dart';
 import '../shared/app_shell.dart';
 import '../shared/sections.dart';
@@ -34,7 +36,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final loc = state.matchedLocation;
-      if (!ref.read(introDoneProvider)) return loc == '/intro' ? null : '/intro';
+      if (!ref.read(introDoneProvider)) {
+        return loc == '/intro' ? null : '/intro';
+      }
 
       const gates = {'/intro', '/login', '/attesa'};
       String? goTo(String target) => loc == target ? null : target;
@@ -68,6 +72,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/rosa' => const RosaPage(),
                   '/regolamento' => const RegolamentoPage(),
                   '/presenze' => const PresenzePage(),
+                  '/calendario' => const CalendarioPage(),
+                  '/risultati' => const RisultatiPage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

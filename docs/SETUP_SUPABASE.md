@@ -11,6 +11,7 @@ https://bxtnvgnxfyzwamfdnmkx.supabase.co/auth/v1/callback
 1. Dashboard Supabase → **SQL Editor** → *New query*
 2. Incolla tutto il file `supabase/migrations/0001_schema_iniziale.sql` → **Run**
 3. Deve comparire "Success. No rows returned".
+4. Ripeti con `supabase/migrations/0002_limiti_media.sql` (limiti di dimensione dei file caricati).
 
 ## 2. URL dell'app
 **Authentication → URL Configuration → Redirect URLs** → *Add URL*:

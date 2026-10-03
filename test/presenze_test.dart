@@ -29,7 +29,11 @@ void main() {
   test('statistiche: il ritardo conta come presenza', () {
     final d = DateTime(2026, 10, 1);
     final stats = AttendanceStats([
-      AttendanceEntry(playerId: 'x', date: d, status: AttendanceStatus.presente),
+      AttendanceEntry(
+        playerId: 'x',
+        date: d,
+        status: AttendanceStatus.presente,
+      ),
       AttendanceEntry(playerId: 'x', date: d, status: AttendanceStatus.ritardo),
       AttendanceEntry(playerId: 'x', date: d, status: AttendanceStatus.assente),
       AttendanceEntry(playerId: 'x', date: d, status: AttendanceStatus.assente),
@@ -42,7 +46,10 @@ void main() {
     await openPresenze(tester);
     expect(find.text('STASERA'), findsOneWidget);
     expect(find.textContaining('Non hai ancora risposto'), findsOneWidget);
-    expect(find.text('In ritardo, arrivo alle 21:50 · Esco tardi da lavoro'), findsOneWidget);
+    expect(
+      find.text('In ritardo, arrivo alle 21:50 · Esco tardi da lavoro'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.widgetWithText(OutlinedButton, 'Presente').first);
     await tester.pumpAndSettle();
@@ -65,6 +72,9 @@ void main() {
     await tester.tap(find.text('Marco Rossi'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Storico presenze'), findsOneWidget);
-    expect(find.text('Segna per questo giocatore (Direttivo):'), findsOneWidget);
+    expect(
+      find.text('Segna per questo giocatore (Direttivo):'),
+      findsOneWidget,
+    );
   });
 }

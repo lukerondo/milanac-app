@@ -20,17 +20,19 @@ class IntroPage extends ConsumerStatefulWidget {
   ConsumerState<IntroPage> createState() => _IntroPageState();
 }
 
-class _IntroPageState extends ConsumerState<IntroPage> with SingleTickerProviderStateMixin {
+class _IntroPageState extends ConsumerState<IntroPage>
+    with SingleTickerProviderStateMixin {
   VideoPlayerController? _video;
   late final AnimationController _progress;
 
   @override
   void initState() {
     super.initState();
-    _progress = AnimationController(vsync: this, duration: IntroPage.fallbackDuration)
-      ..addStatusListener((s) {
-        if (s == AnimationStatus.completed) _finish();
-      });
+    _progress =
+        AnimationController(vsync: this, duration: IntroPage.fallbackDuration)
+          ..addStatusListener((s) {
+            if (s == AnimationStatus.completed) _finish();
+          });
     _start();
   }
 
@@ -114,7 +116,10 @@ class _IntroPageState extends ConsumerState<IntroPage> with SingleTickerProvider
                     if (video != null) ...[
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.asset('assets/images/stemma.png', height: 96),
+                        child: Image.asset(
+                          'assets/images/stemma.png',
+                          height: 96,
+                        ),
                       ),
                       const SizedBox(height: 20),
                     ],
@@ -128,20 +133,27 @@ class _IntroPageState extends ConsumerState<IntroPage> with SingleTickerProvider
                               value: _progress.value,
                               minHeight: 8,
                               backgroundColor: Colors.white24,
-                              valueColor: const AlwaysStoppedAnimation(MilanacColors.red),
+                              valueColor: const AlwaysStoppedAnimation(
+                                MilanacColors.red,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Caricamento… ${(_progress.value * 100).round()}%',
-                            style: const TextStyle(color: Colors.white70, letterSpacing: 1),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              letterSpacing: 1,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text('Tocca per saltare',
-                        style: TextStyle(color: Colors.white38, fontSize: 12)),
+                    const Text(
+                      'Tocca per saltare',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
                   ],
                 ),
               ),

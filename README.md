@@ -14,7 +14,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | 1 | Scheletro, tema rossonero, Intro, Login social, approvazione utenti, menu laterale, Home notizie | ✅ |
 | 2 | Rosa (con approvazione accessi), Regolamento & Storia, contatti social modificabili | ✅ |
 | 3 | Presenze con storico (notifiche push nella fase 8) | ✅ |
-| 4 | Calendario, Risultati + media (link / clip 15s) | ⏳ |
+| 4 | Calendario, Risultati + media (link / foto / clip 15s) | ✅ |
 | 5 | Formazione (campo San Siro) | ⏳ |
 | 6 | Notizie automatiche (GitHub Actions) | ⏳ |
 | 7 | Albo d'oro 2.5D | ⏳ |
@@ -38,7 +38,8 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
 ## Collegare Supabase (gratis)
 
 1. Crea un progetto su [supabase.com](https://supabase.com) (piano Free, regione Europa).
-2. **SQL Editor** → incolla ed esegui `supabase/migrations/0001_schema_iniziale.sql`.
+2. **SQL Editor** → incolla ed esegui, in ordine, i file in `supabase/migrations/`
+   (`0001_schema_iniziale.sql`, poi `0002_limiti_media.sql`).
 3. **Authentication → URL Configuration** → aggiungi agli *Redirect URLs*:
    `com.milanacproclub.milanac://login-callback`
 4. **Authentication → Providers**:

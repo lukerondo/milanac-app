@@ -12,7 +12,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('it');
   if (!AppConfig.isDemo) {
-    await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
+    await Supabase.initialize(
+      url: AppConfig.supabaseUrl,
+      publishableKey: AppConfig.supabaseAnonKey,
+    );
   }
   runApp(const ProviderScope(child: MilanacApp()));
 }

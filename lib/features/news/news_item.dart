@@ -20,14 +20,14 @@ class NewsItem {
   bool get isGameUpdate => category == 'aggiornamenti';
 
   factory NewsItem.fromMap(Map<String, dynamic> m) => NewsItem(
-        title: m['title'] as String,
-        summary: (m['summary'] as String?) ?? '',
-        url: m['url'] as String,
-        source: m['source'] as String,
-        category: m['category'] as String,
-        publishedAt: DateTime.parse(m['published_at'] as String),
-        imageUrl: m['image_url'] as String?,
-      );
+    title: m['title'] as String,
+    summary: (m['summary'] as String?) ?? '',
+    url: m['url'] as String,
+    source: m['source'] as String,
+    category: m['category'] as String,
+    publishedAt: DateTime.parse(m['published_at'] as String),
+    imageUrl: m['image_url'] as String?,
+  );
 }
 
 /// Categorie mostrate come filtri nella Home.

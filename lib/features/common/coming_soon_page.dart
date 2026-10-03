@@ -20,7 +20,10 @@ class ComingSoonPage extends StatelessWidget {
           children: [
             Icon(section.icon, size: 72, color: MilanacColors.gold),
             const SizedBox(height: 16),
-            Text(section.title, style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              section.title,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: 8),
             const Text(
               'Sezione in arrivo nelle prossime fasi di sviluppo.',

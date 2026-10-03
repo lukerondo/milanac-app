@@ -19,7 +19,10 @@ class RegolamentoPage extends ConsumerWidget {
           const TabBar(
             indicatorColor: MilanacColors.gold,
             labelColor: MilanacColors.gold,
-            tabs: [Tab(text: 'Regolamento'), Tab(text: 'Cenni storici')],
+            tabs: [
+              Tab(text: 'Regolamento'),
+              Tab(text: 'Cenni storici'),
+            ],
           ),
           Expanded(
             child: TabBarView(
@@ -58,7 +61,11 @@ class _PageView extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Errore: $e')),
         data: (text) => text.trim().isEmpty
             ? const Center(
-                child: Text('Nessun contenuto ancora.', style: TextStyle(color: Colors.white54)))
+                child: Text(
+                  'Nessun contenuto ancora.',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              )
             : SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
                 child: SimpleRichText(text),
@@ -67,10 +74,17 @@ class _PageView extends ConsumerWidget {
     );
   }
 
-  Future<void> _edit(BuildContext context, WidgetRef ref, String current) async {
-    final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => _EditorPage(page: page, initial: current)),
-    );
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    String current,
+  ) async {
+    final result = await Navigator.of(context, rootNavigator: true)
+        .push<String>(
+          MaterialPageRoute(
+            builder: (_) => _EditorPage(page: page, initial: current),
+          ),
+        );
     if (result == null) return;
     await ref.read(pagesRepositoryProvider).save(page, result);
     ref.invalidate(pageContentProvider(page));
@@ -99,11 +113,18 @@ class _EditorPageState extends State<_EditorPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.page == ClubPage.regolamento ? 'MODIFICA REGOLAMENTO' : 'MODIFICA STORIA'),
+        title: Text(
+          widget.page == ClubPage.regolamento
+              ? 'MODIFICA REGOLAMENTO'
+              : 'MODIFICA STORIA',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(_controller.text),
-            child: const Text('SALVA', style: TextStyle(color: MilanacColors.gold)),
+            child: const Text(
+              'SALVA',
+              style: TextStyle(color: MilanacColors.gold),
+            ),
           ),
         ],
       ),
@@ -143,40 +164,65 @@ class SimpleRichText extends StatelessWidget {
     final children = <Widget>[];
     for (final line in text.split('\n')) {
       if (line.startsWith('## ')) {
-        children.add(Padding(
-          padding: const EdgeInsets.only(top: 16, bottom: 6),
-          child: Text(line.substring(3),
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 16, bottom: 6),
+            child: Text(
+              line.substring(3),
               style: theme.titleMedium?.copyWith(
-                  color: MilanacColors.gold, fontWeight: FontWeight.w800)),
-        ));
-      } else if (line.startsWith('# ')) {
-        children.add(Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(line.substring(2),
-              style: theme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
-        ));
-      } else if (line.startsWith('- ')) {
-        children.add(Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('•  ', style: TextStyle(color: MilanacColors.red, fontWeight: FontWeight.w900)),
-              Expanded(child: Text(line.substring(2), style: theme.bodyLarge)),
-            ],
+                color: MilanacColors.gold,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
-        ));
+        );
+      } else if (line.startsWith('# ')) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              line.substring(2),
+              style: theme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+            ),
+          ),
+        );
+      } else if (line.startsWith('- ')) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '•  ',
+                  style: TextStyle(
+                    color: MilanacColors.red,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Expanded(
+                  child: Text(line.substring(2), style: theme.bodyLarge),
+                ),
+              ],
+            ),
+          ),
+        );
       } else if (line.trim().isEmpty) {
         children.add(const SizedBox(height: 8));
       } else {
-        children.add(Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Text(line, style: theme.bodyLarge?.copyWith(height: 1.4)),
-        ));
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(line, style: theme.bodyLarge?.copyWith(height: 1.4)),
+          ),
+        );
       }
     }
     return SelectionArea(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
     );
   }
 }

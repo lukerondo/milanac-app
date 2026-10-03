@@ -12,11 +12,11 @@ import 'attendance.dart';
 import 'attendance_repository.dart';
 
 Color statusColor(AttendanceStatus? s) => switch (s) {
-      AttendanceStatus.presente => const Color(0xFF2E9E5B),
-      AttendanceStatus.ritardo => const Color(0xFFE0A526),
-      AttendanceStatus.assente => MilanacColors.red,
-      null => Colors.white24,
-    };
+  AttendanceStatus.presente => const Color(0xFF2E9E5B),
+  AttendanceStatus.ritardo => const Color(0xFFE0A526),
+  AttendanceStatus.assente => MilanacColors.red,
+  null => Colors.white24,
+};
 
 class PresenzePage extends ConsumerStatefulWidget {
   const PresenzePage({super.key});
@@ -38,13 +38,18 @@ class _PresenzePageState extends ConsumerState<PresenzePage> {
       return const Center(child: CircularProgressIndicator());
     }
     if (rosa.hasError || attendance.hasError) {
-      return Center(child: Text('Errore nel caricamento: ${rosa.error ?? attendance.error}'));
+      return Center(
+        child: Text(
+          'Errore nel caricamento: ${rosa.error ?? attendance.error}',
+        ),
+      );
     }
 
-    final members = rosa.value!
-        .where((m) => m.active && m.role != ClubRole.pending)
-        .toList()
-      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    final members =
+        rosa.value!
+            .where((m) => m.active && m.role != ClubRole.pending)
+            .toList()
+          ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final entries = attendance.value!;
     final today = {
       for (final e in entries.where((e) => e.date == _day)) e.playerId: e,
@@ -56,10 +61,7 @@ class _PresenzePageState extends ConsumerState<PresenzePage> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        _DaySelector(
-          day: _day,
-          onChanged: (d) => setState(() => _day = d),
-        ),
+        _DaySelector(day: _day, onChanged: (d) => setState(() => _day = d)),
         if (isMember)
           _MyAttendanceCard(
             playerId: me.id,
@@ -107,7 +109,9 @@ class _DaySelector extends StatelessWidget {
               final picked = await showDatePicker(
                 context: context,
                 initialDate: day,
-                firstDate: DateTime.now().subtract(const Duration(days: historyDays)),
+                firstDate: DateTime.now().subtract(
+                  const Duration(days: historyDays),
+                ),
                 lastDate: DateTime.now().add(const Duration(days: 60)),
               );
               if (picked != null) onChanged(dayOnly(picked));
@@ -116,11 +120,21 @@ class _DaySelector extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Column(
                 children: [
-                  Text(isToday ? 'STASERA' : 'SERATA',
-                      style: const TextStyle(
-                          color: MilanacColors.gold, fontSize: 12, fontWeight: FontWeight.w800)),
-                  Text('${label[0].toUpperCase()}${label.substring(1)}',
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  Text(
+                    isToday ? 'STASERA' : 'SERATA',
+                    style: const TextStyle(
+                      color: MilanacColors.gold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    '${label[0].toUpperCase()}${label.substring(1)}',
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -159,8 +173,10 @@ class _MyAttendanceCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('LA TUA PRESENZA',
-                style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+            const Text(
+              'LA TUA PRESENZA',
+              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
+            ),
             const SizedBox(height: 4),
             Text(
               current == null
@@ -178,7 +194,9 @@ class _MyAttendanceCard extends ConsumerWidget {
                       child: _StatusButton(
                         status: s,
                         selected: current?.status == s,
-                        onPressed: enabled ? () => _answer(context, ref, s) : null,
+                        onPressed: enabled
+                            ? () => _answer(context, ref, s)
+                            : null,
                       ),
                     ),
                   ),
@@ -187,8 +205,10 @@ class _MyAttendanceCard extends ConsumerWidget {
             if (!enabled)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
-                child: Text('Le serate passate non si possono più modificare.',
-                    style: TextStyle(color: Colors.white38, fontSize: 12)),
+                child: Text(
+                  'Le serate passate non si possono più modificare.',
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
               ),
           ],
         ),
@@ -196,7 +216,11 @@ class _MyAttendanceCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _answer(BuildContext context, WidgetRef ref, AttendanceStatus status) async {
+  Future<void> _answer(
+    BuildContext context,
+    WidgetRef ref,
+    AttendanceStatus status,
+  ) async {
     final result = await editAttendance(
       context,
       status: status,
@@ -204,17 +228,22 @@ class _MyAttendanceCard extends ConsumerWidget {
       initialNote: current?.note,
     );
     if (result == null) return;
-    await ref.read(attendanceRepositoryProvider).save(AttendanceEntry(
-          playerId: playerId,
-          date: day,
-          status: status,
-          arrivalTime: result.time,
-          note: result.note,
-        ));
+    await ref
+        .read(attendanceRepositoryProvider)
+        .save(
+          AttendanceEntry(
+            playerId: playerId,
+            date: day,
+            status: status,
+            arrivalTime: result.time,
+            note: result.note,
+          ),
+        );
   }
 }
 
-String _describe(AttendanceEntry e) => switch (e.status) {
+String _describe(AttendanceEntry e) =>
+    switch (e.status) {
       AttendanceStatus.presente => 'Presente alle ${e.arrivalTime}',
       AttendanceStatus.ritardo => 'In ritardo, arrivo alle ${e.arrivalTime}',
       AttendanceStatus.assente => 'Assente',
@@ -222,7 +251,11 @@ String _describe(AttendanceEntry e) => switch (e.status) {
     (e.note == null || e.note!.isEmpty ? '' : ' · ${e.note}');
 
 class _StatusButton extends StatelessWidget {
-  const _StatusButton({required this.status, required this.selected, this.onPressed});
+  const _StatusButton({
+    required this.status,
+    required this.selected,
+    this.onPressed,
+  });
   final AttendanceStatus status;
   final bool selected;
   final VoidCallback? onPressed;
@@ -273,25 +306,34 @@ Future<AttendanceInput?> editAttendance(
   }
   var time = initialTime ?? AppConfig.defaultArrivalTime;
   if (status == AttendanceStatus.ritardo) {
-    final parts = (initialTime == null || initialTime == AppConfig.defaultArrivalTime
-            ? '22:00'
-            : initialTime)
-        .split(':');
+    final parts =
+        (initialTime == null || initialTime == AppConfig.defaultArrivalTime
+                ? '22:00'
+                : initialTime)
+            .split(':');
     final picked = await showTimePicker(
       context: context,
       helpText: 'A che ora arrivi?',
-      initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
-      builder: (c, child) =>
-          MediaQuery(data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true), child: child!),
+      initialTime: TimeOfDay(
+        hour: int.parse(parts[0]),
+        minute: int.parse(parts[1]),
+      ),
+      builder: (c, child) => MediaQuery(
+        data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
     );
     if (picked == null) return null;
-    time = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    time =
+        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
   }
   if (!context.mounted) return null;
   final note = await showDialog<String>(
     context: context,
     builder: (_) => _NoteDialog(
-      title: status == AttendanceStatus.ritardo ? 'Arrivo alle $time' : 'Segna assenza',
+      title: status == AttendanceStatus.ritardo
+          ? 'Arrivo alle $time'
+          : 'Segna assenza',
       initial: initialNote,
     ),
   );
@@ -320,20 +362,26 @@ class _NoteDialogState extends State<_NoteDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.title),
-        content: TextField(
-          controller: _note,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Nota (facoltativa)', hintText: 'Motivo…'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annulla')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, _note.text.trim()),
-            child: const Text('Conferma'),
-          ),
-        ],
-      );
+    title: Text(widget.title),
+    content: TextField(
+      controller: _note,
+      autofocus: true,
+      decoration: const InputDecoration(
+        labelText: 'Nota (facoltativa)',
+        hintText: 'Motivo…',
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Annulla'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _note.text.trim()),
+        child: const Text('Conferma'),
+      ),
+    ],
+  );
 }
 
 class _Summary extends StatelessWidget {
@@ -351,18 +399,42 @@ class _Summary extends StatelessWidget {
         child: Row(
           children: [
             for (final (label, value, color) in [
-              ('Presenti', count(AttendanceStatus.presente), statusColor(AttendanceStatus.presente)),
-              ('Ritardi', count(AttendanceStatus.ritardo), statusColor(AttendanceStatus.ritardo)),
-              ('Assenti', count(AttendanceStatus.assente), statusColor(AttendanceStatus.assente)),
+              (
+                'Presenti',
+                count(AttendanceStatus.presente),
+                statusColor(AttendanceStatus.presente),
+              ),
+              (
+                'Ritardi',
+                count(AttendanceStatus.ritardo),
+                statusColor(AttendanceStatus.ritardo),
+              ),
+              (
+                'Assenti',
+                count(AttendanceStatus.assente),
+                statusColor(AttendanceStatus.assente),
+              ),
               ('Senza risposta', waiting < 0 ? 0 : waiting, Colors.white54),
             ])
               Expanded(
                 child: Column(
                   children: [
-                    Text('$value',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: color)),
+                    Text(
+                      '$value',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: color,
+                      ),
+                    ),
                     FittedBox(
-                      child: Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -420,25 +492,44 @@ class _PlayerRow extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(isMe ? '${member.displayName} (tu)' : member.displayName,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w700)),
                         Text(
-                          entry == null ? 'Non ha ancora risposto' : _describe(entry!),
+                          isMe
+                              ? '${member.displayName} (tu)'
+                              : member.displayName,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          entry == null
+                              ? 'Non ha ancora risposto'
+                              : _describe(entry!),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: statusColor(status), fontSize: 13),
+                          style: TextStyle(
+                            color: statusColor(status),
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  Text('${stats.percent}%',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900, color: MilanacColors.gold, fontSize: 16)),
+                  Text(
+                    '${stats.percent}%',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: MilanacColors.gold,
+                      fontSize: 16,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              _HistoryStrip(history: history.where((e) => e.date.isBefore(day)).take(10).toList()),
+              _HistoryStrip(
+                history: history
+                    .where((e) => e.date.isBefore(day))
+                    .take(10)
+                    .toList(),
+              ),
             ],
           ),
         ),
@@ -446,7 +537,8 @@ class _PlayerRow extends ConsumerWidget {
     );
   }
 
-  Future<void> _showHistory(BuildContext context, WidgetRef ref) => showModalBottomSheet(
+  Future<void> _showHistory(BuildContext context, WidgetRef ref) =>
+      showModalBottomSheet(
         context: context,
         showDragHandle: true,
         isScrollControlled: true,
@@ -455,16 +547,24 @@ class _PlayerRow extends ConsumerWidget {
           history: history,
           onSetStatus: canManage && !isMe
               ? (s) async {
-                  final input = await editAttendance(context, status: s,
-                      initialTime: entry?.arrivalTime, initialNote: entry?.note);
+                  final input = await editAttendance(
+                    context,
+                    status: s,
+                    initialTime: entry?.arrivalTime,
+                    initialNote: entry?.note,
+                  );
                   if (input == null) return;
-                  await ref.read(attendanceRepositoryProvider).save(AttendanceEntry(
-                        playerId: member.id,
-                        date: day,
-                        status: s,
-                        arrivalTime: input.time,
-                        note: input.note,
-                      ));
+                  await ref
+                      .read(attendanceRepositoryProvider)
+                      .save(
+                        AttendanceEntry(
+                          playerId: member.id,
+                          date: day,
+                          status: s,
+                          arrivalTime: input.time,
+                          note: input.note,
+                        ),
+                      );
                 }
               : null,
         ),
@@ -479,19 +579,29 @@ class _HistoryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (history.isEmpty) {
-      return const Text('Nessuno storico', style: TextStyle(color: Colors.white38, fontSize: 12));
+      return const Text(
+        'Nessuno storico',
+        style: TextStyle(color: Colors.white38, fontSize: 12),
+      );
     }
     return Row(
       children: [
-        const Text('Ultime: ', style: TextStyle(color: Colors.white54, fontSize: 12)),
+        const Text(
+          'Ultime: ',
+          style: TextStyle(color: Colors.white54, fontSize: 12),
+        ),
         for (final e in history)
           Tooltip(
-            message: '${DateFormat('d/M', 'it').format(e.date)} · ${e.status.label}',
+            message:
+                '${DateFormat('d/M', 'it').format(e.date)} · ${e.status.label}',
             child: Container(
               margin: const EdgeInsets.only(right: 4),
               width: 14,
               height: 14,
-              decoration: BoxDecoration(color: statusColor(e.status), shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: statusColor(e.status),
+                shape: BoxShape.circle,
+              ),
             ),
           ),
       ],
@@ -500,7 +610,11 @@ class _HistoryStrip extends StatelessWidget {
 }
 
 class _HistorySheet extends StatelessWidget {
-  const _HistorySheet({required this.member, required this.history, this.onSetStatus});
+  const _HistorySheet({
+    required this.member,
+    required this.history,
+    this.onSetStatus,
+  });
   final Member member;
   final List<AttendanceEntry> history;
   final Future<void> Function(AttendanceStatus)? onSetStatus;
@@ -516,16 +630,33 @@ class _HistorySheet extends StatelessWidget {
         controller: controller,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         children: [
-          Text(member.displayName, style: Theme.of(context).textTheme.titleLarge),
-          Text('Storico presenze (ultimi $historyDays giorni)',
-              style: const TextStyle(color: Colors.white60)),
+          Text(
+            member.displayName,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          Text(
+            'Storico presenze (ultimi $historyDays giorni)',
+            style: const TextStyle(color: Colors.white60),
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
               _Pill('${stats.percent}%', 'presenze', MilanacColors.gold),
-              _Pill('${stats.present}', 'puntuale', statusColor(AttendanceStatus.presente)),
-              _Pill('${stats.late}', 'ritardi', statusColor(AttendanceStatus.ritardo)),
-              _Pill('${stats.absent}', 'assenze', statusColor(AttendanceStatus.assente)),
+              _Pill(
+                '${stats.present}',
+                'puntuale',
+                statusColor(AttendanceStatus.presente),
+              ),
+              _Pill(
+                '${stats.late}',
+                'ritardi',
+                statusColor(AttendanceStatus.ritardo),
+              ),
+              _Pill(
+                '${stats.absent}',
+                'assenze',
+                statusColor(AttendanceStatus.assente),
+              ),
             ],
           ),
           if (onSetStatus != null) ...[
@@ -553,11 +684,17 @@ class _HistorySheet extends StatelessWidget {
           ],
           const SizedBox(height: 16),
           if (history.isEmpty)
-            const Text('Nessuna presenza registrata.', style: TextStyle(color: Colors.white54)),
+            const Text(
+              'Nessuna presenza registrata.',
+              style: TextStyle(color: Colors.white54),
+            ),
           for (final e in history)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(radius: 8, backgroundColor: statusColor(e.status)),
+              leading: CircleAvatar(
+                radius: 8,
+                backgroundColor: statusColor(e.status),
+              ),
               title: Text(DateFormat('EEEE d MMMM yyyy', 'it').format(e.date)),
               subtitle: Text(_describe(e)),
             ),
@@ -575,11 +712,20 @@ class _Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Expanded(
-        child: Column(
-          children: [
-            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color)),
-            FittedBox(child: Text(label, style: const TextStyle(color: Colors.white60))),
-          ],
+    child: Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
         ),
-      );
+        FittedBox(
+          child: Text(label, style: const TextStyle(color: Colors.white60)),
+        ),
+      ],
+    ),
+  );
 }

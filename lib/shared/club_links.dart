@@ -38,8 +38,9 @@ final clubLinksRepositoryProvider = Provider<ClubLinksRepository>((ref) {
   return _SupabaseClubLinksRepository(ref);
 });
 
-final clubLinksProvider =
-    FutureProvider<List<ClubLink>>((ref) => ref.watch(clubLinksRepositoryProvider).load());
+final clubLinksProvider = FutureProvider<List<ClubLink>>(
+  (ref) => ref.watch(clubLinksRepositoryProvider).load(),
+);
 
 class _SupabaseClubLinksRepository implements ClubLinksRepository {
   _SupabaseClubLinksRepository(this._ref);
@@ -47,11 +48,17 @@ class _SupabaseClubLinksRepository implements ClubLinksRepository {
 
   @override
   Future<List<ClubLink>> load() async {
-    final rows =
-        await _ref.read(supabaseProvider).from('club_links').select().order('sort_order');
+    final rows = await _ref
+        .read(supabaseProvider)
+        .from('club_links')
+        .select()
+        .order('sort_order');
     return [
       for (final r in rows)
-        ClubLink(kind: LinkKind.parse(r['kind'] as String), url: r['url'] as String),
+        ClubLink(
+          kind: LinkKind.parse(r['kind'] as String),
+          url: r['url'] as String,
+        ),
     ];
   }
 
@@ -62,7 +69,8 @@ class _SupabaseClubLinksRepository implements ClubLinksRepository {
     await table.delete().not('id', 'is', null);
     if (links.isEmpty) return;
     await table.insert([
-      for (final (i, l) in links.indexed) {'kind': l.kind.name, 'url': l.url, 'sort_order': i},
+      for (final (i, l) in links.indexed)
+        {'kind': l.kind.name, 'url': l.url, 'sort_order': i},
     ]);
   }
 }
@@ -72,12 +80,16 @@ class DemoClubLinksRepository implements ClubLinksRepository {
     ClubLink(kind: LinkKind.instagram, url: 'https://instagram.com/'),
     ClubLink(kind: LinkKind.whatsapp, url: 'https://wa.me/'),
     ClubLink(kind: LinkKind.youtube, url: 'https://youtube.com/'),
-    ClubLink(kind: LinkKind.sito, url: 'https://fabioruggieri13-debug.github.io/MILANAC/'),
+    ClubLink(
+      kind: LinkKind.sito,
+      url: 'https://fabioruggieri13-debug.github.io/MILANAC/',
+    ),
   ];
 
   @override
   Future<List<ClubLink>> load() async => _links;
 
   @override
-  Future<void> saveAll(List<ClubLink> links) async => _links = List.unmodifiable(links);
+  Future<void> saveAll(List<ClubLink> links) async =>
+      _links = List.unmodifiable(links);
 }

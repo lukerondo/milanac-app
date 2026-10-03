@@ -19,5 +19,7 @@ const appSections = <AppSection>[
   AppSection('/presenze', 'Presenze', Icons.how_to_reg_rounded),
 ];
 
-AppSection sectionFor(String path) =>
-    appSections.firstWhere((s) => s.path == path, orElse: () => appSections.first);
+AppSection sectionFor(String path) => appSections.firstWhere(
+  (s) => s.path == path,
+  orElse: () => appSections.first,
+);

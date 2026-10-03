@@ -6,7 +6,8 @@ import '../../core/auth/profile.dart';
 import 'member.dart';
 import 'rosa_repository.dart';
 
-Future<void> showMemberEditor(BuildContext context, Member member) => showModalBottomSheet(
+Future<void> showMemberEditor(BuildContext context, Member member) =>
+    showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -25,7 +26,9 @@ class _MemberEditor extends ConsumerStatefulWidget {
 class _MemberEditorState extends ConsumerState<_MemberEditor> {
   late final _name = TextEditingController(text: widget.member.displayName);
   late final _gamertag = TextEditingController(text: widget.member.gamertag);
-  late final _number = TextEditingController(text: widget.member.shirtNumber?.toString());
+  late final _number = TextEditingController(
+    text: widget.member.shirtNumber?.toString(),
+  );
   late ClubRole _role = widget.member.role;
   late String? _position = widget.member.fieldPosition;
   late DateTime _joinedAt = widget.member.joinedAt;
@@ -42,7 +45,9 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
   Future<void> _save({bool active = true}) async {
     setState(() => _saving = true);
     final updated = widget.member.copyWith(
-      displayName: _name.text.trim().isEmpty ? widget.member.displayName : _name.text.trim(),
+      displayName: _name.text.trim().isEmpty
+          ? widget.member.displayName
+          : _name.text.trim(),
       gamertag: _gamertag.text.trim(),
       role: _role,
       fieldPosition: _position,
@@ -56,8 +61,9 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
       }
     }
   }
@@ -65,27 +71,43 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Modifica membro', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Modifica membro',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 16),
-            TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nome')),
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(labelText: 'Nome'),
+            ),
             const SizedBox(height: 12),
             TextField(
-                controller: _gamertag, decoration: const InputDecoration(labelText: 'Gamertag')),
+              controller: _gamertag,
+              decoration: const InputDecoration(labelText: 'Gamertag'),
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _position,
-                    decoration: const InputDecoration(labelText: 'Ruolo in campo'),
+                    decoration: const InputDecoration(
+                      labelText: 'Ruolo in campo',
+                    ),
                     items: [
-                      for (final p in fieldPositions) DropdownMenuItem(value: p, child: Text(p)),
+                      for (final p in fieldPositions)
+                        DropdownMenuItem(value: p, child: Text(p)),
                     ],
                     onChanged: (v) => setState(() => _position = v),
                   ),
@@ -106,10 +128,18 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
             const SizedBox(height: 8),
             SegmentedButton<ClubRole>(
               segments: const [
-                ButtonSegment(value: ClubRole.giocatore, label: Text('Giocatore')),
-                ButtonSegment(value: ClubRole.direttivo, label: Text('Direttivo')),
+                ButtonSegment(
+                  value: ClubRole.giocatore,
+                  label: Text('Giocatore'),
+                ),
+                ButtonSegment(
+                  value: ClubRole.direttivo,
+                  label: Text('Direttivo'),
+                ),
               ],
-              selected: {_role == ClubRole.pending ? ClubRole.giocatore : _role},
+              selected: {
+                _role == ClubRole.pending ? ClubRole.giocatore : _role,
+              },
               onSelectionChanged: (s) => setState(() => _role = s.first),
             ),
             const SizedBox(height: 12),
@@ -138,7 +168,10 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
             ),
             TextButton(
               onPressed: _saving ? null : () => _confirmRemove(context),
-              child: const Text('Rimuovi dalla rosa', style: TextStyle(color: Colors.redAccent)),
+              child: const Text(
+                'Rimuovi dalla rosa',
+                style: TextStyle(color: Colors.redAccent),
+              ),
             ),
           ],
         ),
@@ -151,10 +184,18 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Rimuovere dalla rosa?'),
-        content: Text('${widget.member.displayName} non potrà più accedere all\'app.'),
+        content: Text(
+          '${widget.member.displayName} non potrà più accedere all\'app.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annulla')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Rimuovi')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Rimuovi'),
+          ),
         ],
       ),
     );

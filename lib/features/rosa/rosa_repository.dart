@@ -35,15 +35,19 @@ class _SupabaseRosaRepository implements RosaRepository {
       .map((rows) => rows.map(Member.fromMap).toList());
 
   @override
-  Future<void> save(Member m) =>
-      _ref.read(supabaseProvider).from('profiles').update(m.toUpdateMap()).eq('id', m.id);
+  Future<void> save(Member m) => _ref
+      .read(supabaseProvider)
+      .from('profiles')
+      .update(m.toUpdateMap())
+      .eq('id', m.id);
 
   /// Rifiuta una richiesta di accesso: il profilo viene disattivato (resta in attesa).
   @override
   Future<void> remove(String id) => _ref
       .read(supabaseProvider)
       .from('profiles')
-      .update({'active': false}).eq('id', id);
+      .update({'active': false})
+      .eq('id', id);
 }
 
 /// Dati di esempio in memoria per la modalità demo e i test.
@@ -57,16 +61,49 @@ class DemoRosaRepository implements RosaRepository {
   late final StreamController<List<Member>> _controller;
 
   final _members = <Member>[
-    Member(id: 'demo', displayName: 'Demo Direttivo', gamertag: 'MILANAC_Demo',
-        role: ClubRole.direttivo, fieldPosition: 'CC', shirtNumber: 10, joinedAt: DateTime(2025, 1, 10)),
-    Member(id: 'p2', displayName: 'Marco Rossi', gamertag: 'Diavolo_9',
-        role: ClubRole.giocatore, fieldPosition: 'ATT', shirtNumber: 9, joinedAt: DateTime(2025, 2, 3)),
-    Member(id: 'p3', displayName: 'Luca Bianchi', gamertag: 'Muro_Rossonero',
-        role: ClubRole.giocatore, fieldPosition: 'DC', shirtNumber: 4, joinedAt: DateTime(2025, 3, 15)),
-    Member(id: 'p4', displayName: 'Andrea Neri', gamertag: 'Saracinesca1',
-        role: ClubRole.giocatore, fieldPosition: 'POR', shirtNumber: 1, joinedAt: DateTime(2025, 4, 20)),
-    Member(id: 'p5', displayName: 'Nuovo Iscritto', gamertag: 'Rookie_77',
-        role: ClubRole.pending, joinedAt: DateTime(2026, 10, 1)),
+    Member(
+      id: 'demo',
+      displayName: 'Demo Direttivo',
+      gamertag: 'MILANAC_Demo',
+      role: ClubRole.direttivo,
+      fieldPosition: 'CC',
+      shirtNumber: 10,
+      joinedAt: DateTime(2025, 1, 10),
+    ),
+    Member(
+      id: 'p2',
+      displayName: 'Marco Rossi',
+      gamertag: 'Diavolo_9',
+      role: ClubRole.giocatore,
+      fieldPosition: 'ATT',
+      shirtNumber: 9,
+      joinedAt: DateTime(2025, 2, 3),
+    ),
+    Member(
+      id: 'p3',
+      displayName: 'Luca Bianchi',
+      gamertag: 'Muro_Rossonero',
+      role: ClubRole.giocatore,
+      fieldPosition: 'DC',
+      shirtNumber: 4,
+      joinedAt: DateTime(2025, 3, 15),
+    ),
+    Member(
+      id: 'p4',
+      displayName: 'Andrea Neri',
+      gamertag: 'Saracinesca1',
+      role: ClubRole.giocatore,
+      fieldPosition: 'POR',
+      shirtNumber: 1,
+      joinedAt: DateTime(2025, 4, 20),
+    ),
+    Member(
+      id: 'p5',
+      displayName: 'Nuovo Iscritto',
+      gamertag: 'Rookie_77',
+      role: ClubRole.pending,
+      joinedAt: DateTime(2026, 10, 1),
+    ),
   ];
 
   void _emit() => _controller.add(List.of(_members));

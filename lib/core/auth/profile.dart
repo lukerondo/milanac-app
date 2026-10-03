@@ -19,15 +19,15 @@ class Profile {
   bool get isApproved => role != ClubRole.pending;
 
   factory Profile.fromMap(Map<String, dynamic> m) => Profile(
-        id: m['id'] as String,
-        displayName: (m['display_name'] as String?) ?? 'Giocatore',
-        gamertag: m['gamertag'] as String?,
-        avatarUrl: m['avatar_url'] as String?,
-        role: ClubRole.values.firstWhere(
-          (r) => r.name == m['club_role'],
-          orElse: () => ClubRole.pending,
-        ),
-      );
+    id: m['id'] as String,
+    displayName: (m['display_name'] as String?) ?? 'Giocatore',
+    gamertag: m['gamertag'] as String?,
+    avatarUrl: m['avatar_url'] as String?,
+    role: ClubRole.values.firstWhere(
+      (r) => r.name == m['club_role'],
+      orElse: () => ClubRole.pending,
+    ),
+  );
 
   static const demo = Profile(
     id: 'demo',

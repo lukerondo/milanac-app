@@ -8,6 +8,12 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>MILANAC</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Serve per caricare foto e clip delle partite.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Serve per registrare le clip degli highlights.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Serve per registrare l'audio delle clip degli highlights.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -28,7 +28,9 @@ Future<void> startApp(WidgetTester tester) async {
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
-  testWidgets('Rosa: il Direttivo approva una richiesta di accesso', (tester) async {
+  testWidgets('Rosa: il Direttivo approva una richiesta di accesso', (
+    tester,
+  ) async {
     await startApp(tester);
     await openSection(tester, 'Rosa completa');
 
@@ -58,14 +60,19 @@ void main() {
     expect(find.text('11'), findsOneWidget);
   });
 
-  testWidgets('Regolamento: mostra il testo e permette la modifica', (tester) async {
+  testWidgets('Regolamento: mostra il testo e permette la modifica', (
+    tester,
+  ) async {
     await startApp(tester);
     await openSection(tester, 'Regolamento & Storia');
 
     expect(find.text('Regolamento interno'), findsOneWidget);
     await tester.tap(find.text('Modifica'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '# Nuovo regolamento\n- Regola uno');
+    await tester.enterText(
+      find.byType(TextField),
+      '# Nuovo regolamento\n- Regola uno',
+    );
     await tester.tap(find.text('SALVA'));
     await tester.pumpAndSettle();
 

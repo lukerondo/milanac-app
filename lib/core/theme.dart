@@ -11,15 +11,16 @@ class MilanacColors {
 }
 
 ThemeData buildTheme() {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: MilanacColors.red,
-    brightness: Brightness.dark,
-  ).copyWith(
-    primary: MilanacColors.red,
-    secondary: MilanacColors.gold,
-    surface: MilanacColors.surface,
-    surfaceContainerHighest: MilanacColors.surfaceHigh,
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: MilanacColors.red,
+        brightness: Brightness.dark,
+      ).copyWith(
+        primary: MilanacColors.red,
+        secondary: MilanacColors.gold,
+        surface: MilanacColors.surface,
+        surfaceContainerHighest: MilanacColors.surfaceHigh,
+      );
 
   return ThemeData(
     useMaterial3: true,

@@ -10,7 +10,8 @@ class ClubLinksEditorPage extends ConsumerStatefulWidget {
   final List<ClubLink> initial;
 
   @override
-  ConsumerState<ClubLinksEditorPage> createState() => _ClubLinksEditorPageState();
+  ConsumerState<ClubLinksEditorPage> createState() =>
+      _ClubLinksEditorPageState();
 }
 
 class _Row {
@@ -20,7 +21,9 @@ class _Row {
 }
 
 class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
-  late final List<_Row> _rows = [for (final l in widget.initial) _Row(l.kind, l.url)];
+  late final List<_Row> _rows = [
+    for (final l in widget.initial) _Row(l.kind, l.url),
+  ];
   bool _saving = false;
 
   @override
@@ -34,7 +37,8 @@ class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
   Future<void> _save() async {
     final links = [
       for (final r in _rows)
-        if (r.url.text.trim().isNotEmpty) ClubLink(kind: r.kind, url: _normalize(r.url.text)),
+        if (r.url.text.trim().isNotEmpty)
+          ClubLink(kind: r.kind, url: _normalize(r.url.text)),
     ];
     setState(() => _saving = true);
     try {
@@ -44,15 +48,18 @@ class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
       }
     }
   }
 
   static String _normalize(String url) {
     final u = url.trim();
-    return u.startsWith('http://') || u.startsWith('https://') ? u : 'https://$u';
+    return u.startsWith('http://') || u.startsWith('https://')
+        ? u
+        : 'https://$u';
   }
 
   @override
@@ -63,13 +70,17 @@ class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: const Text('SALVA', style: TextStyle(color: MilanacColors.gold)),
+            child: const Text(
+              'SALVA',
+              style: TextStyle(color: MilanacColors.gold),
+            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: MilanacColors.red,
-        onPressed: () => setState(() => _rows.add(_Row(LinkKind.instagram, ''))),
+        onPressed: () =>
+            setState(() => _rows.add(_Row(LinkKind.instagram, ''))),
         child: const Icon(Icons.add_rounded),
       ),
       body: ListView(
@@ -96,7 +107,10 @@ class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
                       child: TextField(
                         controller: r.url,
                         keyboardType: TextInputType.url,
-                        decoration: InputDecoration(labelText: r.kind.label, hintText: 'https://…'),
+                        decoration: InputDecoration(
+                          labelText: r.kind.label,
+                          hintText: 'https://…',
+                        ),
                       ),
                     ),
                     IconButton(

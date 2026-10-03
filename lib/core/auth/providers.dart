@@ -5,10 +5,13 @@ import '../config.dart';
 import 'auth_repository.dart';
 import 'profile.dart';
 
-final supabaseProvider = Provider<SupabaseClient>((ref) => Supabase.instance.client);
+final supabaseProvider = Provider<SupabaseClient>(
+  (ref) => Supabase.instance.client,
+);
 
-final authRepositoryProvider =
-    Provider<AuthRepository>((ref) => AuthRepository(ref.watch(supabaseProvider)));
+final authRepositoryProvider = Provider<AuthRepository>(
+  (ref) => AuthRepository(ref.watch(supabaseProvider)),
+);
 
 /// Sessione corrente (null = non autenticato). In demo è sempre "autenticato".
 final sessionProvider = StreamProvider<Session?>((ref) {

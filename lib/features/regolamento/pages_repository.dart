@@ -68,5 +68,6 @@ Dai primi tornei FVPA alle sfide tra amici, la squadra cresce stagione dopo stag
   Future<String> load(ClubPage page) async => _content[page] ?? '';
 
   @override
-  Future<void> save(ClubPage page, String content) async => _content[page] = content;
+  Future<void> save(ClubPage page, String content) async =>
+      _content[page] = content;
 }

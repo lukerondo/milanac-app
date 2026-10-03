@@ -69,7 +69,9 @@ class AppDrawer extends ConsumerWidget {
                       title: Text(s.title),
                       selected: s.path == currentPath,
                       selectedColor: MilanacColors.gold,
-                      selectedTileColor: MilanacColors.red.withValues(alpha: 0.15),
+                      selectedTileColor: MilanacColors.red.withValues(
+                        alpha: 0.15,
+                      ),
                       onTap: () {
                         Navigator.of(context).pop();
                         context.go(s.path);
@@ -102,12 +104,18 @@ class AppDrawer extends ConsumerWidget {
                   if (profile?.isDirettivo ?? false)
                     IconButton(
                       tooltip: 'Modifica contatti',
-                      icon: const Icon(Icons.edit_rounded, color: MilanacColors.gold),
+                      icon: const Icon(
+                        Icons.edit_rounded,
+                        color: MilanacColors.gold,
+                      ),
                       onPressed: () {
-                        final navigator = Navigator.of(context)..pop();
-                        navigator.push(MaterialPageRoute(
-                          builder: (_) => ClubLinksEditorPage(initial: links),
-                        ));
+                        final root = Navigator.of(context, rootNavigator: true);
+                        Navigator.of(context).pop();
+                        root.push(
+                          MaterialPageRoute(
+                            builder: (_) => ClubLinksEditorPage(initial: links),
+                          ),
+                        );
                       },
                     ),
                 ],

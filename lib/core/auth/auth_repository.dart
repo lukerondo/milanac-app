@@ -15,7 +15,10 @@ class AuthRepository {
     final redirect = kIsWeb ? null : AppConfig.authRedirect;
     switch (method) {
       case LoginMethod.google:
-        await _client.auth.signInWithOAuth(OAuthProvider.google, redirectTo: redirect);
+        await _client.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: redirect,
+        );
       case LoginMethod.microsoft:
         // Account personali Microsoft (Hotmail/Outlook/Live) tramite provider Azure, tenant "common".
         await _client.auth.signInWithOAuth(
@@ -24,7 +27,10 @@ class AuthRepository {
           scopes: 'email openid profile',
         );
       case LoginMethod.apple:
-        await _client.auth.signInWithOAuth(OAuthProvider.apple, redirectTo: redirect);
+        await _client.auth.signInWithOAuth(
+          OAuthProvider.apple,
+          redirectTo: redirect,
+        );
       case LoginMethod.yahoo:
         // Provider OIDC personalizzato configurato in Supabase con identificativo "custom:yahoo".
         await _client.auth.signInWithOAuth(
