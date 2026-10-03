@@ -8,8 +8,7 @@ import 'package:video_player/video_player.dart';
 import '../../core/theme.dart';
 import 'intro_state.dart';
 
-/// Intro: video del club (se presente in assets/video/intro.mp4, altrimenti immagine
-/// di sfondo), stemma al centro e barra di caricamento. Tocca per saltare.
+/// Intro: video del club (assets/video/intro.mp4; se manca, sfondo nero), stemma del Milano FC e barra di caricamento. Tocca per saltare.
 class IntroPage extends ConsumerStatefulWidget {
   const IntroPage({super.key});
 
@@ -93,9 +92,9 @@ class _IntroPageState extends ConsumerState<IntroPage>
                   height: video.value.size.height,
                   child: VideoPlayer(video),
                 ),
-              )
-            else
-              Image.asset('assets/images/intro_bg.png', fit: BoxFit.cover),
+              ),
+            // Finché il video non è pronto (o se manca) lo sfondo resta nero:
+            // nessuna immagine intermedia.
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -108,46 +107,18 @@ class _IntroPageState extends ConsumerState<IntroPage>
             ),
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(32, 0, 32, 40),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    // Lo sfondo statico contiene già lo stemma: lo sovrapponiamo solo al video.
-                    if (video != null) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.asset(
-                          'assets/images/stemma.png',
-                          height: 96,
-                        ),
+                    // Riquadro di caricamento: stemma Milano FC (versione non ufficiale di
+                    // EA SPORTS FC 27) e barra che si riempie in sincronia con il video.
+                    FadeTransition(
+                      opacity: CurvedAnimation(
+                        parent: _progress,
+                        curve: const Interval(0, .12, curve: Curves.easeOut),
                       ),
-                      const SizedBox(height: 20),
-                    ],
-                    AnimatedBuilder(
-                      animation: _progress,
-                      builder: (context, _) => Column(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(
-                              value: _progress.value,
-                              minHeight: 8,
-                              backgroundColor: Colors.white24,
-                              valueColor: const AlwaysStoppedAnimation(
-                                MilanacColors.red,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Caricamento… ${(_progress.value * 100).round()}%',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ],
-                      ),
+                      child: _LoadingPanel(progress: _progress),
                     ),
                     const SizedBox(height: 6),
                     const Text(
@@ -160,6 +131,75 @@ class _IntroPageState extends ConsumerState<IntroPage>
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Riquadro scuro arrotondato con lo stemma a sinistra e la barra di caricamento.
+class _LoadingPanel extends StatelessWidget {
+  const _LoadingPanel({required this.progress});
+  final Animation<double> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 18, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xE61C1C1F),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white12),
+        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 18)],
+      ),
+      child: Row(
+        children: [
+          Image.asset(
+            'assets/images/stemma_milano_fc.png',
+            height: 64,
+            filterQuality: FilterQuality.high,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: AnimatedBuilder(
+              animation: progress,
+              builder: (context, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'MILANAC PRO CLUB',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: progress.value,
+                      minHeight: 8,
+                      backgroundColor: Colors.white12,
+                      valueColor: const AlwaysStoppedAnimation(
+                        MilanacColors.red,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Caricamento… ${(progress.value * 100).round()}%',
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

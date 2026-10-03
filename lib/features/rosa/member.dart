@@ -12,6 +12,7 @@ class Member {
     this.shirtNumber,
     this.avatarUrl,
     this.active = true,
+    this.requestedRole = ClubRole.giocatore,
   });
 
   final String id;
@@ -23,6 +24,9 @@ class Member {
   final int? shirtNumber;
   final String? avatarUrl;
   final bool active;
+
+  /// Ruolo chiesto dall'utente al primo accesso.
+  final ClubRole requestedRole;
 
   String get roleLabel => switch (role) {
     ClubRole.direttivo => 'Direttivo',
@@ -48,6 +52,7 @@ class Member {
     shirtNumber: shirtNumber ?? this.shirtNumber,
     avatarUrl: avatarUrl,
     active: active ?? this.active,
+    requestedRole: requestedRole,
   );
 
   factory Member.fromMap(Map<String, dynamic> m) => Member(
@@ -59,10 +64,8 @@ class Member {
     shirtNumber: (m['shirt_number'] as num?)?.toInt(),
     joinedAt: DateTime.parse(m['joined_at'] as String),
     active: (m['active'] as bool?) ?? true,
-    role: ClubRole.values.firstWhere(
-      (r) => r.name == m['club_role'],
-      orElse: () => ClubRole.pending,
-    ),
+    role: parseRole(m['club_role'], ClubRole.pending),
+    requestedRole: parseRole(m['requested_role'], ClubRole.giocatore),
   );
 
   /// Campi modificabili dal Direttivo.

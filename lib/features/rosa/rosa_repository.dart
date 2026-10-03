@@ -35,19 +35,24 @@ class _SupabaseRosaRepository implements RosaRepository {
       .map((rows) => rows.map(Member.fromMap).toList());
 
   @override
-  Future<void> save(Member m) => _ref
-      .read(supabaseProvider)
-      .from('profiles')
-      .update(m.toUpdateMap())
-      .eq('id', m.id);
+  Future<void> save(Member m) async {
+    // Nota: le query Supabase partono solo quando vengono attese (await).
+    await _ref
+        .read(supabaseProvider)
+        .from('profiles')
+        .update(m.toUpdateMap())
+        .eq('id', m.id);
+  }
 
   /// Rifiuta una richiesta di accesso: il profilo viene disattivato (resta in attesa).
   @override
-  Future<void> remove(String id) => _ref
-      .read(supabaseProvider)
-      .from('profiles')
-      .update({'active': false})
-      .eq('id', id);
+  Future<void> remove(String id) async {
+    await _ref
+        .read(supabaseProvider)
+        .from('profiles')
+        .update({'active': false})
+        .eq('id', id);
+  }
 }
 
 /// Dati di esempio in memoria per la modalità demo e i test.

@@ -49,6 +49,15 @@ class WordpressTest(unittest.TestCase):
         self.assertEqual(item.source, "FUT.it")
 
 
+class FeedMalformatoTest(unittest.TestCase):
+    def test_rss_con_attributi_duplicati(self):
+        items = load("wordpress_broken.xml", {"name": "FUT.it", "category": "ultimate_team"})
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].title, "FC 27: nuove SBC & evoluzioni del weekend")
+        self.assertEqual(items[0].summary, "Tutte le SBC disponibili da oggi.")
+        self.assertEqual(items[0].image_url, "https://fifaultimateteam.it/img.jpg")
+
+
 class AtomTest(unittest.TestCase):
     def test_reddit(self):
         items = load("reddit_atom.xml", {"name": "Reddit", "category": "pro_clubs", "max_items": 5})
@@ -56,6 +65,13 @@ class AtomTest(unittest.TestCase):
         self.assertEqual(items[0].url, "https://www.reddit.com/r/FIFAProClubs/comments/abc/best_build/")
         self.assertEqual(items[0].category, "aggiornamenti")  # "patch" nel titolo
         self.assertEqual(items[0].image_url, "https://b.thumbs.redditmedia.com/x.jpg")
+
+
+class SupabaseTest(unittest.TestCase):
+    def test_user_agent_non_da_browser(self):
+        # Le chiavi sb_secret_ vengono rifiutate (401) con un User-Agent da browser.
+        db = fn.Supabase("https://x.supabase.co", "sb_secret_test")
+        self.assertNotIn("mozilla", db.headers["User-Agent"].lower())
 
 
 class SourcesTest(unittest.TestCase):

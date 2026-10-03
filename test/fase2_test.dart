@@ -37,8 +37,10 @@ void main() {
     expect(find.text('RICHIESTE DI ACCESSO'), findsOneWidget);
     expect(find.text('Nuovo Iscritto'), findsOneWidget);
 
-    await tester.tap(find.text('Approva'));
+    expect(find.textContaining('Chiede di entrare come Giocatore'), findsOneWidget);
+    await tester.tap(find.text('Approva come Giocatore'));
     await tester.pumpAndSettle();
+    expect(find.text('Nuovo Iscritto approvato come Giocatore.'), findsOneWidget);
 
     expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
     expect(find.text('Diavolo_9 · Dal 3 feb 2025'), findsOneWidget);
@@ -47,10 +49,26 @@ void main() {
     expect(find.text('Nuovo Iscritto'), findsOneWidget);
   });
 
+  testWidgets('Rosa: il Direttivo rifiuta una richiesta (con conferma)', (tester) async {
+    await startApp(tester);
+    await openSection(tester, 'Rosa completa');
+
+    await tester.tap(find.text('Rifiuta'));
+    await tester.pumpAndSettle();
+    expect(find.text('Rifiutare Nuovo Iscritto?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Rifiuta'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
+    expect(find.text('Nuovo Iscritto'), findsNothing);
+  });
+
   testWidgets('Rosa: modifica del numero di maglia', (tester) async {
     await startApp(tester);
     await openSection(tester, 'Rosa completa');
 
+    await tester.ensureVisible(find.text('Marco Rossi'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Marco Rossi'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Numero'), '11');

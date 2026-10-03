@@ -1,0 +1,61 @@
+name: Database
+
+# Applica a Supabase le migrazioni in supabase/migrations/ non ancora eseguite.
+# Secret necessario (uno dei due):
+#  - SUPABASE_ACCESS_TOKEN: token personale Supabase (sbp_...)  ← consigliato, più semplice
+#  - SUPABASE_DB_URL: stringa di connessione "Session pooler" con la password del database
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - claude/cloud-credits-private-repo-gqfxlp
+    paths:
+      - supabase/migrations/**
+      - tools/db/**
+      - .github/workflows/database.yml
+
+concurrency: database
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' || secrets.MILANACAPP != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Migrazioni (token personale Supabase)
+        if: env.HAS_TOKEN == 'true'
+        env:
+          # MILANACAPP: nome alternativo con cui è stato salvato il token personale.
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN || secrets.MILANACAPP }}
+        run: |
+          export SUPABASE_PROJECT_REF=$(python3 -c "import json,re;print(re.search(r'https://([a-z0-9]+)\.supabase\.co', json.load(open('env/prod.json'))['SUPABASE_URL']).group(1))")
+          python3 tools/db/migrate_api.py
+      - name: Controllo del secret
+        if: env.HAS_TOKEN != 'true'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Controlli sul formato, senza mai stampare il valore (contiene la password).
+          url="$(printf '%s' "$SUPABASE_DB_URL" | tr -d '[:space:]')"
+          fail() { echo "::error::$1 (vedi docs/SETUP_SUPABASE.md, passo 1)"; exit 1; }
+          [ -n "$url" ] || fail "Il secret SUPABASE_DB_URL è vuoto o mancante"
+          case "$url" in
+            postgresql://*|postgres://*) ;;
+            https://*|http://*) fail "SUPABASE_DB_URL contiene un link web: serve l'indirizzo che inizia con postgresql:// (Supabase → Connect → Session pooler)" ;;
+            *) fail "SUPABASE_DB_URL non inizia con postgresql://: copia l'URI da Supabase → Connect → Session pooler" ;;
+          esac
+          case "$url" in *YOUR-PASSWORD*|*\[*|*\]*) fail "In SUPABASE_DB_URL è rimasto [YOUR-PASSWORD]: sostituiscilo con la password del database, senza parentesi quadre" ;; esac
+          case "$url" in *pooler.supabase.com*) ;; *) fail "SUPABASE_DB_URL non usa il Session pooler (deve contenere pooler.supabase.com): GitHub non raggiunge l'indirizzo diretto db.xxx.supabase.co" ;; esac
+          case "$url" in *:5432/*) ;; *) echo "::warning::La porta non è 5432: assicurati di aver scelto 'Session pooler' e non 'Transaction pooler'" ;; esac
+          echo "Formato del secret corretto."
+      - name: Client PostgreSQL
+        if: env.HAS_TOKEN != 'true'
+        run: command -v psql || (sudo apt-get update -q && sudo apt-get install -yq postgresql-client)
+      - name: Migrazioni (password del database)
+        if: env.HAS_TOKEN != 'true'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: tools/db/migrate.sh

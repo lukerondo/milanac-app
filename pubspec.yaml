@@ -115,10 +115,11 @@ flutter_launcher_icons:
   min_sdk_android: 24
 
 # Schermata di avvio nativa: dart run flutter_native_splash:create
+# Solo sfondo nero: l'intro (video + stemma Milano FC) parte subito dopo.
 flutter_native_splash:
-  color: "#0B0B0D"
-  image: assets/icon/splash_legacy.png
+  color: "#000000"
   android_12:
-    color: "#0B0B0D"
-    image: assets/icon/splash.png
+    color: "#000000"
+    # Immagine trasparente: senza, Android 12+ mostrerebbe l'icona dell'app.
+    image: assets/icon/splash_vuota.png
   web: false
