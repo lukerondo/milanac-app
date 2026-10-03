@@ -94,6 +94,8 @@ void main() {
     await tester.pumpAndSettle();
     // Si apre la carta; il Direttivo modifica i dati del membro da lì.
     expect(find.text('CARTA GIOCATORE'), findsOneWidget);
+    await tester.ensureVisible(find.text('Dati del membro'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Dati del membro'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Numero'), '11');

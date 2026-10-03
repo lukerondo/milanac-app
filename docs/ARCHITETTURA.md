@@ -60,7 +60,8 @@ I permessi sono applicati nel database con **Row Level Security** (non solo nell
    ("Aggiorna il gioco prima del match!") + notifica push.
 3. **Menu laterale** (drawer):
    - Notizie · Chat · Presenze · Formazione · Calendario · Risultati · Tornei · Rosa completa ·
-     La mia carta · Tattiche & Build · Albo d'oro · Regolamento & Storia · Colonna sonora
+     La mia carta · Squadra della settimana · Tattiche & Build · Albo d'oro ·
+     Regolamento & Storia · Colonna sonora (+ Sala Direttivo, visibile solo al Direttivo)
    - in fondo: icone social + sito web (modificabili dal Direttivo)
 4. **Rosa completa** – foto, nome/gamertag, ruolo nel club (*Direttivo* / *Giocatore*),
    ruolo in campo, numero, data di ingresso.
@@ -100,6 +101,17 @@ I permessi sono applicati nel database con **Row Level Security** (non solo nell
 17. **Colonna sonora** – ognuno sceglie un file audio dal proprio telefono (es. compilation
     FIFA): suona in loop, muto sempre in alto. Nessuna canzone è inclusa nell'app (diritti);
     playlist e video ufficiali su YouTube/Spotify condivisi come link.
+18. **Voti e Uomo partita** – quando il Direttivo inserisce il risultato, i giocatori della
+    squadra ricevono la notifica e danno un voto da 1 a 10 ai compagni (non a se stessi).
+    I voti dei singoli restano segreti: si vedono solo media e classifica. Il più votato
+    (almeno 2 voti) riceve la carta speciale nera e oro **Uomo partita**.
+19. **Squadra della settimana** – i migliori 11 per media voto della settimana (lunedì–domenica),
+    per squadra, con carte speciali; elenco degli ultimi Uomini partita.
+20. **Traguardi** – 13 badge (bronzo, argento, oro, leggenda): presenze, gol, Uomo partita,
+    Squadra della settimana, un mese senza ritardi, un anno nel club, overall 85+.
+    I 3 più rari compaiono sulla carta; festa a schermo intero quando se ne sblocca uno.
+21. **Walkout** – animazione stile pacchetti FUT (luci, bandiera, ruolo, stemma, giro della
+    carta) alla prima apertura dopo l'approvazione e quando l'overall sale; rivedibile dalla carta.
 
 ## 5. Modello dati (Supabase / PostgreSQL)
 
@@ -130,11 +142,14 @@ channels      id, slug, name, description, icon   messages  id, channel_id, auth
               body, image_path, meta              channel_mutes / channel_reads (per utente)
 tournaments   id, name, organizer, url, team, status, starts_on, ends_on, notes
 tournament_standings  tournament_id, team_name, won, drawn, lost, goals_for, goals_against, is_us
+match_ratings match_id, voter_id, player_id, rating(1-10)   -- ognuno vede solo i propri voti
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
 pubblicazione formazione → notifica, nuovo messaggio → notifica, presenze → messaggio in *Presenze*,
-`chat_overview()` (non letti + ultimo messaggio per canale).
+`chat_overview()` (non letti + ultimo messaggio per canale), risultato inserito → notifica
+"vota i compagni", `match_rating_summary()` / `match_mvps()` / `team_of_the_week()` /
+`player_stats()` (medie e conteggi senza rivelare chi ha votato cosa).
 
 Storage buckets: `avatars`, `trophies`, `match-media`, `tactics`, `chat` (tutti privati, letti
 tramite URL firmati, con limiti di dimensione e tipo di file).

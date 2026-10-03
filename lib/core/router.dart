@@ -18,10 +18,12 @@ import '../features/musica/musica_page.dart';
 import '../features/news/news_page.dart';
 import '../features/presenze/presenze_page.dart';
 import '../features/regolamento/regolamento_page.dart';
+import '../features/risultati/match_detail_page.dart';
 import '../features/risultati/risultati_page.dart';
 import '../features/rosa/rosa_page.dart';
 import '../features/tattiche/tattiche_page.dart';
 import '../features/tornei/tornei_page.dart';
+import '../features/voti/totw_page.dart';
 import '../shared/app_shell.dart';
 import '../shared/sections.dart';
 import 'auth/providers.dart';
@@ -71,6 +73,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/attesa', builder: (_, _) => const PendingPage()),
+      // Partita (dalla notifica "vota i compagni").
+      GoRoute(
+        path: '/partita/:id',
+        builder: (_, state) =>
+            MatchDetailPage(matchId: state.pathParameters['id']!),
+      ),
       // Conversazione a schermo intero (anche dalle notifiche).
       GoRoute(
         path: '/chat/:slug',
@@ -83,7 +91,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           for (final s in appSections)
             GoRoute(
               path: s.path,
-              pageBuilder: (_, _) => NoTransitionPage(
+              pageBuilder: (_, state) => CustomTransitionPage(
+                key: state.pageKey,
+                transitionDuration: const Duration(milliseconds: 220),
+                transitionsBuilder: (_, animation, _, child) =>
+                    FadeTransition(opacity: animation, child: child),
                 child: switch (s.path) {
                   '/' => const NewsPage(),
                   '/rosa' => const RosaPage(),
@@ -99,6 +111,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/chat' => const ChatListPage(),
                   '/tornei' => const TorneiPage(),
                   '/direttivo' => const DirettivoPage(),
+                  '/squadra-settimana' => const TotwPage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

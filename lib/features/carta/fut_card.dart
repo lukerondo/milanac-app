@@ -2,22 +2,47 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/teams.dart';
+import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
 import '../rosa/member.dart';
 import 'card_stats.dart';
 
+/// Versioni speciali della carta, come le carte "in forma" di FUT.
+enum CardSpecial {
+  motm('UOMO PARTITA'),
+  totw('SQUADRA DELLA SETTIMANA');
+
+  const CardSpecial(this.label);
+  final String label;
+}
+
 /// Carta in stile FUT del giocatore. Disegnata a 300×428 e scalata alla larghezza disponibile.
 class FutCard extends StatelessWidget {
-  const FutCard({super.key, required this.member, required this.stats});
+  const FutCard({
+    super.key,
+    required this.member,
+    required this.stats,
+    this.special,
+    this.badges = const [],
+  });
   final Member member;
   final CardStats stats;
+
+  /// Carta speciale (Uomo partita, Squadra della settimana) al posto di quella base.
+  final CardSpecial? special;
+
+  /// Badge dei traguardi da mostrare sulla carta (icona, colore), al massimo 3.
+  final List<(IconData, Color)> badges;
 
   static const _w = 300.0, _h = 428.0;
 
   @override
   Widget build(BuildContext context) {
-    final tier = tierOf(member.overall);
-    final palette = _Palette.of(tier);
+    final palette = switch (special) {
+      CardSpecial.motm => _Palette.motm,
+      CardSpecial.totw => _Palette.totw,
+      null => _Palette.of(tierOf(member.overall)),
+    };
     return AspectRatio(
       aspectRatio: _w / _h,
       child: FittedBox(
@@ -27,11 +52,13 @@ class FutCard extends StatelessWidget {
           child: CustomPaint(
             painter: _CardPainter(palette),
             child: DefaultTextStyle(
-              style: TextStyle(color: palette.text),
+              style: TextStyle(color: palette.text, fontFamily: sportFont),
               child: _CardContent(
                 member: member,
                 stats: stats,
                 palette: palette,
+                special: special,
+                badges: badges,
               ),
             ),
           ),
@@ -44,6 +71,22 @@ class FutCard extends StatelessWidget {
 class _Palette {
   const _Palette(this.top, this.bottom, this.text, this.line);
   final Color top, bottom, text, line;
+
+  /// Uomo partita: nera e oro.
+  static const motm = _Palette(
+    Color(0xFF2B2B2E),
+    Color(0xFF050505),
+    Color(0xFFF3D27A),
+    Color(0xAAF3D27A),
+  );
+
+  /// Squadra della settimana: nera con riflessi rossi e oro.
+  static const totw = _Palette(
+    Color(0xFF3A0A12),
+    Color(0xFF050505),
+    Color(0xFFF6D77F),
+    Color(0xAAF6D77F),
+  );
 
   static _Palette of(CardTier tier) => switch (tier) {
     CardTier.vuota => const _Palette(
@@ -147,10 +190,14 @@ class _CardContent extends StatelessWidget {
     required this.member,
     required this.stats,
     required this.palette,
+    this.special,
+    this.badges = const [],
   });
   final Member member;
   final CardStats stats;
   final _Palette palette;
+  final CardSpecial? special;
+  final List<(IconData, Color)> badges;
 
   @override
   Widget build(BuildContext context) {
@@ -169,6 +216,23 @@ class _CardContent extends StatelessWidget {
 
     return Stack(
       children: [
+        if (special != null)
+          Positioned(
+            top: 22,
+            left: 60,
+            right: 60,
+            child: Text(
+              special!.label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.6,
+              ),
+            ),
+          ),
         // Overall, ruolo, stemma, piattaforma.
         Positioned(
           left: 34,
@@ -270,6 +334,30 @@ class _CardContent extends StatelessWidget {
             ],
           ),
         ),
+        // Badge dei traguardi più rari.
+        if (badges.isNotEmpty)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 46,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (final (icon, color) in badges)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color,
+                      border: Border.all(color: palette.text, width: 1),
+                    ),
+                    child: Icon(icon, size: 12, color: Colors.white),
+                  ),
+              ],
+            ),
+          ),
         // Squadre e numero di maglia.
         Positioned(
           left: 60,

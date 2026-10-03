@@ -3,15 +3,22 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/local_flags.dart';
 import '../../core/theme.dart';
 import '../presenze/attendance_repository.dart';
 import '../risultati/matches_repository.dart';
 import '../rosa/member.dart';
 import '../rosa/member_editor.dart';
 import '../rosa/rosa_repository.dart';
+import '../traguardi/achievements.dart';
+import '../traguardi/achievements_view.dart';
+import '../voti/ratings_repository.dart';
+import '../walkout/celebrations.dart';
+import '../walkout/walkout_page.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
 
@@ -63,6 +70,9 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
   final _cardKey = GlobalKey();
   bool _sharing = false;
 
+  /// Mostra la carta base anche se c'è quella speciale di Uomo partita.
+  bool _baseCard = false;
+
   Future<void> _share(Member m) async {
     setState(() => _sharing = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -102,6 +112,7 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
       return const Center(child: CircularProgressIndicator());
     }
     final isMine = me?.id == member.id;
+    final motm = ref.watch(recentMvpProvider(member.id));
     final isDirettivo = me?.isDirettivo ?? false;
 
     return ListView(
@@ -115,11 +126,44 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
               child: Padding(
                 // Margine per l'ombra nell'immagine condivisa.
                 padding: const EdgeInsets.all(8),
-                child: FutCard(member: member, stats: stats),
+                child: FutCard(
+                  member: member,
+                  stats: stats,
+                  special: motm != null && !_baseCard ? CardSpecial.motm : null,
+                  badges: [
+                    for (final a in topBadges(
+                      ref.watch(achievementsProvider(member.id)) ?? const [],
+                    ))
+                      (a.icon, a.level.color),
+                  ],
+                ),
               ),
             ),
           ),
         ),
+        if (motm != null) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Uomo partita')),
+                ButtonSegment(value: true, label: Text('Carta base')),
+              ],
+              selected: {_baseCard},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) => setState(() => _baseCard = s.first),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Uomo partita il ${DateFormat('d MMMM', 'it').format(motm.playedAt)} '
+              '(media ${motm.average.toStringAsFixed(1)})',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: MilanacColors.gold),
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         if (isMine && member.overall == null)
           const Padding(
@@ -148,6 +192,12 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
               icon: const Icon(Icons.ios_share_rounded),
               label: const Text('Condividi'),
             ),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  showWalkout(context, member: member, stats: stats),
+              icon: const Icon(Icons.auto_awesome_rounded),
+              label: const Text('Walkout'),
+            ),
             if (isDirettivo && !isMine)
               TextButton.icon(
                 onPressed: () => showMemberEditor(context, member),
@@ -156,6 +206,7 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
               ),
           ],
         ),
+        AchievementsGrid(memberId: member.id),
         const SizedBox(height: 20),
         for (final MapEntry(:key, :value) in cardStatLegend.entries)
           Padding(
@@ -253,8 +304,28 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       preferredFoot: widget.member.preferredFoot,
     );
     try {
+      final rootContext = Navigator.of(context, rootNavigator: true).context;
+      final before = widget.member.overall;
       await ref.read(rosaRepositoryProvider).saveCard(updated);
       if (mounted) Navigator.of(context).pop();
+      // Overall salito: walkout subito (e segnato come visto su questo telefono).
+      if (before != null && _overall > before && rootContext.mounted) {
+        final me = ref.read(profileProvider).value;
+        if (me?.id == updated.id) {
+          await ref
+              .read(localFlagsProvider)
+              .setString(walkoutKey(updated.id), '$_overall');
+        }
+        final stats = ref.read(cardStatsProvider(updated.id));
+        if (stats != null && rootContext.mounted) {
+          await showWalkout(
+            rootContext,
+            member: updated,
+            stats: stats,
+            previousOverall: before,
+          );
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);

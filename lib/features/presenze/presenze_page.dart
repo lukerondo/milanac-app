@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -270,7 +271,12 @@ class AttendanceStatusButton extends StatelessWidget {
       AttendanceStatus.assente => Icons.cancel_rounded,
     };
     return OutlinedButton(
-      onPressed: onPressed,
+      onPressed: onPressed == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              onPressed!();
+            },
       style: OutlinedButton.styleFrom(
         backgroundColor: selected ? color : null,
         foregroundColor: selected ? Colors.white : color,
