@@ -8,6 +8,8 @@ import '../features/common/coming_soon_page.dart';
 import '../features/intro/intro_page.dart';
 import '../features/intro/intro_state.dart';
 import '../features/news/news_page.dart';
+import '../features/regolamento/regolamento_page.dart';
+import '../features/rosa/rosa_page.dart';
 import '../shared/app_shell.dart';
 import '../shared/sections.dart';
 import 'auth/providers.dart';
@@ -60,7 +62,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: s.path,
               pageBuilder: (_, _) => NoTransitionPage(
-                child: s.path == '/' ? const NewsPage() : ComingSoonPage(path: s.path),
+                child: switch (s.path) {
+                  '/' => const NewsPage(),
+                  '/rosa' => const RosaPage(),
+                  '/regolamento' => const RegolamentoPage(),
+                  _ => ComingSoonPage(path: s.path),
+                },
               ),
             ),
         ],

@@ -7,6 +7,7 @@ import '../core/auth/providers.dart';
 import '../core/config.dart';
 import '../core/theme.dart';
 import 'club_links.dart';
+import 'club_links_editor.dart';
 import 'sections.dart';
 
 class AppDrawer extends ConsumerWidget {
@@ -17,6 +18,7 @@ class AppDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(profileProvider).value;
+    final links = ref.watch(clubLinksProvider).value ?? const <ClubLink>[];
 
     return Drawer(
       child: SafeArea(
@@ -88,14 +90,25 @@ class AppDrawer extends ConsumerWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  for (final l in defaultClubLinks)
+                  for (final l in links)
                     IconButton(
-                      tooltip: l.label,
-                      icon: Icon(l.icon),
+                      tooltip: l.kind.label,
+                      icon: Icon(l.kind.icon),
                       onPressed: () => launchUrl(
                         Uri.parse(l.url),
                         mode: LaunchMode.externalApplication,
                       ),
+                    ),
+                  if (profile?.isDirettivo ?? false)
+                    IconButton(
+                      tooltip: 'Modifica contatti',
+                      icon: const Icon(Icons.edit_rounded, color: MilanacColors.gold),
+                      onPressed: () {
+                        final navigator = Navigator.of(context)..pop();
+                        navigator.push(MaterialPageRoute(
+                          builder: (_) => ClubLinksEditorPage(initial: links),
+                        ));
+                      },
                     ),
                 ],
               ),
