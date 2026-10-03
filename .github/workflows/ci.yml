@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_apk:
+        description: "Compila anche l'APK Android"
+        type: boolean
+        default: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Test raccoglitore notizie
+        run: |
+          python3 -m unittest discover -s tools/news_fetcher/tests
+          python3 -m unittest discover -s tools/notifier/tests
+
+  # APK di prova: a ogni pull request, a ogni modifica di main o a mano.
+  # Viene pubblicato come file .apk nella release "APK di prova" (comodo da scaricare dal telefono).
+  apk:
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.build_apk)
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build apk --release --dart-define-from-file=env/prod.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: milanac-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+      - name: Pubblica nella release "APK di prova"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk MILANAC.apk
+          NOTES="APK di prova (Android) – compilato il $(date -u '+%d/%m/%Y %H:%M') UTC dal commit ${GITHUB_SHA::7}. Scarica MILANAC.apk dal telefono e installalo."
+          if gh release view apk-di-prova >/dev/null 2>&1; then
+            gh release edit apk-di-prova --notes "$NOTES"
+          else
+            gh release create apk-di-prova --prerelease --title "APK di prova" --notes "$NOTES" --target "$GITHUB_SHA"
+          fi
+          gh release upload apk-di-prova MILANAC.apk --clobber

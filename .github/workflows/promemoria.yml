@@ -1,0 +1,32 @@
+name: Promemoria presenze
+
+# Ogni giorno nel primo pomeriggio: se stasera c'è una partita o un allenamento,
+# notifica push a tutti i membri per segnare la presenza.
+on:
+  schedule:
+    - cron: "43 13 * * *" # 15:43 ora italiana d'estate, 14:43 d'inverno
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Prova senza inviare"
+        type: boolean
+        default: true
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Promemoria
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: |
+          pip install --quiet google-auth requests
+          export SUPABASE_URL=$(python -c "import json;print(json.load(open('env/prod.json'))['SUPABASE_URL'])")
+          python tools/notifier/notify.py promemoria
