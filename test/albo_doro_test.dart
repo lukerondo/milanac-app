@@ -50,13 +50,18 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Coppa FVPA'));
     await tester.pumpAndSettle();
     expect(find.text('Finale vinta 3-2 ai supplementari.'), findsOneWidget);
-    Navigator.of(tester.element(find.text('Finale vinta 3-2 ai supplementari.'))).pop();
+    Navigator.of(
+      tester.element(find.text('Finale vinta 3-2 ai supplementari.')),
+    ).pop();
     await tester.pumpAndSettle();
 
     // Il Direttivo aggiunge un trofeo alla stagione mostrata.
     await tester.tap(find.text('Aggiungi trofeo'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, 'Nome del trofeo'), 'Supercoppa');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nome del trofeo'),
+      'Supercoppa',
+    );
     await tester.tap(find.text('Medaglia'));
     await tester.ensureVisible(find.text('Metti in bacheca'));
     await tester.pumpAndSettle();

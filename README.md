@@ -18,7 +18,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | 5 | Formazione (campo San Siro, 7 moduli, panchina) | ✅ |
 | 6 | Notizie automatiche ogni 3 ore (GitHub Actions + Supabase) | ✅ |
 | 7 | Albo d'oro: sala trofei 2.5D, scelta stagione, trofei del Direttivo | ✅ |
-| 8 | Pubblicazione Play Store / App Store | ⏳ |
+| 8 | Icona, avvio, notifiche push, privacy, eliminazione account, build firmate | ✅ (configurazione account: `docs/PUBBLICAZIONE.md`) |
 
 ## Provare l'app subito (modalità demo)
 
@@ -39,7 +39,7 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
 
 1. Crea un progetto su [supabase.com](https://supabase.com) (piano Free, regione Europa).
 2. **SQL Editor** → incolla ed esegui, in ordine, i file in `supabase/migrations/`
-   (`0001_schema_iniziale.sql`, `0002_limiti_media.sql`, `0003_forma_trofei.sql`).
+   (`0001_schema_iniziale.sql` … `0004_notifiche_e_account.sql`).
 3. **Authentication → URL Configuration** → aggiungi agli *Redirect URLs*:
    `com.milanacproclub.milanac://login-callback`
 4. **Authentication → Providers**:
@@ -75,6 +75,8 @@ e link nella tabella `news` e cancella quelle più vecchie di 60 giorni.
 
 - **CI**: ad ogni push GitHub Actions esegue `flutter analyze` e `flutter test`.
 - **APK**: Actions → *CI* → *Run workflow* → scarica l'artifact `milanac-apk` (usa `env/prod.json`).
-- **iOS**: tramite Codemagic (piano gratuito) o un Mac – istruzioni nella fase 8.
+- **Rilascio Android (.aab firmato)**: Actions → *Rilascio Android*.
+- **iOS**: Codemagic (`codemagic.yaml`) → TestFlight.
+- Guida completa per gli store: [`docs/PUBBLICAZIONE.md`](docs/PUBBLICAZIONE.md).
 
 Identificativo app: `com.milanacproclub.milanac`

@@ -12,7 +12,8 @@ https://bxtnvgnxfyzwamfdnmkx.supabase.co/auth/v1/callback
 2. Incolla tutto il file `supabase/migrations/0001_schema_iniziale.sql` → **Run**
 3. Deve comparire "Success. No rows returned".
 4. Ripeti con `supabase/migrations/0002_limiti_media.sql` (limiti di dimensione dei file caricati)
-   e poi con `0003_forma_trofei.sql` (forma dei trofei dell'Albo d'oro).
+   poi con `0003_forma_trofei.sql` (forma dei trofei dell'Albo d'oro)
+   e infine con `0004_notifiche_e_account.sql` (notifiche push ed eliminazione account).
 
 ## 2. URL dell'app
 **Authentication → URL Configuration → Redirect URLs** → *Add URL*:

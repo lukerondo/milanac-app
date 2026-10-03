@@ -24,10 +24,13 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: Test raccoglitore notizie
-        run: python3 -m unittest discover -s tools/news_fetcher/tests
+        run: |
+          python3 -m unittest discover -s tools/news_fetcher/tests
+          python3 -m unittest discover -s tools/notifier/tests
 
+  # APK di prova: a ogni pull request (verifica che l'app Android compili) o a mano.
   apk:
-    if: github.event_name == 'workflow_dispatch' && inputs.build_apk
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.build_apk)
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 30

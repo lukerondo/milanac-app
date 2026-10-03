@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/auth/providers.dart';
 import '../core/config.dart';
 import '../core/theme.dart';
+import '../features/privacy/privacy_page.dart';
 import 'club_links.dart';
 import 'club_links_editor.dart';
 import 'sections.dart';
@@ -77,12 +78,36 @@ class AppDrawer extends ConsumerWidget {
                         context.go(s.path);
                       },
                     ),
-                  if (!AppConfig.isDemo)
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.privacy_tip_outlined),
+                    title: const Text('Privacy'),
+                    onTap: () {
+                      final root = Navigator.of(context, rootNavigator: true);
+                      Navigator.of(context).pop();
+                      root.push(
+                        MaterialPageRoute(builder: (_) => const PrivacyPage()),
+                      );
+                    },
+                  ),
+                  if (!AppConfig.isDemo) ...[
                     ListTile(
                       leading: const Icon(Icons.logout_rounded),
                       title: const Text('Esci'),
                       onTap: () => ref.read(authRepositoryProvider).signOut(),
                     ),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.person_off_outlined,
+                        color: Colors.redAccent,
+                      ),
+                      title: const Text(
+                        'Elimina il mio account',
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
+                      onTap: () => _confirmDeleteAccount(context, ref),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -124,6 +149,40 @@ class AppDrawer extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+Future<void> _confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: const Text('Eliminare il tuo account?'),
+      content: const Text(
+        'Verranno cancellati definitivamente il tuo account, il profilo e lo storico delle '
+        'presenze. Per rientrare nel club dovrai essere approvato di nuovo dal Direttivo.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(c, false),
+          child: const Text('Annulla'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+          onPressed: () => Navigator.pop(c, true),
+          child: const Text('Elimina'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  try {
+    await ref.read(authRepositoryProvider).deleteAccount();
+    messenger.showSnackBar(const SnackBar(content: Text('Account eliminato.')));
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Eliminazione non riuscita: $e')),
     );
   }
 }

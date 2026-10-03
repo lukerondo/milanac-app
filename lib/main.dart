@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/auth/providers.dart';
 import 'core/config.dart';
+import 'core/push/push_service.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 
@@ -17,6 +19,7 @@ Future<void> main() async {
       publishableKey: AppConfig.supabaseAnonKey,
     );
   }
+  await PushService.instance.init();
   runApp(const ProviderScope(child: MilanacApp()));
 }
 
@@ -25,11 +28,25 @@ class MilanacApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(routerProvider);
+    PushService.instance.onOpenRoute = router.go;
+
+    // Notifiche del club solo per i membri approvati.
+    ref.listen(profileProvider, (_, next) {
+      final profile = next.value;
+      if (profile?.isApproved ?? false) {
+        PushService.instance.subscribe();
+      } else if (next.hasValue && profile == null) {
+        PushService.instance.unsubscribe();
+      }
+    });
+
     return MaterialApp.router(
       title: 'MILANAC Pro Club',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      routerConfig: ref.watch(routerProvider),
+      routerConfig: router,
+      scaffoldMessengerKey: messengerKey,
       locale: const Locale('it'),
       supportedLocales: const [Locale('it'), Locale('en')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,

@@ -50,7 +50,10 @@ void main() {
 
     // In demo: Neri (POR), Bianchi, Demo, Rossi in campo. Nessuno in panchina.
     expect(find.text('Neri'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Tutti i giocatori sono in campo.'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Tutti i giocatori sono in campo.'),
+      200,
+    );
     expect(find.text('Tutti i giocatori sono in campo.'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Neri'), -200);
 

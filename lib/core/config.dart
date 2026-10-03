@@ -13,4 +13,7 @@ class AppConfig {
   static bool get isDemo => supabaseUrl.isEmpty || supabaseAnonKey.isEmpty;
 
   static const defaultArrivalTime = '21:30';
+
+  /// Email di contatto del club (informativa privacy e pagine degli store).
+  static const contactEmail = String.fromEnvironment('CONTACT_EMAIL');
 }
