@@ -69,22 +69,23 @@ class AppDrawer extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
                   for (final s in appSections)
-                    ListTile(
-                      leading: Icon(s.icon),
-                      title: Text(s.title),
-                      trailing: s.path == '/chat' && unread > 0
-                          ? UnreadBadge(unread)
-                          : null,
-                      selected: s.path == currentPath,
-                      selectedColor: MilanacColors.gold,
-                      selectedTileColor: MilanacColors.red.withValues(
-                        alpha: 0.15,
+                    if (!s.direttivoOnly || (profile?.isDirettivo ?? false))
+                      ListTile(
+                        leading: Icon(s.icon),
+                        title: Text(s.title),
+                        trailing: s.path == '/chat' && unread > 0
+                            ? UnreadBadge(unread)
+                            : null,
+                        selected: s.path == currentPath,
+                        selectedColor: MilanacColors.gold,
+                        selectedTileColor: MilanacColors.red.withValues(
+                          alpha: 0.15,
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          context.go(s.path);
+                        },
                       ),
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        context.go(s.path);
-                      },
-                    ),
                   const Divider(),
                   ListTile(
                     leading: const Icon(Icons.privacy_tip_outlined),

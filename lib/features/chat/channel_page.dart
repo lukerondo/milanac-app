@@ -410,6 +410,9 @@ class _Bubble extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
       decoration: BoxDecoration(
         color: mine ? MilanacColors.redDark : MilanacColors.surfaceHigh,
+        border: message.isAnnouncement
+            ? Border.all(color: MilanacColors.gold, width: 1.5)
+            : null,
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(16),
           topRight: const Radius.circular(16),
@@ -420,6 +423,34 @@ class _Bubble extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (message.isAnnouncement)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.campaign_rounded,
+                    size: 16,
+                    color: MilanacColors.gold,
+                  ),
+                  SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      'AVVISO DEL DIRETTIVO',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: MilanacColors.gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (showAuthor && !mine)
             Text(
               name,

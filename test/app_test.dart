@@ -27,10 +27,10 @@ void main() {
     // Apre il menu e va alla Rosa.
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
-    expect(find.text('Chat'), findsOneWidget);
-    await tester.tap(find.text('Rosa completa'));
+    expect(find.text('Sala Direttivo'), findsOneWidget); // la demo è Direttivo
+    await tester.tap(find.text('Chat'));
     await tester.pumpAndSettle();
-    expect(find.text('ROSA COMPLETA'), findsOneWidget);
+    expect(find.text('CHAT'), findsOneWidget);
   });
 
   test('intro state parte da false', () {

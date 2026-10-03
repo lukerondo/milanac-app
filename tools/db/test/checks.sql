@@ -320,3 +320,29 @@ do $$ begin
   assert (select city from profiles where id = '00000000-0000-0000-0000-0000000000e1') = 'Milano', 'dati salvati';
   assert (select city from profiles where id = '00000000-0000-0000-0000-0000000000e2') is null, 'dati altrui intoccabili';
 end $$;
+
+-- Sala Direttivo: il canale riservato e i suoi messaggi sono invisibili ai giocatori.
+select set_config('test.canale_direttivo', (select id::text from channels where slug = 'direttivo'), false);
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into messages (channel_id, body) select id, 'Riunione segreta' from channels where slug = 'direttivo';
+insert into messages (channel_id, body, meta)
+  select id, 'Stasera si gioca alle 22', '{"type": "announcement"}' from channels where slug = 'main';
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert (select count(*) from channels where slug = 'direttivo') = 0, 'canale riservato invisibile';
+  assert (select count(*) from messages where body = 'Riunione segreta') = 0, 'messaggi riservati invisibili';
+  assert (select count(*) from chat_overview() o join channels c on c.id = o.channel_id) = 4,
+    'il riepilogo mostra solo i canali visibili';
+  assert (select count(*) from messages where body = 'Stasera si gioca alle 22') = 1, 'avviso visibile a tutti';
+end $$;
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body) values (current_setting('test.canale_direttivo')::uuid, 'intruso')$q$,
+  'row-level security');
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body, meta) select id, 'finto avviso', '{"type": "announcement"}' from channels where slug = 'main'$q$,
+  'row-level security');
+reset role;
+do $$ begin
+  assert (select count(*) from channels where direttivo_only) = 1, 'canale Sala Direttivo creato';
+end $$;

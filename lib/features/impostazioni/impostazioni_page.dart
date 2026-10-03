@@ -179,6 +179,10 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
                 right: 0,
                 bottom: 0,
                 child: IconButton.filled(
+                  style: IconButton.styleFrom(
+                    backgroundColor: MilanacColors.gold,
+                    foregroundColor: Colors.black,
+                  ),
                   tooltip: 'Cambia foto',
                   onPressed: _uploading ? null : _changePhoto,
                   icon: _uploading

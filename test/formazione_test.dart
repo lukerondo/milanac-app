@@ -47,6 +47,15 @@ void main() {
     await tester.pumpAndSettle();
     await goToSection(tester, 'Formazione');
 
+    // I giocatori vedono solo la formazione pubblicata: per ora non c'è.
+    expect(
+      find.textContaining('non è ancora stata pubblicata'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Prepara e pubblica nella Sala Direttivo'));
+    await tester.pumpAndSettle();
+    expect(find.text('FORMAZIONI'), findsOneWidget);
+
     // In demo: Neri (POR), Bianchi, Demo, Rossi in campo. Nessuno in panchina.
     expect(find.text('Neri'), findsOneWidget);
     await tester.scrollUntilVisible(
@@ -89,9 +98,18 @@ void main() {
       -200,
     );
     expect(find.textContaining('Pubblicata oggi'), findsOneWidget);
+
+    // Tornando alla sezione Formazione: la versione pubblicata (3-5-2, Neri in panchina).
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('non è ancora stata pubblicata'), findsNothing);
+    expect(find.widgetWithText(Chip, '3-5-2'), findsOneWidget);
+    expect(find.text('Rossi'), findsOneWidget);
+    await tester.scrollUntilVisible(find.textContaining('Andrea Neri'), 200);
+    expect(find.textContaining('Andrea Neri'), findsOneWidget);
   });
 
-  testWidgets('Formazione: una per squadra (MILANAC / FUTURO)', (tester) async {
+  testWidgets('Sala Direttivo: una formazione per squadra', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -105,7 +123,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await goToSection(tester, 'Formazione');
+    await goToSection(tester, 'Sala Direttivo');
+    await tester.scrollUntilVisible(
+      find.text('Formazioni'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Formazioni'));
+    await tester.pumpAndSettle();
 
     expect(find.text('Rossi'), findsOneWidget);
     await tester.tap(find.text('FUTURO'));

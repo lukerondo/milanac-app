@@ -2,14 +2,28 @@ import 'package:flutter/material.dart';
 
 /// Voci del menu laterale. L'ordine qui è l'ordine nel drawer.
 class AppSection {
-  const AppSection(this.path, this.title, this.icon);
+  const AppSection(
+    this.path,
+    this.title,
+    this.icon, {
+    this.direttivoOnly = false,
+  });
   final String path;
   final String title;
   final IconData icon;
+
+  /// Visibile (e raggiungibile) solo dal Direttivo.
+  final bool direttivoOnly;
 }
 
 const appSections = <AppSection>[
   AppSection('/', 'Notizie', Icons.newspaper_rounded),
+  AppSection(
+    '/direttivo',
+    'Sala Direttivo',
+    Icons.admin_panel_settings_rounded,
+    direttivoOnly: true,
+  ),
   AppSection('/chat', 'Chat', Icons.forum_rounded),
   AppSection('/presenze', 'Presenze', Icons.how_to_reg_rounded),
   AppSection('/formazione', 'Formazione', Icons.sports_soccer_rounded),

@@ -8,13 +8,25 @@ import 'news_item.dart';
 /// Immagine in testa alla notizia: la foto della fonte se disponibile,
 /// altrimenti una copertina "EA SPORTS FC 27" disegnata (colore per categoria).
 class NewsImage extends StatelessWidget {
-  const NewsImage({super.key, required this.item, this.height = 150});
+  const NewsImage({
+    super.key,
+    required this.item,
+    this.height = 150,
+    this.compact = false,
+  });
   final NewsItem item;
   final double height;
 
+  /// Miniatura (card stretta della Home): copertina semplificata.
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
-    final cover = NewsCover(category: item.category, height: height);
+    final cover = NewsCover(
+      category: item.category,
+      height: height,
+      compact: compact,
+    );
     final url = item.imageUrl;
     return SizedBox(
       height: height,
@@ -33,9 +45,15 @@ class NewsImage extends StatelessWidget {
 }
 
 class NewsCover extends StatelessWidget {
-  const NewsCover({super.key, required this.category, this.height = 150});
+  const NewsCover({
+    super.key,
+    required this.category,
+    this.height = 150,
+    this.compact = false,
+  });
   final String category;
   final double height;
+  final bool compact;
 
   static (Color, Color, IconData, String) styleFor(String category) =>
       switch (category) {
@@ -68,6 +86,33 @@ class NewsCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (accent, dark, icon, label) = styleFor(category);
+    if (compact) {
+      return SizedBox(
+        height: height,
+        width: double.infinity,
+        child: CustomPaint(
+          painter: _CoverPainter(accent: accent, dark: dark),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 26, color: Colors.white.withValues(alpha: .9)),
+                const SizedBox(height: 2),
+                const Text(
+                  'FC 27',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return SizedBox(
       height: height,
       width: double.infinity,

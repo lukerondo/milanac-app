@@ -33,7 +33,8 @@ class _SupabaseFormationRepository implements FormationRepository {
     final row = await client
         .from('formations')
         .select(
-          'id, module, published_at, updated_at, formation_slots(slot_index, player_id)',
+          'id, module, published_at, updated_at, published_module, published_players, '
+          'formation_slots(slot_index, player_id)',
         )
         .eq('is_current', true)
         .eq('team', team.name)
@@ -48,6 +49,14 @@ class _SupabaseFormationRepository implements FormationRepository {
       module: row['module'] as String,
       publishedAt: date(row['published_at']),
       updatedAt: date(row['updated_at']),
+      publishedModule: row['published_module'] as String?,
+      publishedPlayers: switch (row['published_players']) {
+        final Map<String, dynamic> m => {
+          for (final e in m.entries)
+            if (e.value != null) int.parse(e.key): e.value as String,
+        },
+        _ => null,
+      },
       players: {
         for (final s
             in (row['formation_slots'] as List).cast<Map<String, dynamic>>())
@@ -104,9 +113,18 @@ class _SupabaseFormationRepository implements FormationRepository {
         .update({
           'published_at': now.toIso8601String(),
           'published_by': client.auth.currentUser?.id,
+          'published_module': saved.module,
+          'published_players': {
+            for (final e in saved.players.entries) '${e.key}': e.value,
+          },
         })
         .eq('id', saved.id);
-    return saved.copyWith(publishedAt: now, updatedAt: now);
+    return saved.copyWith(
+      publishedAt: now,
+      updatedAt: now,
+      publishedModule: saved.module,
+      publishedPlayers: Map.of(saved.players),
+    );
   }
 }
 
@@ -141,6 +159,8 @@ class DemoFormationRepository implements FormationRepository {
       id: 'demo-${f.team.name}',
       publishedAt: now,
       updatedAt: now,
+      publishedModule: f.module,
+      publishedPlayers: Map.of(f.players),
     );
   }
 }
