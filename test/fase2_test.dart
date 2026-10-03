@@ -8,6 +8,15 @@ import 'package:milanac/main.dart';
 Future<void> openSection(WidgetTester tester, String title) async {
   await tester.tap(find.byIcon(Icons.menu));
   await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
+    find.text(title),
+    100,
+    scrollable: find.descendant(
+      of: find.byType(Drawer),
+      matching: find.byType(Scrollable),
+    ),
+  );
+  await tester.pumpAndSettle();
   await tester.tap(find.text(title));
   await tester.pumpAndSettle();
 }
@@ -41,6 +50,8 @@ void main() {
       find.textContaining('Chiede di entrare come Giocatore'),
       findsOneWidget,
     );
+    await tester.ensureVisible(find.text('Approva come Giocatore'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Approva come Giocatore'));
     await tester.pumpAndSettle();
     expect(
@@ -79,9 +90,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Marco Rossi'));
     await tester.pumpAndSettle();
+    // Si apre la carta; il Direttivo modifica i dati del membro da lì.
+    expect(find.text('CARTA GIOCATORE'), findsOneWidget);
+    await tester.tap(find.text('Dati del membro'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Numero'), '11');
     await tester.ensureVisible(find.text('Salva'));
     await tester.tap(find.text('Salva'));
+    await tester.pumpAndSettle();
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop();
     await tester.pumpAndSettle();
 
     expect(find.text('11'), findsOneWidget);
@@ -92,9 +109,13 @@ void main() {
     await openSection(tester, 'Rosa completa');
 
     // Richiesta approvata direttamente in MILANAC FUTURO.
+    await tester.ensureVisible(find.text('Nuovo Iscritto'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilterChip, 'MILANAC FUTURO'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilterChip, 'MILANAC'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Approva come Giocatore'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Approva come Giocatore'));
     await tester.pumpAndSettle();
@@ -104,6 +125,10 @@ void main() {
     );
 
     // Filtro FUTURO: Neri (entrambe), Verdi e il nuovo iscritto; non Rossi.
+    await tester.scrollUntilVisible(
+      find.widgetWithText(ChoiceChip, 'FUTURO (3)'),
+      -200,
+    );
     await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO (3)'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Paolo Verdi'), 200);

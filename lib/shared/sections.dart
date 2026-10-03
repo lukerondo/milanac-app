@@ -11,6 +11,7 @@ class AppSection {
 const appSections = <AppSection>[
   AppSection('/', 'Notizie', Icons.newspaper_rounded),
   AppSection('/rosa', 'Rosa completa', Icons.groups_rounded),
+  AppSection('/carta', 'La mia carta', Icons.style_rounded),
   AppSection('/formazione', 'Formazione', Icons.sports_soccer_rounded),
   AppSection('/calendario', 'Calendario partite', Icons.calendar_month_rounded),
   AppSection('/risultati', 'Risultati partite', Icons.scoreboard_rounded),

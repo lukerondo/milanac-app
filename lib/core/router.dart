@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../features/albo_doro/albo_doro_page.dart';
 import '../features/auth/login_page.dart';
 import '../features/calendario/calendario_page.dart';
+import '../features/carta/carta_page.dart';
 import '../features/auth/pending_page.dart';
 import '../features/common/coming_soon_page.dart';
 import '../features/formazione/formazione_page.dart';
@@ -80,6 +81,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/formazione' => const FormazionePage(),
                   '/albo-doro' => const AlboDoroPage(),
                   '/musica' => const MusicaPage(),
+                  '/carta' => const MyCardPage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

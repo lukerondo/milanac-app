@@ -181,3 +181,26 @@ do $$ begin
   assert (select count(*) from shared_links where category = 'build') = 0, 'il Direttivo cancella';
 end $$;
 reset role;
+
+-- Carta FUT: il giocatore imposta overall/stile/piattaforma sul proprio profilo, con limiti.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+update profiles set overall = 84, play_style = 'Finalizzatore', platform = 'ps5'
+  where id = '00000000-0000-0000-0000-0000000000e1';
+select pg_temp.expect_error(
+  $q$update profiles set overall = 120 where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'profiles_overall_check');
+select pg_temp.expect_error(
+  $q$update profiles set platform = 'switch' where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'profiles_platform_check');
+-- Non può cambiare la carta di un altro.
+update profiles set overall = 40 where id = '00000000-0000-0000-0000-0000000000e2';
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update profiles set overall = 86 where id = '00000000-0000-0000-0000-0000000000e1';
+reset role;
+do $$ begin
+  assert (select overall from profiles where id = '00000000-0000-0000-0000-0000000000e1') = 86,
+    'il Direttivo corregge l''overall';
+  assert (select overall from profiles where id = '00000000-0000-0000-0000-0000000000e2') is null,
+    'nessuno modifica la carta altrui';
+end $$;

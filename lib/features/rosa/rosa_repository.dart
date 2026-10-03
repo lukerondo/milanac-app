@@ -12,6 +12,9 @@ abstract class RosaRepository {
   Stream<List<Member>> watchAll();
   Future<void> save(Member member);
   Future<void> remove(String id);
+
+  /// Aggiorna solo i campi della carta (anche il giocatore sul proprio profilo).
+  Future<void> saveCard(Member member);
 }
 
 final rosaRepositoryProvider = Provider<RosaRepository>((ref) {
@@ -42,6 +45,15 @@ class _SupabaseRosaRepository implements RosaRepository {
         .read(supabaseProvider)
         .from('profiles')
         .update(m.toUpdateMap())
+        .eq('id', m.id);
+  }
+
+  @override
+  Future<void> saveCard(Member m) async {
+    await _ref
+        .read(supabaseProvider)
+        .from('profiles')
+        .update(m.cardMap())
         .eq('id', m.id);
   }
 
@@ -84,6 +96,9 @@ class DemoRosaRepository implements RosaRepository {
       fieldPosition: 'ATT',
       shirtNumber: 9,
       joinedAt: DateTime(2025, 2, 3),
+      overall: 86,
+      playStyle: 'Finalizzatore',
+      platform: GamePlatform.ps5,
     ),
     Member(
       id: 'p3',
@@ -93,6 +108,9 @@ class DemoRosaRepository implements RosaRepository {
       fieldPosition: 'DC',
       shirtNumber: 4,
       joinedAt: DateTime(2025, 3, 15),
+      overall: 78,
+      playStyle: 'Muro',
+      platform: GamePlatform.ps5,
     ),
     Member(
       id: 'p4',
@@ -102,6 +120,7 @@ class DemoRosaRepository implements RosaRepository {
       fieldPosition: 'POR',
       shirtNumber: 1,
       joinedAt: DateTime(2025, 4, 20),
+      overall: 70,
       teams: {Team.milanac, Team.futuro},
     ),
     Member(
@@ -112,6 +131,7 @@ class DemoRosaRepository implements RosaRepository {
       fieldPosition: 'CC',
       shirtNumber: 23,
       joinedAt: DateTime(2025, 9, 1),
+      overall: 62,
       teams: {Team.futuro},
     ),
     Member(
@@ -143,4 +163,7 @@ class DemoRosaRepository implements RosaRepository {
     _members.removeWhere((m) => m.id == id);
     _emit();
   }
+
+  @override
+  Future<void> saveCard(Member m) => save(m);
 }

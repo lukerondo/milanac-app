@@ -37,6 +37,8 @@ void main() {
         matching: find.byType(Scrollable),
       ),
     );
+    await tester.ensureVisible(find.text('Privacy'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Privacy'));
     await tester.pumpAndSettle();
 
