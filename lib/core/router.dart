@@ -6,6 +6,7 @@ import '../features/auth/login_page.dart';
 import '../features/calendario/calendario_page.dart';
 import '../features/auth/pending_page.dart';
 import '../features/common/coming_soon_page.dart';
+import '../features/formazione/formazione_page.dart';
 import '../features/intro/intro_page.dart';
 import '../features/intro/intro_state.dart';
 import '../features/news/news_page.dart';
@@ -74,6 +75,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/presenze' => const PresenzePage(),
                   '/calendario' => const CalendarioPage(),
                   '/risultati' => const RisultatiPage(),
+                  '/formazione' => const FormazionePage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

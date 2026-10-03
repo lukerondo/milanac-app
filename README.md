@@ -15,7 +15,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | 2 | Rosa (con approvazione accessi), Regolamento & Storia, contatti social modificabili | ✅ |
 | 3 | Presenze con storico (notifiche push nella fase 8) | ✅ |
 | 4 | Calendario, Risultati + media (link / foto / clip 15s) | ✅ |
-| 5 | Formazione (campo San Siro) | ⏳ |
+| 5 | Formazione (campo San Siro, 7 moduli, panchina) | ✅ |
 | 6 | Notizie automatiche (GitHub Actions) | ⏳ |
 | 7 | Albo d'oro 2.5D | ⏳ |
 | 8 | Pubblicazione Play Store / App Store | ⏳ |
