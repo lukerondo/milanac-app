@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/albo_doro/albo_doro_page.dart';
 import '../features/auth/login_page.dart';
 import '../features/calendario/calendario_page.dart';
 import '../features/auth/pending_page.dart';
@@ -76,6 +77,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/calendario' => const CalendarioPage(),
                   '/risultati' => const RisultatiPage(),
                   '/formazione' => const FormazionePage(),
+                  '/albo-doro' => const AlboDoroPage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

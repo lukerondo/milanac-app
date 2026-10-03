@@ -17,7 +17,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | 4 | Calendario, Risultati + media (link / foto / clip 15s) | ✅ |
 | 5 | Formazione (campo San Siro, 7 moduli, panchina) | ✅ |
 | 6 | Notizie automatiche ogni 3 ore (GitHub Actions + Supabase) | ✅ |
-| 7 | Albo d'oro 2.5D | ⏳ |
+| 7 | Albo d'oro: sala trofei 2.5D, scelta stagione, trofei del Direttivo | ✅ |
 | 8 | Pubblicazione Play Store / App Store | ⏳ |
 
 ## Provare l'app subito (modalità demo)
@@ -39,7 +39,7 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
 
 1. Crea un progetto su [supabase.com](https://supabase.com) (piano Free, regione Europa).
 2. **SQL Editor** → incolla ed esegui, in ordine, i file in `supabase/migrations/`
-   (`0001_schema_iniziale.sql`, poi `0002_limiti_media.sql`).
+   (`0001_schema_iniziale.sql`, `0002_limiti_media.sql`, `0003_forma_trofei.sql`).
 3. **Authentication → URL Configuration** → aggiungi agli *Redirect URLs*:
    `com.milanacproclub.milanac://login-callback`
 4. **Authentication → Providers**:
