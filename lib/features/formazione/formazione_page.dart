@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -93,6 +94,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
     if (ok != true) return;
     try {
       final published = await ref.read(formationRepositoryProvider).publish(f);
+      HapticFeedback.heavyImpact();
       if (mounted) setState(() => _draft = published);
       ref.invalidate(formationProvider);
       messenger.showSnackBar(

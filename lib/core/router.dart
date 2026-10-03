@@ -91,7 +91,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           for (final s in appSections)
             GoRoute(
               path: s.path,
-              pageBuilder: (_, _) => NoTransitionPage(
+              pageBuilder: (_, state) => CustomTransitionPage(
+                key: state.pageKey,
+                transitionDuration: const Duration(milliseconds: 220),
+                transitionsBuilder: (_, animation, _, child) =>
+                    FadeTransition(opacity: animation, child: child),
                 child: switch (s.path) {
                   '/' => const NewsPage(),
                   '/rosa' => const RosaPage(),

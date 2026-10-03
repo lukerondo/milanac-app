@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/teams.dart';
+import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
 import '../rosa/member.dart';
 import 'card_stats.dart';
@@ -51,7 +52,7 @@ class FutCard extends StatelessWidget {
           child: CustomPaint(
             painter: _CardPainter(palette),
             child: DefaultTextStyle(
-              style: TextStyle(color: palette.text),
+              style: TextStyle(color: palette.text, fontFamily: sportFont),
               child: _CardContent(
                 member: member,
                 stats: stats,

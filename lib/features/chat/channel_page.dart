@@ -71,6 +71,7 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
       await ref
           .read(chatRepositoryProvider)
           .send(c.id, body: body.isEmpty ? null : body, image: _image);
+      HapticFeedback.lightImpact();
       _text.clear();
       setState(() => _image = null);
     } catch (e) {

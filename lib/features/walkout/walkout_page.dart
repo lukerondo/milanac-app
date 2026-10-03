@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
 import '../carta/card_stats.dart';
 import '../carta/fut_card.dart';
@@ -148,7 +149,8 @@ class _WalkoutPageState extends State<WalkoutPage>
                   child: Text(
                     m.fieldPosition ?? '??',
                     style: TextStyle(
-                      fontSize: 110,
+                      fontFamily: sportFont,
+                      fontSize: 120,
                       fontWeight: FontWeight.w900,
                       color: _accent,
                       letterSpacing: 4,
@@ -183,6 +185,7 @@ class _WalkoutPageState extends State<WalkoutPage>
                           : 'NUOVO ACQUISTO!',
                       textAlign: TextAlign.center,
                       style: TextStyle(
+                        fontFamily: sportFont,
                         color: t < _flipEnd ? Colors.white70 : _accent,
                         fontSize: t < _flipEnd ? 16 : 30,
                         fontWeight: FontWeight.w900,
@@ -202,9 +205,11 @@ class _WalkoutPageState extends State<WalkoutPage>
                               m.displayName,
                               textAlign: TextAlign.center,
                               style: const TextStyle(
+                                fontFamily: sportFont,
                                 color: Colors.white,
-                                fontSize: 20,
+                                fontSize: 26,
                                 fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
                               ),
                             ),
                             const SizedBox(height: 12),

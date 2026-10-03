@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../features/impostazioni/impostazioni_page.dart';
 import '../features/musica/musica_page.dart';
+import '../core/theme.dart';
 import '../features/walkout/celebrations.dart';
 import 'app_drawer.dart';
 import 'sections.dart';
@@ -15,13 +16,17 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(sectionFor(path).title.toUpperCase()),
-        actions: const [SoundtrackButton(), SettingsButton()],
+    return StadiumBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          title: Text(sectionFor(path).barTitle.toUpperCase()),
+          actions: const [SoundtrackButton(), SettingsButton()],
+        ),
+        drawer: AppDrawer(currentPath: path),
+        body: Celebrations(child: child),
       ),
-      drawer: AppDrawer(currentPath: path),
-      body: Celebrations(child: child),
     );
   }
 }

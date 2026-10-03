@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -109,7 +110,10 @@ class TonightFab extends ConsumerWidget {
         tooltip: 'Stasera',
         backgroundColor: MilanacColors.red,
         shape: const CircleBorder(),
-        onPressed: () => showTonightPanel(context),
+        onPressed: () {
+          HapticFeedback.lightImpact();
+          showTonightPanel(context);
+        },
         child: const Icon(Icons.stadium_rounded, color: Colors.white, size: 28),
       ),
     );
