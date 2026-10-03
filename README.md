@@ -13,7 +13,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 |---|---|---|
 | 1 | Scheletro, tema rossonero, Intro, Login social, approvazione utenti, menu laterale, Home notizie | ✅ |
 | 2 | Rosa (con approvazione accessi), Regolamento & Storia, contatti social modificabili | ✅ |
-| 3 | Presenze con storico + notifiche | ⏳ |
+| 3 | Presenze con storico (notifiche push nella fase 8) | ✅ |
 | 4 | Calendario, Risultati + media (link / clip 15s) | ⏳ |
 | 5 | Formazione (campo San Siro) | ⏳ |
 | 6 | Notizie automatiche (GitHub Actions) | ⏳ |
