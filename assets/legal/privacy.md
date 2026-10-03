@@ -8,7 +8,8 @@ Il Direttivo del MILANAC Pro Club. Contatto: {{EMAIL}}
 
 ## Quali dati raccogliamo
 - Dati dell'account: nome, indirizzo email e foto profilo forniti da Google, Microsoft, Yahoo o Apple al momento dell'accesso.
-- Dati del club inseriti nell'app: gamertag, ruolo, numero di maglia, data di ingresso, presenze e orari di arrivo, note.
+- Dati del club inseriti nell'app: gamertag, ruolo, numero di maglia, data di ingresso, presenze e orari di arrivo, note, carta del giocatore (overall, stile di gioco, piattaforma), messaggi e foto della chat.
+- Dati facoltativi che inserisci nelle Impostazioni: foto del profilo, data di nascita, città, nazionalità e piede preferito.
 - Contenuti caricati dal Direttivo: risultati, foto e clip delle partite, trofei, eventi del calendario.
 - Identificativo del dispositivo per le notifiche push (Firebase Cloud Messaging), solo se le autorizzi.
 
@@ -27,7 +28,7 @@ Finché il tuo account è attivo. Le notizie vengono cancellate dopo 60 giorni.
 
 ## I tuoi diritti
 Puoi chiedere accesso, correzione o cancellazione dei tuoi dati scrivendo al contatto sopra.
-Puoi eliminare in qualsiasi momento il tuo account direttamente dall'app: menu laterale → "Elimina il mio account". L'eliminazione cancella account, profilo e presenze; i contenuti del club che hai creato (es. eventi) restano senza il tuo nome.
+Puoi modificare o cancellare i dati facoltativi dalle Impostazioni (icona ingranaggio in alto). Puoi eliminare in qualsiasi momento il tuo account direttamente dall'app: menu laterale → "Elimina il mio account". L'eliminazione cancella account, profilo e presenze; i contenuti del club che hai creato (es. eventi) restano senza il tuo nome.
 
 ## Minori
 L'app è destinata ai membri del club. I minori di 14 anni possono usarla solo con il consenso dei genitori.

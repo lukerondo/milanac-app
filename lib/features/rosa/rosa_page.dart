@@ -6,6 +6,7 @@ import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/member_photo.dart';
 import '../carta/carta_page.dart';
 import '../carta/fut_card.dart';
 import 'member.dart';
@@ -242,10 +243,7 @@ class _MemberTile extends ConsumerWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: _ShirtBadge(
-          number: member.shirtNumber,
-          avatarUrl: member.avatarUrl,
-        ),
+        leading: MemberAvatar(member: member),
         title: Text(
           member.displayName,
           style: const TextStyle(fontWeight: FontWeight.w700),
@@ -450,33 +448,6 @@ class _PendingTileState extends ConsumerState<_PendingTile> {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ShirtBadge extends StatelessWidget {
-  const _ShirtBadge({this.number, this.avatarUrl});
-  final int? number;
-  final String? avatarUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    if (avatarUrl != null) {
-      return CircleAvatar(
-        radius: 22,
-        backgroundImage: NetworkImage(avatarUrl!),
-      );
-    }
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: MilanacColors.red,
-      child: Text(
-        number?.toString() ?? '–',
-        style: const TextStyle(
-          fontWeight: FontWeight.w900,
-          color: Colors.white,
         ),
       ),
     );

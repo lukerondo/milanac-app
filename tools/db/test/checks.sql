@@ -297,3 +297,26 @@ do $$ begin
   assert (select count(*) from matches where opponent = 'Dinamo' and tournament_id is null) = 1,
     'la partita resta senza torneo';
 end $$;
+
+-- Profilo: ognuno aggiorna i propri dati e carica la foto solo nella propria cartella.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+update profiles set birth_date = '1998-05-12', city = 'Milano', nationality = 'IT',
+  preferred_foot = 'sinistro', avatar_path = '00000000-0000-0000-0000-0000000000e1/foto.jpg'
+  where id = '00000000-0000-0000-0000-0000000000e1';
+insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-0000000000e1/foto.jpg');
+select pg_temp.expect_error(
+  $q$insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-0000000000e2/foto.jpg')$q$,
+  'row-level security');
+select pg_temp.expect_error(
+  $q$update profiles set avatar_path = '00000000-0000-0000-0000-0000000000e2/foto.jpg' where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'profiles_avatar_path_check');
+select pg_temp.expect_error(
+  $q$update profiles set nationality = 'Italia' where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'profiles_nationality_check');
+update profiles set city = 'Roma' where id = '00000000-0000-0000-0000-0000000000e2';
+reset role;
+do $$ begin
+  assert (select city from profiles where id = '00000000-0000-0000-0000-0000000000e1') = 'Milano', 'dati salvati';
+  assert (select city from profiles where id = '00000000-0000-0000-0000-0000000000e2') is null, 'dati altrui intoccabili';
+end $$;

@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/providers.dart';
 import '../../core/push/push_service.dart';
 import '../../core/theme.dart';
+import '../../shared/member_photo.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'chat_repository.dart';
@@ -457,23 +458,16 @@ class _Bubble extends ConsumerWidget {
             SizedBox(
               width: 34,
               child: showAuthor
-                  ? CircleAvatar(
-                      radius: 14,
-                      backgroundColor: MilanacColors.red,
-                      backgroundImage: author?.avatarUrl == null
-                          ? null
-                          : NetworkImage(author!.avatarUrl!),
-                      child: author?.avatarUrl == null
-                          ? Text(
-                              name.characters.first.toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            )
-                          : null,
-                    )
+                  ? (author == null
+                        ? const CircleAvatar(
+                            radius: 14,
+                            child: Icon(Icons.person_rounded, size: 16),
+                          )
+                        : MemberAvatar(
+                            member: author!,
+                            radius: 14,
+                            showNumber: false,
+                          ))
                   : null,
             ),
           GestureDetector(

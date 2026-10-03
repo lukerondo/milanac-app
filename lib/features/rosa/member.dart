@@ -18,6 +18,11 @@ class Member {
     this.overall,
     this.playStyle,
     this.platform,
+    this.avatarPath,
+    this.birthDate,
+    this.city,
+    this.nationality,
+    this.preferredFoot,
   });
 
   final String id;
@@ -40,6 +45,24 @@ class Member {
   final int? overall;
   final String? playStyle;
   final GamePlatform? platform;
+
+  /// Dati del profilo (Impostazioni): foto caricata, nascita, città, nazionalità, piede.
+  final String? avatarPath;
+  final DateTime? birthDate;
+  final String? city;
+
+  /// Codice ISO a 2 lettere (IT, ES...).
+  final String? nationality;
+  final PreferredFoot? preferredFoot;
+
+  int? get age {
+    final b = birthDate;
+    if (b == null) return null;
+    final now = DateTime.now();
+    final hadBirthday =
+        now.month > b.month || (now.month == b.month && now.day >= b.day);
+    return now.year - b.year - (hadBirthday ? 0 : 1);
+  }
 
   bool inTeam(Team? team) => team == null || teams.contains(team);
 
@@ -76,6 +99,11 @@ class Member {
     overall: overall ?? this.overall,
     playStyle: playStyle ?? this.playStyle,
     platform: platform ?? this.platform,
+    avatarPath: avatarPath,
+    birthDate: birthDate,
+    city: city,
+    nationality: nationality,
+    preferredFoot: preferredFoot,
   );
 
   factory Member.fromMap(Map<String, dynamic> m) => Member(
@@ -93,7 +121,55 @@ class Member {
     overall: (m['overall'] as num?)?.toInt(),
     playStyle: m['play_style'] as String?,
     platform: GamePlatform.values.asNameMap()[m['platform']],
+    avatarPath: m['avatar_path'] as String?,
+    birthDate: m['birth_date'] == null
+        ? null
+        : DateTime.parse(m['birth_date'] as String),
+    city: m['city'] as String?,
+    nationality: m['nationality'] as String?,
+    preferredFoot: PreferredFoot.values.asNameMap()[m['preferred_foot']],
   );
+
+  /// Copia con i dati personali modificati dalle Impostazioni (null = svuota).
+  Member withPersonalData({
+    required String displayName,
+    required String? gamertag,
+    required DateTime? birthDate,
+    required String? city,
+    required String? nationality,
+    required PreferredFoot? preferredFoot,
+    String? avatarPath,
+  }) => Member(
+    id: id,
+    displayName: displayName,
+    role: role,
+    joinedAt: joinedAt,
+    gamertag: gamertag,
+    fieldPosition: fieldPosition,
+    shirtNumber: shirtNumber,
+    avatarUrl: avatarUrl,
+    active: active,
+    requestedRole: requestedRole,
+    teams: teams,
+    overall: overall,
+    playStyle: playStyle,
+    platform: platform,
+    avatarPath: avatarPath ?? this.avatarPath,
+    birthDate: birthDate,
+    city: city,
+    nationality: nationality,
+    preferredFoot: preferredFoot,
+  );
+
+  /// Campi personali, modificabili dal membro sul proprio profilo.
+  Map<String, dynamic> personalMap() => {
+    'display_name': displayName,
+    'gamertag': gamertag,
+    'birth_date': birthDate?.toIso8601String().substring(0, 10),
+    'city': city,
+    'nationality': nationality,
+    'preferred_foot': preferredFoot?.name,
+  };
 
   /// Campi modificabili dal Direttivo.
   Map<String, dynamic> toUpdateMap() => {
@@ -114,6 +190,15 @@ class Member {
     'field_position': fieldPosition,
     'shirt_number': shirtNumber,
   };
+}
+
+enum PreferredFoot {
+  destro('Destro'),
+  sinistro('Sinistro'),
+  ambidestro('Ambidestro');
+
+  const PreferredFoot(this.label);
+  final String label;
 }
 
 enum GamePlatform {
