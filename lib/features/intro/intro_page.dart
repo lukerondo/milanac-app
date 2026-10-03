@@ -9,7 +9,7 @@ import '../../core/theme.dart';
 import 'intro_state.dart';
 
 /// Intro: video del club (se presente in assets/video/intro.mp4, altrimenti immagine
-/// di sfondo), stemma al centro e barra di caricamento. Tocca per saltare.
+/// di sfondo), stemma del Milano FC e barra di caricamento. Tocca per saltare.
 class IntroPage extends ConsumerStatefulWidget {
   const IntroPage({super.key});
 
@@ -112,17 +112,20 @@ class _IntroPageState extends ConsumerState<IntroPage>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    // Lo sfondo statico contiene già lo stemma: lo sovrapponiamo solo al video.
-                    if (video != null) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.asset(
-                          'assets/images/stemma.png',
-                          height: 96,
-                        ),
+                    // Stemma del Milano FC (versione non ufficiale di EA SPORTS FC 27),
+                    // che compare in dissolvenza all'inizio del caricamento.
+                    FadeTransition(
+                      opacity: CurvedAnimation(
+                        parent: _progress,
+                        curve: const Interval(0, .2, curve: Curves.easeOut),
                       ),
-                      const SizedBox(height: 20),
-                    ],
+                      child: Image.asset(
+                        'assets/images/stemma_milano_fc.png',
+                        height: 120,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                     AnimatedBuilder(
                       animation: _progress,
                       builder: (context, _) => Column(
