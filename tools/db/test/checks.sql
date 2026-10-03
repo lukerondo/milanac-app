@@ -204,3 +204,20 @@ do $$ begin
   assert (select overall from profiles where id = '00000000-0000-0000-0000-0000000000e2') is null,
     'nessuno modifica la carta altrui';
 end $$;
+
+-- Tattiche: le pubblica solo il Direttivo, le leggono i membri.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$insert into tactics (title) values ('Pressing alto')$q$, 'row-level security');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into tactics (title, module, description, image_path) values ('Pressing alto', '4-3-3', 'Linea alta', 'x.jpg');
+insert into storage.objects (bucket_id, name) values ('tactics', 'x.jpg');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$insert into storage.objects (bucket_id, name) values ('tactics', 'y.jpg')$q$, 'row-level security');
+do $$ begin
+  assert (select count(*) from tactics) = 1, 'il membro legge le tattiche';
+  assert (select count(*) from storage.objects where bucket_id = 'tactics') = 1, 'il membro vede le immagini';
+end $$;
+reset role;

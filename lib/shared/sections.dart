@@ -13,6 +13,7 @@ const appSections = <AppSection>[
   AppSection('/rosa', 'Rosa completa', Icons.groups_rounded),
   AppSection('/carta', 'La mia carta', Icons.style_rounded),
   AppSection('/formazione', 'Formazione', Icons.sports_soccer_rounded),
+  AppSection('/tattiche', 'Tattiche & Build', Icons.draw_rounded),
   AppSection('/calendario', 'Calendario partite', Icons.calendar_month_rounded),
   AppSection('/risultati', 'Risultati partite', Icons.scoreboard_rounded),
   AppSection('/albo-doro', "Albo d'oro", Icons.emoji_events_rounded),

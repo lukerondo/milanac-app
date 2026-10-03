@@ -17,6 +17,7 @@ import '../features/presenze/presenze_page.dart';
 import '../features/regolamento/regolamento_page.dart';
 import '../features/risultati/risultati_page.dart';
 import '../features/rosa/rosa_page.dart';
+import '../features/tattiche/tattiche_page.dart';
 import '../shared/app_shell.dart';
 import '../shared/sections.dart';
 import 'auth/providers.dart';
@@ -82,6 +83,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/albo-doro' => const AlboDoroPage(),
                   '/musica' => const MusicaPage(),
                   '/carta' => const MyCardPage(),
+                  '/tattiche' => const TattichePage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),
