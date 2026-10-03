@@ -1,0 +1,38 @@
+# Build iOS su Codemagic (piano gratuito: 500 minuti/mese su Mac).
+# Configurazione su codemagic.io: collega il repository, poi in Teams → Integrations
+# aggiungi la chiave API di App Store Connect con il nome "MILANAC ASC".
+# Istruzioni complete: docs/PUBBLICAZIONE.md
+workflows:
+  ios-release:
+    name: iOS → TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: MILANAC ASC
+    environment:
+      flutter: stable
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.milanacproclub.milanac
+    triggering:
+      events: []   # solo avvio manuale
+    scripts:
+      - name: Dipendenze
+        script: flutter pub get
+      - name: Test
+        script: flutter test
+      - name: Profili di firma
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          flutter build ipa --release \
+            --dart-define-from-file=env/prod.json \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
