@@ -49,6 +49,12 @@ class MessagesTest(unittest.TestCase):
         self.assertEqual(msg["route"], "/presenze")
 
 
+class SupabaseTest(unittest.TestCase):
+    def test_user_agent_non_da_browser(self):
+        db = notify.Supabase("https://x.supabase.co", "sb_secret_test")
+        self.assertNotIn("mozilla", db.headers["User-Agent"].lower())
+
+
 class NovitaTest(unittest.TestCase):
     def test_invia_e_segna_come_notificati(self):
         db = FakeDb({

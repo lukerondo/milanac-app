@@ -67,6 +67,13 @@ class AtomTest(unittest.TestCase):
         self.assertEqual(items[0].image_url, "https://b.thumbs.redditmedia.com/x.jpg")
 
 
+class SupabaseTest(unittest.TestCase):
+    def test_user_agent_non_da_browser(self):
+        # Le chiavi sb_secret_ vengono rifiutate (401) con un User-Agent da browser.
+        db = fn.Supabase("https://x.supabase.co", "sb_secret_test")
+        self.assertNotIn("mozilla", db.headers["User-Agent"].lower())
+
+
 class SourcesTest(unittest.TestCase):
     def test_file_fonti_valido(self):
         sources = fn.load_sources(Path(fn.__file__).with_name("sources.json"))

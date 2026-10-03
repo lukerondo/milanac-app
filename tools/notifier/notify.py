@@ -85,7 +85,8 @@ def http(method: str, url: str, headers: dict, body: dict | list | None = None) 
 class Supabase:
     def __init__(self, url: str, key: str):
         self.base = url.rstrip("/") + "/rest/v1"
-        self.headers = {"apikey": key}
+        # User-Agent non da browser: Supabase rifiuta le chiavi sb_secret_ dai browser.
+        self.headers = {"apikey": key, "User-Agent": "milanac-notifier/1.0"}
 
     def select(self, table: str, query: dict) -> list[dict]:
         qs = urllib.parse.urlencode(query, safe="(),.:*")

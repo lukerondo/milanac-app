@@ -26,6 +26,9 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 USER_AGENT = "Mozilla/5.0 (compatible; MilanacNewsBot/1.0; +https://github.com/lukerondo/milanac-app)"
+# Verso Supabase NON va usato un User-Agent da browser: le chiavi sb_secret_ vengono
+# rifiutate (401) se la richiesta sembra arrivare da un browser.
+SERVER_USER_AGENT = "milanac-news-fetcher/1.0 (+https://github.com/lukerondo/milanac-app)"
 SUMMARY_MAX = 280
 KEEP_DAYS = 60
 DEFAULT_MAX_ITEMS = 15
@@ -242,7 +245,11 @@ def http(method: str, url: str, *, headers: dict | None = None, body: bytes | No
 class Supabase:
     def __init__(self, url: str, key: str):
         self.base = url.rstrip("/") + "/rest/v1"
-        self.headers = {"apikey": key, "Content-Type": "application/json"}
+        self.headers = {
+            "apikey": key,
+            "Content-Type": "application/json",
+            "User-Agent": SERVER_USER_AGENT,
+        }
 
     def upsert_news(self, items: list[NewsItem]) -> None:
         if not items:
