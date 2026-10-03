@@ -6,6 +6,8 @@ import 'package:milanac/features/albo_doro/trophy.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 
+import 'helpers.dart';
+
 Future<void> openAlbo(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2340);
   tester.view.devicePixelRatio = 3;
@@ -17,10 +19,7 @@ Future<void> openAlbo(WidgetTester tester) async {
     UncontrolledProviderScope(container: container, child: const MilanacApp()),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.byIcon(Icons.menu));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text("Albo d'oro"));
-  await tester.pumpAndSettle();
+  await goToSection(tester, "Albo d'oro");
 }
 
 void main() {

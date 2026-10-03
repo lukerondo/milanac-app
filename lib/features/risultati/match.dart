@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../../core/teams.dart';
+
 enum MatchKind {
   torneo('Torneo'),
   amichevole('Amichevole');
@@ -23,10 +25,18 @@ class ClubMatch {
     this.goalsAgainst,
     this.scorers,
     this.notes,
+    this.team = Team.milanac,
+    this.tournamentId,
   });
 
   final String id;
   final MatchKind kind;
+
+  /// Squadra del club che ha giocato.
+  final Team team;
+
+  /// Torneo di appartenenza (facoltativo).
+  final String? tournamentId;
   final String opponent;
   final DateTime playedAt;
   final String? competition;
@@ -54,6 +64,8 @@ class ClubMatch {
     goalsAgainst: (m['goals_against'] as num?)?.toInt(),
     scorers: m['scorers'] as String?,
     notes: m['notes'] as String?,
+    team: Team.parse(m['team']) ?? Team.milanac,
+    tournamentId: m['tournament_id'] as String?,
   );
 
   Map<String, dynamic> toMap() => {
@@ -66,6 +78,8 @@ class ClubMatch {
     'goals_against': goalsAgainst,
     'scorers': scorers,
     'notes': notes,
+    'team': team.name,
+    'tournament_id': kind == MatchKind.torneo ? tournamentId : null,
   };
 }
 

@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../tornei/tournaments_repository.dart';
 import 'match.dart';
 import 'matches_repository.dart';
 
@@ -25,6 +27,8 @@ class _MatchEditor extends ConsumerStatefulWidget {
 
 class _MatchEditorState extends ConsumerState<_MatchEditor> {
   late MatchKind _kind = widget.match?.kind ?? MatchKind.torneo;
+  late Team _team = widget.match?.team ?? Team.milanac;
+  late String? _tournamentId = widget.match?.tournamentId;
   late bool _home = widget.match?.home ?? true;
   late DateTime _date = widget.match?.playedAt ?? DateTime.now();
   late final _opponent = TextEditingController(text: widget.match?.opponent);
@@ -78,6 +82,8 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
       goalsAgainst: int.tryParse(_against.text),
       scorers: _text(_scorers),
       notes: _text(_notes),
+      team: _team,
+      tournamentId: _tournamentId,
     );
     try {
       await ref.read(matchesRepositoryProvider).save(m);
@@ -123,6 +129,16 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
+            SegmentedButton<Team>(
+              segments: [
+                for (final t in Team.values)
+                  ButtonSegment(value: t, label: Text(t.short)),
+              ],
+              selected: {_team},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) => setState(() => _team = s.first),
+            ),
+            const SizedBox(height: 8),
             SegmentedButton<MatchKind>(
               segments: const [
                 ButtonSegment(
@@ -139,6 +155,16 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
             ),
             if (_kind == MatchKind.torneo) ...[
               const SizedBox(height: 8),
+              _TournamentPicker(
+                team: _team,
+                value: _tournamentId,
+                onChanged: (t) => setState(() {
+                  _tournamentId = t?.id;
+                  if (t != null && _competition.text.trim().isEmpty) {
+                    _competition.text = t.name;
+                  }
+                }),
+              ),
               TextField(
                 controller: _competition,
                 decoration: const InputDecoration(
@@ -175,7 +201,7 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                goals(_for, 'MILANAC'),
+                goals(_for, _team.short),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
@@ -219,6 +245,36 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Scelta del torneo (tra quelli della squadra) a cui collegare la partita.
+class _TournamentPicker extends ConsumerWidget {
+  const _TournamentPicker({
+    required this.team,
+    required this.value,
+    required this.onChanged,
+  });
+  final Team team;
+  final String? value;
+  final ValueChanged<Tournament?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final list = (ref.watch(tournamentsProvider).value ?? const [])
+        .where((t) => t.team == team || t.id == value)
+        .toList();
+    if (list.isEmpty) return const SizedBox.shrink();
+    return DropdownButtonFormField<String?>(
+      initialValue: list.any((t) => t.id == value) ? value : null,
+      decoration: const InputDecoration(labelText: 'Torneo (facoltativo)'),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('Nessuno')),
+        for (final t in list)
+          DropdownMenuItem(value: t.id, child: Text(t.name)),
+      ],
+      onChanged: (id) => onChanged(list.where((t) => t.id == id).firstOrNull),
     );
   }
 }

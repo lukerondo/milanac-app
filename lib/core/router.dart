@@ -5,16 +5,22 @@ import 'package:go_router/go_router.dart';
 import '../features/albo_doro/albo_doro_page.dart';
 import '../features/auth/login_page.dart';
 import '../features/calendario/calendario_page.dart';
+import '../features/carta/carta_page.dart';
+import '../features/chat/channel_page.dart';
+import '../features/chat/chat_list_page.dart';
 import '../features/auth/pending_page.dart';
 import '../features/common/coming_soon_page.dart';
 import '../features/formazione/formazione_page.dart';
 import '../features/intro/intro_page.dart';
 import '../features/intro/intro_state.dart';
+import '../features/musica/musica_page.dart';
 import '../features/news/news_page.dart';
 import '../features/presenze/presenze_page.dart';
 import '../features/regolamento/regolamento_page.dart';
 import '../features/risultati/risultati_page.dart';
 import '../features/rosa/rosa_page.dart';
+import '../features/tattiche/tattiche_page.dart';
+import '../features/tornei/tornei_page.dart';
 import '../shared/app_shell.dart';
 import '../shared/sections.dart';
 import 'auth/providers.dart';
@@ -61,6 +67,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/attesa', builder: (_, _) => const PendingPage()),
+      // Conversazione a schermo intero (anche dalle notifiche).
+      GoRoute(
+        path: '/chat/:slug',
+        builder: (_, state) => ChannelPage(slug: state.pathParameters['slug']!),
+      ),
       ShellRoute(
         builder: (context, state, child) =>
             AppShell(path: state.matchedLocation, child: child),
@@ -78,6 +89,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/risultati' => const RisultatiPage(),
                   '/formazione' => const FormazionePage(),
                   '/albo-doro' => const AlboDoroPage(),
+                  '/musica' => const MusicaPage(),
+                  '/carta' => const MyCardPage(),
+                  '/tattiche' => const TattichePage(),
+                  '/chat' => const ChatListPage(),
+                  '/tornei' => const TorneiPage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

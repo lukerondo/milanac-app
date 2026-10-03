@@ -18,7 +18,29 @@ on:
 concurrency: database
 
 jobs:
+  # Prova le migrazioni su un PostgreSQL vuoto (con le parti di Supabase simulate) e
+  # verifica le regole di sicurezza: un errore qui blocca l'applicazione al database vero.
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/db/test/run.sh
+
   migrate:
+    needs: sql
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

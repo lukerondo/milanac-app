@@ -6,6 +6,8 @@ import 'package:milanac/features/formazione/modules.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 
+import 'helpers.dart';
+
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
@@ -43,10 +45,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Formazione'));
-    await tester.pumpAndSettle();
+    await goToSection(tester, 'Formazione');
 
     // In demo: Neri (POR), Bianchi, Demo, Rossi in campo. Nessuno in panchina.
     expect(find.text('Neri'), findsOneWidget);
@@ -68,8 +67,52 @@ void main() {
     ); // chip in panchina
 
     // Cambio modulo: i giocatori restano schierati.
+    await tester.scrollUntilVisible(find.text('3-5-2'), -200);
     await tester.tap(find.text('3-5-2'));
     await tester.pumpAndSettle();
     expect(find.text('Rossi'), findsOneWidget);
+
+    // Pubblicazione: conferma, poi lo stato diventa "Pubblicata oggi".
+    await tester.scrollUntilVisible(find.textContaining('Bozza'), -200);
+    expect(find.textContaining('Bozza'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Pubblica la formazione di stasera'),
+      200,
+    );
+    await tester.tap(find.text('Pubblica la formazione di stasera'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Pubblica'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ripubblica e avvisa i giocatori'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('Pubblicata oggi'),
+      -200,
+    );
+    expect(find.textContaining('Pubblicata oggi'), findsOneWidget);
+  });
+
+  testWidgets('Formazione: una per squadra (MILANAC / FUTURO)', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container.read(introDoneProvider.notifier).complete();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MilanacApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await goToSection(tester, 'Formazione');
+
+    expect(find.text('Rossi'), findsOneWidget);
+    await tester.tap(find.text('FUTURO'));
+    await tester.pumpAndSettle();
+    // Formazione FUTURO: Neri in porta e Verdi; Rossi non c'è.
+    expect(find.text('Verdi'), findsOneWidget);
+    expect(find.text('Neri'), findsOneWidget);
+    expect(find.text('Rossi'), findsNothing);
   });
 }

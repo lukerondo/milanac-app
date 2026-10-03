@@ -6,9 +6,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/auth/providers.dart';
 import 'core/config.dart';
+import 'core/push/device_tokens.dart';
 import 'core/push/push_service.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
+import 'features/musica/soundtrack.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,12 +36,16 @@ class MilanacApp extends ConsumerWidget {
     // Notifiche del club solo per i membri approvati.
     ref.listen(profileProvider, (_, next) {
       final profile = next.value;
+      final tokens = ref.read(deviceTokensProvider);
       if (profile?.isApproved ?? false) {
-        PushService.instance.subscribe();
+        PushService.instance.subscribe(onToken: tokens.save);
       } else if (next.hasValue && profile == null) {
-        PushService.instance.unsubscribe();
+        PushService.instance.unsubscribe(onRemoveToken: tokens.remove);
       }
     });
+
+    // Musica di sottofondo: resta attiva per tutta la vita dell'app.
+    ref.listen(soundtrackProvider, (_, _) {});
 
     return MaterialApp.router(
       title: 'MILANAC Pro Club',

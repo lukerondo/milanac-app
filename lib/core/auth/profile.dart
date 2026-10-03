@@ -1,3 +1,5 @@
+import '../teams.dart';
+
 enum ClubRole { direttivo, giocatore, pending }
 
 class Profile {
@@ -9,6 +11,7 @@ class Profile {
     this.active = true,
     this.gamertag,
     this.avatarUrl,
+    this.teams = const {Team.milanac},
   });
 
   final String id;
@@ -23,6 +26,9 @@ class Profile {
   final String? gamertag;
   final String? avatarUrl;
 
+  /// Squadre in cui gioca (MILANAC, MILANAC FUTURO o entrambe).
+  final Set<Team> teams;
+
   bool get isDirettivo => role == ClubRole.direttivo && active;
   bool get isApproved => role != ClubRole.pending && active;
 
@@ -34,6 +40,7 @@ class Profile {
     active: (m['active'] as bool?) ?? true,
     role: parseRole(m['club_role'], ClubRole.pending),
     requestedRole: parseRole(m['requested_role'], ClubRole.giocatore),
+    teams: Team.parseSet(m['teams']),
   );
 
   static const demo = Profile(

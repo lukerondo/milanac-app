@@ -48,6 +48,11 @@ class PushService {
   bool _subscribed = false;
   void Function(String route)? onOpenRoute;
 
+  /// Con l'app aperta: false per non mostrare l'avviso (es. messaggio del canale già aperto).
+  bool Function(Map<String, dynamic> data)? shouldShowInApp;
+
+  StreamSubscription<String>? _tokenRefresh;
+
   /// Chiamato all'avvio: inizializza Firebase se configurato.
   Future<void> init() async {
     final options = FirebaseConfig.current;
@@ -65,6 +70,7 @@ class PushService {
       FirebaseMessaging.onMessage.listen((m) {
         final n = m.notification;
         if (n == null) return;
+        if (shouldShowInApp != null && !shouldShowInApp!(m.data)) return;
         messengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text([n.title, n.body].whereType<String>().join('\n')),
@@ -85,26 +91,43 @@ class PushService {
   }
 
   /// Iscrive il dispositivo alle notifiche del club (solo membri approvati).
-  Future<void> subscribe() async {
+  /// [onToken] salva il token del telefono per le notifiche personali (formazione, chat).
+  Future<void> subscribe({Future<void> Function(String token)? onToken}) async {
     if (!_ready || _subscribed) return;
     try {
       final settings = await FirebaseMessaging.instance.requestPermission();
       if (settings.authorizationStatus == AuthorizationStatus.denied) return;
       await FirebaseMessaging.instance.subscribeToTopic(clubTopic);
       _subscribed = true;
+      if (onToken != null) {
+        final token = await FirebaseMessaging.instance.getToken();
+        if (token != null) await onToken(token);
+        await _tokenRefresh?.cancel();
+        _tokenRefresh = FirebaseMessaging.instance.onTokenRefresh.listen(
+          onToken,
+        );
+      }
     } catch (e) {
       debugPrint('Iscrizione alle notifiche non riuscita: $e');
     }
   }
 
   /// All'uscita dall'account il dispositivo smette di ricevere le notifiche del club.
-  Future<void> unsubscribe() async {
+  Future<void> unsubscribe({
+    Future<void> Function(String token)? onRemoveToken,
+  }) async {
     if (!_ready) return;
     try {
+      await _tokenRefresh?.cancel();
+      _tokenRefresh = null;
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null && onRemoveToken != null) await onRemoveToken(token);
       await FirebaseMessaging.instance.unsubscribeFromTopic(clubTopic);
       _subscribed = false;
     } catch (_) {}
   }
+
+  bool get isReady => _ready;
 }
 
 /// Usato per mostrare messaggi da qualunque punto dell'app.

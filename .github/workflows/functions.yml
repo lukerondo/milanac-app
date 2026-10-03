@@ -1,0 +1,62 @@
+name: Funzioni
+
+# Pubblica le Edge Functions di Supabase (notifiche push personali) e collega il database.
+# Usa il token personale Supabase (secret SUPABASE_ACCESS_TOKEN o MILANACAPP).
+# FIREBASE_SERVICE_ACCOUNT è facoltativo: senza, la funzione risponde ma non invia notifiche.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, claude/cloud-credits-private-repo-gqfxlp]
+    paths: [supabase/functions/**, .github/workflows/functions.yml]
+
+concurrency: functions
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN || secrets.MILANACAPP }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Progetto
+        run: |
+          echo "REF=$(python3 -c "import json,re;print(re.search(r'https://([a-z0-9]+)\.supabase\.co', json.load(open('env/prod.json'))['SUPABASE_URL']).group(1))")" >> "$GITHUB_ENV"
+      - name: Segreti della funzione
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          SECRET=$(openssl rand -hex 24)
+          echo "::add-mask::$SECRET"
+          echo "WEBHOOK_SECRET=$SECRET" >> "$GITHUB_ENV"
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > /tmp/fsa.json
+            supabase secrets set --project-ref "$REF" WEBHOOK_SECRET="$SECRET" FIREBASE_SERVICE_ACCOUNT="$(cat /tmp/fsa.json)"
+            rm /tmp/fsa.json
+          else
+            supabase secrets set --project-ref "$REF" WEBHOOK_SECRET="$SECRET"
+          fi
+      - name: Pubblica la funzione notify
+        run: supabase functions deploy notify --project-ref "$REF" --no-verify-jwt
+      - name: Collega il database alla funzione
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          ref, secret = os.environ["REF"], os.environ["WEBHOOK_SECRET"]
+          url = f"https://{ref}.supabase.co/functions/v1/notify"
+          sql = ("create table if not exists public.app_config (key text primary key, value text not null); "
+                 "alter table public.app_config enable row level security; "
+                 "insert into public.app_config(key, value) values "
+                 f"('notify_url', '{url}'), ('notify_secret', '{secret}') "
+                 "on conflict (key) do update set value = excluded.value;")
+          req = urllib.request.Request(
+              f"https://api.supabase.com/v1/projects/{ref}/database/query",
+              data=json.dumps({"query": sql}).encode(), method="POST",
+              headers={"Authorization": f"Bearer {os.environ['SUPABASE_ACCESS_TOKEN']}",
+                       "Content-Type": "application/json", "User-Agent": "milanac-deploy/1.0"})
+          urllib.request.urlopen(req, timeout=60).read()
+          print("Database collegato alla funzione notify.")
+          PY

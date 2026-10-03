@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/musica/musica_page.dart';
 import 'app_drawer.dart';
 import 'sections.dart';
 
@@ -13,7 +14,10 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(sectionFor(path).title.toUpperCase())),
+      appBar: AppBar(
+        title: Text(sectionFor(path).title.toUpperCase()),
+        actions: const [SoundtrackButton()],
+      ),
       drawer: AppDrawer(currentPath: path),
       body: child,
     );

@@ -6,6 +6,8 @@ import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/risultati/match.dart';
 import 'package:milanac/main.dart';
 
+import 'helpers.dart';
+
 Future<void> open(WidgetTester tester, String section) async {
   tester.view.physicalSize = const Size(1080, 2340);
   tester.view.devicePixelRatio = 3;
@@ -17,10 +19,7 @@ Future<void> open(WidgetTester tester, String section) async {
     UncontrolledProviderScope(container: container, child: const MilanacApp()),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.byIcon(Icons.menu));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text(section));
-  await tester.pumpAndSettle();
+  await goToSection(tester, section);
 }
 
 void main() {

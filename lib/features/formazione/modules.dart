@@ -1,3 +1,5 @@
+import '../../core/teams.dart';
+
 /// Una posizione in campo: [x] da 0 (sinistra) a 1 (destra),
 /// [y] da 0 (porta avversaria, in alto) a 1 (nostra porta, in basso).
 class SlotPosition {
@@ -108,12 +110,48 @@ const defaultModule = '4-3-3';
 class Formation {
   const Formation({
     this.id = '',
+    this.team = Team.milanac,
     this.module = defaultModule,
     this.players = const {},
+    this.publishedAt,
+    this.updatedAt,
   });
 
   final String id;
+
+  /// Squadra a cui appartiene (una formazione per squadra).
+  final Team team;
   final String module;
+
+  /// Quando il Direttivo l'ha pubblicata (null = ancora bozza).
+  final DateTime? publishedAt;
+  final DateTime? updatedAt;
+
+  bool get isPublished => publishedAt != null;
+
+  /// Pubblicata oggi (vale come formazione "di stasera").
+  bool get isPublishedToday {
+    final p = publishedAt?.toLocal();
+    final now = DateTime.now();
+    return p != null &&
+        p.year == now.year &&
+        p.month == now.month &&
+        p.day == now.day;
+  }
+
+  /// Modificata dopo l'ultima pubblicazione.
+  bool get hasUnpublishedChanges =>
+      publishedAt != null &&
+      updatedAt != null &&
+      updatedAt!.isAfter(publishedAt!.add(const Duration(seconds: 2)));
+
+  /// Posizione (es. "CC") del giocatore, o null se in panchina.
+  String? positionOf(String playerId) {
+    for (final e in players.entries) {
+      if (e.value == playerId) return slots[e.key].label;
+    }
+    return null;
+  }
 
   /// slot (0–10) → id del giocatore.
   final Map<int, String> players;
@@ -121,12 +159,21 @@ class Formation {
   List<SlotPosition> get slots =>
       formationModules[module] ?? formationModules[defaultModule]!;
 
-  Formation copyWith({String? id, String? module, Map<int, String>? players}) =>
-      Formation(
-        id: id ?? this.id,
-        module: module ?? this.module,
-        players: players ?? this.players,
-      );
+  Formation copyWith({
+    String? id,
+    Team? team,
+    String? module,
+    Map<int, String>? players,
+    DateTime? publishedAt,
+    DateTime? updatedAt,
+  }) => Formation(
+    id: id ?? this.id,
+    team: team ?? this.team,
+    module: module ?? this.module,
+    players: players ?? this.players,
+    publishedAt: publishedAt ?? this.publishedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
 
   /// Mette [playerId] nello [slot]; se era già in campo altrove, lo sposta.
   Formation assign(int slot, String? playerId) {

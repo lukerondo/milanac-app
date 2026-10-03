@@ -181,7 +181,7 @@ class _MyAttendanceCard extends ConsumerWidget {
             Text(
               current == null
                   ? 'Inizio previsto alle ${AppConfig.defaultArrivalTime}. Non hai ancora risposto.'
-                  : _describe(current!),
+                  : describeAttendance(current!),
               style: const TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 12),
@@ -191,7 +191,7 @@ class _MyAttendanceCard extends ConsumerWidget {
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: _StatusButton(
+                      child: AttendanceStatusButton(
                         status: s,
                         selected: current?.status == s,
                         onPressed: enabled
@@ -242,7 +242,7 @@ class _MyAttendanceCard extends ConsumerWidget {
   }
 }
 
-String _describe(AttendanceEntry e) =>
+String describeAttendance(AttendanceEntry e) =>
     switch (e.status) {
       AttendanceStatus.presente => 'Presente alle ${e.arrivalTime}',
       AttendanceStatus.ritardo => 'In ritardo, arrivo alle ${e.arrivalTime}',
@@ -250,8 +250,9 @@ String _describe(AttendanceEntry e) =>
     } +
     (e.note == null || e.note!.isEmpty ? '' : ' · ${e.note}');
 
-class _StatusButton extends StatelessWidget {
-  const _StatusButton({
+class AttendanceStatusButton extends StatelessWidget {
+  const AttendanceStatusButton({
+    super.key,
     required this.status,
     required this.selected,
     this.onPressed,
@@ -502,7 +503,7 @@ class _PlayerRow extends ConsumerWidget {
                         Text(
                           entry == null
                               ? 'Non ha ancora risposto'
-                              : _describe(entry!),
+                              : describeAttendance(entry!),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -669,7 +670,7 @@ class _HistorySheet extends StatelessWidget {
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: _StatusButton(
+                      child: AttendanceStatusButton(
                         status: s,
                         selected: false,
                         onPressed: () async {
@@ -696,7 +697,7 @@ class _HistorySheet extends StatelessWidget {
                 backgroundColor: statusColor(e.status),
               ),
               title: Text(DateFormat('EEEE d MMMM yyyy', 'it').format(e.date)),
-              subtitle: Text(_describe(e)),
+              subtitle: Text(describeAttendance(e)),
             ),
         ],
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 import 'club_event.dart';
 import 'events_repository.dart';
@@ -24,13 +25,20 @@ Future<void> showEventDetails(
             children: [
               Icon(e.type.icon, color: e.type.color),
               const SizedBox(width: 8),
-              Text(
-                e.type.label.toUpperCase(),
-                style: TextStyle(
-                  color: e.type.color,
-                  fontWeight: FontWeight.w800,
+              Flexible(
+                child: Text(
+                  e.type.label.toUpperCase(),
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: e.type.color,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
+              if (e.team != null) ...[
+                const SizedBox(width: 8),
+                TeamBadge(e.team!),
+              ],
             ],
           ),
           const SizedBox(height: 8),
@@ -133,6 +141,7 @@ class _EventEditor extends ConsumerStatefulWidget {
 
 class _EventEditorState extends ConsumerState<_EventEditor> {
   late EventType _type = widget.event?.type ?? EventType.torneo;
+  late Team? _team = widget.event?.team;
   late final _title = TextEditingController(text: widget.event?.title);
   late final _location = TextEditingController(text: widget.event?.location);
   late final _description = TextEditingController(
@@ -174,6 +183,7 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
       description: _description.text.trim().isEmpty
           ? null
           : _description.text.trim(),
+      team: _team,
     );
     try {
       await ref.read(eventsRepositoryProvider).save(e);
@@ -217,6 +227,24 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
                     label: Text(t.label),
                     selected: _type == t,
                     onSelected: (_) => setState(() => _type = t),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Tutto il club'),
+                  selected: _team == null,
+                  onSelected: (_) => setState(() => _team = null),
+                ),
+                for (final t in Team.values)
+                  ChoiceChip(
+                    label: Text(t.label),
+                    selected: _team == t,
+                    onSelected: (_) => setState(() => _team = t),
                   ),
               ],
             ),

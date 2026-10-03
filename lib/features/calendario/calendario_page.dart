@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 import 'club_event.dart';
 import 'event_editor.dart';
@@ -191,6 +192,9 @@ class EventCard extends StatelessWidget {
               event.location!,
           ].join(' · '),
         ),
+        trailing: event.team == null
+            ? null
+            : TeamBadge(event.team!, small: true),
         onTap: () => showEventDetails(context, event, editable: editable),
       ),
     );
