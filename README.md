@@ -26,6 +26,10 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | D | Chat a canali (Main, Presenze automatiche, Fantacalcio, Tattiche) | ✅ |
 | E | Tornei (link, classifica facoltativa, partite collegate) | ✅ |
 | – | Colonna sonora: musica di sottofondo scelta dal telefono, con muto | ✅ |
+| – | Sala Direttivo, Impostazioni (dati e foto della carta), Home "Notizie dal mondo FC" con pannello Stasera | ✅ |
+| F | Voti dopo la partita, carta "Uomo partita", Squadra della settimana | ✅ |
+| G | Traguardi sbloccabili (badge su profilo e carta) e walkout stile FUT | ✅ |
+| – | Restyling: font sportivo, sfondo stadio, card a vetro, transizioni, vibrazioni | ✅ |
 
 ## Provare l'app subito (modalità demo)
 
