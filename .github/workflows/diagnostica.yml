@@ -1,0 +1,21 @@
+name: Diagnostica DB
+
+# Controlli in sola lettura sul database (avvio manuale o modificando tools/db/diagnose.py).
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/cloud-credits-private-repo-gqfxlp]
+    paths: [tools/db/diagnose.py, .github/workflows/diagnostica.yml]
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diagnostica
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN || secrets.MILANACAPP }}
+        run: |
+          export SUPABASE_PROJECT_REF=$(python3 -c "import json,re;print(re.search(r'https://([a-z0-9]+)\.supabase\.co', json.load(open('env/prod.json'))['SUPABASE_URL']).group(1))")
+          python3 tools/db/diagnose.py
