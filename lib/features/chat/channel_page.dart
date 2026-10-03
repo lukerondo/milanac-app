@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/providers.dart';
 import '../../core/push/push_service.dart';
 import '../../core/theme.dart';
+import '../../shared/member_photo.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'chat_repository.dart';
@@ -409,6 +410,9 @@ class _Bubble extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
       decoration: BoxDecoration(
         color: mine ? MilanacColors.redDark : MilanacColors.surfaceHigh,
+        border: message.isAnnouncement
+            ? Border.all(color: MilanacColors.gold, width: 1.5)
+            : null,
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(16),
           topRight: const Radius.circular(16),
@@ -419,6 +423,34 @@ class _Bubble extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (message.isAnnouncement)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.campaign_rounded,
+                    size: 16,
+                    color: MilanacColors.gold,
+                  ),
+                  SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      'AVVISO DEL DIRETTIVO',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: MilanacColors.gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (showAuthor && !mine)
             Text(
               name,
@@ -457,23 +489,16 @@ class _Bubble extends ConsumerWidget {
             SizedBox(
               width: 34,
               child: showAuthor
-                  ? CircleAvatar(
-                      radius: 14,
-                      backgroundColor: MilanacColors.red,
-                      backgroundImage: author?.avatarUrl == null
-                          ? null
-                          : NetworkImage(author!.avatarUrl!),
-                      child: author?.avatarUrl == null
-                          ? Text(
-                              name.characters.first.toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            )
-                          : null,
-                    )
+                  ? (author == null
+                        ? const CircleAvatar(
+                            radius: 14,
+                            child: Icon(Icons.person_rounded, size: 16),
+                          )
+                        : MemberAvatar(
+                            member: author!,
+                            radius: 14,
+                            showNumber: false,
+                          ))
                   : null,
             ),
           GestureDetector(

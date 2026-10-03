@@ -115,6 +115,8 @@ class Formation {
     this.players = const {},
     this.publishedAt,
     this.updatedAt,
+    this.publishedModule,
+    this.publishedPlayers,
   });
 
   final String id;
@@ -126,6 +128,22 @@ class Formation {
   /// Quando il Direttivo l'ha pubblicata (null = ancora bozza).
   final DateTime? publishedAt;
   final DateTime? updatedAt;
+
+  /// Modulo e giocatori "congelati" all'ultima pubblicazione (quello che vedono i giocatori).
+  final String? publishedModule;
+  final Map<int, String>? publishedPlayers;
+
+  /// La formazione come l'hanno ricevuta i giocatori (vuota se mai pubblicata).
+  Formation get publishedView => Formation(
+    id: id,
+    team: team,
+    module: publishedModule ?? module,
+    players: publishedPlayers ?? const {},
+    publishedAt: publishedAt,
+    updatedAt: publishedAt,
+    publishedModule: publishedModule,
+    publishedPlayers: publishedPlayers,
+  );
 
   bool get isPublished => publishedAt != null;
 
@@ -166,6 +184,8 @@ class Formation {
     Map<int, String>? players,
     DateTime? publishedAt,
     DateTime? updatedAt,
+    String? publishedModule,
+    Map<int, String>? publishedPlayers,
   }) => Formation(
     id: id ?? this.id,
     team: team ?? this.team,
@@ -173,6 +193,8 @@ class Formation {
     players: players ?? this.players,
     publishedAt: publishedAt ?? this.publishedAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    publishedModule: publishedModule ?? this.publishedModule,
+    publishedPlayers: publishedPlayers ?? this.publishedPlayers,
   );
 
   /// Mette [playerId] nello [slot]; se era già in campo altrove, lo sposta.

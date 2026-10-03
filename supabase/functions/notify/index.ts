@@ -66,15 +66,18 @@ const TEAM_NAMES: Record<string, string> = { milanac: "MILANAC", futuro: "MILANA
 async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]> {
   const { data: msg } = await db
     .from("messages")
-    .select("id, kind, body, image_path, author_id, channel_id, channels(name, slug), profiles(display_name)")
+    .select("id, kind, body, image_path, meta, author_id, channel_id, channels(name, slug, direttivo_only), profiles(display_name)")
     .eq("id", messageId).single();
   if (!msg) return [];
   // deno-lint-ignore no-explicit-any
   const channel = (msg as any).channels;
   // deno-lint-ignore no-explicit-any
   const author = (msg as any).profiles?.display_name ?? "MILANAC";
-  const { data: members } = await db
-    .from("profiles").select("id").eq("active", true).neq("club_role", "pending");
+  // I canali riservati (Sala Direttivo) notificano solo il Direttivo.
+  const membersQuery = db.from("profiles").select("id").eq("active", true);
+  const { data: members } = channel?.direttivo_only
+    ? await membersQuery.eq("club_role", "direttivo")
+    : await membersQuery.neq("club_role", "pending");
   const { data: mutes } = await db
     .from("channel_mutes").select("user_id").eq("channel_id", msg.channel_id);
   const muted = new Set((mutes ?? []).map((m) => m.user_id));
@@ -84,7 +87,9 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
     .map((m) => ({
       userId: m.id,
       // I messaggi automatici (ritardi, assenze) contengono già il nome.
-      title: msg.kind === "system" ? `#${channel?.name ?? "chat"}` : `#${channel?.name ?? "chat"} · ${author}`,
+      title: msg.meta?.type === "announcement"
+        ? `📣 Avviso del Direttivo · ${author}`
+        : msg.kind === "system" ? `#${channel?.name ?? "chat"}` : `#${channel?.name ?? "chat"} · ${author}`,
       body: text.length > 140 ? text.slice(0, 137) + "…" : text,
       route: `/chat/${channel?.slug ?? ""}`,
       data: { channel: channel?.slug ?? "" },

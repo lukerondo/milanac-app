@@ -46,6 +46,15 @@ class ChatListPage extends ConsumerWidget {
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
+                if (c.direttivoOnly)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: Icon(
+                      Icons.lock_rounded,
+                      size: 16,
+                      color: MilanacColors.gold,
+                    ),
+                  ),
                 if (isMuted)
                   const Padding(
                     padding: EdgeInsets.only(left: 4),

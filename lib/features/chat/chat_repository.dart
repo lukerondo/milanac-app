@@ -18,6 +18,7 @@ class Channel {
     required this.name,
     this.description,
     this.icon = 'chat',
+    this.direttivoOnly = false,
   });
 
   final String id;
@@ -26,11 +27,15 @@ class Channel {
   final String? description;
   final String icon;
 
+  /// Canale riservato al Direttivo (Sala Direttivo).
+  final bool direttivoOnly;
+
   IconData get iconData => switch (icon) {
     'forum' => Icons.forum_rounded,
     'presenze' => Icons.how_to_reg_rounded,
     'fantacalcio' => Icons.emoji_events_rounded,
     'tattiche' => Icons.draw_rounded,
+    'direttivo' => Icons.admin_panel_settings_rounded,
     _ => Icons.chat_rounded,
   };
 
@@ -40,6 +45,7 @@ class Channel {
     name: m['name'] as String,
     description: m['description'] as String?,
     icon: (m['icon'] as String?) ?? 'chat',
+    direttivoOnly: (m['direttivo_only'] as bool?) ?? false,
   );
 }
 
@@ -71,6 +77,9 @@ class ChatMessage {
   final Uint8List? localImage;
 
   bool get hasImage => imagePath != null || localImage != null;
+
+  /// Avviso ufficiale del Direttivo (evidenziato in chat, titolo dedicato nella notifica).
+  bool get isAnnouncement => meta['type'] == 'announcement';
 
   factory ChatMessage.fromMap(Map<String, dynamic> m) => ChatMessage(
     id: m['id'] as String,
@@ -119,7 +128,12 @@ abstract class ChatRepository {
 
   /// Non letti e ultimo messaggio per ogni canale (id del canale → riepilogo).
   Stream<Map<String, ChannelOverview>> watchOverview();
-  Future<void> send(String channelId, {String? body, Uint8List? image});
+  Future<void> send(
+    String channelId, {
+    String? body,
+    Uint8List? image,
+    Map<String, dynamic>? meta,
+  });
   Future<void> delete(ChatMessage message);
   Future<void> markRead(String channelId);
   Future<Set<String>> mutedChannels();
@@ -247,7 +261,12 @@ class _SupabaseChatRepository extends ChatRepository {
   }
 
   @override
-  Future<void> send(String channelId, {String? body, Uint8List? image}) async {
+  Future<void> send(
+    String channelId, {
+    String? body,
+    Uint8List? image,
+    Map<String, dynamic>? meta,
+  }) async {
     String? path;
     if (image != null) {
       path =
@@ -264,6 +283,7 @@ class _SupabaseChatRepository extends ChatRepository {
       'channel_id': channelId,
       'body': body,
       'image_path': path,
+      'meta': meta,
     });
   }
 
@@ -374,6 +394,14 @@ class DemoChatRepository extends ChatRepository {
       description: 'Idee, schemi e video',
       icon: 'tattiche',
     ),
+    Channel(
+      id: 'c-direttivo',
+      slug: 'direttivo',
+      name: 'Sala Direttivo',
+      description: 'Solo per il Direttivo: decisioni, mercato, formazioni',
+      icon: 'direttivo',
+      direttivoOnly: true,
+    ),
   ];
 
   final _messages = <ChatMessage>[];
@@ -433,7 +461,12 @@ class DemoChatRepository extends ChatRepository {
   }
 
   @override
-  Future<void> send(String channelId, {String? body, Uint8List? image}) async {
+  Future<void> send(
+    String channelId, {
+    String? body,
+    Uint8List? image,
+    Map<String, dynamic>? meta,
+  }) async {
     _messages.add(
       ChatMessage(
         id: 'm${_next++}',
@@ -441,6 +474,7 @@ class DemoChatRepository extends ChatRepository {
         authorId: 'demo',
         body: body,
         localImage: image,
+        meta: meta ?? const {},
         createdAt: DateTime.now(),
       ),
     );

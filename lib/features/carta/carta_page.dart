@@ -246,6 +246,11 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       overall: _overall,
       playStyle: style.isEmpty ? null : style,
       platform: _platform,
+      avatarPath: widget.member.avatarPath,
+      birthDate: widget.member.birthDate,
+      city: widget.member.city,
+      nationality: widget.member.nationality,
+      preferredFoot: widget.member.preferredFoot,
     );
     try {
       await ref.read(rosaRepositoryProvider).saveCard(updated);

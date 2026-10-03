@@ -10,6 +10,7 @@ import '../features/chat/channel_page.dart';
 import '../features/chat/chat_list_page.dart';
 import '../features/auth/pending_page.dart';
 import '../features/common/coming_soon_page.dart';
+import '../features/direttivo/direttivo_page.dart';
 import '../features/formazione/formazione_page.dart';
 import '../features/intro/intro_page.dart';
 import '../features/intro/intro_state.dart';
@@ -51,6 +52,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       const gates = {'/intro', '/login', '/attesa'};
       String? goTo(String target) => loc == target ? null : target;
 
+      // La Sala Direttivo (e le altre sezioni riservate) solo per il Direttivo.
+      final reserved = appSections.any((s) => s.direttivoOnly && s.path == loc);
       if (AppConfig.isDemo) return gates.contains(loc) ? '/' : null;
 
       final session = ref.read(sessionProvider);
@@ -61,6 +64,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (profile.isLoading) return null;
       if (profile.value?.isApproved != true) return goTo('/attesa');
 
+      if (reserved && profile.value?.isDirettivo != true) return '/';
       return gates.contains(loc) ? '/' : null;
     },
     routes: [
@@ -94,6 +98,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/tattiche' => const TattichePage(),
                   '/chat' => const ChatListPage(),
                   '/tornei' => const TorneiPage(),
+                  '/direttivo' => const DirettivoPage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

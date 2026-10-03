@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/calendario/club_event.dart';
 import 'package:milanac/features/intro/intro_state.dart';
-import 'package:milanac/features/news/tonight_card.dart';
+import 'package:milanac/features/news/tonight_panel.dart';
 import 'package:milanac/main.dart';
 
 void main() {
@@ -37,7 +37,9 @@ void main() {
     expect(tonightEvent([domani, riunione, partita], now).id, 'p');
   });
 
-  testWidgets('Home: riquadro Stasera con risposta rapida', (tester) async {
+  testWidgets('Home: bottone Stasera apre il pannello laterale', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -52,17 +54,30 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // La Home mostra le notizie; il riepilogo della serata è dietro al bottone tondo.
+    expect(find.text('Notizie dal mondo FC'), findsOneWidget);
+    expect(find.textContaining('STASERA ·'), findsNothing);
+
+    await tester.tap(find.byTooltip('Stasera'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('STASERA ·'), findsOneWidget);
+    expect(find.text('Presenti'), findsOneWidget);
+    expect(find.text('Ritardi'), findsOneWidget);
+    expect(find.text('Assenti'), findsOneWidget);
+    expect(find.text('non ancora pubblicata'), findsOneWidget);
     expect(find.text('Ci sei stasera?'), findsOneWidget);
-    expect(find.text('Formazione non ancora pubblicata'), findsOneWidget);
 
     await tester.tap(
       find.descendant(
-        of: find.byType(TonightCard),
+        of: find.byType(TonightPanel),
         matching: find.widgetWithText(OutlinedButton, 'Presente'),
       ),
     );
     await tester.pumpAndSettle();
     expect(find.text('La tua risposta: Presente alle 21:30'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Chiudi').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('STASERA ·'), findsNothing);
   });
 }

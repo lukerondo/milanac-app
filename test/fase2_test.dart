@@ -26,15 +26,14 @@ Future<void> startApp(WidgetTester tester) async {
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
-  testWidgets('Rosa: il Direttivo approva una richiesta di accesso', (
+  testWidgets('Sala Direttivo: approva una richiesta di accesso', (
     tester,
   ) async {
     await startApp(tester);
-    await openSection(tester, 'Rosa completa');
+    await openSection(tester, 'Sala Direttivo');
 
     expect(find.text('RICHIESTE DI ACCESSO'), findsOneWidget);
     expect(find.text('Nuovo Iscritto'), findsOneWidget);
-
     expect(
       find.textContaining('Chiede di entrare come Giocatore'),
       findsOneWidget,
@@ -47,20 +46,23 @@ void main() {
       find.text('Nuovo Iscritto approvato come Giocatore (MILANAC).'),
       findsOneWidget,
     );
-
     expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
+
+    // Ora è in Rosa, tra i giocatori.
+    await openSection(tester, 'Rosa completa');
     expect(find.text('Diavolo_9 · Dal 3 feb 2025'), findsOneWidget);
-    // Ora è in fondo, tra i giocatori.
     await tester.scrollUntilVisible(find.text('Nuovo Iscritto'), 200);
     expect(find.text('Nuovo Iscritto'), findsOneWidget);
   });
 
-  testWidgets('Rosa: il Direttivo rifiuta una richiesta (con conferma)', (
+  testWidgets('Sala Direttivo: rifiuta una richiesta (con conferma)', (
     tester,
   ) async {
     await startApp(tester);
-    await openSection(tester, 'Rosa completa');
+    await openSection(tester, 'Sala Direttivo');
 
+    await tester.ensureVisible(find.text('Rifiuta'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Rifiuta'));
     await tester.pumpAndSettle();
     expect(find.text('Rifiutare Nuovo Iscritto?'), findsOneWidget);
@@ -69,6 +71,17 @@ void main() {
 
     expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
     expect(find.text('Nuovo Iscritto'), findsNothing);
+  });
+
+  testWidgets('Rosa: per il Direttivo un rimando alle richieste in sala', (
+    tester,
+  ) async {
+    await startApp(tester);
+    await openSection(tester, 'Rosa completa');
+    expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
+    await tester.tap(find.text('1 richiesta di accesso'));
+    await tester.pumpAndSettle();
+    expect(find.text('SALA DIRETTIVO'), findsWidgets);
   });
 
   testWidgets('Rosa: modifica del numero di maglia', (tester) async {
@@ -93,12 +106,14 @@ void main() {
     expect(find.text('11'), findsOneWidget);
   });
 
-  testWidgets('Rosa: squadre MILANAC e FUTURO', (tester) async {
+  testWidgets('Squadre MILANAC e FUTURO: approvazione e spostamenti', (
+    tester,
+  ) async {
     await startApp(tester);
-    await openSection(tester, 'Rosa completa');
+    await openSection(tester, 'Sala Direttivo');
 
     // Richiesta approvata direttamente in MILANAC FUTURO.
-    await tester.ensureVisible(find.text('Nuovo Iscritto'));
+    await tester.ensureVisible(find.text('Squadra'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilterChip, 'MILANAC FUTURO'));
     await tester.pumpAndSettle();
@@ -113,16 +128,45 @@ void main() {
       findsOneWidget,
     );
 
-    // Filtro FUTURO: Neri (entrambe), Verdi e il nuovo iscritto; non Rossi.
+    // Rosa e squadre: Rossi passa anche in FUTURO.
     await tester.scrollUntilVisible(
-      find.widgetWithText(ChoiceChip, 'FUTURO (3)'),
-      -200,
+      find.text('Rosa e squadre'),
+      300,
+      scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO (3)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rosa e squadre'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ChoiceChip, 'FUTURO (3)'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Marco Rossi'), 200);
+    final rossiCard = find.ancestor(
+      of: find.text('Marco Rossi'),
+      matching: find.byType(Card),
+    );
+    await tester.ensureVisible(rossiCard);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: rossiCard,
+        matching: find.widgetWithText(FilterChip, 'MILANAC FUTURO'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(ChoiceChip, 'FUTURO (4)'),
+      -300,
+    );
+    expect(find.widgetWithText(ChoiceChip, 'FUTURO (4)'), findsOneWidget);
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+    await tester.pumpAndSettle();
+
+    // Filtro FUTURO in Rosa: Neri (entrambe), Verdi, il nuovo iscritto e ora Rossi.
+    await openSection(tester, 'Rosa completa');
+    await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO (4)'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Paolo Verdi'), 200);
     expect(find.text('Andrea Neri'), findsOneWidget);
-    expect(find.text('Marco Rossi'), findsNothing);
+    expect(find.text('Luca Bianchi'), findsNothing);
   });
 
   testWidgets('Regolamento: mostra il testo e permette la modifica', (

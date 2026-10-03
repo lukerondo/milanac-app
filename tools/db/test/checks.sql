@@ -297,3 +297,52 @@ do $$ begin
   assert (select count(*) from matches where opponent = 'Dinamo' and tournament_id is null) = 1,
     'la partita resta senza torneo';
 end $$;
+
+-- Profilo: ognuno aggiorna i propri dati e carica la foto solo nella propria cartella.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+update profiles set birth_date = '1998-05-12', city = 'Milano', nationality = 'IT',
+  preferred_foot = 'sinistro', avatar_path = '00000000-0000-0000-0000-0000000000e1/foto.jpg'
+  where id = '00000000-0000-0000-0000-0000000000e1';
+insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-0000000000e1/foto.jpg');
+select pg_temp.expect_error(
+  $q$insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-0000000000e2/foto.jpg')$q$,
+  'row-level security');
+select pg_temp.expect_error(
+  $q$update profiles set avatar_path = '00000000-0000-0000-0000-0000000000e2/foto.jpg' where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'profiles_avatar_path_check');
+select pg_temp.expect_error(
+  $q$update profiles set nationality = 'Italia' where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'profiles_nationality_check');
+update profiles set city = 'Roma' where id = '00000000-0000-0000-0000-0000000000e2';
+reset role;
+do $$ begin
+  assert (select city from profiles where id = '00000000-0000-0000-0000-0000000000e1') = 'Milano', 'dati salvati';
+  assert (select city from profiles where id = '00000000-0000-0000-0000-0000000000e2') is null, 'dati altrui intoccabili';
+end $$;
+
+-- Sala Direttivo: il canale riservato e i suoi messaggi sono invisibili ai giocatori.
+select set_config('test.canale_direttivo', (select id::text from channels where slug = 'direttivo'), false);
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into messages (channel_id, body) select id, 'Riunione segreta' from channels where slug = 'direttivo';
+insert into messages (channel_id, body, meta)
+  select id, 'Stasera si gioca alle 22', '{"type": "announcement"}' from channels where slug = 'main';
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert (select count(*) from channels where slug = 'direttivo') = 0, 'canale riservato invisibile';
+  assert (select count(*) from messages where body = 'Riunione segreta') = 0, 'messaggi riservati invisibili';
+  assert (select count(*) from chat_overview() o join channels c on c.id = o.channel_id) = 4,
+    'il riepilogo mostra solo i canali visibili';
+  assert (select count(*) from messages where body = 'Stasera si gioca alle 22') = 1, 'avviso visibile a tutti';
+end $$;
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body) values (current_setting('test.canale_direttivo')::uuid, 'intruso')$q$,
+  'row-level security');
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body, meta) select id, 'finto avviso', '{"type": "announcement"}' from channels where slug = 'main'$q$,
+  'row-level security');
+reset role;
+do $$ begin
+  assert (select count(*) from channels where direttivo_only) = 1, 'canale Sala Direttivo creato';
+end $$;

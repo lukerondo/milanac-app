@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/impostazioni/impostazioni_page.dart';
 import '../features/musica/musica_page.dart';
 import 'app_drawer.dart';
 import 'sections.dart';
@@ -16,7 +17,7 @@ class AppShell extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(sectionFor(path).title.toUpperCase()),
-        actions: const [SoundtrackButton()],
+        actions: const [SoundtrackButton(), SettingsButton()],
       ),
       drawer: AppDrawer(currentPath: path),
       body: child,

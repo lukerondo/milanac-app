@@ -37,6 +37,14 @@ android {
     }
 
     signingConfigs {
+        // Chiave di prova fissa (password "android", come quella di debug) per gli APK di prova:
+        // così ogni nuovo APK si installa sopra quello vecchio. Per Google Play si usa "release".
+        create("prova") {
+            storeFile = file("apk-di-prova.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("release") {
             if (keystoreProperties.isNotEmpty()) {
                 storeFile = file(keystoreProperties.getProperty("storeFile"))
@@ -49,11 +57,11 @@ android {
 
     buildTypes {
         release {
-            // Senza key.properties (sviluppo locale) si firma con la chiave di debug.
+            // Senza key.properties (APK di prova, sviluppo locale) si firma con la chiave di prova.
             signingConfig = if (keystoreProperties.isNotEmpty()) {
                 signingConfigs.getByName("release")
             } else {
-                signingConfigs.getByName("debug")
+                signingConfigs.getByName("prova")
             }
         }
     }

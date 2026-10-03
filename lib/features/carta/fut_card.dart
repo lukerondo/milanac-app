@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/teams.dart';
+import '../../shared/member_photo.dart';
 import '../rosa/member.dart';
 import 'card_stats.dart';
 
@@ -189,6 +191,14 @@ class _CardContent extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
+              if (member.nationality != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    flagEmoji(member.nationality!),
+                    style: const TextStyle(fontSize: 26, height: 1.1),
+                  ),
+                ),
               Image.asset('assets/images/stemma_milano_fc.png', height: 38),
               const SizedBox(height: 6),
               if (member.platform != null)
@@ -327,14 +337,14 @@ class _StatColumn extends StatelessWidget {
   );
 }
 
-class _Portrait extends StatelessWidget {
+class _Portrait extends ConsumerWidget {
   const _Portrait({required this.member, required this.color});
   final Member member;
   final Color color;
 
   @override
-  Widget build(BuildContext context) {
-    final url = member.avatarUrl;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final photo = memberPhoto(ref, member);
     final silhouette = Stack(
       alignment: Alignment.center,
       children: [
@@ -356,11 +366,11 @@ class _Portrait extends StatelessWidget {
         ),
       ],
     );
-    if (url == null || url.isEmpty) return silhouette;
+    if (photo == null) return silhouette;
     return ClipRRect(
       borderRadius: BorderRadius.circular(85),
-      child: Image.network(
-        url,
+      child: Image(
+        image: photo,
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => silhouette,
       ),

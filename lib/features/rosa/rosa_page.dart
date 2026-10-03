@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/member_photo.dart';
 import '../carta/carta_page.dart';
 import '../carta/fut_card.dart';
 import 'member.dart';
@@ -82,13 +84,25 @@ class _RosaPageState extends ConsumerState<RosaPage> {
               selected: {_cards},
               onSelectionChanged: (s) => setState(() => _cards = s.first),
             ),
-            if (isDirettivo && pending.isNotEmpty) ...[
-              const _Header(
-                'Richieste di accesso',
-                icon: Icons.person_add_alt_1_rounded,
+            if (isDirettivo && pending.isNotEmpty)
+              Card(
+                margin: const EdgeInsets.only(top: 12),
+                color: MilanacColors.surfaceHigh,
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.person_add_alt_1_rounded,
+                    color: MilanacColors.gold,
+                  ),
+                  title: Text(
+                    pending.length == 1
+                        ? '1 richiesta di accesso'
+                        : '${pending.length} richieste di accesso',
+                  ),
+                  subtitle: const Text('Approvale nella Sala Direttivo'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => context.go('/direttivo'),
+                ),
               ),
-              for (final m in pending) _PendingTile(member: m),
-            ],
             if (_cards) ...[
               const SizedBox(height: 12),
               _CardGrid(
@@ -242,10 +256,7 @@ class _MemberTile extends ConsumerWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: _ShirtBadge(
-          number: member.shirtNumber,
-          avatarUrl: member.avatarUrl,
-        ),
+        leading: MemberAvatar(member: member),
         title: Text(
           member.displayName,
           style: const TextStyle(fontWeight: FontWeight.w700),
@@ -292,192 +303,6 @@ class _MemberTile extends ConsumerWidget {
           ],
         ),
         onTap: () => _openCard(context, member),
-      ),
-    );
-  }
-}
-
-class _PendingTile extends ConsumerStatefulWidget {
-  const _PendingTile({required this.member});
-  final Member member;
-
-  @override
-  ConsumerState<_PendingTile> createState() => _PendingTileState();
-}
-
-class _PendingTileState extends ConsumerState<_PendingTile> {
-  bool _busy = false;
-  late Set<Team> _teams = widget.member.teams;
-
-  static String _label(ClubRole r) =>
-      r == ClubRole.direttivo ? 'Direttivo' : 'Giocatore';
-
-  Future<void> _run(Future<void> Function() action, String done) async {
-    setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await action();
-      messenger.showSnackBar(SnackBar(content: Text(done)));
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Operazione non riuscita: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _approve(ClubRole role) {
-    final m = widget.member;
-    _run(
-      () => ref
-          .read(rosaRepositoryProvider)
-          .save(
-            m.copyWith(role: role, joinedAt: DateTime.now(), teams: _teams),
-          ),
-      '${m.displayName} approvato come ${_label(role)} '
-      '(${_teams.map((t) => t.label).join(' e ')}).',
-    );
-  }
-
-  Future<void> _reject() async {
-    final m = widget.member;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text('Rifiutare ${m.displayName}?'),
-        content: const Text('Non potrà accedere all\'app del club.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Annulla'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Rifiuta'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await _run(
-      () => ref.read(rosaRepositoryProvider).remove(m.id),
-      'Richiesta di ${m.displayName} rifiutata.',
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final m = widget.member;
-    final requested = m.requestedRole;
-    final other = requested == ClubRole.direttivo
-        ? ClubRole.giocatore
-        : ClubRole.direttivo;
-    return Card(
-      color: MilanacColors.surfaceHigh,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.hourglass_top_rounded,
-                  color: MilanacColors.gold,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        m.displayName,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        [
-                          'Chiede di entrare come ${_label(requested)}',
-                          if (m.gamertag != null && m.gamertag!.isNotEmpty)
-                            m.gamertag!,
-                        ].join(' · '),
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_busy)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Squadra',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-            const SizedBox(height: 4),
-            TeamsPicker(
-              value: _teams,
-              onChanged: (t) => setState(() => _teams = t),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                TextButton(
-                  onPressed: _busy ? null : _reject,
-                  child: const Text('Rifiuta'),
-                ),
-                OutlinedButton(
-                  onPressed: _busy ? null : () => _approve(other),
-                  child: Text('Approva come ${_label(other)}'),
-                ),
-                FilledButton(
-                  onPressed: _busy ? null : () => _approve(requested),
-                  child: Text('Approva come ${_label(requested)}'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ShirtBadge extends StatelessWidget {
-  const _ShirtBadge({this.number, this.avatarUrl});
-  final int? number;
-  final String? avatarUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    if (avatarUrl != null) {
-      return CircleAvatar(
-        radius: 22,
-        backgroundImage: NetworkImage(avatarUrl!),
-      );
-    }
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: MilanacColors.red,
-      child: Text(
-        number?.toString() ?? '–',
-        style: const TextStyle(
-          fontWeight: FontWeight.w900,
-          color: Colors.white,
-        ),
       ),
     );
   }

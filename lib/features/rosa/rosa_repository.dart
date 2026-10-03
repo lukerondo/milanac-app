@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/teams.dart';
+import '../../shared/member_photo.dart';
 import 'member.dart';
 
 abstract class RosaRepository {
@@ -15,6 +18,12 @@ abstract class RosaRepository {
 
   /// Aggiorna solo i campi della carta (anche il giocatore sul proprio profilo).
   Future<void> saveCard(Member member);
+
+  /// Aggiorna i dati personali dalle Impostazioni (nome, gamertag, nascita...).
+  Future<void> saveProfile(Member member);
+
+  /// Carica la nuova foto del profilo (JPEG) e la imposta; restituisce il percorso.
+  Future<String> uploadPhoto(Member member, Uint8List jpeg);
 }
 
 final rosaRepositoryProvider = Provider<RosaRepository>((ref) {
@@ -55,6 +64,33 @@ class _SupabaseRosaRepository implements RosaRepository {
         .from('profiles')
         .update(m.cardMap())
         .eq('id', m.id);
+  }
+
+  @override
+  Future<void> saveProfile(Member m) async {
+    await _ref
+        .read(supabaseProvider)
+        .from('profiles')
+        .update(m.personalMap())
+        .eq('id', m.id);
+  }
+
+  @override
+  Future<String> uploadPhoto(Member m, Uint8List jpeg) async {
+    final client = _ref.read(supabaseProvider);
+    final path = '${m.id}/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await client.storage
+        .from(avatarsBucket)
+        .uploadBinary(
+          path,
+          jpeg,
+          fileOptions: const FileOptions(contentType: 'image/jpeg'),
+        );
+    await client.from('profiles').update({'avatar_path': path}).eq('id', m.id);
+    if (m.avatarPath != null) {
+      await client.storage.from(avatarsBucket).remove([m.avatarPath!]);
+    }
+    return path;
   }
 
   /// Rifiuta una richiesta di accesso: il profilo viene disattivato (resta in attesa).
@@ -166,4 +202,28 @@ class DemoRosaRepository implements RosaRepository {
 
   @override
   Future<void> saveCard(Member m) => save(m);
+
+  @override
+  Future<void> saveProfile(Member m) => save(m);
+
+  @override
+  Future<String> uploadPhoto(Member m, Uint8List jpeg) async {
+    final path = '${m.id}/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    demoPhotos[path] = jpeg;
+    final i = _members.indexWhere((x) => x.id == m.id);
+    if (i >= 0) {
+      final old = _members[i];
+      _members[i] = old.withPersonalData(
+        displayName: old.displayName,
+        gamertag: old.gamertag,
+        birthDate: old.birthDate,
+        city: old.city,
+        nationality: old.nationality,
+        preferredFoot: old.preferredFoot,
+        avatarPath: path,
+      );
+    }
+    _emit();
+    return path;
+  }
 }

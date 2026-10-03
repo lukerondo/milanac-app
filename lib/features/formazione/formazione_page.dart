@@ -12,14 +12,37 @@ import 'formation_repository.dart';
 import 'modules.dart';
 import 'pitch_painter.dart';
 
-class FormazionePage extends ConsumerStatefulWidget {
+/// Sezione Formazione: la formazione pubblicata, in sola lettura (anche per il Direttivo,
+/// che la prepara e la pubblica dalla Sala Direttivo).
+class FormazionePage extends StatelessWidget {
   const FormazionePage({super.key});
 
   @override
-  ConsumerState<FormazionePage> createState() => _FormazionePageState();
+  Widget build(BuildContext context) => const FormationBoard(editable: false);
 }
 
-class _FormazionePageState extends ConsumerState<FormazionePage> {
+/// Editor delle formazioni nella Sala Direttivo.
+class FormationEditorPage extends StatelessWidget {
+  const FormationEditorPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('FORMAZIONI')),
+    body: const FormationBoard(editable: true),
+  );
+}
+
+class FormationBoard extends ConsumerStatefulWidget {
+  const FormationBoard({super.key, required this.editable});
+
+  /// true nella Sala Direttivo: si modifica la bozza e si pubblica.
+  final bool editable;
+
+  @override
+  ConsumerState<FormationBoard> createState() => _FormationBoardState();
+}
+
+class _FormationBoardState extends ConsumerState<FormationBoard> {
   /// Copia locale modificata dal Direttivo (null = usa quella salvata).
   Formation? _draft;
 
@@ -89,6 +112,7 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
   @override
   Widget build(BuildContext context) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
+    final canEdit = widget.editable && isDirettivo;
     final saved = ref.watch(formationProvider(_team));
     final rosa = ref.watch(rosaProvider);
 
@@ -102,9 +126,9 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
     }
 
     final draft = _draft;
-    final formation = draft != null && draft.team == _team
-        ? draft
-        : saved.value!;
+    final current = draft != null && draft.team == _team ? draft : saved.value!;
+    // I giocatori vedono la versione pubblicata, il Direttivo (in sala) la bozza.
+    final formation = canEdit ? current : current.publishedView;
     // Tutti i membri (per mostrare chi è già schierato) e quelli della squadra (per le scelte).
     final allMembers = {
       for (final m in rosa.value!)
@@ -136,134 +160,180 @@ class _FormazionePageState extends ConsumerState<FormazionePage> {
           }),
         ),
         const SizedBox(height: 10),
-        _PublishStatus(formation: formation),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          alignment: WrapAlignment.center,
-          children: [
-            for (final module in formationModules.keys)
-              ChoiceChip(
+        _PublishStatus(formation: current, forPlayers: !canEdit),
+        if (!canEdit && !current.isPublished) ...[
+          const SizedBox(height: 40),
+          const Icon(
+            Icons.hourglass_empty_rounded,
+            size: 48,
+            color: Colors.white38,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'La formazione di ${_team.label} non è ancora stata pubblicata.\n'
+            'Arriverà una notifica quando il Direttivo la pubblica.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white60),
+          ),
+          if (isDirettivo) ...[const SizedBox(height: 16), _OpenEditorButton()],
+        ] else ...[
+          const SizedBox(height: 8),
+          if (!canEdit)
+            Center(
+              child: Chip(
                 label: Text(
-                  module,
+                  formation.module,
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
-                selected: formation.module == module,
-                // Sempre attivo (solo il Direttivo può davvero cambiare modulo),
-                // così il modulo corrente non appare "disabilitato".
-                onSelected: (_) {
-                  if (isDirettivo && formation.module != module) {
-                    _update(formation.copyWith(module: module));
-                  }
-                },
               ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        AspectRatio(
-          aspectRatio: 0.68,
-          child: LayoutBuilder(
-            builder: (context, box) {
-              const inset = PitchPainter.inset;
-              final fieldW = box.maxWidth - inset * 2;
-              final fieldH = box.maxHeight - inset * 2;
-              return Stack(
-                children: [
-                  const Positioned.fill(
-                    child: CustomPaint(painter: PitchPainter()),
-                  ),
-                  for (final (i, slot) in formation.slots.indexed)
-                    Positioned(
-                      left: inset + slot.x * fieldW - 40,
-                      top: inset + slot.y * fieldH - 28,
-                      width: 80,
-                      child: _PlayerToken(
-                        slot: slot,
-                        member: allMembers[formation.players[i]],
-                        onTap: isDirettivo
-                            ? () async {
-                                final choice = await _pickPlayer(
-                                  context,
-                                  slot: slot,
-                                  current: allMembers[formation.players[i]],
-                                  members: members.values.toList(),
-                                  formation: formation,
-                                );
-                                if (choice == null) return;
-                                await _update(
-                                  formation.assign(
-                                    i,
-                                    choice.isEmpty ? null : choice,
-                                  ),
-                                );
-                              }
-                            : null,
-                      ),
+            )
+          else
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                for (final module in formationModules.keys)
+                  ChoiceChip(
+                    label: Text(
+                      module,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
-                ],
-              );
-            },
+                    selected: formation.module == module,
+                    // Sempre attivo (solo il Direttivo può davvero cambiare modulo),
+                    // così il modulo corrente non appare "disabilitato".
+                    onSelected: (_) {
+                      if (canEdit && formation.module != module) {
+                        _update(formation.copyWith(module: module));
+                      }
+                    },
+                  ),
+              ],
+            ),
+          const SizedBox(height: 8),
+          AspectRatio(
+            aspectRatio: 0.68,
+            child: LayoutBuilder(
+              builder: (context, box) {
+                const inset = PitchPainter.inset;
+                final fieldW = box.maxWidth - inset * 2;
+                final fieldH = box.maxHeight - inset * 2;
+                return Stack(
+                  children: [
+                    const Positioned.fill(
+                      child: CustomPaint(painter: PitchPainter()),
+                    ),
+                    for (final (i, slot) in formation.slots.indexed)
+                      Positioned(
+                        left: inset + slot.x * fieldW - 40,
+                        top: inset + slot.y * fieldH - 28,
+                        width: 80,
+                        child: _PlayerToken(
+                          slot: slot,
+                          member: allMembers[formation.players[i]],
+                          onTap: canEdit
+                              ? () async {
+                                  final choice = await _pickPlayer(
+                                    context,
+                                    slot: slot,
+                                    current: allMembers[formation.players[i]],
+                                    members: members.values.toList(),
+                                    formation: formation,
+                                  );
+                                  if (choice == null) return;
+                                  await _update(
+                                    formation.assign(
+                                      i,
+                                      choice.isEmpty ? null : choice,
+                                    ),
+                                  );
+                                }
+                              : null,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
           ),
-        ),
-        if (isDirettivo) ...[
+          if (!canEdit && isDirettivo) ...[
+            const SizedBox(height: 12),
+            _OpenEditorButton(),
+          ],
+          if (canEdit) ...[
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Tocca un bollino per scegliere il giocatore. Le modifiche restano in bozza '
+                'finché non pubblichi.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: () => _publish(formation),
+              icon: const Icon(Icons.campaign_rounded),
+              label: Text(
+                formation.isPublished && !formation.hasUnpublishedChanges
+                    ? 'Ripubblica e avvisa i giocatori'
+                    : 'Pubblica la formazione di stasera',
+              ),
+            ),
+          ],
           const Padding(
-            padding: EdgeInsets.only(top: 8),
+            padding: EdgeInsets.fromLTRB(4, 20, 4, 8),
             child: Text(
-              'Tocca un bollino per scegliere il giocatore. Le modifiche restano in bozza '
-              'finché non pubblichi.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+              'PANCHINA',
+              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
             ),
           ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: () => _publish(formation),
-            icon: const Icon(Icons.campaign_rounded),
-            label: Text(
-              formation.isPublished && !formation.hasUnpublishedChanges
-                  ? 'Ripubblica e avvisa i giocatori'
-                  : 'Pubblica la formazione di stasera',
+          if (bench.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(4),
+              child: Text(
+                'Tutti i giocatori sono in campo.',
+                style: TextStyle(color: Colors.white54),
+              ),
             ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final m in bench)
+                Chip(
+                  avatar: CircleAvatar(
+                    backgroundColor: MilanacColors.redDark,
+                    child: Text(
+                      m.shirtNumber?.toString() ?? '–',
+                      style: const TextStyle(fontSize: 11, color: Colors.white),
+                    ),
+                  ),
+                  label: Text(
+                    '${m.displayName}${m.fieldPosition != null ? ' · ${m.fieldPosition}' : ''}',
+                  ),
+                ),
+            ],
           ),
         ],
-        const Padding(
-          padding: EdgeInsets.fromLTRB(4, 20, 4, 8),
-          child: Text(
-            'PANCHINA',
-            style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
-          ),
-        ),
-        if (bench.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(4),
-            child: Text(
-              'Tutti i giocatori sono in campo.',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final m in bench)
-              Chip(
-                avatar: CircleAvatar(
-                  backgroundColor: MilanacColors.redDark,
-                  child: Text(
-                    m.shirtNumber?.toString() ?? '–',
-                    style: const TextStyle(fontSize: 11, color: Colors.white),
-                  ),
-                ),
-                label: Text(
-                  '${m.displayName}${m.fieldPosition != null ? ' · ${m.fieldPosition}' : ''}',
-                ),
-              ),
-          ],
-        ),
       ],
     );
   }
+}
+
+/// Per il Direttivo: apre l'editor delle formazioni (Sala Direttivo).
+class _OpenEditorButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Center(
+    child: OutlinedButton.icon(
+      onPressed: () => Navigator.of(
+        context,
+        rootNavigator: true,
+      ).push(MaterialPageRoute(builder: (_) => const FormationEditorPage())),
+      icon: const Icon(Icons.admin_panel_settings_rounded),
+      label: const Text('Prepara e pubblica nella Sala Direttivo'),
+    ),
+  );
 }
 
 /// Restituisce l'id del giocatore scelto, '' per liberare la posizione, null se annullato.
@@ -414,18 +484,22 @@ class _PlayerToken extends StatelessWidget {
 
 /// Stato della formazione: bozza, pubblicata, oppure modificata dopo la pubblicazione.
 class _PublishStatus extends StatelessWidget {
-  const _PublishStatus({required this.formation});
+  const _PublishStatus({required this.formation, this.forPlayers = false});
   final Formation formation;
+
+  /// Vista dei giocatori: niente "bozza" o "modificata", solo quando è stata pubblicata.
+  final bool forPlayers;
 
   @override
   Widget build(BuildContext context) {
+    if (forPlayers && !formation.isPublished) return const SizedBox.shrink();
     final (icon, color, text) = !formation.isPublished
         ? (
             Icons.edit_note_rounded,
             Colors.white54,
             'Bozza: non ancora pubblicata',
           )
-        : formation.hasUnpublishedChanges
+        : formation.hasUnpublishedChanges && !forPlayers
         ? (
             Icons.warning_amber_rounded,
             MilanacColors.gold,
