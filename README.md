@@ -48,11 +48,12 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
    - **Apple** – obbligatorio su iOS (Services ID dal tuo account Apple Developer)
    - **Yahoo** – provider *Custom OIDC* con identificativo `yahoo`, issuer
      `https://api.login.yahoo.com`, client creato su developer.yahoo.com
-5. Avvia l'app con le chiavi (Settings → API):
+5. Avvia l'app collegata al progetto (URL e chiave *publishable* sono in `env/prod.json`;
+   la chiave publishable è pubblica per design, la sicurezza è data dalle policy RLS):
    ```bash
-   flutter run --dart-define=SUPABASE_URL=https://XXXX.supabase.co \
-               --dart-define=SUPABASE_ANON_KEY=la_tua_publishable_key
+   flutter run --dart-define-from-file=env/prod.json
    ```
+   **Non** inserire mai nel repository la chiave `secret` / `service_role`.
 6. Fai il primo login, poi nell'SQL Editor nomina il primo Direttivo:
    ```sql
    update profiles set club_role = 'direttivo' where display_name = 'Il tuo nome';
@@ -62,7 +63,7 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
 ## Build
 
 - **CI**: ad ogni push GitHub Actions esegue `flutter analyze` e `flutter test`.
-- **APK**: Actions → *CI* → *Run workflow* (serve impostare i secret `SUPABASE_URL` e `SUPABASE_ANON_KEY`).
+- **APK**: Actions → *CI* → *Run workflow* → scarica l'artifact `milanac-apk` (usa `env/prod.json`).
 - **iOS**: tramite Codemagic (piano gratuito) o un Mac – istruzioni nella fase 8.
 
 Identificativo app: `com.milanacproclub.milanac`
