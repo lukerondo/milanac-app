@@ -72,9 +72,6 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # Sempre la stessa chiave di prova: ogni nuovo APK si installa sopra quello vecchio.
-      - name: Chiave fissa per gli APK di prova
-        run: mkdir -p ~/.android && cp android/app/apk-di-prova.keystore ~/.android/debug.keystore
       - name: APK per tutti i telefoni
         run: |
           flutter build apk --release --dart-define-from-file=env/prod.json
@@ -90,6 +87,16 @@ jobs:
           path: |
             MILANAC.apk
             MILANAC-arm64.apk
+      # Controllo: gli APK di prova devono essere firmati con la chiave fissa (non con una casuale).
+      - name: Verifica la firma
+        run: |
+          keytool -exportcert -keystore android/app/apk-di-prova.keystore -storepass android -alias androiddebugkey -file prova.der
+          python3 - <<'PY'
+          der = open("prova.der", "rb").read()
+          for apk in ("MILANAC.apk", "MILANAC-arm64.apk"):
+              assert der in open(apk, "rb").read(), f"{apk} non è firmato con la chiave di prova"
+          print("Firma corretta.")
+          PY
       - name: Pubblica nella release "APK di prova"
         env:
           GH_TOKEN: ${{ github.token }}
