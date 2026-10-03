@@ -17,6 +17,7 @@ const appSections = <AppSection>[
   AppSection('/albo-doro', "Albo d'oro", Icons.emoji_events_rounded),
   AppSection('/regolamento', 'Regolamento & Storia', Icons.menu_book_rounded),
   AppSection('/presenze', 'Presenze', Icons.how_to_reg_rounded),
+  AppSection('/musica', 'Colonna sonora', Icons.library_music_rounded),
 ];
 
 AppSection sectionFor(String path) => appSections.firstWhere(

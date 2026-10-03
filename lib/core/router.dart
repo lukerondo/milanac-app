@@ -10,6 +10,7 @@ import '../features/common/coming_soon_page.dart';
 import '../features/formazione/formazione_page.dart';
 import '../features/intro/intro_page.dart';
 import '../features/intro/intro_state.dart';
+import '../features/musica/musica_page.dart';
 import '../features/news/news_page.dart';
 import '../features/presenze/presenze_page.dart';
 import '../features/regolamento/regolamento_page.dart';
@@ -78,6 +79,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/risultati' => const RisultatiPage(),
                   '/formazione' => const FormazionePage(),
                   '/albo-doro' => const AlboDoroPage(),
+                  '/musica' => const MusicaPage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

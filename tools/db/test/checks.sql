@@ -146,3 +146,38 @@ do $$ begin
     'il giocatore modifica i propri dati personali';
   assert (select count(*) from formations where team = 'milanac') = 1, 'formazione esistente in MILANAC';
 end $$;
+
+-- Link condivisi: lettura membri, ognuno modifica i propri, il Direttivo tutti.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select count(*) from shared_links where category = 'musica') = 5, 'link musica iniziali';
+end $$;
+reset role;
+select pg_temp.as_user(null);
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000e1', 'e1@example.com'),
+  ('00000000-0000-0000-0000-0000000000e2', 'e2@example.com');
+update profiles set club_role = 'giocatore' where id in ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000e2');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+insert into shared_links (category, title, url, tag) values ('build', 'Build ATT', 'https://youtu.be/abc', 'ATT');
+select pg_temp.expect_error(
+  $q$insert into shared_links (category, title, url, created_by) values ('build', 'X', 'https://x.it', '00000000-0000-0000-0000-00000000000d')$q$,
+  'row-level security');
+select pg_temp.expect_error(
+  $q$insert into shared_links (category, title, url) values ('build', 'X', 'javascript:alert(1)')$q$,
+  'shared_links_url_check');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+update shared_links set title = 'Rubato' where tag = 'ATT';
+delete from shared_links where category = 'musica';
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select title from shared_links where tag = 'ATT') = 'Build ATT', 'un altro membro non modifica';
+  assert (select count(*) from shared_links where category = 'musica') = 5, 'un membro non cancella i link altrui';
+end $$;
+delete from shared_links where tag = 'ATT';
+do $$ begin
+  assert (select count(*) from shared_links where category = 'build') = 0, 'il Direttivo cancella';
+end $$;
+reset role;
