@@ -101,7 +101,13 @@ def first_image(element: ET.Element, description: str | None) -> str | None:
 
 def parse_feed(xml_text: str, source: dict) -> list[NewsItem]:
     """Legge un feed RSS 2.0 o Atom e restituisce le notizie (senza filtri)."""
-    root = ET.fromstring(xml_text)
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        # Alcuni siti (es. WordPress con plugin) pubblicano RSS non perfettamente valido.
+        if "<item" not in xml_text:
+            raise
+        return parse_rss_lenient(xml_text, source)
     items: list[NewsItem] = []
 
     if root.tag == f"{ATOM}feed":
@@ -132,6 +138,33 @@ def parse_feed(xml_text: str, source: dict) -> list[NewsItem]:
                 image=first_image(node, description),
                 publisher=node.findtext("source"),
             ))
+    return [i for i in items if i is not None]
+
+
+def _tag(block: str, name: str) -> str | None:
+    match = re.search(rf"<{name}\b[^>]*>(.*?)</{name}>", block, flags=re.S | re.I)
+    if not match:
+        return None
+    value = match.group(1).strip()
+    cdata = re.fullmatch(r"<!\[CDATA\[(.*)\]\]>", value, flags=re.S)
+    return cdata.group(1) if cdata else html.unescape(value)
+
+
+def parse_rss_lenient(xml_text: str, source: dict) -> list[NewsItem]:
+    """Lettura tollerante di un RSS malformato: estrae i blocchi <item> uno per uno."""
+    items = []
+    for block in re.findall(r"<item\b.*?</item>", xml_text, flags=re.S | re.I):
+        description = _tag(block, "description")
+        image = re.search(r'<(?:media:content|media:thumbnail|enclosure)[^>]+url="([^"]+)"', block)
+        items.append(_make_item(
+            source,
+            title=_tag(block, "title"),
+            description=description,
+            url=_tag(block, "link"),
+            date=_tag(block, "pubDate"),
+            image=html.unescape(image.group(1)) if image else first_image(ET.Element("x"), description),
+            publisher=None,
+        ))
     return [i for i in items if i is not None]
 
 

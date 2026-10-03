@@ -49,6 +49,15 @@ class WordpressTest(unittest.TestCase):
         self.assertEqual(item.source, "FUT.it")
 
 
+class FeedMalformatoTest(unittest.TestCase):
+    def test_rss_con_attributi_duplicati(self):
+        items = load("wordpress_broken.xml", {"name": "FUT.it", "category": "ultimate_team"})
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].title, "FC 27: nuove SBC & evoluzioni del weekend")
+        self.assertEqual(items[0].summary, "Tutte le SBC disponibili da oggi.")
+        self.assertEqual(items[0].image_url, "https://fifaultimateteam.it/img.jpg")
+
+
 class AtomTest(unittest.TestCase):
     def test_reddit(self):
         items = load("reddit_atom.xml", {"name": "Reddit", "category": "pro_clubs", "max_items": 5})
