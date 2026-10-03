@@ -1,0 +1,37 @@
+name: Database
+
+# Applica a Supabase le migrazioni in supabase/migrations/ non ancora eseguite.
+# Secret necessario: SUPABASE_DB_URL (stringa di connessione "Session pooler" con la password).
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - claude/cloud-credits-private-repo-gqfxlp
+    paths:
+      - supabase/migrations/**
+      - tools/db/**
+      - .github/workflows/database.yml
+
+concurrency: database
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Controllo del secret
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::Manca il secret SUPABASE_DB_URL (vedi docs/SETUP_SUPABASE.md, passo 1)"
+            exit 1
+          fi
+      - name: Client PostgreSQL
+        run: command -v psql || (sudo apt-get update -q && sudo apt-get install -yq postgresql-client)
+      - name: Migrazioni
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: tools/db/migrate.sh

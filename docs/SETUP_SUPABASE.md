@@ -7,13 +7,18 @@ Progetto: `https://bxtnvgnxfyzwamfdnmkx.supabase.co`
 https://bxtnvgnxfyzwamfdnmkx.supabase.co/auth/v1/callback
 ```
 
-## 1. Database (5 minuti)
-1. Dashboard Supabase → **SQL Editor** → *New query*
-2. Incolla tutto il file `supabase/migrations/0001_schema_iniziale.sql` → **Run**
-3. Deve comparire "Success. No rows returned".
-4. Ripeti con `supabase/migrations/0002_limiti_media.sql` (limiti di dimensione dei file caricati)
-   poi con `0003_forma_trofei.sql` (forma dei trofei dell'Albo d'oro)
-   e infine con `0004_notifiche_e_account.sql` (notifiche push ed eliminazione account).
+## 1. Database (automatico, tramite GitHub)
+Le tabelle vengono create dal workflow **Database** di GitHub Actions: basta dargli l'indirizzo del database.
+1. Dashboard Supabase → pulsante **Connect** in alto → scheda **Connection String** → metodo **Session pooler**
+   → copia l'URI, tipo `postgresql://postgres.bxtnvgnxfyzwamfdnmkx:[YOUR-PASSWORD]@aws-…pooler.supabase.com:5432/postgres`.
+2. Sostituisci `[YOUR-PASSWORD]` con la password del database (se non la ricordi: **Project Settings → Database →
+   Reset database password**).
+3. GitHub → repository **milanac-app** → **Settings → Secrets and variables → Actions → New repository secret**:
+   nome `SUPABASE_DB_URL`, valore l'URI completo con la password.
+4. **Actions → Database → Run workflow**. Nel log compare `✓` per ogni file applicato.
+   Le migrazioni future si applicano da sole quando arrivano su `main`; quelle già eseguite vengono saltate.
+
+In alternativa, a mano: SQL Editor → incolla ed esegui in ordine i file di `supabase/migrations/`.
 
 ## 2. URL dell'app
 **Authentication → URL Configuration → Redirect URLs** → *Add URL*:

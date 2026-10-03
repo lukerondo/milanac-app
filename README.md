@@ -38,8 +38,8 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
 ## Collegare Supabase (gratis)
 
 1. Crea un progetto su [supabase.com](https://supabase.com) (piano Free, regione Europa).
-2. **SQL Editor** → incolla ed esegui, in ordine, i file in `supabase/migrations/`
-   (`0001_schema_iniziale.sql` … `0004_notifiche_e_account.sql`).
+2. Crea le tabelle: secret `SUPABASE_DB_URL` + workflow **Database** (vedi `docs/SETUP_SUPABASE.md`),
+   oppure SQL Editor con i file di `supabase/migrations/` in ordine.
 3. **Authentication → URL Configuration** → aggiungi agli *Redirect URLs*:
    `com.milanacproclub.milanac://login-callback`
 4. **Authentication → Providers**:
