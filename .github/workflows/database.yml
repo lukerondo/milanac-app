@@ -1,7 +1,9 @@
 name: Database
 
 # Applica a Supabase le migrazioni in supabase/migrations/ non ancora eseguite.
-# Secret necessario: SUPABASE_DB_URL (stringa di connessione "Session pooler" con la password).
+# Secret necessario (uno dei due):
+#  - SUPABASE_ACCESS_TOKEN: token personale Supabase (sbp_...)  ← consigliato, più semplice
+#  - SUPABASE_DB_URL: stringa di connessione "Session pooler" con la password del database
 on:
   workflow_dispatch:
   push:
@@ -19,9 +21,19 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Migrazioni (token personale Supabase)
+        if: env.HAS_TOKEN == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          export SUPABASE_PROJECT_REF=$(python3 -c "import json,re;print(re.search(r'https://([a-z0-9]+)\.supabase\.co', json.load(open('env/prod.json'))['SUPABASE_URL']).group(1))")
+          python3 tools/db/migrate_api.py
       - name: Controllo del secret
+        if: env.HAS_TOKEN != 'true'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
@@ -39,8 +51,10 @@ jobs:
           case "$url" in *:5432/*) ;; *) echo "::warning::La porta non è 5432: assicurati di aver scelto 'Session pooler' e non 'Transaction pooler'" ;; esac
           echo "Formato del secret corretto."
       - name: Client PostgreSQL
+        if: env.HAS_TOKEN != 'true'
         run: command -v psql || (sudo apt-get update -q && sudo apt-get install -yq postgresql-client)
-      - name: Migrazioni
+      - name: Migrazioni (password del database)
+        if: env.HAS_TOKEN != 'true'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: tools/db/migrate.sh

@@ -8,7 +8,15 @@ https://bxtnvgnxfyzwamfdnmkx.supabase.co/auth/v1/callback
 ```
 
 ## 1. Database (automatico, tramite GitHub)
-Le tabelle vengono create dal workflow **Database** di GitHub Actions: basta dargli l'indirizzo del database.
+Le tabelle vengono create dal workflow **Database** di GitHub Actions.
+
+**Modo consigliato – token personale:**
+1. https://supabase.com/dashboard/account/tokens → **Generate new token** → nome `GitHub milanac` → copia il token (`sbp_…`).
+2. GitHub → milanac-app → Settings → Secrets and variables → Actions → New repository secret:
+   nome `SUPABASE_ACCESS_TOKEN`, valore il token.
+3. Actions → **Database** → Run workflow.
+
+**In alternativa – password del database:**
 1. Dashboard Supabase → pulsante **Connect** in alto → scheda **Connection String** → metodo **Session pooler**
    → copia l'URI, tipo `postgresql://postgres.bxtnvgnxfyzwamfdnmkx:[YOUR-PASSWORD]@aws-…pooler.supabase.com:5432/postgres`.
 2. Sostituisci `[YOUR-PASSWORD]` con la password del database (se non la ricordi: **Project Settings → Database →
