@@ -50,10 +50,38 @@ class PresenzePage extends ConsumerStatefulWidget {
   ConsumerState<PresenzePage> createState() => _PresenzePageState();
 }
 
-class _PresenzePageState extends ConsumerState<PresenzePage> {
+class _PresenzePageState extends ConsumerState<PresenzePage>
+    with SingleTickerProviderStateMixin {
   late DateTime _day = dayOnly(widget.initialDay ?? ref.read(clockProvider)());
   late DateTime _focused = _day;
   Team? _team;
+  late final _tabs = TabController(
+    length: 2,
+    vsync: this,
+    initialIndex: widget.initialTab == 'statistiche' ? 1 : 0,
+  );
+
+  @override
+  void didUpdateWidget(covariant PresenzePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Stessa pagina, rotta cambiata (es. dalla notifica di un evento).
+    if (widget.initialTab != oldWidget.initialTab) {
+      _tabs.animateTo(widget.initialTab == 'statistiche' ? 1 : 0);
+    }
+    final day = widget.initialDay;
+    if (day != null && day != oldWidget.initialDay) {
+      setState(() {
+        _day = dayOnly(day);
+        _focused = _day;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,53 +118,51 @@ class _PresenzePageState extends ConsumerState<PresenzePage> {
     final entries = attendance.value!;
     final event = eveningEvent(events, _day, teams: {team});
 
-    return DefaultTabController(
-      length: 2,
-      initialIndex: widget.initialTab == 'statistiche' ? 1 : 0,
-      child: Column(
-        children: [
-          const TabBar(
-            indicatorColor: MilanacColors.red,
-            labelColor: Colors.white,
-            tabs: [
-              Tab(icon: Icon(Icons.calendar_month_rounded), text: 'Calendario'),
-              Tab(icon: Icon(Icons.bar_chart_rounded), text: 'Statistiche'),
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabs,
+          indicatorColor: MilanacColors.red,
+          labelColor: Colors.white,
+          tabs: const [
+            Tab(icon: Icon(Icons.calendar_month_rounded), text: 'Calendario'),
+            Tab(icon: Icon(Icons.bar_chart_rounded), text: 'Statistiche'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabs,
+            children: [
+              _CalendarTab(
+                day: _day,
+                focused: _focused,
+                now: now,
+                me: me,
+                team: team,
+                canPickTeam: canPickTeam,
+                members: members,
+                entries: entries,
+                events: events,
+                event: event,
+                onDay: (d, f) => setState(() {
+                  _day = dayOnly(d);
+                  _focused = f;
+                }),
+                onTeam: (t) => setState(() => _team = t),
+              ),
+              _StatsTab(
+                members: members,
+                entries: entries,
+                me: me,
+                now: now,
+                team: team,
+                canPickTeam: canPickTeam,
+                onTeam: (t) => setState(() => _team = t),
+              ),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _CalendarTab(
-                  day: _day,
-                  focused: _focused,
-                  now: now,
-                  me: me,
-                  team: team,
-                  canPickTeam: canPickTeam,
-                  members: members,
-                  entries: entries,
-                  events: events,
-                  event: event,
-                  onDay: (d, f) => setState(() {
-                    _day = dayOnly(d);
-                    _focused = f;
-                  }),
-                  onTeam: (t) => setState(() => _team = t),
-                ),
-                _StatsTab(
-                  members: members,
-                  entries: entries,
-                  me: me,
-                  now: now,
-                  team: team,
-                  canPickTeam: canPickTeam,
-                  onTeam: (t) => setState(() => _team = t),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -187,14 +213,13 @@ class _CalendarTab extends ConsumerWidget {
 
     List<ClubEvent> on(DateTime d) => events
         .where(
-          (e) =>
-              isSameDay(e.startsAt, d) &&
-              (e.team == null || e.team == team),
+          (e) => isSameDay(e.startsAt, d) && (e.team == null || e.team == team),
         )
         .toList();
     List<Member> withStatus(AttendanceStatus? s) => members
         .where(
-          (m) => s == null ? !ofDay.containsKey(m.id) : ofDay[m.id]?.status == s,
+          (m) =>
+              s == null ? !ofDay.containsKey(m.id) : ofDay[m.id]?.status == s,
         )
         .toList();
 
@@ -603,7 +628,9 @@ class _NoteDialogState extends State<_NoteDialog> {
       maxLength: 200,
       textCapitalization: TextCapitalization.sentences,
       decoration: InputDecoration(
-        labelText: widget.required ? 'Motivo (obbligatorio)' : 'Nota (facoltativa)',
+        labelText: widget.required
+            ? 'Motivo (obbligatorio)'
+            : 'Nota (facoltativa)',
         hintText: widget.required ? 'es. Esco tardi da lavoro' : 'Motivo…',
         errorText: _error,
       ),
@@ -837,19 +864,22 @@ class _StatsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final today = dayOnly(now);
-    final rows = [
-      for (final m in members)
-        (
-          m,
-          entries.where((e) => e.playerId == m.id && !e.date.isAfter(today)).toList()
-            ..sort((a, b) => b.date.compareTo(a.date)),
-        ),
-    ]..sort((a, b) {
-      final pa = AttendanceStats(a.$2);
-      final pb = AttendanceStats(b.$2);
-      final c = pb.percent.compareTo(pa.percent);
-      return c != 0 ? c : pb.total.compareTo(pa.total);
-    });
+    final rows =
+        [
+          for (final m in members)
+            (
+              m,
+              entries
+                  .where((e) => e.playerId == m.id && !e.date.isAfter(today))
+                  .toList()
+                ..sort((a, b) => b.date.compareTo(a.date)),
+            ),
+        ]..sort((a, b) {
+          final pa = AttendanceStats(a.$2);
+          final pb = AttendanceStats(b.$2);
+          final c = pb.percent.compareTo(pa.percent);
+          return c != 0 ? c : pb.total.compareTo(pa.total);
+        });
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 32),
       children: [
@@ -873,11 +903,7 @@ class _StatsTab extends ConsumerWidget {
           ),
         const SizedBox(height: 8),
         for (final (m, history) in rows)
-          _StatsRow(
-            member: m,
-            history: history,
-            isMe: m.id == me?.id,
-          ),
+          _StatsRow(member: m, history: history, isMe: m.id == me?.id),
       ],
     );
   }
@@ -916,7 +942,9 @@ class _StatsRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isMe ? '${member.displayName} (tu)' : member.displayName,
+                          isMe
+                              ? '${member.displayName} (tu)'
+                              : member.displayName,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),

@@ -26,13 +26,20 @@ class MondoPage extends ConsumerStatefulWidget {
 
 class _MondoPageState extends ConsumerState<MondoPage>
     with SingleTickerProviderStateMixin {
-  late final _tabs =
-      TabController(
-          length: 2,
-          vsync: this,
-          initialIndex: widget.initialTab == 'notizie' ? 1 : 0,
-        )
-        ..addListener(() => setState(() {}));
+  late final _tabs = TabController(
+    length: 2,
+    vsync: this,
+    initialIndex: widget.initialTab == 'notizie' ? 1 : 0,
+  )..addListener(() => setState(() {}));
+
+  @override
+  void didUpdateWidget(covariant MondoPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Stessa pagina, rotta cambiata (es. da una notifica): cambia scheda.
+    if (widget.initialTab != oldWidget.initialTab) {
+      _tabs.animateTo(widget.initialTab == 'notizie' ? 1 : 0);
+    }
+  }
 
   @override
   void dispose() {
@@ -161,15 +168,14 @@ class _VideoTabState extends ConsumerState<_VideoTab> {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Errore: $e')),
       data: (all) {
-        final published =
-            all.where((l) => l.isPublished).toList()..sort(
-              (a, b) => (b.publishedAt ?? b.createdAt ?? DateTime(2000))
-                  .compareTo(a.publishedAt ?? a.createdAt ?? DateTime(2000)),
-            );
+        final published = all.where((l) => l.isPublished).toList()
+          ..sort(
+            (a, b) => (b.publishedAt ?? b.createdAt ?? DateTime(2000))
+                .compareTo(a.publishedAt ?? a.createdAt ?? DateTime(2000)),
+          );
         final proposals = all
             .where(
-              (l) =>
-                  !l.isPublished && (isDirettivo || l.createdBy == me?.id),
+              (l) => !l.isPublished && (isDirettivo || l.createdBy == me?.id),
             )
             .toList();
         final roles = {for (final l in published) ?l.tag};
@@ -345,7 +351,8 @@ class VideoCard extends ConsumerWidget {
                         if (link.tag != null) link.tag!,
                         if (link.note != null && link.note!.isNotEmpty)
                           link.note!,
-                        if (date != null) DateFormat('d MMM', 'it').format(date),
+                        if (date != null)
+                          DateFormat('d MMM', 'it').format(date),
                       ].join(' · '),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -361,9 +368,9 @@ class VideoCard extends ConsumerWidget {
                 PopupMenuButton<String>(
                   onSelected: (v) async {
                     if (v == 'delete') {
-                      await ref.read(sharedLinksRepositoryProvider).delete(
-                        link.id,
-                      );
+                      await ref
+                          .read(sharedLinksRepositoryProvider)
+                          .delete(link.id);
                     } else if (context.mounted) {
                       await proposeVideo(context, ref, link: link);
                     }
