@@ -46,7 +46,19 @@ class PushService {
 
   bool _ready = false;
   bool _subscribed = false;
-  void Function(String route)? onOpenRoute;
+  void Function(String route)? _onOpenRoute;
+  String? _pendingRoute;
+
+  /// Chi apre le sezioni (il router). Se una notifica è arrivata prima che
+  /// l'app fosse pronta, la sua rotta viene consegnata appena possibile.
+  set onOpenRoute(void Function(String route)? open) {
+    _onOpenRoute = open;
+    final pending = _pendingRoute;
+    if (open != null && pending != null) {
+      _pendingRoute = null;
+      open(pending);
+    }
+  }
 
   /// Con l'app aperta: false per non mostrare l'avviso (es. messaggio del canale già aperto).
   bool Function(Map<String, dynamic> data)? shouldShowInApp;
@@ -87,7 +99,13 @@ class PushService {
 
   void _open(RemoteMessage m) {
     final route = m.data['route'];
-    if (route is String && route.startsWith('/')) onOpenRoute?.call(route);
+    if (route is! String || !route.startsWith('/')) return;
+    final open = _onOpenRoute;
+    if (open == null) {
+      _pendingRoute = route;
+    } else {
+      open(route);
+    }
   }
 
   /// Iscrive il dispositivo alle notifiche del club (solo membri approvati).

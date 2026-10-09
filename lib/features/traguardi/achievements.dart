@@ -6,7 +6,7 @@ import '../carta/card_stats.dart';
 import '../carta/carta_page.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
-import '../voti/ratings_repository.dart';
+import 'player_stats.dart';
 
 /// Livello del badge (colore), dal più comune al più raro.
 enum BadgeLevel {
@@ -73,24 +73,6 @@ final achievements = <Achievement>[
     (i) => i.goals,
   ),
   Achievement(
-    'mvp_1',
-    'Uomo partita',
-    'Il più votato in una partita',
-    Icons.emoji_events_rounded,
-    BadgeLevel.argento,
-    1,
-    (i) => i.stats.mvp,
-  ),
-  Achievement(
-    'totw_1',
-    'Squadra della settimana',
-    'Tra i migliori 11 di una settimana',
-    Icons.workspace_premium_rounded,
-    BadgeLevel.argento,
-    1,
-    (i) => i.stats.totw,
-  ),
-  Achievement(
     'svizzero',
     'Svizzero',
     'Un mese intero (almeno 8 serate) senza ritardi',
@@ -125,24 +107,6 @@ final achievements = <Achievement>[
     BadgeLevel.oro,
     12,
     (i) => i.months,
-  ),
-  Achievement(
-    'mvp_5',
-    'Trascinatore',
-    '5 volte Uomo partita',
-    Icons.military_tech_rounded,
-    BadgeLevel.oro,
-    5,
-    (i) => i.stats.mvp,
-  ),
-  Achievement(
-    'totw_5',
-    'Sempre in forma',
-    '5 volte nella Squadra della settimana',
-    Icons.trending_up_rounded,
-    BadgeLevel.oro,
-    5,
-    (i) => i.stats.totw,
   ),
   Achievement(
     'presenze_100',

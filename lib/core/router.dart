@@ -13,6 +13,7 @@ import '../features/chat/chat_list_page.dart';
 import '../features/common/coming_soon_page.dart';
 import '../features/direttivo/direttivo_page.dart';
 import '../features/formazione/formazione_page.dart';
+import '../features/impostazioni/impostazioni_page.dart';
 import '../features/intro/intro_page.dart';
 import '../features/intro/intro_state.dart';
 import '../features/musica/musica_page.dart';
@@ -27,7 +28,6 @@ import '../features/risultati/risultati_page.dart';
 import '../features/rosa/rosa_page.dart';
 import '../features/tattiche/tattiche_page.dart';
 import '../features/tornei/tornei_page.dart';
-import '../features/voti/totw_page.dart';
 import '../shared/app_shell.dart';
 import '../shared/sections.dart';
 import 'auth/providers.dart';
@@ -42,6 +42,18 @@ const gatePaths = {
   '/regolamento/accetta',
   '/nuova-password',
 };
+
+/// Sezione chiesta (es. da una notifica) mentre l'intro era ancora in corso:
+/// viene aperta appena l'intro finisce.
+final pendingRouteProvider = NotifierProvider<PendingRoute, String?>(
+  PendingRoute.new,
+);
+
+class PendingRoute extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void set(String? route) => state = route;
+}
 
 /// Fa ricalcolare i redirect al router quando cambiano intro, sessione, profilo,
 /// recupero password o versione del regolamento.
@@ -65,10 +77,24 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final loc = state.matchedLocation;
       if (!ref.read(introDoneProvider)) {
+        // Una notifica aperta ad app chiusa: ricordiamo dove andare dopo l'intro.
+        if (loc != '/intro' && !gatePaths.contains(loc)) {
+          ref.read(pendingRouteProvider.notifier).set(state.uri.toString());
+        }
         return loc == '/intro' ? null : '/intro';
       }
 
       String? goTo(String target) => loc == target ? null : target;
+
+      /// Dopo l'intro (o le porte) si torna alla Home, o alla sezione in sospeso.
+      String? home() {
+        final pending = ref.read(pendingRouteProvider);
+        if (pending != null) {
+          ref.read(pendingRouteProvider.notifier).set(null);
+          return pending;
+        }
+        return '/';
+      }
 
       // La Sala Direttivo (e le altre sezioni riservate) solo per il Direttivo.
       final reserved = appSections.any((s) => s.direttivoOnly && s.path == loc);
@@ -76,7 +102,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // In demo non c'è login: intro e pagina di blocco rimandano alla Home;
       // accesso e registrazione restano visitabili per provarli.
       if (AppConfig.isDemo) {
-        return loc == '/intro' || loc == '/attesa' ? '/' : null;
+        return loc == '/intro' || loc == '/attesa' ? home() : null;
       }
 
       final session = ref.read(sessionProvider);
@@ -104,7 +130,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!p.isApproved) return goTo('/attesa');
 
       if (reserved && !p.isDirettivo) return '/';
-      return gatePaths.contains(loc) ? '/' : null;
+      return gatePaths.contains(loc) ? home() : null;
     },
     routes: [
       GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
@@ -124,6 +150,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/nuova-password',
         builder: (_, _) => const NewPasswordPage(),
+      ),
+      GoRoute(
+        path: '/impostazioni',
+        builder: (_, _) => const ImpostazioniPage(),
       ),
       // Partita (dalla notifica del risultato).
       GoRoute(
@@ -163,7 +193,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/chat' => const ChatListPage(),
                   '/tornei' => const TorneiPage(),
                   '/direttivo' => const DirettivoPage(),
-                  '/squadra-settimana' => const TotwPage(),
                   _ => ComingSoonPage(path: s.path),
                 },
               ),

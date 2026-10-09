@@ -154,9 +154,9 @@ void main() {
     await tester.tap(find.text('Carte'));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('ROSSI'));
+    await tester.ensureVisible(find.text('MARCO ROSSI'));
     // Prima la carta con l'overall più alto (Rossi, 86: rossonera).
-    expect(find.text('ROSSI'), findsOneWidget);
+    expect(find.text('MARCO ROSSI'), findsOneWidget);
     expect(find.text('86'), findsWidgets);
   });
 }

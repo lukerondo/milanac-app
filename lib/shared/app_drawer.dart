@@ -73,7 +73,7 @@ class AppDrawer extends ConsumerWidget {
                   ),
                   if (profile != null)
                     Text(
-                      '${profile.displayName} · ${profile.isDirettivo ? 'Direttivo' : 'Giocatore'}',
+                      '${profile.displayName} · ${profile.roleLabel}',
                       style: const TextStyle(color: Colors.white70),
                     ),
                 ],
@@ -101,36 +101,6 @@ class AppDrawer extends ConsumerWidget {
                           context.go(s.path);
                         },
                       ),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.privacy_tip_outlined),
-                    title: const Text('Privacy'),
-                    onTap: () {
-                      final root = Navigator.of(context, rootNavigator: true);
-                      Navigator.of(context).pop();
-                      root.push(
-                        MaterialPageRoute(builder: (_) => const PrivacyPage()),
-                      );
-                    },
-                  ),
-                  if (!AppConfig.isDemo) ...[
-                    ListTile(
-                      leading: const Icon(Icons.logout_rounded),
-                      title: const Text('Esci'),
-                      onTap: () => logout(ref),
-                    ),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.person_off_outlined,
-                        color: Colors.redAccent,
-                      ),
-                      title: const Text(
-                        'Elimina il mio account',
-                        style: TextStyle(color: Colors.redAccent),
-                      ),
-                      onTap: () => _confirmDeleteAccount(context, ref),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -172,40 +142,6 @@ class AppDrawer extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-Future<void> _confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (c) => AlertDialog(
-      title: const Text('Eliminare il tuo account?'),
-      content: const Text(
-        'Verranno cancellati definitivamente il tuo account, il profilo e lo storico delle '
-        'presenze. Per rientrare nel club dovrai essere approvato di nuovo dal Direttivo.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(c, false),
-          child: const Text('Annulla'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-          onPressed: () => Navigator.pop(c, true),
-          child: const Text('Elimina'),
-        ),
-      ],
-    ),
-  );
-  if (ok != true) return;
-  try {
-    await ref.read(authRepositoryProvider).deleteAccount();
-    messenger.showSnackBar(const SnackBar(content: Text('Account eliminato.')));
-  } catch (e) {
-    messenger.showSnackBar(
-      SnackBar(content: Text('Eliminazione non riuscita: $e')),
     );
   }
 }

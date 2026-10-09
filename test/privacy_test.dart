@@ -13,7 +13,7 @@ void main() {
     expect(FirebaseConfig.current, isNull);
   });
 
-  testWidgets('Privacy raggiungibile dal menu', (tester) async {
+  testWidgets('Privacy raggiungibile dalle Impostazioni', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -27,17 +27,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.menu));
+    // La Privacy sta nelle Impostazioni (ingranaggio in alto a destra).
+    await tester.tap(find.byTooltip('Impostazioni'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Privacy'),
-      100,
-      scrollable: find.descendant(
-        of: find.byType(Drawer),
-        matching: find.byType(Scrollable),
-      ),
+      150,
+      scrollable: find.byType(Scrollable).first,
     );
-    await tester.ensureVisible(find.text('Privacy'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Privacy'));
     await tester.pumpAndSettle();

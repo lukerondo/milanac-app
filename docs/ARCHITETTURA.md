@@ -34,21 +34,45 @@ con un unico codice.
 | Yahoo | **provider OIDC personalizzato** (`https://api.login.yahoo.com`) | supportato da Supabase come custom OIDC |
 | **Apple** | provider nativo Supabase | **obbligatorio su iOS** (regola App Store 4.8: se offri login social devi offrire anche "Accedi con Apple") |
 
-Al primo accesso l'utente è in stato **"in attesa"**: un membro del Direttivo lo approva e gli assegna
-il ruolo. Così nessun estraneo vede i dati del club.
+| **Email e password** | Supabase Auth (email confermata con link; password dimenticata via email) | serve un servizio SMTP (vedi `docs/SETUP_SUPABASE.md`) |
+
+### Registrazione (nuova app)
+
+Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `complete_registration`:
+
+1. **Chi sei**: nome, cognome, anno di nascita (li vede solo il Direttivo), **nome sulla carta**
+   (è il nome mostrato in tutta l'app: `display_name`), motto.
+2. **Squadra e ruolo**: Milan AC o Milan AC Futuro (entrambe solo per il Direttivo); "Faccio parte
+   del Direttivo" richiede la **password del club** (solo l'hash bcrypt sta in `app_config`,
+   si cambia dall'app con `set_direttivo_password`) e almeno un'etichetta tra Capitano,
+   Reclutatore, Organizzatore, Gestore; ruolo in campo, numero, piattaforma.
+3. **Il tuo volto**: avatar disegnato dall'app (parametri in `profiles.face`), usato in rosa, chat,
+   carta e walkout.
+
+Il profilo resta `pending` finché non si **accetta il regolamento** (`accept_rules`): da lì il ruolo
+richiesto diventa effettivo. Non serve nessuna approvazione del Direttivo; il Direttivo può
+comunque sospendere un membro (`active = false`).
 
 ## 3. Ruoli e permessi
 
-- **Direttivo** (= Esecutivo): crea/modifica rosa, formazione, calendario, risultati e media,
-  albo d'oro, regolamento/storia, contatti social.
-- **Giocatore**: legge tutto, gestisce **solo le proprie** presenze, la propria carta FUT
-  (overall, ruolo, stile, piattaforma), scrive in chat e aggiunge link (build, playlist).
-  Non può cambiarsi ruolo, squadra, stato o data d'ingresso (lo impedisce un trigger).
-- **Squadre**: ogni membro è in **MILANAC**, in **MILANAC FUTURO** (riserve) o in entrambe;
-  le assegna il Direttivo all'approvazione o dalla scheda del membro.
-- **In attesa**: vede solo la schermata "account in approvazione".
+- **Direttivo**: crea/modifica rosa, formazione, calendario, risultati e media, albo d'oro,
+  regolamento (bozza + pubblicazione) e storia, contatti social; assegna l'**overall** delle carte.
+- **Giocatore**: legge tutto, gestisce **solo le proprie** presenze, i propri dati e il proprio
+  volto, la propria carta (ruolo, numero, stile, piattaforma, non l'overall), scrive in chat e
+  aggiunge link. Non può cambiarsi ruolo, squadra, stato, overall o data d'ingresso (trigger).
+- **Squadre**: Milan AC e Milan AC Futuro; i giocatori stanno in una sola squadra, chi è del
+  Direttivo può stare in entrambe.
+- **Registrazione in corso** (`pending`): vede solo i passi della registrazione e il regolamento.
+- **Sospeso** (`active = false`): vede solo la pagina "account non attivo".
 
 I permessi sono applicati nel database con **Row Level Security** (non solo nell'interfaccia).
+
+### Regolamento con versioni
+
+Gli articoli vivono in una **bozza** (`rules_articles`, solo Direttivo). "Pubblica" crea una riga in
+`rules_versions` con la fotografia degli articoli e manda la notifica `rules`. Ogni profilo
+ricorda la versione accettata (`rules_accepted_version`): se non è l'ultima, l'app mostra la
+pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti (non mostrati).
 
 ## 4. Sezioni dell'app
 
@@ -101,16 +125,12 @@ I permessi sono applicati nel database con **Row Level Security** (non solo nell
 17. **Colonna sonora** – ognuno sceglie un file audio dal proprio telefono (es. compilation
     FIFA): suona in loop, muto sempre in alto. Nessuna canzone è inclusa nell'app (diritti);
     playlist e video ufficiali su YouTube/Spotify condivisi come link.
-18. **Voti e Uomo partita** – quando il Direttivo inserisce il risultato, i giocatori della
-    squadra ricevono la notifica e danno un voto da 1 a 10 ai compagni (non a se stessi).
-    I voti dei singoli restano segreti: si vedono solo media e classifica. Il più votato
-    (almeno 2 voti) riceve la carta speciale nera e oro **Uomo partita**.
-19. **Squadra della settimana** – i migliori 11 per media voto della settimana (lunedì–domenica),
-    per squadra, con carte speciali; elenco degli ultimi Uomini partita.
-20. **Traguardi** – 13 badge (bronzo, argento, oro, leggenda): presenze, gol, Uomo partita,
-    Squadra della settimana, un mese senza ritardi, un anno nel club, overall 85+.
-    I 3 più rari compaiono sulla carta; festa a schermo intero quando se ne sblocca uno.
-21. **Walkout** – animazione stile pacchetti FUT (luci, bandiera, ruolo, stemma, giro della
+18. **Carte speciali** (fase 3) – al posto dei voti: dopo ogni partita ufficiale il Direttivo
+    sceglie un giocatore per reparto per la carta nero/oro della settimana (bonus fino a +5,
+    vale 7 giorni); carta blu elettrico automatica per tripletta o portiere imbattuto 3 volte.
+19. **Traguardi** – 9 badge (bronzo, argento, oro, leggenda): presenze, gol, un mese senza
+    ritardi, un anno nel club, overall 85+ (quelli legati alle carte speciali arrivano in fase 3).
+20. **Walkout** – animazione stile pacchetti FUT (luci, bandiera, ruolo, stemma, giro della
     carta) alla prima apertura dopo l'approvazione e quando l'overall sale; rivedibile dalla carta.
 
 ## 5. Modello dati (Supabase / PostgreSQL)
@@ -142,14 +162,18 @@ channels      id, slug, name, description, icon   messages  id, channel_id, auth
               body, image_path, meta              channel_mutes / channel_reads (per utente)
 tournaments   id, name, organizer, url, team, status, starts_on, ends_on, notes
 tournament_standings  tournament_id, team_name, won, drawn, lost, goals_for, goals_against, is_us
-match_ratings match_id, voter_id, player_id, rating(1-10)   -- ognuno vede solo i propri voti
+rules_articles id, sort_order, title, body                -- bozza del Direttivo
+rules_versions number, snapshot(jsonb), published_at       -- versioni pubblicate del regolamento
+profiles      + first_name, last_name, birth_year, motto, direttivo_roles[], face(jsonb),
+                registration_completed_at, rules_accepted_version, rules_accepted_at
+app_config    + direttivo_password_hash (bcrypt)
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
 pubblicazione formazione → notifica, nuovo messaggio → notifica, presenze → messaggio in *Presenze*,
 `chat_overview()` (non letti + ultimo messaggio per canale), risultato inserito → notifica
-"vota i compagni", `match_rating_summary()` / `match_mvps()` / `team_of_the_week()` /
-`player_stats()` (medie e conteggi senza rivelare chi ha votato cosa).
+alla squadra, `complete_registration()` / `accept_rules()` / `publish_rules()` /
+`set_direttivo_password()` (registrazione e regolamento), `player_stats()` (numeri per i traguardi).
 
 Storage buckets: `avatars`, `trophies`, `match-media`, `tactics`, `chat` (tutti privati, letti
 tramite URL firmati, con limiti di dimensione e tipo di file).

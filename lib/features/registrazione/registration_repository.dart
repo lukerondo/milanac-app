@@ -62,6 +62,9 @@ class RegistrationData {
 abstract class RegistrationRepository {
   /// Salva i dati (funzione `complete_registration`); il ruolo arriva accettando il regolamento.
   Future<void> complete(RegistrationData data);
+
+  /// Cambia la password del club con cui si entra nel Direttivo (solo Direttivo).
+  Future<void> changeDirettivoPassword(String current, String next);
 }
 
 final registrationRepositoryProvider = Provider<RegistrationRepository>((ref) {
@@ -79,13 +82,28 @@ class _SupabaseRegistrationRepository implements RegistrationRepository {
         .read(supabaseProvider)
         .rpc('complete_registration', params: data.toParams());
   }
+
+  @override
+  Future<void> changeDirettivoPassword(String current, String next) async {
+    await _ref
+        .read(supabaseProvider)
+        .rpc(
+          'set_direttivo_password',
+          params: {'p_current': current, 'p_new': next},
+        );
+  }
 }
 
 class DemoRegistrationRepository implements RegistrationRepository {
   RegistrationData? last;
+  String? newPassword;
 
   @override
   Future<void> complete(RegistrationData data) async => last = data;
+
+  @override
+  Future<void> changeDirettivoPassword(String current, String next) async =>
+      newPassword = next;
 }
 
 /// Testo comprensibile per gli errori della registrazione (le regole del database

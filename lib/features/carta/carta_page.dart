@@ -16,7 +16,6 @@ import '../rosa/member_editor.dart';
 import '../rosa/rosa_repository.dart';
 import '../traguardi/achievements.dart';
 import '../traguardi/achievements_view.dart';
-import '../voti/ratings_repository.dart';
 import '../walkout/celebrations.dart';
 import '../walkout/walkout_page.dart';
 import 'card_stats.dart';
@@ -71,7 +70,6 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
   bool _sharing = false;
 
   /// Mostra la carta base anche se c'è quella speciale di Uomo partita.
-  bool _baseCard = false;
 
   Future<void> _share(Member m) async {
     setState(() => _sharing = true);
@@ -112,7 +110,6 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
       return const Center(child: CircularProgressIndicator());
     }
     final isMine = me?.id == member.id;
-    final motm = ref.watch(recentMvpProvider(member.id));
     final isDirettivo = me?.isDirettivo ?? false;
 
     return ListView(
@@ -129,7 +126,6 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                 child: FutCard(
                   member: member,
                   stats: stats,
-                  special: motm != null && !_baseCard ? CardSpecial.motm : null,
                   badges: [
                     for (final a in topBadges(
                       ref.watch(achievementsProvider(member.id)) ?? const [],
@@ -141,29 +137,6 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
             ),
           ),
         ),
-        if (motm != null) ...[
-          const SizedBox(height: 8),
-          Center(
-            child: SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: false, label: Text('Uomo partita')),
-                ButtonSegment(value: true, label: Text('Carta base')),
-              ],
-              selected: {_baseCard},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => setState(() => _baseCard = s.first),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              'Uomo partita il ${DateFormat('d MMMM', 'it').format(motm.playedAt)} '
-              '(media ${motm.average.toStringAsFixed(1)})',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: MilanacColors.gold),
-            ),
-          ),
-        ],
         const SizedBox(height: 12),
         if (isMine && member.overall == null)
           const Padding(

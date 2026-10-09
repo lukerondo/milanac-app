@@ -4,7 +4,8 @@
 // Eventi gestiti:
 //   { kind: "formation", id }     → ai membri della squadra: titolare (con ruolo) o panchina
 //   { kind: "chat_message", id }  → ai membri del canale, escluso l'autore e chi l'ha silenziato
-//   { kind: "match_result", id }  → ai giocatori della squadra: "vota i compagni"
+//   { kind: "match_result", id }  → ai giocatori della squadra: risultato e marcatori
+//   { kind: "rules", version }    → a tutti i membri: nuova versione del regolamento da accettare
 //
 // Variabili (impostate dal workflow "Funzioni"):
 //   WEBHOOK_SECRET, FIREBASE_SERVICE_ACCOUNT (JSON; se manca le notifiche sono disattivate)
@@ -18,13 +19,14 @@ Deno.serve(async (req) => {
   if (req.headers.get("x-milanac-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("forbidden", { status: 403 });
   }
-  const { kind, id } = await req.json();
+  const { kind, id, version } = await req.json();
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   let pushes: Push[] = [];
   if (kind === "formation") pushes = await formationPushes(db, id);
   else if (kind === "chat_message") pushes = await chatPushes(db, id);
   else if (kind === "match_result") pushes = await matchResultPushes(db, id);
+  else if (kind === "rules") pushes = await rulesPushes(db, version);
   else return new Response("unknown kind", { status: 400 });
 
   const account = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
@@ -35,13 +37,15 @@ Deno.serve(async (req) => {
   return Response.json({ pushes: pushes.length, sent });
 });
 
+const TEAM_NAMES: Record<string, string> = { milanac: "Milan AC", futuro: "Milan AC Futuro" };
+
 // ------------------------------------------------------------------ formazione
 
 async function formationPushes(db: SupabaseClient, formationId: string): Promise<Push[]> {
   const { data: formation } = await db
     .from("formations").select("team").eq("id", formationId).single();
   const team = formation?.team ?? "milanac";
-  const teamName = TEAM_NAMES[team] ?? "MILANAC";
+  const teamName = TEAM_NAMES[team] ?? "Milan AC";
   const { data: slots } = await db
     .from("formation_slots").select("label, player_id").eq("formation_id", formationId);
   // Solo i giocatori di quella squadra (chi è in entrambe riceve entrambe le formazioni).
@@ -61,8 +65,6 @@ async function formationPushes(db: SupabaseClient, formationId: string): Promise
   });
 }
 
-const TEAM_NAMES: Record<string, string> = { milanac: "MILANAC", futuro: "MILANAC FUTURO" };
-
 // ------------------------------------------------------------------ risultato
 
 async function matchResultPushes(db: SupabaseClient, matchId: string): Promise<Push[]> {
@@ -70,7 +72,7 @@ async function matchResultPushes(db: SupabaseClient, matchId: string): Promise<P
     .from("matches").select("id, team, opponent, home, goals_for, goals_against").eq("id", matchId).single();
   if (!match || match.goals_for == null || match.goals_against == null) return [];
   const team = match.team ?? "milanac";
-  const us = TEAM_NAMES[team] ?? "MILANAC";
+  const us = TEAM_NAMES[team] ?? "Milan AC";
   const score = match.home
     ? `${us} ${match.goals_for}–${match.goals_against} ${match.opponent}`
     : `${match.opponent} ${match.goals_against}–${match.goals_for} ${us}`;
@@ -80,9 +82,23 @@ async function matchResultPushes(db: SupabaseClient, matchId: string): Promise<P
   return (members ?? []).map((m) => ({
     userId: m.id,
     title: `⚽ ${score}`,
-    body: "Vota i compagni: chi è l'Uomo partita?",
+    body: "Risultato registrato: guarda marcatori e highlights.",
     route: `/partita/${match.id}`,
     data: { match: match.id },
+  }));
+}
+
+// ------------------------------------------------------------------ regolamento
+
+async function rulesPushes(db: SupabaseClient, version: number | undefined): Promise<Push[]> {
+  const { data: members } = await db
+    .from("profiles").select("id").eq("active", true).neq("club_role", "pending");
+  const label = version ? `Versione ${version}` : "Nuova versione";
+  return (members ?? []).map((m) => ({
+    userId: m.id,
+    title: "📜 Nuovo regolamento del club",
+    body: `${label}: al prossimo accesso leggilo e accettalo per continuare.`,
+    route: "/regolamento",
   }));
 }
 
@@ -141,7 +157,7 @@ async function sendAll(db: SupabaseClient, account: ServiceAccount, pushes: Push
               token: t.token,
               notification: { title: p.title, body: p.body },
               data: { route: p.route, ...(p.data ?? {}) },
-              android: { priority: "high", notification: { color: "#C8102E" } },
+              android: { priority: "high", notification: { color: "#C61C23" } },
               apns: { payload: { aps: { sound: "default" } } },
             },
           }),

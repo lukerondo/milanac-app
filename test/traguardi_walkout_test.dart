@@ -7,7 +7,7 @@ import 'package:milanac/features/carta/card_stats.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/rosa/member.dart';
 import 'package:milanac/features/traguardi/achievements.dart';
-import 'package:milanac/features/voti/ratings_repository.dart';
+import 'package:milanac/features/traguardi/player_stats.dart';
 import 'package:milanac/main.dart';
 
 import 'helpers.dart';
@@ -44,7 +44,7 @@ void main() {
       months: 21,
       winRate: 60,
     );
-    const stats = PlayerStats(presences: 48, mvp: 1, cleanMonth: true);
+    const stats = PlayerStats(presences: 48, cleanMonth: true);
     final list = progressFor(member, card, stats);
     bool unlocked(String id) =>
         list.firstWhere((p) => p.achievement.id == id).unlocked;
@@ -68,10 +68,6 @@ void main() {
     await tester.ensureVisible(find.text('MARCO ROSSI'));
     await tester.tap(find.text('MARCO ROSSI'));
     await tester.pumpAndSettle();
-
-    // Rossi è stato Uomo partita: carta speciale con scelta della carta base.
-    expect(find.text('UOMO PARTITA'), findsOneWidget);
-    expect(find.text('Carta base'), findsOneWidget);
 
     final page = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(find.text('48/50'), 200, scrollable: page);

@@ -70,14 +70,30 @@ com.milanacproclub.milanac://login-callback
    seguendo le istruzioni del pannello (Team ID, Key ID, file .p8).
    ⚠️ Il secret Apple scade ogni 6 mesi: va rigenerato (promemoria nel calendario!).
 
-## 7. Primo Direttivo
-1. Apri l'app e fai login (finirai in "Account in attesa").
-2. SQL Editor:
-   ```sql
-   select id, display_name, created_at from profiles order by created_at;
-   update profiles set club_role = 'direttivo' where display_name = 'IL TUO NOME';
-   ```
-3. L'app si sblocca da sola. Da qui in poi gli altri li approva il Direttivo.
+## 7. Email e password (conferma dell'email, password dimenticata)
+Supabase invia le email di conferma e di recupero, ma il suo server di posta predefinito è solo
+per le prove (pochi messaggi all'ora). Serve un servizio SMTP gratuito, per esempio **Resend**
+(3.000 email al mese) o **Brevo** (300 al giorno):
+1. Crea l'account sul servizio, verifica il dominio o l'indirizzo mittente e crea una **chiave SMTP**.
+2. Supabase → **Project Settings → Authentication → SMTP Settings** → *Enable Custom SMTP*:
+   host, porta, utente e password forniti dal servizio; mittente es. `MILANAC Pro Club <noreply@…>`.
+3. **Authentication → Providers → Email**: lascia attivo *Confirm email* (chi si registra con email
+   entra solo dopo aver aperto il link).
+4. **Authentication → URL Configuration**: l'URL di reindirizzamento `com.milanacproclub.milanac://login-callback`
+   deve essere tra i *Redirect URLs* (serve anche ai link di conferma e di recupero password).
+
+## 8. Password del Direttivo
+Chi si registra scegliendo "Faccio parte del Direttivo" deve inserire la **password del club**.
+Nel database c'è solo il suo hash (`app_config`, chiave `direttivo_password_hash`), impostato dalla
+migrazione `0016`. Si cambia dall'app: Impostazioni → Account → *Password del Direttivo*
+(oppure dall'SQL Editor: `select set_direttivo_password('attuale', 'nuova')` eseguito come Direttivo).
+Non serve più nominare il primo Direttivo a mano: basta registrarsi con la password.
+
+## 9. Azzeramento dei dati
+La migrazione `0016` svuota presenze, formazioni, eventi, risultati, trofei, tattiche, chat e tornei,
+e riporta tutti i profili alla registrazione: ogni membro ripassa dai tre passi e dal regolamento.
+I file nei bucket (foto, clip, trofei) non vengono cancellati: se servono spazio, svuotali da
+**Storage** nel pannello di Supabase.
 
 ## 8. Notizie automatiche (GitHub Actions)
 1. Su GitHub apri il repository **milanac-app** → **Settings → Secrets and variables → Actions**
