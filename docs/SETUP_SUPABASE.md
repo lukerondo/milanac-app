@@ -95,7 +95,7 @@ e riporta tutti i profili alla registrazione: ogni membro ripassa dai tre passi 
 I file nei bucket (foto, clip, trofei) non vengono cancellati: se servono spazio, svuotali da
 **Storage** nel pannello di Supabase.
 
-## 8. Notizie automatiche (GitHub Actions)
+## 10. Notizie automatiche (GitHub Actions)
 1. Su GitHub apri il repository **milanac-app** → **Settings → Secrets and variables → Actions**
 2. **New repository secret**
    - Name: `SUPABASE_SECRET_KEY`
@@ -106,6 +106,16 @@ I file nei bucket (foto, clip, trofei) non vengono cancellati: se servono spazio
 
 > Nota: le esecuzioni programmate partono solo dal branch principale (`main`):
 > il workflow si attiva da solo dopo il merge della pull request.
+
+## 11. Lavori automatici delle presenze (pg_cron)
+La migrazione `0017` attiva l'estensione **pg_cron** e programma `attendance_tick()` ogni minuto:
+alle 18:00 (ora italiana) il promemoria a chi non ha risposto, alle 18:30 le assenze automatiche.
+Se il workflow Database si ferma sulla riga `create extension if not exists pg_cron`, attiva
+l'estensione a mano (Dashboard → **Database → Extensions** → cerca `pg_cron` → abilita) e rilancia
+il workflow. Per controllare: SQL Editor → `select jobname, schedule from cron.job;` e
+`select * from cron.job_run_details order by start_time desc limit 10;`.
+Le notifiche (promemoria, assenze, eventi, video, notizie) partono dalla funzione `notify`: il
+workflow **Funzioni** la ripubblica da solo quando il codice arriva su `main`.
 
 ## Sicurezza
 - La chiave **publishable** (`sb_publishable_…`) è nel repository: va bene, è pensata per stare nell'app.
