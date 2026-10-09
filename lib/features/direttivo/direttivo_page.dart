@@ -1,25 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
+import '../../core/clock.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/club_links.dart';
 import '../../shared/club_links_editor.dart';
 import '../../shared/member_photo.dart';
+import '../../shared/shared_links.dart';
+import '../calendario/club_event.dart';
 import '../calendario/event_editor.dart';
+import '../calendario/events_repository.dart';
 import '../chat/chat_repository.dart';
 import '../formazione/formation_repository.dart';
 import '../formazione/formazione_page.dart';
 import '../presenze/attendance.dart';
 import '../presenze/attendance_repository.dart';
-import '../presenze/presenze_page.dart' show describeAttendance, statusColor;
+import '../presenze/evening.dart';
+import '../presenze/presenze_page.dart'
+    show
+        AttendanceStatusButton,
+        answerAttendance,
+        describeAttendance,
+        statusColor;
 import '../risultati/match_editor.dart';
 import '../rosa/member.dart';
 import '../rosa/member_editor.dart';
 import '../rosa/rosa_repository.dart';
-import 'pending_request_tile.dart';
 
 /// Sala Direttivo: la stanza riservata dove si gestisce il club.
 /// Visibile solo al Direttivo (menu filtrato e redirect nel router).
@@ -29,13 +39,10 @@ class DirettivoPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final all = ref.watch(rosaProvider).value ?? const <Member>[];
-    final pending = all
-        .where((m) => m.active && m.role == ClubRole.pending)
-        .toList();
     final members = all
         .where((m) => m.active && m.role != ClubRole.pending)
         .toList();
-    final today = dayOnly(DateTime.now());
+    final today = dayOnly(ref.watch(clockProvider)());
     final answered = {
       for (final e in ref.watch(attendanceProvider).value ?? const [])
         if (e.date == today) e.playerId,
@@ -45,6 +52,11 @@ class DirettivoPage extends ConsumerWidget {
       final f = ref.watch(formationProvider(t)).value;
       return f == null || !f.isPublishedToday || f.hasUnpublishedChanges;
     }).length;
+    final proposals =
+        (ref.watch(sharedLinksProvider(LinkCategory.video)).value ??
+                const <SharedLink>[])
+            .where((l) => !l.isPublished)
+            .length;
 
     void push(Widget page) => Navigator.of(
       context,
@@ -80,14 +92,15 @@ class DirettivoPage extends ConsumerWidget {
                     Text(
                       'SALA DIRETTIVO',
                       style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.5,
+                        fontFamily: sportFont,
+                        fontSize: 20,
+                        letterSpacing: 2,
                         color: MilanacColors.gold,
                       ),
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Riservata al Direttivo: formazioni, rosa e squadre, avvisi.',
+                      'Riservata al Direttivo: presenze, formazioni, eventi, avvisi.',
                       style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
                   ],
@@ -102,13 +115,6 @@ class DirettivoPage extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Stat(
-                value: pending.length,
-                label: pending.length == 1
-                    ? 'richiesta di accesso'
-                    : 'richieste di accesso',
-                highlight: pending.isNotEmpty,
-              ),
-              _Stat(
                 value: missing,
                 label: 'senza risposta stasera',
                 highlight: missing > 0,
@@ -120,13 +126,15 @@ class DirettivoPage extends ConsumerWidget {
                 highlight: toPublish > 0,
                 onTap: () => push(const FormationEditorPage()),
               ),
+              _Stat(
+                value: proposals,
+                label: proposals == 1 ? 'video proposto' : 'video proposti',
+                highlight: proposals > 0,
+                onTap: () => context.go('/mondo'),
+              ),
             ],
           ),
         ),
-        if (pending.isNotEmpty) ...[
-          const _Header('Richieste di accesso'),
-          for (final m in pending) PendingRequestTile(member: m),
-        ],
         const _Header('Gestione'),
         GridView.count(
           crossAxisCount: 2,
@@ -137,10 +145,34 @@ class DirettivoPage extends ConsumerWidget {
           childAspectRatio: 1.55,
           children: [
             _Action(
+              icon: Icons.how_to_reg_rounded,
+              title: 'Presenze di stasera',
+              subtitle: 'Correggi anche dopo le 18:30',
+              onTap: () => push(const TonightAttendancePage()),
+            ),
+            _Action(
               icon: Icons.sports_soccer_rounded,
               title: 'Formazioni',
-              subtitle: 'Schiera, sposta e pubblica',
+              subtitle: 'Schiera, pubblica, PDF',
               onTap: () => push(const FormationEditorPage()),
+            ),
+            _Action(
+              icon: Icons.event_available_rounded,
+              title: 'Nuovo evento',
+              subtitle: 'Partita, amichevole, riunione',
+              onTap: () => showEventEditor(context),
+            ),
+            _Action(
+              icon: Icons.campaign_rounded,
+              title: 'Avviso a tutti',
+              subtitle: 'In Comunicazioni, con notifica',
+              onTap: () => _sendAnnouncement(context, ref),
+            ),
+            _Action(
+              icon: Icons.scoreboard_rounded,
+              title: 'Nuovo risultato',
+              subtitle: 'Punteggio e marcatori',
+              onTap: () => showMatchEditor(context),
             ),
             _Action(
               icon: Icons.groups_rounded,
@@ -149,34 +181,16 @@ class DirettivoPage extends ConsumerWidget {
               onTap: () => push(const RosaManagementPage()),
             ),
             _Action(
-              icon: Icons.how_to_reg_rounded,
-              title: 'Presenze di stasera',
-              subtitle: 'Chi manca all\'appello',
-              onTap: () => push(const TonightAttendancePage()),
-            ),
-            _Action(
-              icon: Icons.campaign_rounded,
-              title: 'Avviso a tutti',
-              subtitle: 'Notifica a tutto il club',
-              onTap: () => _sendAnnouncement(context, ref),
+              icon: Icons.public_rounded,
+              title: 'Mondo Proclub',
+              subtitle: 'Video proposti da pubblicare',
+              onTap: () => context.go('/mondo'),
             ),
             _Action(
               icon: Icons.lock_rounded,
               title: 'Chat del Direttivo',
               subtitle: 'Solo per voi',
               onTap: () => context.push('/chat/direttivo'),
-            ),
-            _Action(
-              icon: Icons.event_available_rounded,
-              title: 'Nuovo evento',
-              subtitle: 'Partita, allenamento…',
-              onTap: () => showEventEditor(context),
-            ),
-            _Action(
-              icon: Icons.scoreboard_rounded,
-              title: 'Nuovo risultato',
-              subtitle: 'Punteggio e marcatori',
-              onTap: () => showMatchEditor(context),
             ),
             _Action(
               icon: Icons.share_rounded,
@@ -194,6 +208,8 @@ class DirettivoPage extends ConsumerWidget {
     );
   }
 
+  /// Avviso ufficiale: va in Comunicazioni, dove scrive solo il Direttivo,
+  /// e arriva a tutti come notifica.
   Future<void> _sendAnnouncement(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
     final text = await showDialog<String>(
@@ -202,21 +218,22 @@ class DirettivoPage extends ConsumerWidget {
     );
     if (text == null || text.trim().isEmpty) return;
     try {
-      final channels = ref.read(channelsProvider).value ?? const <Channel>[];
-      final main =
-          channels.where((c) => c.slug == 'main').firstOrNull ??
-          (await ref.read(chatRepositoryProvider).watchChannels().first)
-              .firstWhere((c) => c.slug == 'main');
+      final channels =
+          ref.read(channelsProvider).value ??
+          await ref.read(chatRepositoryProvider).watchChannels().first;
+      final target =
+          channels.where((c) => c.slug == 'comunicazioni').firstOrNull ??
+          channels.firstWhere((c) => c.slug == 'main');
       await ref
           .read(chatRepositoryProvider)
           .send(
-            main.id,
+            target.id,
             body: text.trim(),
             meta: const {'type': 'announcement'},
           );
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Avviso inviato in MILANAC Main a tutto il club.'),
+        SnackBar(
+          content: Text('Avviso inviato in ${target.name} a tutto il club.'),
         ),
       );
     } catch (e) {
@@ -470,7 +487,8 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
   }
 }
 
-/// Presenze di stasera viste dal Direttivo: chi non ha risposto, ritardi e assenze.
+/// Presenze di stasera viste dal Direttivo: chi non ha risposto, ritardi, assenze e
+/// presenti; toccando un giocatore si corregge la sua risposta, anche dopo le 18:30.
 class TonightAttendancePage extends ConsumerWidget {
   const TonightAttendancePage({super.key});
 
@@ -481,7 +499,9 @@ class TonightAttendancePage extends ConsumerWidget {
             .where((m) => m.active && m.role != ClubRole.pending)
             .toList()
           ..sort((a, b) => a.displayName.compareTo(b.displayName));
-    final today = dayOnly(DateTime.now());
+    final now = ref.watch(clockProvider)();
+    final today = dayOnly(now);
+    final events = ref.watch(eventsProvider).value ?? const <ClubEvent>[];
     final tonight = {
       for (final e in ref.watch(attendanceProvider).value ?? const [])
         if (e.date == today) e.playerId: e,
@@ -493,6 +513,25 @@ class TonightAttendancePage extends ConsumerWidget {
               : tonight[m.id]?.status == s,
         )
         .toList();
+
+    Future<void> edit(Member m) async {
+      final entry = tonight[m.id];
+      final status = await showModalBottomSheet<AttendanceStatus>(
+        context: context,
+        showDragHandle: true,
+        builder: (_) => _EditSheet(member: m, entry: entry),
+      );
+      if (status == null || !context.mounted) return;
+      await answerAttendance(
+        context,
+        ref,
+        playerId: m.id,
+        day: today,
+        status: status,
+        current: entry,
+        event: eveningEvent(events, today, teams: {mainTeam(m.teams)}),
+      );
+    }
 
     Widget group(String title, Color color, List<Member> list) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,18 +557,40 @@ class TonightAttendancePage extends ConsumerWidget {
             dense: true,
             leading: MemberAvatar(member: m, radius: 16),
             title: Text(m.displayName),
-            subtitle: tonight[m.id] == null
-                ? Text(m.teams.map((t) => t.short).join(' · '))
-                : Text(describeAttendance(tonight[m.id]!)),
+            subtitle: Text(
+              tonight[m.id] == null
+                  ? 'Non ha ancora risposto'
+                  : describeAttendance(tonight[m.id]!) +
+                        (tonight[m.id]!.setBy != null
+                            ? ' · segnata dal Direttivo'
+                            : ''),
+              style: TextStyle(
+                color: tonight[m.id]?.auto ?? false
+                    ? Colors.white38
+                    : statusColor(tonight[m.id]?.status),
+              ),
+            ),
+            trailing: Wrap(
+              spacing: 4,
+              children: [for (final t in m.teams) TeamBadge(t, small: true)],
+            ),
+            onTap: () => edit(m),
           ),
       ],
     );
 
+    final closed = !answersOpen(today, now);
     return Scaffold(
       appBar: AppBar(title: const Text('PRESENZE DI STASERA')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
+          Text(
+            '${DateFormat('EEEE d MMMM', 'it').format(today)} · '
+            '${closed ? 'risposte chiuse alle $attendanceDeadlineLabel' : 'risposte aperte fino alle $attendanceDeadlineLabel'}. '
+            'Tocca un giocatore per correggere la sua risposta: resta registrato chi l\'ha fatto.',
+            style: const TextStyle(color: Colors.white60, fontSize: 13),
+          ),
           group('Senza risposta', MilanacColors.gold, withStatus(null)),
           group(
             'In ritardo',
@@ -550,4 +611,46 @@ class TonightAttendancePage extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _EditSheet extends StatelessWidget {
+  const _EditSheet({required this.member, required this.entry});
+  final Member member;
+  final AttendanceEntry? entry;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(member.displayName, style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          entry == null
+              ? 'Non ha ancora risposto per stasera.'
+              : 'Ora: ${describeAttendance(entry!)}',
+          style: const TextStyle(color: Colors.white60),
+        ),
+        const SizedBox(height: 14),
+        const Text('Segna per lui (Direttivo):'),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (final s in AttendanceStatus.values)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: AttendanceStatusButton(
+                    status: s,
+                    selected: entry?.status == s,
+                    onPressed: () => Navigator.pop(context, s),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    ),
+  );
 }

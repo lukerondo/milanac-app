@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
-import '../../core/auth/providers.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
@@ -29,7 +27,6 @@ class _RosaPageState extends ConsumerState<RosaPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final rosa = ref.watch(rosaProvider);
 
     return rosa.when(
@@ -38,9 +35,6 @@ class _RosaPageState extends ConsumerState<RosaPage> {
           Center(child: Text('Errore nel caricamento della rosa.\n$e')),
       data: (all) {
         final active = all.where((m) => m.active).toList();
-        final pending = active
-            .where((m) => m.role == ClubRole.pending)
-            .toList();
         final members = active.where((m) => m.role != ClubRole.pending);
         final shown = members.where((m) => m.inTeam(_team));
         final direttivo = shown
@@ -84,25 +78,6 @@ class _RosaPageState extends ConsumerState<RosaPage> {
               selected: {_cards},
               onSelectionChanged: (s) => setState(() => _cards = s.first),
             ),
-            if (isDirettivo && pending.isNotEmpty)
-              Card(
-                margin: const EdgeInsets.only(top: 12),
-                color: MilanacColors.surfaceHigh,
-                child: ListTile(
-                  leading: const Icon(
-                    Icons.person_add_alt_1_rounded,
-                    color: MilanacColors.gold,
-                  ),
-                  title: Text(
-                    pending.length == 1
-                        ? '1 richiesta di accesso'
-                        : '${pending.length} richieste di accesso',
-                  ),
-                  subtitle: const Text('Approvale nella Sala Direttivo'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => context.go('/direttivo'),
-                ),
-              ),
             if (_cards) ...[
               const SizedBox(height: 12),
               _CardGrid(

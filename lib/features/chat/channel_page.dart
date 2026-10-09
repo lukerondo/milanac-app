@@ -110,6 +110,10 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
     final muted =
         channel != null &&
         (ref.watch(mutedChannelsProvider).value?.contains(channel.id) ?? false);
+    final canWrite =
+        channel != null &&
+        (!channel.direttivoWrites ||
+            (ref.watch(profileProvider).value?.isDirettivo ?? false));
 
     return Scaffold(
       appBar: AppBar(
@@ -137,7 +141,7 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
           : Column(
               children: [
                 Expanded(child: _messages(channel)),
-                _composer(channel),
+                if (canWrite) _composer(channel) else const _ReadOnlyNote(),
               ],
             ),
     );
@@ -284,6 +288,31 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
 
   static bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+/// Canale in sola lettura (Comunicazioni): vi scrive solo il Direttivo.
+class _ReadOnlyNote extends StatelessWidget {
+  const _ReadOnlyNote();
+
+  @override
+  Widget build(BuildContext context) => const SafeArea(
+    top: false,
+    child: Padding(
+      padding: EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: Row(
+        children: [
+          Icon(Icons.campaign_rounded, color: MilanacColors.gold, size: 18),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Qui scrive solo il Direttivo: avvisi ufficiali, formazioni ed eventi.',
+              style: TextStyle(color: Colors.white60, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _DaySeparator extends StatelessWidget {

@@ -27,64 +27,6 @@ Future<void> startApp(WidgetTester tester) async {
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
-  testWidgets('Sala Direttivo: approva una richiesta di accesso', (
-    tester,
-  ) async {
-    await startApp(tester);
-    await openSection(tester, 'Sala Direttivo');
-
-    expect(find.text('RICHIESTE DI ACCESSO'), findsOneWidget);
-    expect(find.text('Nuovo Iscritto'), findsOneWidget);
-    expect(
-      find.textContaining('Chiede di entrare come Giocatore'),
-      findsOneWidget,
-    );
-    await tester.ensureVisible(find.text('Approva come Giocatore'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Approva come Giocatore'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Nuovo Iscritto approvato come Giocatore (Milan AC).'),
-      findsOneWidget,
-    );
-    expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
-
-    // Ora è in Rosa, tra i giocatori.
-    await openSection(tester, 'Rosa completa');
-    expect(find.text('Diavolo_9 · Dal 3 feb 2025'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Nuovo Iscritto'), 200);
-    expect(find.text('Nuovo Iscritto'), findsOneWidget);
-  });
-
-  testWidgets('Sala Direttivo: rifiuta una richiesta (con conferma)', (
-    tester,
-  ) async {
-    await startApp(tester);
-    await openSection(tester, 'Sala Direttivo');
-
-    await tester.ensureVisible(find.text('Rifiuta'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rifiuta'));
-    await tester.pumpAndSettle();
-    expect(find.text('Rifiutare Nuovo Iscritto?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Rifiuta'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
-    expect(find.text('Nuovo Iscritto'), findsNothing);
-  });
-
-  testWidgets('Rosa: per il Direttivo un rimando alle richieste in sala', (
-    tester,
-  ) async {
-    await startApp(tester);
-    await openSection(tester, 'Rosa completa');
-    expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
-    await tester.tap(find.text('1 richiesta di accesso'));
-    await tester.pumpAndSettle();
-    expect(find.text('SALA DIRETTIVO'), findsWidgets);
-  });
-
   testWidgets('Rosa: modifica del numero di maglia', (tester) async {
     await startApp(tester);
     await openSection(tester, 'Rosa completa');
@@ -109,27 +51,9 @@ void main() {
     expect(find.text('11'), findsOneWidget);
   });
 
-  testWidgets('Squadre MILANAC e FUTURO: approvazione e spostamenti', (
-    tester,
-  ) async {
+  testWidgets('Squadre MILANAC e FUTURO: spostamenti', (tester) async {
     await startApp(tester);
     await openSection(tester, 'Sala Direttivo');
-
-    // Richiesta approvata direttamente in MILANAC FUTURO.
-    await tester.ensureVisible(find.text('Squadra'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilterChip, 'Milan AC Futuro'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilterChip, 'Milan AC'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Approva come Giocatore'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Approva come Giocatore'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Nuovo Iscritto approvato come Giocatore (Milan AC Futuro).'),
-      findsOneWidget,
-    );
 
     // Rosa e squadre: Rossi passa anche in FUTURO.
     await tester.scrollUntilVisible(
@@ -140,7 +64,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rosa e squadre'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ChoiceChip, 'FUTURO (3)'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'FUTURO (2)'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Marco Rossi'), 200);
     final rossiCard = find.ancestor(
       of: find.text('Marco Rossi'),
@@ -156,16 +80,16 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.widgetWithText(ChoiceChip, 'FUTURO (4)'),
+      find.widgetWithText(ChoiceChip, 'FUTURO (3)'),
       -300,
     );
-    expect(find.widgetWithText(ChoiceChip, 'FUTURO (4)'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'FUTURO (3)'), findsOneWidget);
     tester.state<NavigatorState>(find.byType(Navigator).first).pop();
     await tester.pumpAndSettle();
 
-    // Filtro FUTURO in Rosa: Neri (entrambe), Verdi, il nuovo iscritto e ora Rossi.
+    // Filtro FUTURO in Rosa: Neri (entrambe), Verdi e ora Rossi.
     await openSection(tester, 'Rosa completa');
-    await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO (4)'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO (3)'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Paolo Verdi'), 200);
     expect(find.text('Andrea Neri'), findsOneWidget);

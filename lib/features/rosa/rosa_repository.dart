@@ -225,13 +225,6 @@ class DemoRosaRepository implements RosaRepository {
         accessory: 3,
       ),
     ),
-    Member(
-      id: 'p5',
-      displayName: 'Nuovo Iscritto',
-      gamertag: 'Rookie_77',
-      role: ClubRole.pending,
-      joinedAt: DateTime(2026, 10, 1),
-    ),
   ];
 
   void _emit() => _controller.add(List.of(_members));

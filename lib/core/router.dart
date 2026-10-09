@@ -98,7 +98,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // La Sala Direttivo (e le altre sezioni riservate) solo per il Direttivo.
-      final reserved = appSections.any((s) => s.direttivoOnly && s.path == loc);
+      final reserved =
+          appSections.any((s) => s.direttivoOnly && s.path == loc) ||
+          loc.startsWith('/direttivo/');
 
       // In demo non c'è login: intro e pagina di blocco rimandano alla Home;
       // accesso e registrazione restano visitabili per provarli.
@@ -155,6 +157,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/impostazioni',
         builder: (_, _) => const ImpostazioniPage(),
+      ),
+      // Presenze di stasera per il Direttivo (anche dalle notifiche).
+      GoRoute(
+        path: '/direttivo/stasera',
+        builder: (_, _) => const TonightAttendancePage(),
       ),
       // Partita (dalla notifica del risultato).
       GoRoute(
