@@ -7,6 +7,7 @@ import '../core/auth/providers.dart';
 import '../core/config.dart';
 import '../core/theme.dart';
 import '../features/rosa/member.dart';
+import '../features/volto/face_view.dart';
 
 const avatarsBucket = 'avatars';
 
@@ -53,6 +54,18 @@ class MemberAvatar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Il volto disegnato ha la precedenza su qualsiasi foto.
+    final face = member.face;
+    if (face != null) {
+      return ClipOval(
+        child: FaceView(
+          face: face,
+          size: radius * 2,
+          crop: FaceCrop.head,
+          background: MilanacColors.surfaceHigh,
+        ),
+      );
+    }
     final photo = memberPhoto(ref, member);
     final label = showNumber && member.shirtNumber != null
         ? '${member.shirtNumber}'

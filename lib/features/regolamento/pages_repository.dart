@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 
-/// Pagine di testo modificabili dal Direttivo (tabella `pages`).
-enum ClubPage { regolamento, storia }
+/// Pagine di testo libero modificabili dal Direttivo (tabella `pages`).
+/// Il regolamento non sta qui: vive nelle versioni di `rules_repository.dart`.
+enum ClubPage { storia }
 
 abstract class PagesRepository {
   Future<String> load(ClubPage page);
@@ -47,21 +48,18 @@ class _SupabasePagesRepository implements PagesRepository {
   }
 }
 
+/// La storia del club com'era nella vecchia app (demo e test).
 class DemoPagesRepository implements PagesRepository {
   final _content = <ClubPage, String>{
-    ClubPage.regolamento: '''# Regolamento interno
-## Presenze
-- Le partite iniziano alle 21:30: segna la presenza entro le 18:00.
-- In caso di ritardo indica l'orario di arrivo nella sezione Presenze.
-## Comportamento
-- Rispetto per compagni, avversari e arbitri.
-- Niente abbandoni a partita in corso.
-## Aggiornamenti
-- Aggiorna il gioco prima di ogni serata ufficiale.''',
-    ClubPage.storia: '''# La nostra storia
-Il MILANAC Pro Club nasce nel 2025 da un gruppo di amici tifosi rossoneri.
-## Milano siamo noi!
-Dai primi tornei FVPA alle sfide tra amici, la squadra cresce stagione dopo stagione.''',
+    ClubPage.storia:
+        'Il MilanAc viene fondato a settembre 2025 da Fabio Ruggieri, il quale '
+        '(assieme a Giuseppe e Christian) crede fortemente nel progetto di ricreare '
+        'le glorie vissute dall\'AC MILAN nel campo reale, anche nel campo virtuale.\n\n'
+        'La squadra si forma lentamente ma impreziosendosi sempre di più di elementi '
+        'validi, in quanto i fondatori sono convinti che un gruppo solido sia la base '
+        'di partenza di fondamentale importanza per ottenere i risultati che i tre si '
+        'aspettano.\n\n'
+        'I colori sociali del club sono il rosso ed il nero.',
   };
 
   @override

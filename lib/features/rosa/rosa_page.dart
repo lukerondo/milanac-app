@@ -289,17 +289,33 @@ class _MemberTile extends ConsumerWidget {
               member.roleLabel,
               highlight: member.role == ClubRole.direttivo,
             ),
-            if (member.fieldPosition != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  member.fieldPosition!,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (member.fieldPosition != null)
+                    Text(
+                      member.fieldPosition!,
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  if (member.shirtNumber != null) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '${member.shirtNumber}',
+                      style: const TextStyle(
+                        fontFamily: sportFont,
+                        color: MilanacColors.gold,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ],
               ),
+            ),
           ],
         ),
         onTap: () => _openCard(context, member),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
+import 'package:milanac/features/regolamento/parchment.dart';
 import 'package:milanac/main.dart';
 
 import 'helpers.dart';
@@ -177,22 +178,49 @@ void main() {
     await startApp(tester);
     await openSection(tester, 'Regolamento & Storia');
 
-    expect(find.text('Regolamento interno'), findsOneWidget);
+    // Pergamena con gli articoli dell'ultima versione pubblicata.
+    expect(find.text('REGOLAMENTO'), findsWidgets);
+    expect(find.text('ORGANIGRAMMA'), findsOneWidget);
+    expect(find.textContaining('Versione 1'), findsOneWidget);
+
+    // Il Direttivo apre la bozza, aggiunge un articolo e pubblica la versione 2.
     await tester.tap(find.text('Modifica'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byType(TextField),
-      '# Nuovo regolamento\n- Regola uno',
-    );
-    await tester.tap(find.text('SALVA'));
+    expect(find.text('BOZZA DEL REGOLAMENTO'), findsOneWidget);
+    await tester.tap(find.text('Nuovo articolo'));
     await tester.pumpAndSettle();
-
-    expect(find.text('Nuovo regolamento'), findsOneWidget);
-    expect(find.text('Regola uno'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Titolo'),
+      'Art. 4 – Chat',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Testo'),
+      'Niente insulti in chat.',
+    );
+    await tester.tap(find.text('Salva'));
+    await tester.pumpAndSettle();
+    expect(find.text('Art. 4 – Chat'), findsOneWidget);
+    await tester.tap(find.text('PUBBLICA'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pubblica'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Versione 2 pubblicata'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('ART. 4 – CHAT'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(ParchmentSheet),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('ART. 4 – CHAT'), findsOneWidget);
 
     await tester.tap(find.text('Cenni storici'));
     await tester.pumpAndSettle();
-    expect(find.text('La nostra storia'), findsOneWidget);
+    expect(find.text('LA NOSTRA STORIA'), findsOneWidget);
+    expect(find.textContaining('settembre 2025'), findsOneWidget);
   });
 
   testWidgets('Contatti social modificabili dal Direttivo', (tester) async {

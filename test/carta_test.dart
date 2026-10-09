@@ -104,7 +104,7 @@ void main() {
     expect(tierOf(90), CardTier.rossonera);
   });
 
-  testWidgets('La mia carta: il giocatore imposta il suo overall', (
+  testWidgets('La mia carta: stile di gioco, overall deciso dal Direttivo', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1080, 2340);
@@ -122,8 +122,9 @@ void main() {
     await tester.pumpAndSettle();
     await goToSection(tester, 'La mia carta');
 
-    expect(find.text('??'), findsOneWidget);
-    expect(find.textContaining('Completa la tua carta'), findsOneWidget);
+    // L'overall (82) lo ha assegnato il Direttivo; il giocatore cambia lo stile.
+    expect(find.text('82'), findsOneWidget);
+    expect(find.textContaining('non ha ancora assegnato'), findsNothing);
     await tester.tap(find.text('Modifica la mia carta'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Regista'));
@@ -131,9 +132,8 @@ void main() {
     await tester.tap(find.text('Salva la carta'));
     await tester.pumpAndSettle();
 
-    expect(find.text('70'), findsOneWidget);
+    expect(find.text('82'), findsOneWidget);
     expect(find.text('REGISTA'), findsOneWidget);
-    expect(find.textContaining('Completa la tua carta'), findsNothing);
   });
 
   testWidgets('Rosa: vista a carte', (tester) async {

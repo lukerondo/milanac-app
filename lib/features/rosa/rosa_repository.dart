@@ -9,6 +9,7 @@ import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/teams.dart';
 import '../../shared/member_photo.dart';
+import '../volto/face.dart';
 import 'member.dart';
 
 abstract class RosaRepository {
@@ -118,15 +119,26 @@ class DemoRosaRepository implements RosaRepository {
     Member(
       id: 'demo',
       displayName: 'Demo Direttivo',
+      firstName: 'Demo',
+      lastName: 'Direttivo',
+      birthYear: 1992,
+      motto: 'Milano siamo noi!',
       gamertag: 'MILANAC_Demo',
       role: ClubRole.direttivo,
+      direttivoRoles: const [DirettivoRole.capitano, DirettivoRole.gestore],
       fieldPosition: 'CC',
       shirtNumber: 10,
       joinedAt: DateTime(2025, 1, 10),
+      overall: 82,
+      face: const Face(skin: 2, hair: 3, hairColor: 0, brows: 1, beard: 2),
     ),
     Member(
       id: 'p2',
       displayName: 'Marco Rossi',
+      firstName: 'Marco',
+      lastName: 'Rossi',
+      birthYear: 1998,
+      motto: 'Prima il gol, poi tutto il resto.',
       gamertag: 'Diavolo_9',
       role: ClubRole.giocatore,
       fieldPosition: 'ATT',
@@ -135,10 +147,22 @@ class DemoRosaRepository implements RosaRepository {
       overall: 86,
       playStyle: 'Finalizzatore',
       platform: GamePlatform.ps5,
+      face: const Face(
+        skin: 1,
+        hair: 2,
+        hairColor: 1,
+        eyeColor: 1,
+        beard: 4,
+        mouth: 2,
+        accessory: 1,
+      ),
     ),
     Member(
       id: 'p3',
       displayName: 'Luca Bianchi',
+      firstName: 'Luca',
+      lastName: 'Bianchi',
+      birthYear: 1995,
       gamertag: 'Muro_Rossonero',
       role: ClubRole.giocatore,
       fieldPosition: 'DC',
@@ -147,10 +171,22 @@ class DemoRosaRepository implements RosaRepository {
       overall: 78,
       playStyle: 'Muro',
       platform: GamePlatform.ps5,
+      face: const Face(
+        skin: 3,
+        hair: 0,
+        hairColor: 0,
+        eyes: 1,
+        brows: 2,
+        beard: 3,
+        mouth: 1,
+      ),
     ),
     Member(
       id: 'p4',
       displayName: 'Andrea Neri',
+      firstName: 'Andrea',
+      lastName: 'Neri',
+      birthYear: 2001,
       gamertag: 'Saracinesca1',
       role: ClubRole.giocatore,
       fieldPosition: 'POR',
@@ -158,10 +194,21 @@ class DemoRosaRepository implements RosaRepository {
       joinedAt: DateTime(2025, 4, 20),
       overall: 70,
       teams: {Team.milanac, Team.futuro},
+      face: const Face(
+        skin: 0,
+        hair: 4,
+        hairColor: 3,
+        eyes: 2,
+        eyeColor: 2,
+        accessory: 2,
+      ),
     ),
     Member(
       id: 'p6',
       displayName: 'Paolo Verdi',
+      firstName: 'Paolo',
+      lastName: 'Verdi',
+      birthYear: 2003,
       gamertag: 'Futuro_23',
       role: ClubRole.giocatore,
       fieldPosition: 'CC',
@@ -169,6 +216,14 @@ class DemoRosaRepository implements RosaRepository {
       joinedAt: DateTime(2025, 9, 1),
       overall: 62,
       teams: {Team.futuro},
+      face: const Face(
+        skin: 4,
+        hair: 6,
+        hairColor: 0,
+        brows: 1,
+        beard: 1,
+        accessory: 3,
+      ),
     ),
     Member(
       id: 'p5',

@@ -65,8 +65,8 @@ void main() {
     await goToSection(tester, 'Rosa completa');
     await tester.tap(find.text('Carte'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('ROSSI'));
-    await tester.tap(find.text('ROSSI'));
+    await tester.ensureVisible(find.text('MARCO ROSSI'));
+    await tester.tap(find.text('MARCO ROSSI'));
     await tester.pumpAndSettle();
 
     // Rossi è stato Uomo partita: carta speciale con scelta della carta base.
