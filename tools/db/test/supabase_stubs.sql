@@ -64,3 +64,12 @@ returns bigint language sql as $$
   insert into net.calls (url, body, headers) values (url, body, headers) returning id
 $$;
 grant usage on schema net to anon, authenticated, service_role;
+
+-- pg_cron finto: registra i lavori programmati invece di eseguirli.
+create schema cron;
+create table cron.job (jobid bigserial primary key, jobname text, schedule text, command text);
+create table cron.job_run_details (runid bigserial primary key, end_time timestamptz);
+create function cron.schedule(job_name text, schedule text, command text) returns bigint
+language sql as $$
+  insert into cron.job (jobname, schedule, command) values (job_name, schedule, command) returning jobid
+$$;

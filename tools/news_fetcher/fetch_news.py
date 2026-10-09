@@ -54,6 +54,7 @@ class NewsItem:
     url: str
     published_at: str
     image_url: str | None = None
+    platform: str | None = None   # solo per la categoria "console": ps5 o xbox
 
 
 # ----------------------------------------------------------------------------- parsing
@@ -211,12 +212,27 @@ def is_relevant(item: NewsItem, require: list[str] | None) -> bool:
 
 
 def classify(item: NewsItem) -> str:
-    """Sceglie la categoria più specifica in base alle parole chiave, altrimenti quella della fonte."""
+    """Sceglie la categoria più specifica in base alle parole chiave, altrimenti quella della fonte.
+    Le notizie sulle console restano "console" (parlano anch'esse di aggiornamenti)."""
+    if item.category == "console":
+        return "console"
     haystack = f" {item.title} ".lower()
     for category, words in CATEGORY_KEYWORDS:
         if any(w in haystack for w in words):
             return category
     return item.category
+
+
+def platform_of(item: NewsItem) -> str | None:
+    """Per le notizie sulle console: la piattaforma di cui parlano (avviso a chi la usa)."""
+    if item.category != "console":
+        return None
+    haystack = f" {item.title} {item.summary} ".lower()
+    if "xbox" in haystack:
+        return "xbox"
+    if "ps5" in haystack or "playstation" in haystack:
+        return "ps5"
+    return None
 
 
 def select(items: list[NewsItem], source: dict, now: datetime) -> list[NewsItem]:
@@ -228,6 +244,7 @@ def select(items: list[NewsItem], source: dict, now: datetime) -> list[NewsItem]
         if datetime.fromisoformat(item.published_at) < oldest:
             continue
         item.category = classify(item)
+        item.platform = platform_of(item)
         result.append(item)
     result.sort(key=lambda i: i.published_at, reverse=True)
     return result[: source.get("max_items", DEFAULT_MAX_ITEMS)]

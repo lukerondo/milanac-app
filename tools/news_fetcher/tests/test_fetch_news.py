@@ -67,6 +67,24 @@ class AtomTest(unittest.TestCase):
         self.assertEqual(items[0].image_url, "https://b.thumbs.redditmedia.com/x.jpg")
 
 
+class ConsoleTest(unittest.TestCase):
+    def test_console_resta_console_con_piattaforma(self):
+        now = datetime.now(timezone.utc)
+        source = {"name": "GN PS5", "category": "console", "require": ["aggiornamento di sistema"]}
+        ps5 = fn.NewsItem(source="GN", category="console", title="PS5: aggiornamento di sistema 10.02",
+                          summary="Nuovo firmware per PlayStation 5", url="https://x.it/ps5",
+                          published_at=now.isoformat())
+        xbox = fn.NewsItem(source="GN", category="console", title="Xbox, aggiornamento di sistema di ottobre",
+                           summary="", url="https://x.it/xbox", published_at=now.isoformat())
+        fuori = fn.NewsItem(source="GN", category="console", title="Nuovo controller in vendita",
+                            summary="", url="https://x.it/pad", published_at=now.isoformat())
+        items = {i.url: i for i in fn.select([ps5, xbox, fuori], source, now)}
+        self.assertEqual(set(items), {"https://x.it/ps5", "https://x.it/xbox"})
+        self.assertEqual(items["https://x.it/ps5"].category, "console")  # non "aggiornamenti"
+        self.assertEqual(items["https://x.it/ps5"].platform, "ps5")
+        self.assertEqual(items["https://x.it/xbox"].platform, "xbox")
+
+
 class SupabaseTest(unittest.TestCase):
     def test_user_agent_non_da_browser(self):
         # Le chiavi sb_secret_ vengono rifiutate (401) con un User-Agent da browser.
@@ -77,7 +95,7 @@ class SupabaseTest(unittest.TestCase):
 class SourcesTest(unittest.TestCase):
     def test_file_fonti_valido(self):
         sources = fn.load_sources(Path(fn.__file__).with_name("sources.json"))
-        categories = {"tornei", "aggiornamenti", "ultimate_team", "pro_clubs"}
+        categories = {"tornei", "aggiornamenti", "ultimate_team", "pro_clubs", "console"}
         for s in sources:
             self.assertIn(s["category"], categories, s["name"])
             self.assertTrue(s["url"].startswith("https://"), s["name"])

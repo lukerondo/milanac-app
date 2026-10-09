@@ -15,8 +15,9 @@ run() { psql -v ON_ERROR_STOP=1 -q -X -d "$DB" "$@"; }
 run -f tools/db/test/supabase_stubs.sql
 for f in supabase/migrations/*.sql; do
   echo "→ $(basename "$f")"
-  # pg_net non esiste su un PostgreSQL normale: lo sostituisce lo stub.
-  sed -E 's/^create extension if not exists pg_net.*$/-- (pg_net: stub di test)/' "$f" \
+  # pg_net e pg_cron non esistono su un PostgreSQL normale: li sostituiscono gli stub.
+  sed -E -e 's/^create extension if not exists pg_net.*$/-- (pg_net: stub di test)/' \
+         -e 's/^create extension if not exists pg_cron.*$/-- (pg_cron: stub di test)/' "$f" \
     | run -1 -f -
 done
 echo "→ controlli"

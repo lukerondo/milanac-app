@@ -18,6 +18,14 @@ begin
   perform set_config('request.jwt.claim.sub', coalesce(uid::text, ''), false);
 end $$;
 
+-- Fissa "adesso" (app_now) a un orario italiano di oggi: le presenze chiudono alle 18:30.
+create function pg_temp.at_rome(t text) returns void language plpgsql as $$
+begin
+  perform set_config('milanac.now',
+    ((((now() at time zone 'Europe/Rome')::date)::text || ' ' || t)::timestamp at time zone 'Europe/Rome')::text,
+    false);
+end $$;
+
 insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-00000000000d', 'd@example.com', '{"full_name": "Direttore"}'),
   ('00000000-0000-0000-0000-00000000000a', 'g@example.com', '{"name": "Giocatore"}'),
@@ -91,6 +99,11 @@ do $$ begin
   assert (select count(*) from net.calls) = 1, 'una sola notifica: solo alla pubblicazione';
   assert (select body->>'kind' from net.calls) = 'formation', 'notifica di tipo formazione';
   assert (select headers->>'x-milanac-secret' from net.calls) = 's3greto', 'segreto nell''header';
+  assert (select count(*) from messages m join channels c on c.id = m.channel_id
+          where c.slug = 'comunicazioni' and m.kind = 'system' and m.meta->>'type' = 'formation') = 1,
+    'formazione annunciata in Comunicazioni';
+  assert (select body from messages where meta->>'type' = 'formation')
+         like 'Formazione Milan AC (4-3-3): POR Giocatore%', 'testo dell''annuncio';
 end $$;
 
 -- Eliminazione account: profilo e token spariscono, la formazione resta.
@@ -160,27 +173,53 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000e2', 'e2@example.com');
 update profiles set club_role = 'giocatore' where id in ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000e2');
 set role authenticated;
+reset role;
+delete from net.calls;
+set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
-insert into shared_links (category, title, url, tag) values ('build', 'Build ATT', 'https://youtu.be/abc', 'ATT');
+-- Un giocatore propone un video (anche se chiede "pubblicato", resta una proposta).
+insert into shared_links (category, title, url, tag, status) values ('video', 'Build ATT', 'https://youtu.be/abc', 'ATT', 'pubblicato');
 select pg_temp.expect_error(
-  $q$insert into shared_links (category, title, url, created_by) values ('build', 'X', 'https://x.it', '00000000-0000-0000-0000-00000000000d')$q$,
+  $q$insert into shared_links (category, title, url, created_by) values ('video', 'X', 'https://x.it', '00000000-0000-0000-0000-00000000000d')$q$,
   'row-level security');
 select pg_temp.expect_error(
-  $q$insert into shared_links (category, title, url) values ('build', 'X', 'javascript:alert(1)')$q$,
+  $q$insert into shared_links (category, title, url) values ('video', 'X', 'javascript:alert(1)')$q$,
   'shared_links_url_check');
+select pg_temp.expect_error(
+  $q$insert into shared_links (category, title, url) values ('build', 'X', 'https://x.it')$q$,
+  'shared_links_category_check');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
 update shared_links set title = 'Rubato' where tag = 'ATT';
 delete from shared_links where category = 'musica';
+do $$ begin
+  assert (select count(*) from shared_links where tag = 'ATT') = 0, 'la proposta altrui non si vede';
+end $$;
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
 do $$ begin
   assert (select title from shared_links where tag = 'ATT') = 'Build ATT', 'un altro membro non modifica';
+  assert (select status from shared_links where tag = 'ATT') = 'proposto', 'il giocatore può solo proporre';
   assert (select count(*) from shared_links where category = 'musica') = 5, 'un membro non cancella i link altrui';
+end $$;
+-- Il Direttivo pubblica: da quel momento lo vedono tutti.
+update shared_links set status = 'pubblicato' where tag = 'ATT';
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+do $$ begin
+  assert (select count(*) from shared_links where tag = 'ATT') = 1, 'video pubblicato visibile a tutti';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select published_by from shared_links where tag = 'ATT') = '00000000-0000-0000-0000-00000000000d',
+    'chi ha pubblicato';
 end $$;
 delete from shared_links where tag = 'ATT';
 do $$ begin
-  assert (select count(*) from shared_links where category = 'build') = 0, 'il Direttivo cancella';
+  assert (select count(*) from shared_links where category = 'video') = 0, 'il Direttivo cancella';
 end $$;
 reset role;
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' = 'video_proposed') = 1, 'avviso della proposta';
+  assert (select count(*) from net.calls where body->>'kind' = 'video_published') = 1, 'avviso della pubblicazione';
+end $$;
 
 -- Carta FUT: il giocatore imposta stile e piattaforma; l'overall lo decide il Direttivo.
 set role authenticated;
@@ -241,21 +280,19 @@ select pg_temp.expect_error(
 select pg_temp.expect_error(
   $q$insert into messages (channel_id, body) select id, '   ' from channels where slug = 'main'$q$,
   'messages_check');
--- Ritardo di stasera → messaggio automatico in Presenze.
-insert into attendance (player_id, date, status, arrival_time, note)
-values ('00000000-0000-0000-0000-0000000000e1', (now() at time zone 'Europe/Rome')::date, 'ritardo', '21:50', 'Traffico');
-update attendance set note = 'Traffico' where player_id = '00000000-0000-0000-0000-0000000000e1';
-update attendance set status = 'presente' where player_id = '00000000-0000-0000-0000-0000000000e1';
-insert into channel_mutes (channel_id) select id from channels where slug = 'fantacalcio';
+-- Una presenza di stasera (le risposte sono aperte alle 17:00) non produce messaggi in chat.
+select pg_temp.at_rome('17:00');
+insert into attendance (player_id, date, status)
+values ('00000000-0000-0000-0000-0000000000e1', (now() at time zone 'Europe/Rome')::date, 'presente');
+insert into channel_mutes (channel_id) select id from channels where slug = 'tattiche';
 
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
 do $$
 declare o record;
 begin
   assert (select count(*) from messages m join channels c on c.id = m.channel_id
-          where c.slug = 'presenze' and m.kind = 'system') = 2, 'ritardo + "alla fine ci sarà" (nota invariata ignorata)';
-  assert (select body from messages where kind = 'system' order by created_at limit 1)
-         like '% stasera arriva in ritardo, alle 21:50 · Traffico', 'testo del ritardo';
+          where m.meta->>'type' = 'attendance') = 0, 'niente messaggi automatici per le presenze';
+  assert (select count(*) from channels where slug in ('presenze', 'fantacalcio')) = 0, 'canali Presenze e Fantacalcio spariti';
   select * into o from chat_overview() where channel_id = (select id from channels where slug = 'main');
   assert o.unread = 1 and o.last_body = 'Ciao a tutti', 'non letti e ultimo messaggio per il Direttivo';
   assert (select count(*) from channel_mutes) = 0, 'i silenziati altrui non sono visibili';
@@ -276,7 +313,7 @@ delete from messages where body = 'Ciao a tutti';
 reset role;
 do $$ begin
   assert (select count(*) from messages where body = 'Ciao a tutti') = 0, 'il Direttivo elimina';
-  assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 3, 'una notifica per messaggio';
+  assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 1, 'una notifica per messaggio';
 end $$;
 
 -- Tornei: li gestisce il Direttivo; eliminando un torneo le partite restano.
@@ -466,3 +503,140 @@ do $$ begin
   assert check_direttivo_password('nuova-password'), 'nuova password attiva';
   assert not check_direttivo_password('prova-test'), 'vecchia password disattivata';
 end $$;
+
+-- Presenze: nota obbligatoria per il ritardo, risposte chiuse alle 18:30, promemoria alle 18:00
+-- e assenze automatiche alle 18:30 (anche per i giorni successivi si risponde in anticipo).
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+set role authenticated;
+select pg_temp.at_rome('17:00');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+select pg_temp.expect_error(
+  $q$insert into attendance (player_id, date, status, arrival_time) values ('00000000-0000-0000-0000-0000000000e2', (now() at time zone 'Europe/Rome')::date, 'ritardo', '21:50')$q$,
+  'attendance_late_note_check');
+insert into attendance (player_id, date, status, arrival_time, note)
+values ('00000000-0000-0000-0000-0000000000e2', (now() at time zone 'Europe/Rome')::date, 'ritardo', '21:50', 'Traffico');
+insert into attendance (player_id, date, status)
+values ('00000000-0000-0000-0000-0000000000e2', (now() at time zone 'Europe/Rome')::date + 1, 'presente');
+-- 18:05: il promemoria va solo a chi non ha risposto per stasera (D, a1, a2).
+select pg_temp.at_rome('18:05');
+reset role;
+select pg_temp.as_user(null);
+select attendance_tick();
+select attendance_tick();
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' = 'attendance_reminder') = 1, 'un solo promemoria';
+  assert (select jsonb_array_length(body->'users') from net.calls where body->>'kind' = 'attendance_reminder') = 3,
+    'promemoria a chi non ha risposto';
+  assert (select count(*) from attendance where auto) = 0, 'prima delle 18:30 nessuna assenza automatica';
+end $$;
+-- 18:31: i giocatori non cambiano più nulla; il Direttivo sì (e resta registrato).
+set role authenticated;
+select pg_temp.at_rome('18:31');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+update attendance set status = 'presente', note = null
+  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = (now() at time zone 'Europe/Rome')::date;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
+select pg_temp.expect_error(
+  $q$insert into attendance (player_id, date, status) values ('00000000-0000-0000-0000-0000000000a1', (now() at time zone 'Europe/Rome')::date, 'presente')$q$,
+  'row-level security');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select status from attendance where player_id = '00000000-0000-0000-0000-0000000000e2'
+          and date = (now() at time zone 'Europe/Rome')::date) = 'ritardo', 'dopo le 18:30 il giocatore non modifica';
+end $$;
+update attendance set status = 'presente', note = null
+  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = (now() at time zone 'Europe/Rome')::date;
+reset role;
+select pg_temp.as_user(null);
+select attendance_tick();
+select attendance_tick();
+do $$ begin
+  assert (select status from attendance where player_id = '00000000-0000-0000-0000-0000000000e2'
+          and date = (now() at time zone 'Europe/Rome')::date) = 'presente', 'il Direttivo corregge dopo le 18:30';
+  assert (select set_by from attendance where player_id = '00000000-0000-0000-0000-0000000000e2'
+          and date = (now() at time zone 'Europe/Rome')::date) = '00000000-0000-0000-0000-00000000000d',
+    'la correzione del Direttivo resta registrata';
+  assert (select count(*) from attendance where auto) = 3, 'assenze automatiche per chi non ha risposto';
+  assert (select count(*) from net.calls where body->>'kind' = 'attendance_auto_absent') = 1, 'un solo avviso di assenza';
+  assert (select jsonb_array_length(body->'users') from net.calls where body->>'kind' = 'attendance_auto_absent') = 3,
+    'avviso a chi è risultato assente';
+  assert (select count(*) from daily_jobs) = 2, 'lavori del giorno segnati una volta sola';
+  assert (select count(*) from attendance where player_id = '00000000-0000-0000-0000-0000000000e2' and auto) = 0,
+    'chi ha risposto non è assente d''ufficio';
+end $$;
+-- L'assenza automatica la corregge solo il Direttivo.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
+update attendance set status = 'presente'
+  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = (now() at time zone 'Europe/Rome')::date;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select auto from attendance where player_id = '00000000-0000-0000-0000-0000000000a1'
+          and date = (now() at time zone 'Europe/Rome')::date), 'il giocatore non toglie l''assenza automatica';
+end $$;
+update attendance set status = 'presente'
+  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = (now() at time zone 'Europe/Rome')::date;
+reset role;
+do $$ begin
+  assert (select not auto and set_by = '00000000-0000-0000-0000-00000000000d' from attendance
+          where player_id = '00000000-0000-0000-0000-0000000000a1' and date = (now() at time zone 'Europe/Rome')::date),
+    'corretta dal Direttivo';
+  assert (select count(*) from cron.job where jobname = 'presenze' and schedule = '* * * * *') = 1,
+    'controllo delle presenze ogni minuto';
+end $$;
+select set_config('milanac.now', '', false);
+
+-- Eventi: alla creazione parte la notifica alla squadra (o a tutti).
+delete from net.calls;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into events (type, title, starts_at, team) values ('amichevole', 'Amichevole vs Rivali', now() + interval '2 days', 'milanac');
+reset role;
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' = 'event') = 1, 'notifica del nuovo evento';
+end $$;
+
+-- Canali di squadra: chi è solo in una squadra non vede l'altra; in Comunicazioni scrive solo il Direttivo.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert (select count(*) from channels where slug = 'milanac') = 1, 'la propria squadra si vede';
+  assert (select count(*) from channels where slug = 'futuro') = 0, 'l''altra squadra no';
+  assert (select count(*) from channels where slug = 'comunicazioni') = 1, 'Comunicazioni per tutti';
+  assert (select count(*) from channels where slug = 'main' and name = 'Generale') = 1, 'canale Generale';
+end $$;
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body) select id, 'intruso' from channels where slug = 'comunicazioni'$q$,
+  'row-level security');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a2');
+do $$ begin
+  assert (select count(*) from channels where slug in ('milanac', 'futuro')) = 2, 'il Direttivo vede entrambe le squadre';
+end $$;
+insert into messages (channel_id, body) select id, 'Domenica si gioca alle 22' from channels where slug = 'comunicazioni';
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert (select count(*) from messages where body = 'Domenica si gioca alle 22') = 1, 'le comunicazioni si leggono';
+end $$;
+reset role;
+
+-- Notizie: un avviso per gli aggiornamenti di FC 27 (a tutti) e per le console (per piattaforma),
+-- al massimo uno ogni 12 ore per tipo; le notizie vecchie non avvisano.
+delete from net.calls;
+insert into news (source, category, title, url, published_at) values
+  ('EA', 'aggiornamenti', 'Title Update 3', 'https://ea.com/tu3', now()),
+  ('GN', 'aggiornamenti', 'Title Update 3 (ripresa)', 'https://gn.it/tu3', now()),
+  ('GN', 'aggiornamenti', 'Vecchia patch', 'https://gn.it/old', now() - interval '10 days');
+insert into news (source, category, title, url, published_at, platform) values
+  ('GN', 'console', 'PS5: aggiornamento di sistema 10.02', 'https://gn.it/ps5', now(), 'ps5'),
+  ('GN', 'console', 'Console senza piattaforma', 'https://gn.it/console', now(), null);
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' = 'news') = 2, 'un avviso per FC 27 e uno per PS5';
+  assert (select notified_at is not null from news where url = 'https://ea.com/tu3'), 'avvisata';
+  assert (select notified_at is null from news where url = 'https://gn.it/tu3'), 'ripresa non avvisata';
+  assert (select notified_at is null from news where url = 'https://gn.it/old'), 'vecchia non avvisata';
+end $$;
+select pg_temp.expect_error(
+  $q$insert into news (source, category, title, url, platform) values ('GN', 'console', 'X', 'https://gn.it/x3', 'switch')$q$,
+  'news_platform_check');

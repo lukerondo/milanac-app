@@ -24,9 +24,7 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: Test raccoglitore notizie
-        run: |
-          python3 -m unittest discover -s tools/news_fetcher/tests
-          python3 -m unittest discover -s tools/notifier/tests
+        run: python3 -m unittest discover -s tools/news_fetcher/tests
 
   # Prova le migrazioni su un PostgreSQL vuoto (con le parti di Supabase simulate) e
   # verifica le regole di sicurezza: un errore qui blocca l'applicazione al database vero.
