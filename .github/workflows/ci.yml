@@ -45,8 +45,8 @@ jobs:
           cd / && sudo -u postgres psql -qc "alter user postgres password 'postgres'"
       - run: tools/db/test/run.sh
 
-  # APK di prova: a ogni pull request, a ogni modifica di main o a mano.
-  # Viene pubblicato come file .apk nella release "APK di prova" (comodo da scaricare dal telefono).
+  # APK di prova: a ogni pull request (solo come artifact), a ogni modifica di main o a mano
+  # (pubblicato nella release "APK di prova", comoda da scaricare dal telefono).
   apk:
     if: >
       github.event_name == 'pull_request' ||
@@ -93,7 +93,10 @@ jobs:
               assert der in open(apk, "rb").read(), f"{apk} non è firmato con la chiave di prova"
           print("Firma corretta.")
           PY
+      # Solo a mano o da main: le build delle pull request restano come artifact, così la release
+      # non viene sostituita a ogni push (un download a metà sostituzione dà un APK rotto).
       - name: Pubblica nella release "APK di prova"
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
