@@ -5,13 +5,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/auth/profile.dart';
 import '../core/auth/providers.dart';
-import '../core/push/device_tokens.dart';
-import '../core/config.dart';
 import '../core/teams.dart';
 import '../core/theme.dart';
 import '../features/chat/chat_list_page.dart';
 import '../features/chat/chat_repository.dart';
-import '../features/privacy/privacy_page.dart';
 import 'club_links.dart';
 import 'club_links_editor.dart';
 import 'sections.dart';

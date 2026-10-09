@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prova tutte le migrazioni su un database PostgreSQL vuoto, poi esegue i controlli di checks.sql.
 # Uso: PGHOST=... PGUSER=... PGPASSWORD=... tools/db/test/run.sh
-# (in CI usa il servizio postgres; in locale qualsiasi PostgreSQL 15+).
+# (in CI usa il PostgreSQL già presente sul runner; in locale qualsiasi PostgreSQL 15+).
 set -euo pipefail
 export PGOPTIONS="-c client_min_messages=error"
 cd "$(dirname "$0")/../../.."
