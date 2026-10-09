@@ -182,26 +182,29 @@ do $$ begin
 end $$;
 reset role;
 
--- Carta FUT: il giocatore imposta overall/stile/piattaforma sul proprio profilo, con limiti.
+-- Carta FUT: il giocatore imposta stile e piattaforma; l'overall lo decide il Direttivo.
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
-update profiles set overall = 84, play_style = 'Finalizzatore', platform = 'ps5'
+update profiles set play_style = 'Finalizzatore', platform = 'ps5'
   where id = '00000000-0000-0000-0000-0000000000e1';
 select pg_temp.expect_error(
-  $q$update profiles set overall = 120 where id = '00000000-0000-0000-0000-0000000000e1'$q$,
-  'profiles_overall_check');
+  $q$update profiles set overall = 84 where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'Solo il Direttivo');
 select pg_temp.expect_error(
   $q$update profiles set platform = 'switch' where id = '00000000-0000-0000-0000-0000000000e1'$q$,
   'profiles_platform_check');
 -- Non può cambiare la carta di un altro.
-update profiles set overall = 40 where id = '00000000-0000-0000-0000-0000000000e2';
+update profiles set play_style = 'Rubato' where id = '00000000-0000-0000-0000-0000000000e2';
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select pg_temp.expect_error(
+  $q$update profiles set overall = 120 where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'profiles_overall_check');
 update profiles set overall = 86 where id = '00000000-0000-0000-0000-0000000000e1';
 reset role;
 do $$ begin
   assert (select overall from profiles where id = '00000000-0000-0000-0000-0000000000e1') = 86,
-    'il Direttivo corregge l''overall';
-  assert (select overall from profiles where id = '00000000-0000-0000-0000-0000000000e2') is null,
+    'il Direttivo imposta l''overall';
+  assert (select play_style from profiles where id = '00000000-0000-0000-0000-0000000000e2') is null,
     'nessuno modifica la carta altrui';
 end $$;
 
@@ -347,7 +350,7 @@ do $$ begin
   assert (select count(*) from channels where direttivo_only) = 1, 'canale Sala Direttivo creato';
 end $$;
 
--- Voti: segreti, niente autovoto, solo a partita finita; medie, Uomo partita e TOTW dalle funzioni.
+-- Statistiche di sempre per i traguardi (niente più voti).
 reset role;
 select pg_temp.as_user(null);
 delete from net.calls;
@@ -355,36 +358,12 @@ insert into matches (id, kind, opponent, played_at, team, goals_for, goals_again
 values ('00000000-0000-0000-0000-0000000000b1', 'torneo', 'Dinamo', now(), 'milanac', 2, 1),
        ('00000000-0000-0000-0000-0000000000b2', 'torneo', 'Futura', now() + interval '1 day', 'milanac', null, null);
 set role authenticated;
-select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
-insert into match_ratings (match_id, player_id, rating) values
-  ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-00000000000d', 8),
-  ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000e2', 6);
-select pg_temp.expect_error(
-  $q$insert into match_ratings (match_id, player_id, rating) values ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000e1', 10)$q$,
-  'match_ratings_check');
-select pg_temp.expect_error(
-  $q$insert into match_ratings (match_id, player_id, rating) values ('00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-00000000000d', 7)$q$,
-  'row-level security');
-select pg_temp.expect_error(
-  $q$insert into match_ratings (match_id, player_id, rating) values ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000e2', 11)$q$,
-  'match_ratings_rating_check');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
-insert into match_ratings (match_id, player_id, rating) values
-  ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-00000000000d', 9);
-do $$
-declare s record;
-begin
-  assert (select count(*) from match_ratings) = 1, 'si vedono solo i propri voti';
-  select * into s from match_rating_summary('00000000-0000-0000-0000-0000000000b1') limit 1;
-  assert s.player_id = '00000000-0000-0000-0000-00000000000d' and s.avg_rating = 8.5 and s.votes = 2 and s.is_mvp,
-    'Uomo partita: media 8,5 con 2 voti';
-  assert (select count(*) from match_mvps()) = 1, 'un Uomo partita';
-  assert (select count(*) from team_of_the_week(current_date, 'milanac')) = 1, 'squadra della settimana';
-  assert (player_stats('00000000-0000-0000-0000-00000000000d')->>'mvp')::int = 1, 'mvp nelle statistiche';
-  assert (player_stats('00000000-0000-0000-0000-00000000000d')->>'totw')::int = 1, 'totw nelle statistiche';
+do $$ begin
   assert (player_stats('00000000-0000-0000-0000-0000000000e1')->>'presences')::int = 1, 'presenze di sempre';
+  assert (player_stats('00000000-0000-0000-0000-0000000000e1')->>'late')::int = 0, 'ritardi di sempre';
 end $$;
--- Risultato inserito → una notifica "vota i compagni".
+-- Risultato inserito → una notifica alla squadra.
 reset role;
 delete from net.calls;
 set role authenticated;
@@ -395,4 +374,95 @@ reset role;
 do $$ begin
   assert (select count(*) from net.calls where body->>'kind' = 'match_result') = 1,
     'una sola notifica per risultato';
+end $$;
+
+-- Registrazione: dati completi, password del Direttivo, regolamento da accettare.
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+-- La password del club, solo per il test (l'hash vero sta nella migrazione).
+update app_config set value = crypt('prova-test', gen_salt('bf')) where key = 'direttivo_password_hash';
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000a1', 'r1@example.com'),
+  ('00000000-0000-0000-0000-0000000000a2', 'r2@example.com');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
+do $$ begin
+  assert (select count(*) from rules_versions) = 1, 'chi si registra legge il regolamento (versione 1)';
+  assert (select count(*) from pages where slug = 'storia') = 1, 'e la storia del club';
+end $$;
+select pg_temp.expect_error($q$select accept_rules(1)$q$, 'Completa prima');
+select pg_temp.expect_error(
+  $q$select complete_registration('', 'Rossi', 1995, 'ROSSI', null, array['milanac'], false, null, null, 'ATT', 9, 'ps5', '{}')$q$,
+  'Nome non valido');
+select pg_temp.expect_error(
+  $q$select complete_registration('Mario', 'Rossi', 1995, 'NOME TROPPO LUNGO!', null, array['milanac'], false, null, null, 'ATT', 9, 'ps5', '{}')$q$,
+  'massimo 14');
+select pg_temp.expect_error(
+  $q$select complete_registration('Mario', 'Rossi', 1995, 'ROSSI', null, array['milanac', 'futuro'], false, null, null, 'ATT', 9, 'ps5', '{}')$q$,
+  'una sola squadra');
+select complete_registration('Mario', 'Rossi', 1995, ' Rossi ', 'Forza Milan', array['milanac'], false, null, null, 'ATT', 9, 'ps5', '{"skin": 2}');
+do $$ begin
+  assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 'pending',
+    'ancora fuori finché non accetta il regolamento';
+  assert (select display_name from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 'Rossi', 'nome sulla carta';
+  assert (select overall from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 60, 'overall iniziale 60';
+  assert (select count(*) from events) = 0, 'chi non è entrato non legge i dati del club';
+end $$;
+select pg_temp.expect_error($q$select accept_rules(7)$q$, 'non aggiornata');
+select pg_temp.expect_error(
+  $q$update profiles set requested_role = 'direttivo' where id = '00000000-0000-0000-0000-0000000000a1'$q$,
+  'Solo il Direttivo');
+select accept_rules(1);
+do $$ begin
+  assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 'giocatore', 'entrato come giocatore';
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 1, 'versione accettata';
+  assert (select count(*) from events) >= 1, 'da membro legge i dati del club';
+end $$;
+select pg_temp.expect_error($q$select publish_rules()$q$, 'Solo il Direttivo');
+select pg_temp.expect_error($q$select set_direttivo_password('prova-test', 'nuova-password')$q$, 'Solo il Direttivo');
+
+-- Direttivo: serve la password del club; può stare in entrambe le squadre.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a2');
+select pg_temp.expect_error(
+  $q$select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['milanac', 'futuro'], true, 'sbagliata', array['capitano'], 'CC', 10, 'ps5', '{}')$q$,
+  'Password del Direttivo');
+select pg_temp.expect_error(
+  $q$select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['milanac', 'futuro'], true, 'prova-test', '{}', 'CC', 10, 'ps5', '{}')$q$,
+  'almeno un ruolo');
+select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['futuro', 'milanac', 'milanac'], true, 'prova-test', array['capitano', 'gestore'], 'CC', 10, 'ps5', '{}');
+select accept_rules(1);
+do $$ begin
+  assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 'direttivo', 'entrato nel Direttivo';
+  assert (select teams from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['milanac', 'futuro'],
+    'squadre in ordine, senza doppioni';
+  assert (select direttivo_roles from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['capitano', 'gestore'], 'etichette';
+end $$;
+-- Nuova versione del regolamento: notifica a tutti e nuova accettazione.
+insert into rules_articles (sort_order, title, body) values (1, 'Art. 1 – Presenze', 'Rispondi entro le 18:30.');
+do $$ begin
+  assert (select publish_rules()) = 2, 'versione 2';
+end $$;
+reset role;
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' = 'rules') = 1, 'notifica del nuovo regolamento';
+  assert (select jsonb_array_length(snapshot) from rules_versions where number = 2) = 2, 'due articoli nella versione 2';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
+select pg_temp.expect_error($q$select accept_rules(1)$q$, 'non aggiornata');
+select accept_rules(2);
+do $$ begin
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 2, 'riaccettata la versione 2';
+  assert (select count(*) from rules_articles) = 0, 'la bozza non si legge dai giocatori';
+end $$;
+-- Cambio della password del club.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a2');
+select pg_temp.expect_error($q$select set_direttivo_password('sbagliata', 'nuova-password')$q$, 'non corretta');
+select pg_temp.expect_error($q$select set_direttivo_password('prova-test', 'corta')$q$, 'almeno 8');
+select set_direttivo_password('prova-test', 'nuova-password');
+reset role;
+do $$ begin
+  assert check_direttivo_password('nuova-password'), 'nuova password attiva';
+  assert not check_direttivo_password('prova-test'), 'vecchia password disattivata';
 end $$;
