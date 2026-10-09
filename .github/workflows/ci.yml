@@ -73,10 +73,11 @@ jobs:
           flutter build apk --release --dart-define-from-file=env/prod.json
           cp build/app/outputs/flutter-apk/app-release.apk MILANAC.apk
       # Versione leggera (circa metà) per i telefoni a 64 bit, comoda da mandare in chat.
-      # --split-per-abi tiene nel file solo le librerie di quella architettura (anche quelle dei plugin).
+      # --split-per-abi tiene nel file solo le librerie di quella architettura (anche quelle dei plugin);
+      # il numero di versione resta quello dell'APK completo, così si passa dall'uno all'altro senza disinstallare.
       - name: APK solo arm64
         run: |
-          flutter build apk --release --split-per-abi --dart-define-from-file=env/prod.json
+          flutter build apk --release --split-per-abi --android-project-arg force-version-code-ignoring-abi=true --dart-define-from-file=env/prod.json
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk MILANAC-arm64.apk
       - uses: actions/upload-artifact@v4
         with:
