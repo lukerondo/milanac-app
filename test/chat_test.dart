@@ -25,7 +25,10 @@ void main() {
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
     // Badge dei non letti nel menu (2 in Main + 1 in Presenze).
-    expect(find.text('3'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(Drawer), matching: find.text('3')),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Chat'));
     await tester.pumpAndSettle();
 

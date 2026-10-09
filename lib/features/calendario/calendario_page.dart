@@ -58,6 +58,7 @@ class _CalendarioPageState extends ConsumerState<CalendarioPage> {
                 lastDay: DateTime(now.year + 3),
                 focusedDay: _focused,
                 startingDayOfWeek: StartingDayOfWeek.monday,
+                availableGestures: AvailableGestures.horizontalSwipe,
                 availableCalendarFormats: const {CalendarFormat.month: 'Mese'},
                 selectedDayPredicate: (d) => isSameDay(d, _selected),
                 eventLoader: on,

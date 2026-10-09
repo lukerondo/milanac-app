@@ -154,13 +154,13 @@ void main() {
     await tester.tap(find.text('Ho letto e accetto'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Servono 2 minuti di lettura'), findsOneWidget);
-    expect(find.text('NOTIZIE'), findsNothing);
+    expect(find.text('MILAN AC PRO CLUB'), findsNothing);
 
     await tester.pump(const Duration(minutes: 2));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ho letto e accetto'));
     await tester.pumpAndSettle();
-    expect(find.text('NOTIZIE'), findsOneWidget);
+    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
   });
 
   testWidgets('Giocatore: una sola squadra, niente password', (tester) async {

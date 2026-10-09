@@ -130,6 +130,7 @@ class Profile {
     gamertag: 'MILANAC_Demo',
     role: ClubRole.direttivo,
     direttivoRoles: [DirettivoRole.capitano, DirettivoRole.gestore],
+    platform: 'ps5',
     face: Face.defaults,
     registrationCompleted: true,
     rulesAcceptedVersion: 1,

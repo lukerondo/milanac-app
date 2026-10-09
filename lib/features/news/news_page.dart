@@ -7,156 +7,113 @@ import '../../core/theme.dart';
 import 'news_cover.dart';
 import 'news_item.dart';
 import 'news_repository.dart';
-import 'tonight_panel.dart';
 
-class NewsPage extends ConsumerStatefulWidget {
-  const NewsPage({super.key});
+/// Le notizie dal mondo FC (scheda "Notizie" di Mondo Proclub): filtri per categoria,
+/// avviso in evidenza quando esce un aggiornamento del gioco.
+class NewsList extends ConsumerStatefulWidget {
+  const NewsList({super.key});
 
   @override
-  ConsumerState<NewsPage> createState() => _NewsPageState();
+  ConsumerState<NewsList> createState() => _NewsListState();
 }
 
-class _NewsPageState extends ConsumerState<NewsPage> {
+class _NewsListState extends ConsumerState<NewsList> {
   String _category = 'tutte';
 
   @override
   Widget build(BuildContext context) {
     final news = ref.watch(newsProvider);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      // Bottone tondo in basso a destra: apre il pannello della serata.
-      floatingActionButton: const TonightFab(),
-      body: RefreshIndicator(
-        onRefresh: () => ref.refresh(newsProvider.future),
-        child: news.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ListView(
-            children: [
-              const _NewsHeader(),
-              const SizedBox(height: 80),
-              const Icon(
-                Icons.wifi_off_rounded,
-                size: 48,
-                color: Colors.white38,
+    return RefreshIndicator(
+      onRefresh: () => ref.refresh(newsProvider.future),
+      child: news.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ListView(
+          children: [
+            const SizedBox(height: 80),
+            const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.white38),
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                'Impossibile caricare le notizie.\n$e',
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  'Impossibile caricare le notizie.\n$e',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          ),
-          data: (items) {
-            final filtered = _category == 'tutte'
-                ? items
-                : items.where((n) => n.category == _category).toList();
-            final latestUpdate = items.where((n) => n.isGameUpdate).firstOrNull;
-
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-              children: [
-                const _NewsHeader(),
-                if (latestUpdate != null) _UpdateBanner(item: latestUpdate),
-                SizedBox(
-                  height: 44,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      for (final c in newsCategories.entries)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(c.value),
-                            selected: _category == c.key,
-                            onSelected: (_) =>
-                                setState(() => _category = c.key),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                if (filtered.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 48),
-                    child: Center(
-                      child: Text('Nessuna notizia in questa categoria.'),
-                    ),
-                  ),
-                for (final n in filtered) NewsCard(item: n),
-              ],
-            );
-          },
+            ),
+          ],
         ),
+        data: (items) {
+          final filtered = _category == 'tutte'
+              ? items
+              : items.where((n) => n.category == _category).toList();
+          final latestUpdate = items.where((n) => n.isGameUpdate).firstOrNull;
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+            children: [
+              if (latestUpdate != null) UpdateBanner(item: latestUpdate),
+              SizedBox(
+                height: 44,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    for (final c in newsCategories.entries)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(c.value),
+                          selected: _category == c.key,
+                          onSelected: (_) =>
+                              setState(() => _category = c.key),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (filtered.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 48),
+                  child: Center(
+                    child: Text('Nessuna notizia in questa categoria.'),
+                  ),
+                ),
+              for (final n in filtered) NewsCard(item: n),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-/// Titolo della Home.
-class _NewsHeader extends StatelessWidget {
-  const _NewsHeader();
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
-    child: Row(
-      children: [
-        Container(
-          width: 5,
-          height: 46,
-          decoration: BoxDecoration(
-            color: MilanacColors.red,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Notizie dal mondo FC',
-                style: Theme.of(context).textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const Text(
-                'Aggiornamenti, tornei, Ultimate Team e Pro Clubs',
-                style: TextStyle(color: Colors.white60, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _UpdateBanner extends StatelessWidget {
-  const _UpdateBanner({required this.item});
+/// Avviso in evidenza: nuovo aggiornamento del gioco (o di una console).
+class UpdateBanner extends StatelessWidget {
+  const UpdateBanner({super.key, required this.item, this.compact = false});
   final NewsItem item;
+
+  /// Versione stretta per la Home.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final isRecent = DateTime.now().difference(item.publishedAt).inDays <= 3;
-    if (!isRecent) return const SizedBox.shrink();
+    if (!item.isRecent(DateTime.now())) return const SizedBox.shrink();
+    final console = item.isConsoleUpdate;
     return Card(
-      color: MilanacColors.redDark,
-      margin: const EdgeInsets.only(bottom: 12),
+      color: console ? const Color(0xFF14233B) : MilanacColors.redDark,
+      margin: EdgeInsets.only(bottom: compact ? 6 : 12),
       child: ListTile(
         dense: true,
-        leading: const Icon(
-          Icons.system_update_rounded,
+        leading: Icon(
+          console ? Icons.videogame_asset_rounded : Icons.system_update_rounded,
           color: MilanacColors.gold,
         ),
-        title: const Text(
-          'Nuovo aggiornamento: aggiorna il gioco prima del match!',
+        title: Text(
+          console
+              ? 'Aggiornamento ${platformLabel(item.platform)} disponibile'
+              : 'Nuovo aggiornamento FC 27: aggiorna il gioco prima del match!',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
           item.title,

@@ -6,59 +6,20 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/theme.dart';
-import '../../shared/shared_links.dart';
 import '../formazione/modules.dart';
-import '../risultati/match.dart' show youtubeId;
-import '../rosa/member.dart';
 import 'tactics_repository.dart';
 
-/// Tattiche & Build: video dei creator con le build per ruolo e schemi del club.
-class TattichePage extends ConsumerStatefulWidget {
+/// Tattiche: gli schemi del club con immagine e spiegazione (li pubblica il Direttivo).
+/// I video dei creator sono in Mondo Proclub.
+class TattichePage extends ConsumerWidget {
   const TattichePage({super.key});
 
   @override
-  ConsumerState<TattichePage> createState() => _TattichePageState();
-}
-
-class _TattichePageState extends ConsumerState<TattichePage>
-    with SingleTickerProviderStateMixin {
-  late final _tabs = TabController(length: 2, vsync: this)
-    ..addListener(() => setState(() {}));
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
-
-  Future<void> _addBuild() async {
-    final link = await showSharedLinkEditor(
-      context,
-      category: LinkCategory.build,
-      tags: fieldPositions,
-      titleHint: 'es. La build da ATT più forte',
-      noteLabel: 'Creator / note (facoltative)',
-    );
-    if (link != null) {
-      await ref.read(sharedLinksRepositoryProvider).save(link);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    final onBuilds = _tabs.index == 0;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: onBuilds
-          ? FloatingActionButton.extended(
-              heroTag: 'build',
-              backgroundColor: MilanacColors.red,
-              onPressed: _addBuild,
-              icon: const Icon(Icons.add_link_rounded),
-              label: const Text('Aggiungi build'),
-            )
-          : isDirettivo
+      floatingActionButton: isDirettivo
           ? FloatingActionButton.extended(
               heroTag: 'tattica',
               backgroundColor: MilanacColors.red,
@@ -67,183 +28,7 @@ class _TattichePageState extends ConsumerState<TattichePage>
               label: const Text('Nuova tattica'),
             )
           : null,
-      body: Column(
-        children: [
-          TabBar(
-            controller: _tabs,
-            indicatorColor: MilanacColors.red,
-            labelColor: Colors.white,
-            tabs: const [
-              Tab(icon: Icon(Icons.smart_display_rounded), text: 'Build'),
-              Tab(icon: Icon(Icons.draw_rounded), text: 'Tattiche'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabs,
-              children: const [_BuildsTab(), _TacticsTab()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ------------------------------------------------------------------ build
-
-class _BuildsTab extends ConsumerStatefulWidget {
-  const _BuildsTab();
-
-  @override
-  ConsumerState<_BuildsTab> createState() => _BuildsTabState();
-}
-
-class _BuildsTabState extends ConsumerState<_BuildsTab> {
-  String? _role;
-
-  @override
-  Widget build(BuildContext context) {
-    final me = ref.watch(profileProvider).value;
-    final links = ref.watch(sharedLinksProvider(LinkCategory.build));
-    return links.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Errore: $e')),
-      data: (all) {
-        final roles = {for (final l in all) ?l.tag};
-        final shown = all
-            .where((l) => _role == null || l.tag == _role)
-            .toList();
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-          children: [
-            const Text(
-              'I video dei creator con le build migliori per ogni ruolo. '
-              'Chiunque può aggiungerne.',
-              style: TextStyle(color: Colors.white60),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: [
-                ChoiceChip(
-                  label: const Text('Tutti'),
-                  selected: _role == null,
-                  onSelected: (_) => setState(() => _role = null),
-                ),
-                for (final r in fieldPositions.where(roles.contains))
-                  ChoiceChip(
-                    label: Text(r),
-                    selected: _role == r,
-                    onSelected: (_) => setState(() => _role = r),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (shown.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 40),
-                child: Center(
-                  child: Text(
-                    'Nessuna build ancora: aggiungi il primo video!',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                ),
-              ),
-            for (final l in shown)
-              _BuildCard(
-                link: l,
-                canEdit: me != null && (me.isDirettivo || l.createdBy == me.id),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _BuildCard extends ConsumerWidget {
-  const _BuildCard({required this.link, required this.canEdit});
-  final SharedLink link;
-  final bool canEdit;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final id = youtubeId(link.url);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => openSharedLink(link.url),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (id != null)
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.network(
-                      'https://img.youtube.com/vi/$id/hqdefault.jpg',
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) =>
-                          const ColoredBox(color: MilanacColors.surfaceHigh),
-                    ),
-                    const Center(
-                      child: Icon(
-                        Icons.play_circle_fill_rounded,
-                        size: 56,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ListTile(
-              leading: link.tag == null
-                  ? null
-                  : CircleAvatar(
-                      backgroundColor: MilanacColors.red,
-                      child: Text(
-                        link.tag!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-              title: Text(
-                link.title,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: link.note == null ? null : Text(link.note!),
-              trailing: canEdit
-                  ? PopupMenuButton<String>(
-                      onSelected: (v) async {
-                        final repo = ref.read(sharedLinksRepositoryProvider);
-                        if (v == 'delete') return repo.delete(link.id);
-                        final edited = await showSharedLinkEditor(
-                          context,
-                          category: LinkCategory.build,
-                          link: link,
-                          tags: fieldPositions,
-                          noteLabel: 'Creator / note (facoltative)',
-                        );
-                        if (edited != null) await repo.save(edited);
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'edit', child: Text('Modifica')),
-                        PopupMenuItem(value: 'delete', child: Text('Elimina')),
-                      ],
-                    )
-                  : null,
-            ),
-          ],
-        ),
-      ),
+      body: const _TacticsTab(),
     );
   }
 }

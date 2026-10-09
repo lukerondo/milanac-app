@@ -13,11 +13,12 @@ import '../features/chat/chat_list_page.dart';
 import '../features/common/coming_soon_page.dart';
 import '../features/direttivo/direttivo_page.dart';
 import '../features/formazione/formazione_page.dart';
+import '../features/home/home_page.dart';
 import '../features/impostazioni/impostazioni_page.dart';
 import '../features/intro/intro_page.dart';
 import '../features/intro/intro_state.dart';
+import '../features/mondo/mondo_page.dart';
 import '../features/musica/musica_page.dart';
-import '../features/news/news_page.dart';
 import '../features/presenze/presenze_page.dart';
 import '../features/regolamento/regolamento_page.dart';
 import '../features/regolamento/rules_accept_page.dart';
@@ -179,10 +180,18 @@ final routerProvider = Provider<GoRouter>((ref) {
                 transitionsBuilder: (_, animation, _, child) =>
                     FadeTransition(opacity: animation, child: child),
                 child: switch (s.path) {
-                  '/' => const NewsPage(),
+                  '/' => const HomePage(),
+                  '/mondo' => MondoPage(
+                    initialTab: state.uri.queryParameters['scheda'],
+                  ),
                   '/rosa' => const RosaPage(),
                   '/regolamento' => const RegolamentoPage(),
-                  '/presenze' => const PresenzePage(),
+                  '/presenze' => PresenzePage(
+                    initialDay: DateTime.tryParse(
+                      state.uri.queryParameters['giorno'] ?? '',
+                    ),
+                    initialTab: state.uri.queryParameters['scheda'],
+                  ),
                   '/calendario' => const CalendarioPage(),
                   '/risultati' => const RisultatiPage(),
                   '/formazione' => const FormazionePage(),

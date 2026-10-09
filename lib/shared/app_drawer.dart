@@ -32,6 +32,12 @@ class AppDrawer extends ConsumerWidget {
     final profile = ref.watch(profileProvider).value;
     final links = ref.watch(clubLinksProvider).value ?? const <ClubLink>[];
     final unread = ref.watch(chatUnreadProvider);
+    final isDirettivo = profile?.isDirettivo ?? false;
+
+    List<AppSection> visible(SectionGroup g) => [
+      for (final s in appSections)
+        if (s.group == g && (!s.direttivoOnly || isDirettivo)) s,
+    ];
 
     return Drawer(
       child: SafeArea(
@@ -39,7 +45,7 @@ class AppDrawer extends ConsumerWidget {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [MilanacColors.redDark, MilanacColors.black],
@@ -68,11 +74,23 @@ class AppDrawer extends ConsumerWidget {
                       color: MilanacColors.gold,
                     ),
                   ),
-                  if (profile != null)
+                  if (profile != null) ...[
+                    const SizedBox(height: 6),
                     Text(
-                      '${profile.displayName} · ${profile.roleLabel}',
-                      style: const TextStyle(color: Colors.white70),
+                      profile.fullName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
                     ),
+                    Text(
+                      profile.roleLabel,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -80,9 +98,23 @@ class AppDrawer extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  for (final s in appSections)
-                    if (!s.direttivoOnly || (profile?.isDirettivo ?? false))
+                  for (final g in SectionGroup.values) ...[
+                    if (g.label.isNotEmpty && visible(g).isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                        child: Text(
+                          g.label.toUpperCase(),
+                          style: const TextStyle(
+                            fontFamily: sportFont,
+                            fontSize: 12,
+                            letterSpacing: 2,
+                            color: MilanacColors.gold,
+                          ),
+                        ),
+                      ),
+                    for (final s in visible(g))
                       ListTile(
+                        dense: true,
                         leading: Icon(s.icon),
                         title: Text(s.title),
                         trailing: s.path == '/chat' && unread > 0
@@ -98,6 +130,7 @@ class AppDrawer extends ConsumerWidget {
                           context.go(s.path);
                         },
                       ),
+                  ],
                 ],
               ),
             ),
@@ -116,7 +149,7 @@ class AppDrawer extends ConsumerWidget {
                         mode: LaunchMode.externalApplication,
                       ),
                     ),
-                  if (profile?.isDirettivo ?? false)
+                  if (isDirettivo)
                     IconButton(
                       tooltip: 'Modifica contatti',
                       icon: const Icon(
