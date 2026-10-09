@@ -43,7 +43,7 @@ void main() {
     await tester.tap(find.text('Approva come Giocatore'));
     await tester.pumpAndSettle();
     expect(
-      find.text('Nuovo Iscritto approvato come Giocatore (MILANAC).'),
+      find.text('Nuovo Iscritto approvato come Giocatore (Milan AC).'),
       findsOneWidget,
     );
     expect(find.text('RICHIESTE DI ACCESSO'), findsNothing);
@@ -117,16 +117,16 @@ void main() {
     // Richiesta approvata direttamente in MILANAC FUTURO.
     await tester.ensureVisible(find.text('Squadra'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilterChip, 'MILANAC FUTURO'));
+    await tester.tap(find.widgetWithText(FilterChip, 'Milan AC Futuro'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilterChip, 'MILANAC'));
+    await tester.tap(find.widgetWithText(FilterChip, 'Milan AC'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Approva come Giocatore'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Approva come Giocatore'));
     await tester.pumpAndSettle();
     expect(
-      find.text('Nuovo Iscritto approvato come Giocatore (MILANAC FUTURO).'),
+      find.text('Nuovo Iscritto approvato come Giocatore (Milan AC Futuro).'),
       findsOneWidget,
     );
 
@@ -150,7 +150,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: rossiCard,
-        matching: find.widgetWithText(FilterChip, 'MILANAC FUTURO'),
+        matching: find.widgetWithText(FilterChip, 'Milan AC Futuro'),
       ),
     );
     await tester.pumpAndSettle();

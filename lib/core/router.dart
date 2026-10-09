@@ -56,7 +56,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // La Sala Direttivo (e le altre sezioni riservate) solo per il Direttivo.
       final reserved = appSections.any((s) => s.direttivoOnly && s.path == loc);
-      if (AppConfig.isDemo) return gates.contains(loc) ? '/' : null;
+      // In demo non c'è login: solo intro e attesa rimandano alla Home
+      // (la pagina di accesso resta visitabile per provarla).
+      if (AppConfig.isDemo) {
+        return loc == '/intro' || loc == '/attesa' ? '/' : null;
+      }
 
       final session = ref.read(sessionProvider);
       if (session.isLoading) return null;

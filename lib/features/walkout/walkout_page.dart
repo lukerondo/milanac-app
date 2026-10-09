@@ -163,7 +163,7 @@ class _WalkoutPageState extends State<WalkoutPage>
                   from: _crestAt,
                   to: _flipAt,
                   child: Image.asset(
-                    'assets/images/stemma_milano_fc.png',
+                    'assets/images/stemma_256.png',
                     height: 170,
                   ),
                 ),
@@ -316,7 +316,7 @@ class _CardBack extends StatelessWidget {
           ),
         ),
         child: Center(
-          child: Image.asset('assets/images/stemma_milano_fc.png', width: 110),
+          child: Image.asset('assets/images/stemma_256.png', width: 110),
         ),
       ),
     ),

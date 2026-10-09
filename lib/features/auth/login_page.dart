@@ -39,75 +39,96 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         defaultTargetPlatform == TargetPlatform.macOS;
 
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                children: [
-                  Image.asset('assets/images/stemma.png', height: 140),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'MILANAC PRO CLUB',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
-                      color: MilanacColors.gold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Milano siamo noi!',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 36),
-                  _LoginButton(
-                    label: 'Continua con Google',
-                    icon: Icons.g_mobiledata_rounded,
-                    busy: _busy == LoginMethod.google,
-                    onPressed: _busy == null
-                        ? () => _signIn(LoginMethod.google)
-                        : null,
-                  ),
-                  _LoginButton(
-                    label: 'Continua con Microsoft (Hotmail/Outlook)',
-                    icon: Icons.window_rounded,
-                    busy: _busy == LoginMethod.microsoft,
-                    onPressed: _busy == null
-                        ? () => _signIn(LoginMethod.microsoft)
-                        : null,
-                  ),
-                  _LoginButton(
-                    label: 'Continua con Yahoo',
-                    icon: Icons.alternate_email_rounded,
-                    busy: _busy == LoginMethod.yahoo,
-                    onPressed: _busy == null
-                        ? () => _signIn(LoginMethod.yahoo)
-                        : null,
-                  ),
-                  if (showApple)
-                    _LoginButton(
-                      label: 'Continua con Apple',
-                      icon: Icons.apple_rounded,
-                      busy: _busy == LoginMethod.apple,
-                      onPressed: _busy == null
-                          ? () => _signIn(LoginMethod.apple)
-                          : null,
-                    ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Dopo il primo accesso un membro del Direttivo approverà il tuo account.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
-                  ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Sfondo della vecchia app: stemma del club e Duomo in oro.
+          Image.asset(
+            'assets/images/login_bg.jpg',
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Color(0xB3000000),
+                  Color(0xF2000000),
                 ],
+                stops: [.3, .6, 1],
               ),
             ),
           ),
-        ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(28, 120, 28, 24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'MILANO SIAMO NOI!',
+                        style: TextStyle(
+                          fontFamily: sportFont,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 3,
+                          color: MilanacColors.gold,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      _LoginButton(
+                        label: 'Continua con Google',
+                        icon: Icons.g_mobiledata_rounded,
+                        busy: _busy == LoginMethod.google,
+                        onPressed: _busy == null
+                            ? () => _signIn(LoginMethod.google)
+                            : null,
+                      ),
+                      _LoginButton(
+                        label: 'Continua con Microsoft (Hotmail/Outlook)',
+                        icon: Icons.window_rounded,
+                        busy: _busy == LoginMethod.microsoft,
+                        onPressed: _busy == null
+                            ? () => _signIn(LoginMethod.microsoft)
+                            : null,
+                      ),
+                      _LoginButton(
+                        label: 'Continua con Yahoo',
+                        icon: Icons.alternate_email_rounded,
+                        busy: _busy == LoginMethod.yahoo,
+                        onPressed: _busy == null
+                            ? () => _signIn(LoginMethod.yahoo)
+                            : null,
+                      ),
+                      if (showApple)
+                        _LoginButton(
+                          label: 'Continua con Apple',
+                          icon: Icons.apple_rounded,
+                          busy: _busy == LoginMethod.apple,
+                          onPressed: _busy == null
+                              ? () => _signIn(LoginMethod.apple)
+                              : null,
+                        ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Al primo accesso completi il profilo, crei il tuo volto e accetti il regolamento.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

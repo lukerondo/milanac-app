@@ -100,4 +100,4 @@ CardTier tierOf(int? overall) => switch (overall) {
 
 /// Etichette brevi delle squadre per la carta.
 String teamsLabel(Set<Team> teams) =>
-    teams.length == 2 ? 'MILANAC · FUTURO' : teams.first.label;
+    teams.length == 2 ? 'MILAN AC · FUTURO' : teams.first.label;

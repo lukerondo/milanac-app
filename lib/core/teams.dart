@@ -4,8 +4,8 @@ import 'theme.dart';
 
 /// Le due squadre del club: un giocatore può stare in una o in entrambe.
 enum Team {
-  milanac('MILANAC', 'MILANAC', MilanacColors.red),
-  futuro('MILANAC FUTURO', 'FUTURO', Color(0xFF9CA3AF));
+  milanac('Milan AC', 'MILAN AC', MilanacColors.red),
+  futuro('Milan AC Futuro', 'FUTURO', Color(0xFF9CA3AF));
 
   const Team(this.label, this.short, this.color);
   final String label;

@@ -67,7 +67,7 @@ class _PendingPageState extends ConsumerState<PendingPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset('assets/images/stemma_milano_fc.png', height: 96),
+                  Image.asset('assets/images/stemma_256.png', height: 96),
                   const SizedBox(height: 16),
                   Text(
                     profile == null

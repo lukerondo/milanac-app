@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/auth/profile.dart';
 import '../core/auth/providers.dart';
 import '../core/push/device_tokens.dart';
 import '../core/config.dart';
+import '../core/teams.dart';
 import '../core/theme.dart';
 import '../features/chat/chat_list_page.dart';
 import '../features/chat/chat_repository.dart';
@@ -13,6 +15,15 @@ import '../features/privacy/privacy_page.dart';
 import 'club_links.dart';
 import 'club_links_editor.dart';
 import 'sections.dart';
+
+/// Nome del club nel menu: dipende dalla squadra del membro
+/// (chi è solo in Milan AC Futuro vede il nome della sua squadra).
+String clubTitleFor(Profile? profile) {
+  final teams = profile?.teams ?? const {Team.milanac};
+  return teams.contains(Team.milanac)
+      ? 'MILAN AC PRO CLUB'
+      : 'MILAN AC FUTURO PRO CLUB';
+}
 
 class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key, required this.currentPath});
@@ -44,15 +55,19 @@ class AppDrawer extends ConsumerWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: Image.asset('assets/images/stemma.png', height: 84),
+                    child: Image.asset(
+                      'assets/images/stemma_256.png',
+                      height: 84,
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'MILANAC PRO CLUB',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 18,
-                      letterSpacing: 1.5,
+                  Text(
+                    clubTitleFor(profile),
+                    style: const TextStyle(
+                      fontFamily: sportFont,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 19,
+                      letterSpacing: 2,
                       color: MilanacColors.gold,
                     ),
                   ),

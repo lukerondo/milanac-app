@@ -120,10 +120,22 @@ class _IntroPageState extends ConsumerState<IntroPage>
                       ),
                       child: _LoadingPanel(progress: _progress),
                     ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Tocca per saltare',
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    const SizedBox(height: 4),
+                    TextButton.icon(
+                      onPressed: _finish,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        minimumSize: const Size(120, 44),
+                      ),
+                      icon: const Icon(Icons.skip_next_rounded),
+                      label: const Text(
+                        'SALTA',
+                        style: TextStyle(
+                          fontFamily: sportFont,
+                          fontSize: 15,
+                          letterSpacing: 2,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -154,7 +166,7 @@ class _LoadingPanel extends StatelessWidget {
       child: Row(
         children: [
           Image.asset(
-            'assets/images/stemma_milano_fc.png',
+            'assets/images/stemma_256.png',
             height: 64,
             filterQuality: FilterQuality.high,
           ),
@@ -169,8 +181,10 @@ class _LoadingPanel extends StatelessWidget {
                   const Text(
                     'MILANAC PRO CLUB',
                     style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.5,
+                      fontFamily: sportFont,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      letterSpacing: 2,
                       color: Colors.white,
                     ),
                   ),

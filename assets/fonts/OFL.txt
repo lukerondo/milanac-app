@@ -1,6 +1,11 @@
-Barlow Condensed
-Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
+Font inclusi nell'app, tutti con licenza SIL Open Font License, Version 1.1
+(testo completo: https://openfontlicense.org), scaricati da Google Fonts.
 
-This Font Software is licensed under the SIL Open Font License, Version 1.1.
-The full license text is available at https://openfontlicense.org
-(scaricato da Google Fonts: https://fonts.google.com/specimen/Barlow+Condensed)
+Oswald
+Copyright 2016 The Oswald Project Authors (https://github.com/googlefonts/OswaldFont)
+
+Cormorant Garamond
+Copyright 2015 The Cormorant Project Authors (https://github.com/CatharsisFonts/Cormorant)
+
+Great Vibes
+Copyright (c) 2012 TypeSETit, LLC (typesetit@att.net)

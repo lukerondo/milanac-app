@@ -92,7 +92,7 @@ void main() {
       find.widgetWithText(TextField, 'Avversario'),
       'Inter Digitale',
     );
-    await tester.enterText(find.widgetWithText(TextField, 'MILANAC'), '4');
+    await tester.enterText(find.widgetWithText(TextField, 'MILAN AC'), '4');
     await tester.enterText(find.widgetWithText(TextField, 'Avversari'), '0');
     await tester.ensureVisible(find.text('Salva partita'));
     await tester.pumpAndSettle();

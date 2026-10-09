@@ -145,7 +145,7 @@ class DirettivoPage extends ConsumerWidget {
             _Action(
               icon: Icons.groups_rounded,
               title: 'Rosa e squadre',
-              subtitle: 'MILANAC / FUTURO, ruoli',
+              subtitle: 'Milan AC / Futuro, ruoli',
               onTap: () => push(const RosaManagementPage()),
             ),
             _Action(

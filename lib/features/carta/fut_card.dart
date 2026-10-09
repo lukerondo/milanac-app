@@ -263,7 +263,7 @@ class _CardContent extends StatelessWidget {
                     style: const TextStyle(fontSize: 26, height: 1.1),
                   ),
                 ),
-              Image.asset('assets/images/stemma_milano_fc.png', height: 38),
+              Image.asset('assets/images/stemma_256.png', height: 38),
               const SizedBox(height: 6),
               if (member.platform != null)
                 Text(
