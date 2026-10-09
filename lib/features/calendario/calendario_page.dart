@@ -6,6 +6,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../../core/auth/providers.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../presenze/evening.dart';
 import 'club_event.dart';
 import 'event_editor.dart';
 import 'events_repository.dart';
@@ -42,7 +43,7 @@ class _CalendarioPageState extends ConsumerState<CalendarioPage> {
         data: (all) {
           List<ClubEvent> on(DateTime day) =>
               all.where((e) => isSameDay(e.startsAt, day)).toList();
-          final dayEvents = on(_selected);
+          final dayEvents = withTrainings(on(_selected), _selected);
           final now = DateTime.now();
           final upcoming = all
               .where((e) => e.startsAt.isAfter(now))
@@ -137,6 +138,22 @@ class _CalendarioPageState extends ConsumerState<CalendarioPage> {
     );
   }
 
+  /// Aggiunge l'allenamento automatico delle 21:30 per la squadra che quel giorno
+  /// non ha altro in programma (le riunioni non contano).
+  static List<ClubEvent> withTrainings(List<ClubEvent> events, DateTime day) {
+    final covered = <Team>{
+      for (final e in events)
+        if (e.type != EventType.riunione)
+          ...(e.team == null ? Team.values : [e.team!]),
+    };
+    final free = Team.values.where((t) => !covered.contains(t)).toList();
+    final trainings = free.length == Team.values.length
+        ? [trainingOn(day)]
+        : [for (final t in free) trainingOn(day, team: t)];
+    return [...events, ...trainings]
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+  }
+
   static String _dayTitle(DateTime d) {
     final s = DateFormat('EEEE d MMMM', 'it').format(d);
     return '${s[0].toUpperCase()}${s.substring(1)}';
@@ -174,6 +191,8 @@ class EventCard extends StatelessWidget {
       showDate ? 'EEE d MMM · HH:mm' : 'HH:mm',
       'it',
     ).format(event.startsAt);
+    // Senza id: è l'allenamento automatico di ogni sera.
+    final automatic = event.id.isEmpty;
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: ListTile(
@@ -183,12 +202,15 @@ class EventCard extends StatelessWidget {
         ),
         title: Text(
           event.title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: automatic ? Colors.white70 : null,
+          ),
         ),
         subtitle: Text(
           [
             time,
-            event.type.label,
+            automatic ? 'ogni sera, automatico' : event.type.label,
             if (event.location != null && event.location!.isNotEmpty)
               event.location!,
           ].join(' · '),
@@ -196,7 +218,9 @@ class EventCard extends StatelessWidget {
         trailing: event.team == null
             ? null
             : TeamBadge(event.team!, small: true),
-        onTap: () => showEventDetails(context, event, editable: editable),
+        onTap: automatic
+            ? null
+            : () => showEventDetails(context, event, editable: editable),
       ),
     );
   }
