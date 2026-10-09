@@ -114,8 +114,10 @@ void main() {
     // Volto: a caso, poi una scelta precisa.
     await tester.tap(find.text('A caso'));
     await tester.pumpAndSettle();
-    await reveal(tester, 3, find.text('Ciuffo'));
-    await tester.tap(find.text('Ciuffo'));
+    // Il nome dello stile compare anche nel riepilogo quando "A caso" lo sceglie:
+    // si punta alla sola opzione.
+    await reveal(tester, 3, find.widgetWithText(ChoiceChip, 'Ciuffo'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Ciuffo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Completa la registrazione'));
     await tester.pumpAndSettle();
