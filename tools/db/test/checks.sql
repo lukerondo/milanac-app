@@ -640,3 +640,179 @@ end $$;
 select pg_temp.expect_error(
   $q$insert into news (source, category, title, url, platform) values ('GN', 'console', 'X', 'https://gn.it/x3', 'switch')$q$,
   'news_platform_check');
+
+-- Chat (Fase 3): si risponde solo nello stesso canale, vocali fino a 2 minuti, foto e vocali
+-- scadono dopo 60 giorni e i file finiscono in coda per la pulizia.
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+insert into messages (id, channel_id, audio_path, duration_s)
+  select '00000000-0000-0000-0000-0000000000c1', id, '00000000-0000-0000-0000-0000000000e1/voce.m4a', 30
+  from channels where slug = 'main';
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, audio_path) select id, '00000000-0000-0000-0000-0000000000e1/x.m4a' from channels where slug = 'main'$q$,
+  'messages_audio_duration_check');
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, audio_path, duration_s) select id, '00000000-0000-0000-0000-0000000000e1/x.m4a', 121 from channels where slug = 'main'$q$,
+  'messages_duration_s_check');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+insert into messages (channel_id, body, reply_to)
+  select id, 'Bel vocale', '00000000-0000-0000-0000-0000000000c1' from channels where slug = 'main';
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body, reply_to) select id, 'altro canale', '00000000-0000-0000-0000-0000000000c1' from channels where slug = 'milanac'$q$,
+  'stesso canale');
+insert into messages (channel_id, body, image_path, expires_at)
+  select id, 'foto', '00000000-0000-0000-0000-0000000000e2/foto.jpg', now() + interval '10 years'
+  from channels where slug = 'main';
+do $$ begin
+  assert (select expires_at between now() + interval '59 days' and now() + interval '61 days'
+          from messages where id = '00000000-0000-0000-0000-0000000000c1'), 'il vocale scade dopo 60 giorni';
+  assert (select expires_at between now() + interval '59 days' and now() + interval '61 days'
+          from messages where body = 'foto'), 'anche la foto scade dopo 60 giorni (la scadenza non si sceglie)';
+  assert (select expires_at is null from messages where body = 'Bel vocale'), 'il testo non scade';
+  assert (select last_has_image and not last_has_audio from chat_overview()
+          where channel_id = (select id from channels where slug = 'main')), 'riepilogo con foto e vocali';
+end $$;
+delete from messages where body = 'foto';
+reset role;
+select set_config('milanac.now', (now() + interval '61 days')::text, false);
+do $$ begin
+  assert (select count(*) from storage_cleanup where bucket = 'chat'
+          and path = '00000000-0000-0000-0000-0000000000e2/foto.jpg') = 1, 'foto del messaggio eliminato in coda';
+  assert expire_attachments() = 1, 'un allegato scaduto';
+  assert (select audio_path is null and expired_at is not null and body is null
+          from messages where id = '00000000-0000-0000-0000-0000000000c1'), 'il messaggio resta senza il vocale';
+  assert (select count(*) from storage_cleanup) = 2, 'file in coda per la pulizia';
+  assert (select count(*) from net.calls where body->>'kind' = 'cleanup') = 1, 'la pulizia dei file è stata chiesta';
+  assert (select count(*) from cron.job where jobname = 'allegati-scaduti') = 1, 'pulizia notturna programmata';
+end $$;
+select set_config('milanac.now', '', false);
+
+-- Carte speciali: il portiere viene dalla formazione pubblicata; la blu elettrico è automatica
+-- (tripletta; tre partite ufficiali di fila senza subire gol); le nero/oro le assegna il Direttivo,
+-- una per reparto, con l'annuncio in Comunicazioni.
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+update profiles set field_position = 'POR' where id = '00000000-0000-0000-0000-0000000000e2';
+update profiles set field_position = 'DC' where id = '00000000-0000-0000-0000-0000000000e1';
+update formation_slots set player_id = '00000000-0000-0000-0000-0000000000e2'
+  where formation_id = '00000000-0000-0000-0000-0000000000f1' and slot_index = 0;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against, scorers)
+values ('00000000-0000-0000-0000-0000000000b3', 'torneo', 'Lupi', now() + interval '2 days', 'milanac', 4, 0, 'Rossi (3), e1');
+update matches set scorers = 'Rossi (3), e1 (1)' where id = '00000000-0000-0000-0000-0000000000b3';
+do $$ begin
+  assert (select goalkeeper_id from matches where id = '00000000-0000-0000-0000-0000000000b3')
+         = '00000000-0000-0000-0000-0000000000e2', 'portiere dalla formazione pubblicata';
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
+          and kind = 'blu' and player_id = '00000000-0000-0000-0000-0000000000a1' and reparto = 'ATT'
+          and bonus = 5 and reason = 'Tripletta contro Lupi') = 1, 'blu elettrico per la tripletta';
+  assert (select count(*) from special_cards) = 1, 'una sola carta (la correzione dei marcatori non la raddoppia)';
+  assert (select ends_at - starts_at from special_cards) = interval '7 days', 'la carta dura una settimana';
+end $$;
+-- Il giocatore legge le carte ma non le assegna.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$select assign_special_cards('00000000-0000-0000-0000-0000000000b3', '[]')$q$, 'Solo il Direttivo');
+select pg_temp.expect_error(
+  $q$insert into special_cards (player_id, kind, reparto) values ('00000000-0000-0000-0000-0000000000e1', 'nero_oro', 'DIF')$q$,
+  'row-level security');
+do $$ begin
+  assert (select count(*) from special_cards) = 1, 'le carte si leggono';
+end $$;
+-- Il Direttivo assegna: reparto dalla posizione in campo, bonus da +1 a +5, un premiato per reparto.
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select pg_temp.expect_error(
+  $q$select assign_special_cards('00000000-0000-0000-0000-0000000000b3', '[{"player_id": "00000000-0000-0000-0000-00000000000c", "bonus": 5}]')$q$,
+  'non è della squadra');
+select pg_temp.expect_error(
+  $q$select assign_special_cards('00000000-0000-0000-0000-0000000000b3', '[{"player_id": "00000000-0000-0000-0000-00000000000d", "bonus": 5}]')$q$,
+  'Reparto sconosciuto');
+select pg_temp.expect_error(
+  $q$select assign_special_cards('00000000-0000-0000-0000-0000000000b3', '[{"player_id": "00000000-0000-0000-0000-0000000000e1", "bonus": 6}]')$q$,
+  'bonus');
+select pg_temp.expect_error(
+  $q$select assign_special_cards('00000000-0000-0000-0000-0000000000b3', '[{"player_id": "00000000-0000-0000-0000-0000000000e1"}, {"player_id": "00000000-0000-0000-0000-0000000000e2", "reparto": "DIF"}]')$q$,
+  'per reparto');
+select pg_temp.expect_error(
+  $q$select assign_special_cards((select id from matches where opponent = 'Dinamo' and goals_for is null), '[]')$q$,
+  'prima il risultato');
+do $$ begin
+  assert assign_special_cards('00000000-0000-0000-0000-0000000000b3',
+    '[{"player_id": "00000000-0000-0000-0000-0000000000e1", "bonus": 4},
+      {"player_id": "00000000-0000-0000-0000-0000000000a1", "bonus": 5},
+      {"player_id": "00000000-0000-0000-0000-0000000000e2"}]') = 2,
+    'due carte nero/oro nuove (Rossi tiene la blu)';
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3' and kind = 'nero_oro') = 2,
+    'nero/oro per portiere e difensore';
+  assert (select body from messages where meta->>'type' = 'special_cards')
+         = 'Carte speciali della ' || match_number('00000000-0000-0000-0000-0000000000b3')
+           || 'ª giornata (Milan AC 4–0 Lupi): POR e2 +5, DIF e1 +4. Blu elettrico: Rossi (tripletta contro Lupi).',
+    'annuncio in Comunicazioni';
+  assert match_number('00000000-0000-0000-0000-0000000000b3') between 1 and 3, 'numero della giornata';
+  -- Nuova assegnazione: chi non è più in elenco perde la carta, i bonus si aggiornano, l'annuncio resta uno.
+  assert assign_special_cards('00000000-0000-0000-0000-0000000000b3',
+    '[{"player_id": "00000000-0000-0000-0000-0000000000e1", "bonus": 2}]') = 0, 'nessuna carta nuova';
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3' and kind = 'nero_oro') = 1,
+    'la carta del portiere è stata tolta';
+  assert (select bonus from special_cards where player_id = '00000000-0000-0000-0000-0000000000e1') = 2, 'bonus aggiornato';
+  assert (select count(*) from messages where meta->>'type' = 'special_cards') = 1, 'un solo annuncio per partita';
+  assert (select body from messages where meta->>'type' = 'special_cards') like '%: DIF e1 +2. Blu elettrico: Rossi%',
+    'annuncio aggiornato';
+end $$;
+-- Portiere: la terza partita ufficiale di fila senza subire gol vale la blu; le amichevoli non contano.
+insert into matches (kind, opponent, played_at, team, goals_for, goals_against, goalkeeper_id)
+values ('torneo', 'Orsi', now() + interval '3 days', 'milanac', 1, 0, '00000000-0000-0000-0000-0000000000e2');
+do $$ begin
+  assert (select count(*) from special_cards where player_id = '00000000-0000-0000-0000-0000000000e2' and kind = 'blu') = 0,
+    'due partite senza subire gol non bastano';
+end $$;
+insert into matches (kind, opponent, played_at, team, goals_for, goals_against, goalkeeper_id)
+values ('amichevole', 'Amici', now() + interval '3 days 1 hour', 'milanac', 3, 0, '00000000-0000-0000-0000-0000000000e2');
+insert into matches (kind, opponent, played_at, team, goals_for, goals_against, goalkeeper_id)
+values ('torneo', 'Aquile', now() + interval '4 days', 'milanac', 2, 0, '00000000-0000-0000-0000-0000000000e2');
+do $$ begin
+  assert (select count(*) from special_cards where player_id = '00000000-0000-0000-0000-0000000000e2' and kind = 'blu'
+          and reparto = 'POR' and reason = 'Tre partite di fila senza subire gol') = 1, 'blu elettrico al portiere';
+end $$;
+reset role;
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' = 'special_card') = 4,
+    'un avviso per ogni carta ricevuta (blu Rossi, nero/oro e1 ed e2, blu portiere)';
+  assert (select count(*) from net.calls where body->>'kind' = 'special_cards_week') = 2,
+    'un avviso alla squadra per ogni assegnazione';
+  assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 0,
+    'l''annuncio delle carte non manda l''avviso generico della chat';
+  assert (select count(*) from net.calls where body->>'kind' = 'match_result') = 4, 'una notifica per ogni risultato';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert (player_stats('00000000-0000-0000-0000-0000000000a1')->>'blu')::int = 1, 'carte blu nelle statistiche';
+  assert (player_stats('00000000-0000-0000-0000-0000000000e1')->>'nero_oro')::int = 1, 'carte nero/oro nelle statistiche';
+end $$;
+reset role;
+
+-- Tornei: la foto (o il logo) la carica solo il Direttivo, nella cartella del torneo.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into tournaments (id, name, team) values ('00000000-0000-0000-0000-0000000000a9', 'Coppa Rossonera', 'milanac');
+insert into storage.objects (bucket_id, name) values ('tournaments', '00000000-0000-0000-0000-0000000000a9/logo.jpg');
+update tournaments set image_path = '00000000-0000-0000-0000-0000000000a9/logo.jpg'
+  where id = '00000000-0000-0000-0000-0000000000a9';
+select pg_temp.expect_error(
+  $q$update tournaments set image_path = 'altrove/logo.jpg' where id = '00000000-0000-0000-0000-0000000000a9'$q$,
+  'tournaments_image_path_check');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$insert into storage.objects (bucket_id, name) values ('tournaments', '00000000-0000-0000-0000-0000000000a9/altra.jpg')$q$,
+  'row-level security');
+do $$ begin
+  assert (select count(*) from storage.objects where bucket_id = 'tournaments') = 1, 'il membro vede la foto del torneo';
+  assert (select image_path from tournaments where id = '00000000-0000-0000-0000-0000000000a9') like '%/logo.jpg', 'foto salvata';
+end $$;
+reset role;

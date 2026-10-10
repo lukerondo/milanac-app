@@ -3,8 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/auth/profile.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../rosa/member.dart';
+import '../rosa/rosa_repository.dart';
 import '../tornei/tournaments_repository.dart';
 import 'match.dart';
 import 'matches_repository.dart';
@@ -29,6 +32,7 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
   late MatchKind _kind = widget.match?.kind ?? MatchKind.torneo;
   late Team _team = widget.match?.team ?? Team.milanac;
   late String? _tournamentId = widget.match?.tournamentId;
+  late String? _goalkeeperId = widget.match?.goalkeeperId;
   late bool _home = widget.match?.home ?? true;
   late DateTime _date = widget.match?.playedAt ?? DateTime.now();
   late final _opponent = TextEditingController(text: widget.match?.opponent);
@@ -84,6 +88,7 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
       notes: _text(_notes),
       team: _team,
       tournamentId: _tournamentId,
+      goalkeeperId: _goalkeeperId,
     );
     try {
       await ref.read(matchesRepositoryProvider).save(m);
@@ -228,6 +233,12 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
               ),
             ),
             const SizedBox(height: 8),
+            _GoalkeeperPicker(
+              team: _team,
+              value: _goalkeeperId,
+              onChanged: (id) => setState(() => _goalkeeperId = id),
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: _notes,
               maxLines: 3,
@@ -245,6 +256,57 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Portiere della partita: se non si sceglie, al primo risultato viene preso dalla
+/// formazione pubblicata. Conta per la carta blu elettrico (tre partite senza subire gol).
+class _GoalkeeperPicker extends ConsumerWidget {
+  const _GoalkeeperPicker({
+    required this.team,
+    required this.value,
+    required this.onChanged,
+  });
+  final Team team;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final members =
+        (ref.watch(rosaProvider).value ?? const <Member>[])
+            .where(
+              (m) =>
+                  m.active &&
+                  m.role != ClubRole.pending &&
+                  (m.inTeam(team) || m.id == value),
+            )
+            .toList()
+          ..sort((a, b) {
+            final pa = a.fieldPosition == 'POR' ? 0 : 1;
+            final pb = b.fieldPosition == 'POR' ? 0 : 1;
+            return pa != pb ? pa - pb : a.displayName.compareTo(b.displayName);
+          });
+    return DropdownButtonFormField<String?>(
+      initialValue: members.any((m) => m.id == value) ? value : null,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'Portiere della partita'),
+      items: [
+        const DropdownMenuItem(
+          value: null,
+          child: Text('Dalla formazione pubblicata'),
+        ),
+        for (final m in members)
+          DropdownMenuItem(
+            value: m.id,
+            child: Text(
+              '${m.displayName}${m.fieldPosition == null ? '' : ' (${m.fieldPosition})'}',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: onChanged,
     );
   }
 }

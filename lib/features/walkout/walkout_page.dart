@@ -16,6 +16,8 @@ Future<void> showWalkout(
   required Member member,
   required CardStats stats,
   int? previousOverall,
+  CardSpecial? special,
+  int bonus = 0,
 }) => Navigator.of(context, rootNavigator: true).push(
   PageRouteBuilder<void>(
     opaque: true,
@@ -24,6 +26,8 @@ Future<void> showWalkout(
       member: member,
       stats: stats,
       previousOverall: previousOverall,
+      special: special,
+      bonus: bonus,
     ),
     transitionsBuilder: (_, animation, _, child) =>
         FadeTransition(opacity: animation, child: child),
@@ -36,10 +40,16 @@ class WalkoutPage extends StatefulWidget {
     required this.member,
     required this.stats,
     this.previousOverall,
+    this.special,
+    this.bonus = 0,
   });
   final Member member;
   final CardStats stats;
   final int? previousOverall;
+
+  /// Carta speciale appena ricevuta (nero/oro o blu elettrico) con il suo bonus.
+  final CardSpecial? special;
+  final int bonus;
 
   static const duration = Duration(milliseconds: 7600);
 
@@ -97,7 +107,13 @@ class _WalkoutPageState extends State<WalkoutPage>
     }
   }
 
-  Color get _accent => switch (tierOf(widget.member.overall)) {
+  Color get _accent => switch (widget.special) {
+    CardSpecial.blu => const Color(0xFF3D8BFF),
+    CardSpecial.neroOro => const Color(0xFFF3D27A),
+    null => _tierAccent,
+  };
+
+  Color get _tierAccent => switch (tierOf(widget.member.overall)) {
     CardTier.rossonera => const Color(0xFFE0182F),
     CardTier.oro => const Color(0xFFF3D27A),
     CardTier.argento => const Color(0xFFDDE2EA),
@@ -180,6 +196,10 @@ class _WalkoutPageState extends State<WalkoutPage>
                     child: Text(
                       t < _flipEnd
                           ? 'MILANAC PRO CLUB'
+                          : widget.special == CardSpecial.blu
+                          ? 'BLU ELETTRICO +${widget.bonus}'
+                          : widget.special == CardSpecial.neroOro
+                          ? 'CARTA DELLA SETTIMANA +${widget.bonus}'
                           : up != null && up > 0
                           ? 'OVERALL +$up'
                           : 'NUOVO ACQUISTO!',
@@ -262,7 +282,12 @@ class _WalkoutPageState extends State<WalkoutPage>
                 ],
               ),
               child: front
-                  ? FutCard(member: widget.member, stats: widget.stats)
+                  ? FutCard(
+                      member: widget.member,
+                      stats: widget.stats,
+                      special: widget.special,
+                      bonus: widget.bonus,
+                    )
                   : const _CardBack(),
             ),
           ),

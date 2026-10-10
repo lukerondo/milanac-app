@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -98,10 +99,7 @@ class _TournamentCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-        leading: const CircleAvatar(
-          backgroundColor: MilanacColors.surfaceHigh,
-          child: Icon(Icons.leaderboard_rounded, color: MilanacColors.gold),
-        ),
+        leading: TournamentLogo(tournament: t),
         title: Text(
           t.name,
           style: const TextStyle(fontWeight: FontWeight.w800),
@@ -137,6 +135,52 @@ class _TournamentCard extends ConsumerWidget {
 
 void _open(String url) =>
     launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+
+/// Foto o logo del torneo in tondo (icona della coppa se manca).
+class TournamentLogo extends ConsumerWidget {
+  const TournamentLogo({super.key, required this.tournament, this.radius = 22});
+  final Tournament tournament;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final path = tournament.imagePath;
+    final image = path == null
+        ? null
+        : ref.watch(tournamentImageProvider(path)).value;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: MilanacColors.surfaceHigh,
+      backgroundImage: image,
+      child: image == null
+          ? Icon(
+              Icons.leaderboard_rounded,
+              color: MilanacColors.gold,
+              size: radius,
+            )
+          : null,
+    );
+  }
+}
+
+/// La foto del torneo in grande, nel dettaglio.
+class _TournamentPhoto extends ConsumerWidget {
+  const _TournamentPhoto({required this.path});
+  final String path;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final image = ref.watch(tournamentImageProvider(path)).value;
+    if (image == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image(image: image, height: 180, fit: BoxFit.cover),
+      ),
+    );
+  }
+}
 
 /// Dettaglio: info, sito, classifica e partite del torneo.
 class TournamentPage extends ConsumerWidget {
@@ -174,6 +218,7 @@ class TournamentPage extends ConsumerWidget {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
+                if (t.imagePath != null) _TournamentPhoto(path: t.imagePath!),
                 Wrap(
                   spacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -376,7 +421,19 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
   late TournamentStatus _status =
       widget.tournament?.status ?? TournamentStatus.inCorso;
   late DateTime? _startsOn = widget.tournament?.startsOn;
+  Uint8List? _photo;
   bool _saving = false;
+
+  Future<void> _pickPhoto() async {
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      imageQuality: 85,
+    );
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    setState(() => _photo = bytes);
+  }
 
   @override
   void dispose() {
@@ -410,9 +467,12 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
       startsOn: _startsOn,
       endsOn: widget.tournament?.endsOn,
       notes: _text(_notes),
+      imagePath: widget.tournament?.imagePath,
     );
     try {
-      await ref.read(tournamentsRepositoryProvider).save(t);
+      final repo = ref.read(tournamentsRepositoryProvider);
+      final id = await repo.save(t);
+      if (_photo != null) await repo.uploadImage(id, _photo!);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
@@ -532,6 +592,35 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
               decoration: const InputDecoration(
                 labelText: 'Note (facoltative)',
               ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (_photo != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      _photo!,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                else if (widget.tournament != null)
+                  TournamentLogo(tournament: widget.tournament!, radius: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _saving ? null : _pickPhoto,
+                    icon: const Icon(Icons.add_photo_alternate_rounded),
+                    label: Text(
+                      _photo != null || widget.tournament?.imagePath != null
+                          ? 'Cambia foto o logo'
+                          : 'Foto o logo del torneo',
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             FilledButton(

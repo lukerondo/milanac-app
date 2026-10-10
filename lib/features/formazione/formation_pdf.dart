@@ -9,31 +9,12 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/theme.dart';
+import '../carta/mini_card.dart';
+import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
 import '../volto/face_view.dart';
 import 'modules.dart';
 import 'pitch_painter.dart';
-
-/// Colori della mini carta secondo l'overall (come i livelli della carta grande).
-(Color, Color, Color) _cardColors(int? overall) => switch (overall) {
-  null => (const Color(0xFF34343C), const Color(0xFF17171B), Colors.white),
-  < 65 => (
-    const Color(0xFFD9A273),
-    const Color(0xFF8A5530),
-    const Color(0xFF3B2414),
-  ),
-  < 75 => (
-    const Color(0xFFF1F3F6),
-    const Color(0xFF9AA1AB),
-    const Color(0xFF23272E),
-  ),
-  < 85 => (
-    const Color(0xFFFBE3A0),
-    const Color(0xFFC99A2E),
-    const Color(0xFF3A2A08),
-  ),
-  _ => (const Color(0xFFC8102E), const Color(0xFF0B0B0D), const Color(0xFFF6D77F)),
-};
 
 /// Larghezza "logica" del disegno (il campo come appare nell'app); il PNG è più grande.
 const _logicalWidth = 360.0;
@@ -45,6 +26,7 @@ Future<Uint8List> renderFormationImage(
   Formation formation,
   Map<String, Member> members, {
   double width = 1080,
+  Map<String, SpecialCard> specials = const {},
 }) async {
   final scale = width / _logicalWidth;
   final logical = Size(_logicalWidth, _logicalWidth / _pitchAspect);
@@ -62,7 +44,7 @@ Future<Uint8List> renderFormationImage(
     if (member == null) {
       _paintEmptySlot(canvas, center, slot.label);
     } else {
-      _paintMiniCard(canvas, center, member, slot.label);
+      _paintMiniCard(canvas, center, member, slot.label, specials[member.id]);
     }
   }
 
@@ -97,9 +79,15 @@ void _paintEmptySlot(Canvas canvas, Offset center, String label) {
   _text(canvas, label, center, 10, FontWeight.w800, Colors.white);
 }
 
-void _paintMiniCard(Canvas canvas, Offset center, Member m, String label) {
+void _paintMiniCard(
+  Canvas canvas,
+  Offset center,
+  Member m,
+  String label,
+  SpecialCard? special,
+) {
   final rect = Rect.fromCenter(center: center, width: _cardW, height: _cardH);
-  final (top, bottom, text) = _cardColors(m.overall);
+  final (top, bottom, text) = miniCardColors(m.overall, special);
   final rr = RRect.fromRectAndRadius(rect, const Radius.circular(9));
   canvas.drawRRect(
     rr.shift(const Offset(0, 2)),
@@ -167,7 +155,7 @@ void _paintMiniCard(Canvas canvas, Offset center, Member m, String label) {
   // Overall e ruolo, poi il nome sulla carta.
   _text(
     canvas,
-    '${m.overall?.toString() ?? '–'} $label',
+    '${overallWith(m.overall, special)?.toString() ?? '–'} $label',
     Offset(center.dx, rect.top + 47),
     11,
     FontWeight.w800,
@@ -313,10 +301,15 @@ Future<void> shareFormationPdf(
   required Formation formation,
   required Map<String, Member> members,
   required List<Member> bench,
+  Map<String, SpecialCard> specials = const {},
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   try {
-    final image = await renderFormationImage(formation, members);
+    final image = await renderFormationImage(
+      formation,
+      members,
+      specials: specials,
+    );
     final bytes = await buildFormationPdf(
       formation: formation,
       members: members,

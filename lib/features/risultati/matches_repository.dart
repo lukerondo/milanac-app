@@ -166,6 +166,7 @@ class DemoMatchesRepository implements MatchesRepository {
         goalsAgainst: 1,
         scorers: 'Rossi (2), Bianchi',
         notes: 'Rimonta nel secondo tempo!',
+        goalkeeperId: 'p4',
       ),
       ClubMatch(
         id: 'm2',
@@ -232,6 +233,7 @@ class DemoMatchesRepository implements MatchesRepository {
         notes: m.notes,
         team: m.team,
         tournamentId: m.tournamentId,
+        goalkeeperId: m.goalkeeperId,
       ),
     );
     _matchesCtrl.add(_sorted);

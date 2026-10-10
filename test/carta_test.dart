@@ -122,8 +122,10 @@ void main() {
     await tester.pumpAndSettle();
     await goToSection(tester, 'La mia carta');
 
-    // L'overall (82) lo ha assegnato il Direttivo; il giocatore cambia lo stile.
-    expect(find.text('82'), findsOneWidget);
+    // L'overall (82) lo ha assegnato il Direttivo; questa settimana ha la carta
+    // nero/oro (+5), quindi sulla carta si legge 87. Il giocatore cambia lo stile.
+    expect(find.text('87'), findsOneWidget);
+    expect(find.text('+5'), findsOneWidget);
     expect(find.textContaining('non ha ancora assegnato'), findsNothing);
     await tester.tap(find.text('Modifica la mia carta'));
     await tester.pumpAndSettle();
@@ -132,7 +134,7 @@ void main() {
     await tester.tap(find.text('Salva la carta'));
     await tester.pumpAndSettle();
 
-    expect(find.text('82'), findsOneWidget);
+    expect(find.text('87'), findsOneWidget);
     expect(find.text('REGISTA'), findsOneWidget);
   });
 

@@ -8,6 +8,7 @@ import '../features/auth/new_password_page.dart';
 import '../features/auth/pending_page.dart';
 import '../features/calendario/calendario_page.dart';
 import '../features/carta/carta_page.dart';
+import '../features/carte/carte_speciali_page.dart';
 import '../features/chat/channel_page.dart';
 import '../features/chat/chat_list_page.dart';
 import '../features/common/coming_soon_page.dart';
@@ -205,6 +206,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/albo-doro' => const AlboDoroPage(),
                   '/musica' => const MusicaPage(),
                   '/carta' => const MyCardPage(),
+                  '/carte-speciali' => const CarteSpecialiPage(),
                   '/tattiche' => const TattichePage(),
                   '/chat' => const ChatListPage(),
                   '/tornei' => const TorneiPage(),

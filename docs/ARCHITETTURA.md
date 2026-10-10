@@ -84,8 +84,8 @@ pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti 
    del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi.
 3. **Menu laterale** (drawer), a gruppi, con stemma, nome del club, nome e cognome e ruolo:
    - *Squadra*: Presenze · Formazione · Calendario · Risultati · Chat
-   - *Club*: Mondo Proclub · Rosa completa · La mia carta · Tornei · Albo d'oro ·
-     Regolamento & Storia · Tattiche & Build · Colonna sonora
+   - *Club*: Mondo Proclub · Rosa completa · La mia carta · Carte speciali · Tornei ·
+     Albo d'oro · Regolamento & Storia · Tattiche & Build · Colonna sonora
    - *Direttivo*: Sala Direttivo (solo per chi ne fa parte)
    - in fondo: icone social + sito web (modificabili dal Direttivo)
 3b. **Mondo Proclub** – scheda *Video*: i video dei creator pubblicati dal Direttivo,
@@ -94,8 +94,11 @@ pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti 
    descrizione breve e "Leggi la notizia"; filtri *Aggiornamenti FC 27*, *Console*, *Tornei*,
    *Pro Clubs*, *Ultimate Team*; avviso in evidenza per un nuovo Title Update o un
    aggiornamento della console.
-4. **Rosa completa** – foto, nome/gamertag, ruolo nel club (*Direttivo* / *Giocatore*),
-   ruolo in campo, numero, data di ingresso.
+4. **Rosa completa** – vista predefinita a **mini carte** (volto, overall con l'eventuale
+   bonus della carta speciale, ruolo, nome), oppure carte grandi o elenco (foto, gamertag,
+   ruolo nel club, ruolo in campo, numero, data di ingresso). Ricerca per nome, cognome o
+   gamertag; filtri per squadra, reparto (POR/DIF/CEN/ATT) e *Solo Direttivo*. Un tocco apre
+   la carta del giocatore.
 5. **Formazione** – campo verde stile San Siro (disegnato in Flutter), scelta modulo
    (4-3-3, 4-2-3-1, 3-5-2…), 11 bollini: il Direttivo tocca un bollino e assegna il giocatore.
 6. **Calendario** – vista mensile + lista; tipi evento: *Partita torneo*, *Amichevole*,
@@ -127,26 +130,42 @@ pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti 
     la pubblica, poi ogni giocatore della squadra riceve la notifica personale (titolare con
     ruolo o panchina), l'annuncio compare in *Comunicazioni* e chiunque può scaricare il
     **PDF con le mini carte** (campo, volto, nome, ruolo, overall, panchina).
-13. **Carta FUT** – "La mia carta" e carte in Rosa: overall scelto dal giocatore (livelli bronzo,
+13. **Carta FUT** – "La mia carta" e carte in Rosa: overall deciso dal Direttivo (livelli bronzo,
     argento, oro, rossonera 85+), statistiche dal club (presenze, puntualità, serate, gol dai
-    marcatori, mesi nel club, % vittorie), condivisione come immagine.
+    marcatori, mesi nel club, % vittorie), condivisione come immagine. Se il giocatore ha una
+    carta speciale in corso, la carta mostrata è quella (colori nero/oro o blu elettrico,
+    overall con il bonus) ovunque: carta, Rosa, mini carte del PDF, anello sul volto in chat.
 14. **Tattiche & Build** – schemi del club con immagine e spiegazione (Direttivo); i video dei
     creator stanno in Mondo Proclub (la lavagna arriva con la fase 4).
 15. **Chat** – canali Generale, Milan AC, Milan AC Futuro (visibili a chi ci gioca),
-    Tattiche & Schemi, Comunicazioni (scrive solo il Direttivo: avvisi, formazioni), Sala
-    Direttivo (riservato); foto, non letti, canali silenziabili, notifiche.
-16. **Tornei** – link al sito, squadra, stato, classifica facoltativa compilata dal Direttivo,
-    partite collegate.
+    Tattiche & Schemi, Comunicazioni (scrive solo il Direttivo: avvisi, formazioni, carte
+    speciali), Sala Direttivo (riservato). In stile Telegram: bolle rosse per i propri
+    messaggi e grigie per gli altri (volto e nome), separatori per giorno, "Nuovi messaggi"
+    dall'ultima lettura, risposta citata, menu a pressione lunga (rispondi, copia, elimina con
+    conferma), **vocali** (tieni premuto il microfono, scorri a sinistra per annullare, max
+    2 minuti, lettore con avanzamento), foto, link cliccabili, pulsante "torna in fondo".
+    Foto e vocali scadono dopo 60 giorni: il messaggio resta con "Allegato scaduto" (pulizia
+    notturna). Non letti, canali silenziabili, notifiche.
+16. **Tornei** – foto o logo (caricati dal Direttivo), link al sito, squadra, stato,
+    classifica facoltativa compilata dal Direttivo, partite collegate.
 17. **Colonna sonora** – ognuno sceglie un file audio dal proprio telefono (es. compilation
     FIFA): suona in loop, muto sempre in alto. Nessuna canzone è inclusa nell'app (diritti);
     playlist e video ufficiali su YouTube/Spotify condivisi come link.
-18. **Carte speciali** (fase 3) – al posto dei voti: dopo ogni partita ufficiale il Direttivo
-    sceglie un giocatore per reparto per la carta nero/oro della settimana (bonus fino a +5,
-    vale 7 giorni); carta blu elettrico automatica per tripletta o portiere imbattuto 3 volte.
-19. **Traguardi** – 9 badge (bronzo, argento, oro, leggenda): presenze, gol, un mese senza
-    ritardi, un anno nel club, overall 85+ (quelli legati alle carte speciali arrivano in fase 3).
+18. **Carte speciali** – al posto dei voti. Dal dettaglio di una partita con risultato il
+    Direttivo sceglie un premiato per reparto (POR, DIF, CEN, ATT) per la **carta nero/oro
+    della settimana**, con bonus da +1 a +5 sull'overall; la **blu elettrico** (+5) arriva da
+    sola quando si salva il risultato: tripletta (dai marcatori) o portiere alla terza partita
+    ufficiale di fila senza subire gol (il portiere della partita viene dalla formazione
+    pubblicata, correggibile nell'editor). Durano 7 giorni; la blu batte la nero/oro.
+    Ogni assegnazione aggiorna l'annuncio in *Comunicazioni* ("Carte speciali della Nª
+    giornata…"), avvisa la squadra e manda al premiato la notifica che apre la sua carta
+    con il walkout dedicato. La sezione *Carte speciali* mostra la settimana in corso e lo
+    storico per giornata.
+19. **Traguardi** – 11 badge (bronzo, argento, oro, leggenda): presenze, gol, un mese senza
+    ritardi, un anno nel club, overall 85+, carta della settimana, blu elettrico.
 20. **Walkout** – animazione stile pacchetti FUT (luci, bandiera, ruolo, stemma, giro della
-    carta) alla prima apertura dopo l'approvazione e quando l'overall sale; rivedibile dalla carta.
+    carta) alla prima apertura dopo l'approvazione, quando l'overall sale e quando arriva una
+    carta speciale (con i suoi colori); rivedibile dalla carta.
 21. **Sala Direttivo** – contatori (senza risposta stasera, formazioni da pubblicare, video
     proposti) e azioni: presenze di stasera (correzioni anche dopo le 18:30), formazioni,
     nuovo evento, avviso a tutti (in Comunicazioni), nuovo risultato, rosa e squadre,
@@ -192,6 +211,15 @@ daily_jobs    day, job, done_at                    -- promemoria e assenze fatti
 channels      + team (milanac|futuro), direttivo_writes   -- Generale, Milan AC, Futuro, Tattiche, Comunicazioni, Direttivo
 shared_links  category(musica|video) + status(proposto|pubblicato), published_by, published_at
 news          + platform (ps5|xbox) per la categoria console
+-- dalla migrazione 0018
+messages      + reply_to (stesso canale), audio_path, duration_s(<=120), expires_at, expired_at
+              (foto e vocali scadono dopo 60 giorni: resta "Allegato scaduto")
+storage_cleanup bucket, path, queued_at              -- file da togliere dallo Storage (solo server)
+matches       + goalkeeper_id (dalla formazione pubblicata al primo risultato)
+special_cards id, player_id, kind(nero_oro|blu), reparto(POR|DIF|CEN|ATT), bonus(1-5), reason,
+              match_id, team, starts_at, ends_at(+7 giorni), assigned_by
+              (per partita: una carta per giocatore e tipo, una nero/oro per reparto)
+tournaments   + image_path (foto o logo nel bucket tournaments)
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
@@ -199,8 +227,19 @@ pubblicazione formazione → notifica + annuncio in *Comunicazioni*, nuovo messa
 nuovo evento → notifica, `chat_overview()` (non letti + ultimo messaggio per canale),
 risultato inserito → notifica alla squadra, `complete_registration()` / `accept_rules()` /
 `publish_rules()` / `set_direttivo_password()` (registrazione e regolamento), `player_stats()`
-(numeri per i traguardi), video proposto / pubblicato → notifica, notizia su aggiornamenti o
-console → notifica (al massimo una ogni 12 ore per tipo).
+(numeri per i traguardi, comprese le carte speciali ricevute), video proposto / pubblicato →
+notifica, notizia su aggiornamenti o console → notifica (al massimo una ogni 12 ore per tipo).
+Carte speciali: `assign_special_cards(partita, premi)` (solo Direttivo: una nero/oro per
+reparto, sostituisce l'elenco precedente, aggiorna l'annuncio in *Comunicazioni* con
+`announce_special_cards` e manda gli avvisi `special_card` / `special_cards_week`);
+`award_blue_cards` gira dal trigger del risultato e legge i marcatori con `scorer_goals`
+(nome sulla carta, cognome o gamertag, "Rossi (3)" / "x3") e la serie del portiere;
+`match_number` numera le giornate (partite ufficiali con risultato dal 1° agosto). Chat:
+`messages_before_insert` (risposta nello stesso canale, scadenza a 60 giorni),
+`expire_attachments()` ogni notte alle 3:15 (pg_cron) toglie gli allegati scaduti, mette i
+file in `storage_cleanup` e chiama la funzione `notify` (evento `cleanup`) che li elimina
+dallo Storage con la chiave di servizio; i messaggi eliminati accodano i loro file allo
+stesso modo.
 
 Lavori automatici con **pg_cron**: `attendance_tick()` gira ogni minuto e, in ora italiana,
 alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assenze automatiche
@@ -208,8 +247,9 @@ alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assen
 le 18:30 dalle policy (`attendance_open`); il Direttivo corregge sempre. Nei test l'ora si fissa
 con l'impostazione `milanac.now` (`app_now()`).
 
-Storage buckets: `avatars`, `trophies`, `match-media`, `tactics`, `chat` (tutti privati, letti
-tramite URL firmati, con limiti di dimensione e tipo di file).
+Storage buckets: `avatars`, `trophies`, `match-media`, `tactics`, `chat` (foto e vocali),
+`tournaments` (tutti privati, letti tramite URL firmati, con limiti di dimensione e tipo di
+file).
 
 Ogni migrazione è provata in CI su un PostgreSQL vuoto (`tools/db/test/`: parti di Supabase
 simulate + controlli su RLS e trigger) prima di essere applicata al database vero.
@@ -255,8 +295,9 @@ milanac-app/
   lib/
     main.dart
     core/      theme/ (rossonero), router/, supabase/, auth/, widgets/
-    features/  intro/ news/ rosa/ formazione/ calendario/ risultati/
-               albo_doro/ regolamento/ presenze/ settings/
+    features/  intro/ auth/ registrazione/ home/ mondo/ news/ rosa/ carta/ carte/ formazione/
+               calendario/ risultati/ presenze/ chat/ tornei/ albo_doro/ regolamento/
+               tattiche/ musica/ traguardi/ walkout/ volto/ direttivo/ impostazioni/
   assets/      video/intro.mp4, images/ (stemma, sala trofei), fonts/
   supabase/    migrations/ (schema + RLS), seed.sql
   tools/news_fetcher/   script raccolta notizie

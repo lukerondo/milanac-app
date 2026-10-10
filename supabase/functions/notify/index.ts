@@ -12,6 +12,10 @@
 //   { kind: "video_proposed", id }          → al Direttivo: un giocatore propone un video
 //   { kind: "video_published", id }         → a chi l'ha proposto: il video è stato pubblicato
 //   { kind: "news", id }                    → aggiornamento FC 27 (a tutti) o di una console (per piattaforma)
+//   { kind: "special_card", id }            → al giocatore: ha ricevuto una carta nero/oro o blu elettrico
+//   { kind: "special_cards_week", match }   → alla squadra: le carte speciali della giornata
+//   { kind: "cleanup" }                     → nessuna notifica: rimuove dallo Storage i file in coda
+//                                             (allegati della chat scaduti o eliminati)
 //
 // Variabili (impostate dal workflow "Funzioni"):
 //   WEBHOOK_SECRET, FIREBASE_SERVICE_ACCOUNT (JSON; se manca le notifiche sono disattivate)
@@ -25,8 +29,10 @@ Deno.serve(async (req) => {
   if (req.headers.get("x-milanac-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("forbidden", { status: 403 });
   }
-  const { kind, id, version, users } = await req.json();
+  const { kind, id, version, users, match } = await req.json();
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+  if (kind === "cleanup") return Response.json({ removed: await cleanupStorage(db) });
 
   let pushes: Push[] = [];
   if (kind === "formation") pushes = await formationPushes(db, id);
@@ -39,6 +45,8 @@ Deno.serve(async (req) => {
   else if (kind === "video_proposed") pushes = await videoProposedPushes(db, id);
   else if (kind === "video_published") pushes = await videoPublishedPushes(db, id);
   else if (kind === "news") pushes = await newsPushes(db, id);
+  else if (kind === "special_card") pushes = await specialCardPushes(db, id);
+  else if (kind === "special_cards_week") pushes = await specialCardsWeekPushes(db, match);
   else return new Response("unknown kind", { status: 400 });
 
   const account = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
@@ -238,7 +246,7 @@ async function newsPushes(db: SupabaseClient, newsId: number): Promise<Push[]> {
 async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]> {
   const { data: msg } = await db
     .from("messages")
-    .select("id, kind, body, image_path, meta, author_id, channel_id, channels(name, slug, team, direttivo_only), profiles(display_name)")
+    .select("id, kind, body, image_path, audio_path, meta, author_id, channel_id, channels(name, slug, team, direttivo_only), profiles(display_name)")
     .eq("id", messageId).single();
   if (!msg) return [];
   // deno-lint-ignore no-explicit-any
@@ -256,7 +264,7 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
   const { data: mutes } = await db
     .from("channel_mutes").select("user_id").eq("channel_id", msg.channel_id);
   const muted = new Set((mutes ?? []).map((m) => m.user_id));
-  const text = msg.body?.trim() || (msg.image_path ? "📷 Foto" : "");
+  const text = msg.body?.trim() || (msg.image_path ? "📷 Foto" : msg.audio_path ? "🎤 Messaggio vocale" : "");
   return (members ?? [])
     .filter((m) => m.id !== msg.author_id && !muted.has(m.id))
     .map((m) => ({
@@ -269,6 +277,68 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
       route: `/chat/${channel?.slug ?? ""}`,
       data: { channel: channel?.slug ?? "" },
     }));
+}
+
+// ------------------------------------------------------------------ carte speciali
+
+const REPARTO_NAMES: Record<string, string> = {
+  POR: "portiere", DIF: "difensore", CEN: "centrocampista", ATT: "attaccante",
+};
+
+async function specialCardPushes(db: SupabaseClient, cardId: string): Promise<Push[]> {
+  const { data: c } = await db
+    .from("special_cards").select("id, player_id, kind, reparto, bonus, reason").eq("id", cardId).single();
+  if (!c) return [];
+  const bonus = `+${c.bonus}`;
+  return [c.kind === "blu"
+    ? {
+      userId: c.player_id,
+      title: "⚡ Carta blu elettrico!",
+      body: `${c.reason ?? "Prestazione da ricordare"}: la tua carta è blu elettrico (${bonus}) per una settimana.`,
+      route: "/carta",
+      data: { card: c.id },
+    }
+    : {
+      userId: c.player_id,
+      title: "🏅 Carta nero/oro della settimana",
+      body: `Hai ricevuto la carta nero/oro della settimana (${bonus}) come ${REPARTO_NAMES[c.reparto] ?? c.reparto}. Vale 7 giorni!`,
+      route: "/carta",
+      data: { card: c.id },
+    }];
+}
+
+async function specialCardsWeekPushes(db: SupabaseClient, matchId: string): Promise<Push[]> {
+  const { data: m } = await db.from("matches").select("id, team").eq("id", matchId).single();
+  if (!m) return [];
+  const { data: msg } = await db
+    .from("messages").select("body").eq("kind", "system")
+    .eq("meta->>type", "special_cards").eq("meta->>match", matchId).maybeSingle();
+  // "Carte speciali della 3ª giornata (Milan AC 3–1 Rivali): POR Rossi +5, …"
+  const body = msg?.body ?? "Guarda chi ha la carta speciale di questa settimana.";
+  const title = body.match(/^Carte speciali ([^(]+)/)?.[1]?.trim();
+  return (await members(db, m.team)).map((u) => ({
+    userId: u.id,
+    title: `🏅 Carte speciali ${title ?? "della giornata"}`,
+    body: body.replace(/^Carte speciali [^:]*: /, ""),
+    route: "/carte-speciali",
+    data: { match: m.id },
+  }));
+}
+
+// ------------------------------------------------------------------ pulizia dello Storage
+
+/// Rimuove i file in coda (storage_cleanup); le righe restano se la rimozione fallisce.
+async function cleanupStorage(db: SupabaseClient): Promise<number> {
+  const { data: rows } = await db.from("storage_cleanup").select("bucket, path").limit(500);
+  let removed = 0;
+  for (const bucket of new Set((rows ?? []).map((r) => r.bucket))) {
+    const paths = (rows ?? []).filter((r) => r.bucket === bucket).map((r) => r.path);
+    const { error } = await db.storage.from(bucket).remove(paths);
+    if (error) continue;
+    await db.from("storage_cleanup").delete().eq("bucket", bucket).in("path", paths);
+    removed += paths.length;
+  }
+  return removed;
 }
 
 // ------------------------------------------------------------------ FCM

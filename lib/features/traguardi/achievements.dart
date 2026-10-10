@@ -100,6 +100,15 @@ final achievements = <Achievement>[
     (i) => i.goals,
   ),
   Achievement(
+    'carta_settimana',
+    'Carta della settimana',
+    'Premiato dal Direttivo con la carta nero/oro',
+    Icons.military_tech_rounded,
+    BadgeLevel.oro,
+    1,
+    (i) => i.stats.neroOro,
+  ),
+  Achievement(
     'anni_1',
     'Bandiera',
     'Un anno nel club',
@@ -125,6 +134,15 @@ final achievements = <Achievement>[
     BadgeLevel.leggenda,
     25,
     (i) => i.goals,
+  ),
+  Achievement(
+    'blu_elettrico',
+    'Blu elettrico',
+    'Tripletta, o tre partite ufficiali di fila senza subire gol',
+    Icons.bolt_rounded,
+    BadgeLevel.leggenda,
+    1,
+    (i) => i.stats.blu,
   ),
   Achievement(
     'fuoriclasse',
