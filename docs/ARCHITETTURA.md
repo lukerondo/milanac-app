@@ -135,8 +135,16 @@ pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti 
     marcatori, mesi nel club, % vittorie), condivisione come immagine. Se il giocatore ha una
     carta speciale in corso, la carta mostrata è quella (colori nero/oro o blu elettrico,
     overall con il bonus) ovunque: carta, Rosa, mini carte del PDF, anello sul volto in chat.
-14. **Tattiche & Build** – schemi del club con immagine e spiegazione (Direttivo); i video dei
-    creator stanno in Mondo Proclub (la lavagna arriva con la fase 4).
+14. **Tattiche & Build** – schemi del club con immagine e spiegazione (Direttivo) e la
+    **lavagna tattica**: campo con i gettoni dei giocatori (dalla formazione della squadra,
+    con numero e nome sulla carta; anche avversari e gettoni vuoti), pennello *Fuoco* (la
+    heatmap gialla e rossa si accumula dove si insiste), *Freccia* (trascina; doppio tocco
+    per le tratteggiate), *Annulla*, *Pulisci*, nuova lavagna da un modulo. *Salva* mette lo
+    schema (gettoni, frecce, heatmap in `tactics.board`) in Tattiche e schemi con l'immagine
+    esportata; tutti lo guardano, il Direttivo lo modifica. *Registra* chiede il microfono e
+    salva la voce e ogni azione con il suo istante (fino a 5 minuti); allo stop l'anteprima
+    con il replay sincronizzato, poi "Invia in chat" (canale a scelta, predefinito Tattiche e
+    Schemi) oppure elimina. I video dei creator stanno in Mondo Proclub.
 15. **Chat** – canali Generale, Milan AC, Milan AC Futuro (visibili a chi ci gioca),
     Tattiche & Schemi, Comunicazioni (scrive solo il Direttivo: avvisi, formazioni, carte
     speciali), Sala Direttivo (riservato). In stile Telegram: bolle rosse per i propri
@@ -145,7 +153,9 @@ pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti 
     conferma), **vocali** (tieni premuto il microfono, scorri a sinistra per annullare, max
     2 minuti, lettore con avanzamento), foto, link cliccabili, pulsante "torna in fondo".
     Foto e vocali scadono dopo 60 giorni: il messaggio resta con "Allegato scaduto" (pulizia
-    notturna). Non letti, canali silenziabili, notifiche.
+    notturna). Il **replay della lavagna** arriva come riquadro con il campo e il pulsante
+    Play: si riproduce nell'app (audio più mosse, pochi KB, non è un video) e scade dopo 3
+    giorni. Non letti, canali silenziabili, notifiche.
 16. **Tornei** – foto o logo (caricati dal Direttivo), link al sito, squadra, stato,
     classifica facoltativa compilata dal Direttivo, partite collegate.
 17. **Colonna sonora** – ognuno sceglie un file audio dal proprio telefono (es. compilation
@@ -220,6 +230,10 @@ special_cards id, player_id, kind(nero_oro|blu), reparto(POR|DIF|CEN|ATT), bonus
               match_id, team, starts_at, ends_at(+7 giorni), assigned_by
               (per partita: una carta per giocatore e tipo, una nero/oro per reparto)
 tournaments   + image_path (foto o logo nel bucket tournaments)
+-- dalla migrazione 0019
+tactics       + board (jsonb: modulo, squadra, gettoni, frecce, heatmap), team
+messages      + replay_path (JSON delle azioni con i tempi; l'audio in audio_path fino a 300 s);
+              un replay scade dopo 3 giorni
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
@@ -236,10 +250,12 @@ reparto, sostituisce l'elenco precedente, aggiorna l'annuncio in *Comunicazioni*
 (nome sulla carta, cognome o gamertag, "Rossi (3)" / "x3") e la serie del portiere;
 `match_number` numera le giornate (partite ufficiali con risultato dal 1° agosto). Chat:
 `messages_before_insert` (risposta nello stesso canale, scadenza a 60 giorni),
-`expire_attachments()` ogni notte alle 3:15 (pg_cron) toglie gli allegati scaduti, mette i
-file in `storage_cleanup` e chiama la funzione `notify` (evento `cleanup`) che li elimina
-dallo Storage con la chiave di servizio; i messaggi eliminati accodano i loro file allo
-stesso modo.
+`expire_attachments()` ogni notte alle 3:15 (pg_cron) toglie gli allegati scaduti (foto e
+vocali dopo 60 giorni, replay della lavagna dopo 3), mette i file in `storage_cleanup` e
+chiama la funzione `notify` (evento `cleanup`) che li elimina dallo Storage con la chiave di
+servizio; i messaggi eliminati accodano i loro file allo stesso modo. Il replay è un file
+JSON con la lavagna di partenza e le azioni con l'istante (`lib/features/lavagna/`): la
+stessa macchina a stati disegna la lavagna e rifà le mosse in riproduzione.
 
 Lavori automatici con **pg_cron**: `attendance_tick()` gira ogni minuto e, in ora italiana,
 alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assenze automatiche
@@ -297,7 +313,7 @@ milanac-app/
     core/      theme/ (rossonero), router/, supabase/, auth/, widgets/
     features/  intro/ auth/ registrazione/ home/ mondo/ news/ rosa/ carta/ carte/ formazione/
                calendario/ risultati/ presenze/ chat/ tornei/ albo_doro/ regolamento/
-               tattiche/ musica/ traguardi/ walkout/ volto/ direttivo/ impostazioni/
+               tattiche/ lavagna/ musica/ traguardi/ walkout/ volto/ direttivo/ impostazioni/
   assets/      video/intro.mp4, images/ (stemma, sala trofei), fonts/
   supabase/    migrations/ (schema + RLS), seed.sql
   tools/news_fetcher/   script raccolta notizie

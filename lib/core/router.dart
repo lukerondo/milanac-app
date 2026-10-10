@@ -18,6 +18,7 @@ import '../features/home/home_page.dart';
 import '../features/impostazioni/impostazioni_page.dart';
 import '../features/intro/intro_page.dart';
 import '../features/intro/intro_state.dart';
+import '../features/lavagna/board_page.dart';
 import '../features/mondo/mondo_page.dart';
 import '../features/musica/musica_page.dart';
 import '../features/presenze/presenze_page.dart';
@@ -174,6 +175,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/chat/:slug',
         builder: (_, state) => ChannelPage(slug: state.pathParameters['slug']!),
+      ),
+      // Lavagna tattica: nuova o uno schema salvato.
+      GoRoute(path: '/lavagna', builder: (_, _) => const BoardPage()),
+      GoRoute(
+        path: '/lavagna/:id',
+        builder: (_, state) =>
+            SavedBoardPage(tacticId: state.pathParameters['id']!),
       ),
       ShellRoute(
         builder: (context, state, child) =>

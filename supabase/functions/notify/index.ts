@@ -4,6 +4,7 @@
 // Eventi gestiti:
 //   { kind: "formation", id }               → ai membri della squadra: titolare (con ruolo) o panchina
 //   { kind: "chat_message", id }            → ai membri del canale, escluso l'autore e chi l'ha silenziato
+//                                             (un replay della lavagna: "Nuovo schema con audio")
 //   { kind: "match_result", id }            → ai giocatori della squadra: risultato e marcatori
 //   { kind: "rules", version }              → a tutti i membri: nuova versione del regolamento da accettare
 //   { kind: "event", id }                   → alla squadra (o a tutti): nuovo appuntamento in calendario
@@ -264,7 +265,9 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
   const { data: mutes } = await db
     .from("channel_mutes").select("user_id").eq("channel_id", msg.channel_id);
   const muted = new Set((mutes ?? []).map((m) => m.user_id));
-  const text = msg.body?.trim() || (msg.image_path ? "📷 Foto" : msg.audio_path ? "🎤 Messaggio vocale" : "");
+  const text = msg.meta?.type === "replay"
+    ? `🎬 Nuovo schema con audio${msg.meta?.title ? `: ${msg.meta.title}` : ""}`
+    : msg.body?.trim() || (msg.image_path ? "📷 Foto" : msg.audio_path ? "🎤 Messaggio vocale" : "");
   return (members ?? [])
     .filter((m) => m.id !== msg.author_id && !muted.has(m.id))
     .map((m) => ({
