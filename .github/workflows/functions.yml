@@ -4,8 +4,19 @@ name: Funzioni
 # e collega il database. Usa il token personale Supabase (secret SUPABASE_ACCESS_TOKEN o MILANACAPP).
 # FIREBASE_SERVICE_ACCOUNT è facoltativo: senza, la funzione risponde ma non invia notifiche.
 # AGORA_APP_ID e AGORA_APP_CERTIFICATE sono facoltativi: senza, la stanza vocale resta spenta.
+# Si possono mettere come secret di GitHub oppure incollare nel modulo "Run workflow":
+# in entrambi i casi finiscono solo tra i segreti delle funzioni su Supabase.
 on:
   workflow_dispatch:
+    inputs:
+      agora_app_id:
+        description: "App ID di Agora (facoltativo: se vuoto si usa il secret AGORA_APP_ID)"
+        required: false
+        type: string
+      agora_app_certificate:
+        description: "App Certificate di Agora (facoltativo: se vuoto si usa il secret AGORA_APP_CERTIFICATE)"
+        required: false
+        type: string
   push:
     branches: [main, claude/cloud-credits-private-repo-gqfxlp]
     paths: [supabase/functions/**, .github/workflows/functions.yml]
@@ -31,8 +42,8 @@ jobs:
       - name: Segreti delle funzioni
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          AGORA_APP_ID: ${{ secrets.AGORA_APP_ID }}
-          AGORA_APP_CERTIFICATE: ${{ secrets.AGORA_APP_CERTIFICATE }}
+          AGORA_APP_ID: ${{ inputs.agora_app_id || secrets.AGORA_APP_ID }}
+          AGORA_APP_CERTIFICATE: ${{ inputs.agora_app_certificate || secrets.AGORA_APP_CERTIFICATE }}
         run: |
           SECRET=$(openssl rand -hex 24)
           echo "::add-mask::$SECRET"
@@ -44,10 +55,12 @@ jobs:
             rm /tmp/fsa.json
           fi
           if [ -n "$AGORA_APP_ID" ] && [ -n "$AGORA_APP_CERTIFICATE" ]; then
+            echo "::add-mask::$AGORA_APP_ID"
+            echo "::add-mask::$AGORA_APP_CERTIFICATE"
             ARGS+=(AGORA_APP_ID="$AGORA_APP_ID" AGORA_APP_CERTIFICATE="$AGORA_APP_CERTIFICATE")
             echo "Stanza vocale: segreti Agora impostati."
           else
-            echo "Stanza vocale: segreti Agora assenti (AGORA_APP_ID / AGORA_APP_CERTIFICATE), resta spenta."
+            echo "Stanza vocale: segreti Agora non indicati; restano quelli già su Supabase, se mai impostati."
           fi
           supabase secrets set --project-ref "$REF" "${ARGS[@]}"
       - name: Pubblica le funzioni
