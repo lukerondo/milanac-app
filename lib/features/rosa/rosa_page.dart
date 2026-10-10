@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
 import '../carta/carta_page.dart';
 import '../carta/fut_card.dart';
+import '../carte/special_cards_repository.dart';
 import 'member.dart';
 import 'rosa_repository.dart';
 
@@ -211,9 +212,15 @@ class _CardGrid extends ConsumerWidget {
           child: Consumer(
             builder: (context, ref, _) {
               final stats = ref.watch(cardStatsProvider(m.id));
+              final special = ref.watch(activeSpecialCardProvider(m.id));
               return stats == null
                   ? const SizedBox()
-                  : FutCard(member: m, stats: stats);
+                  : FutCard(
+                      member: m,
+                      stats: stats,
+                      special: special?.kind,
+                      bonus: special?.bonus ?? 0,
+                    );
             },
           ),
         ),

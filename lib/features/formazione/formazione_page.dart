@@ -7,6 +7,7 @@ import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'formation_pdf.dart';
@@ -268,6 +269,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
                   formation: formation,
                   members: allMembers,
                   bench: bench,
+                  specials: ref.read(activeSpecialCardsProvider),
                 ),
                 icon: const Icon(Icons.picture_as_pdf_rounded),
                 label: const Text('PDF con le mini carte'),

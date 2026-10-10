@@ -13,6 +13,7 @@ import '../../core/push/push_service.dart';
 import '../../core/theme.dart';
 import '../../shared/link_text.dart';
 import '../../shared/member_photo.dart';
+import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'chat_repository.dart';
@@ -744,9 +745,16 @@ class _SystemMessage extends StatelessWidget {
       'special_cards' => (Icons.military_tech_rounded, MilanacColors.gold),
       _ => (Icons.info_rounded, Colors.white54),
     };
+    final route = switch (message.systemType) {
+      'formation' => '/formazione',
+      'special_cards' => '/carte-speciali',
+      _ => null,
+    };
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-      child: Container(
+      child: GestureDetector(
+        onTap: route == null ? null : () => context.push(route),
+        child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: color.withValues(alpha: .12),
@@ -765,6 +773,7 @@ class _SystemMessage extends StatelessWidget {
               style: const TextStyle(fontSize: 11, color: Colors.white38),
             ),
           ],
+        ),
         ),
       ),
     );
@@ -840,6 +849,10 @@ class _Bubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Chi ha la carta speciale della settimana ha l'anello colorato sul volto.
+    final special = author == null
+        ? null
+        : ref.watch(activeSpecialCardProvider(author!.id));
     final bubble = Container(
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * .78,
@@ -949,10 +962,22 @@ class _Bubble extends ConsumerWidget {
                             radius: 15,
                             child: Icon(Icons.person_rounded, size: 16),
                           )
-                        : MemberAvatar(
-                            member: author!,
-                            radius: 15,
-                            showNumber: false,
+                        : Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: special == null
+                                ? null
+                                : BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: special.kind.color,
+                                      width: 2,
+                                    ),
+                                  ),
+                            child: MemberAvatar(
+                              member: author!,
+                              radius: special == null ? 15 : 13,
+                              showNumber: false,
+                            ),
                           ))
                   : null,
             ),

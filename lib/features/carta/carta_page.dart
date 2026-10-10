@@ -3,11 +3,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/local_flags.dart';
 import '../../core/theme.dart';
+import '../carte/special_cards_repository.dart';
 import '../presenze/attendance_repository.dart';
 import '../risultati/matches_repository.dart';
 import '../rosa/member.dart';
@@ -43,6 +46,12 @@ class MyCardPage extends ConsumerWidget {
     return PlayerCardView(memberId: me.id);
   }
 }
+
+/// Apre la carta di un compagno a schermo intero.
+void openPlayerCard(BuildContext context, String memberId) => Navigator.of(
+  context,
+  rootNavigator: true,
+).push(MaterialPageRoute(builder: (_) => PlayerCardPage(memberId: memberId)));
 
 /// Carta di un compagno, aperta dalla Rosa.
 class PlayerCardPage extends StatelessWidget {
@@ -108,6 +117,8 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
     if (member == null || stats == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    // La carta speciale della settimana (se c'è) sostituisce quella normale.
+    final special = ref.watch(activeSpecialCardProvider(member.id));
     final isMine = me?.id == member.id;
     final isDirettivo = me?.isDirettivo ?? false;
 
@@ -125,6 +136,8 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                 child: FutCard(
                   member: member,
                   stats: stats,
+                  special: special?.kind,
+                  bonus: special?.bonus ?? 0,
                   badges: [
                     for (final a in topBadges(
                       ref.watch(achievementsProvider(member.id)) ?? const [],
@@ -137,6 +150,7 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
           ),
         ),
         const SizedBox(height: 12),
+        if (special != null) _SpecialNote(card: special),
         if (isMine && member.overall == null)
           const Padding(
             padding: EdgeInsets.only(bottom: 8),
@@ -165,8 +179,13 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
               label: const Text('Condividi'),
             ),
             OutlinedButton.icon(
-              onPressed: () =>
-                  showWalkout(context, member: member, stats: stats),
+              onPressed: () => showWalkout(
+                context,
+                member: member,
+                stats: stats,
+                special: special?.kind,
+                bonus: special?.bonus ?? 0,
+              ),
               icon: const Icon(Icons.auto_awesome_rounded),
               label: const Text('Walkout'),
             ),
@@ -204,6 +223,30 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
       ],
     );
   }
+}
+
+/// Sotto la carta: perché è speciale e fino a quando.
+class _SpecialNote extends StatelessWidget {
+  const _SpecialNote({required this.card});
+  final SpecialCard card;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(bottom: 10),
+    child: ListTile(
+      leading: Icon(card.kind.icon, color: card.kind.color, size: 30),
+      title: Text(
+        'Carta ${card.kind.label.toLowerCase()} +${card.bonus}',
+        style: TextStyle(fontWeight: FontWeight.w800, color: card.kind.color),
+      ),
+      subtitle: Text(
+        '${card.reason ?? 'Carta della settimana'} · fino al '
+        '${DateFormat('d MMMM', 'it').format(card.endsAt)}',
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () => context.push('/carte-speciali'),
+    ),
+  );
 }
 
 /// Stili di gioco proposti (si può scrivere anche altro).

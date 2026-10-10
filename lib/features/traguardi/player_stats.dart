@@ -9,6 +9,8 @@ class PlayerStats {
     this.presences = 0,
     this.late = 0,
     this.cleanMonth = false,
+    this.neroOro = 0,
+    this.blu = 0,
   });
   final int presences;
   final int late;
@@ -16,10 +18,16 @@ class PlayerStats {
   /// Almeno un mese con 8 serate e nessun ritardo.
   final bool cleanMonth;
 
+  /// Carte speciali ricevute: nero/oro della settimana e blu elettrico.
+  final int neroOro;
+  final int blu;
+
   factory PlayerStats.fromMap(Map<String, dynamic> m) => PlayerStats(
     presences: (m['presences'] as num?)?.toInt() ?? 0,
     late: (m['late'] as num?)?.toInt() ?? 0,
     cleanMonth: (m['clean_month'] as bool?) ?? false,
+    neroOro: (m['nero_oro'] as num?)?.toInt() ?? 0,
+    blu: (m['blu'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -57,5 +65,11 @@ class DemoPlayerStatsRepository implements PlayerStatsRepository {
     presences: playerId == 'p2' ? 48 : 12,
     late: playerId == 'p3' ? 2 : 0,
     cleanMonth: playerId != 'p3',
+    neroOro: switch (playerId) {
+      'p2' => 2,
+      'p3' || 'demo' => 1,
+      _ => 0,
+    },
+    blu: playerId == 'p4' ? 1 : 0,
   );
 }

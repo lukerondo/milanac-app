@@ -5,6 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/theme.dart';
+import '../carte/assign_cards_sheet.dart';
+import '../carte/carte_speciali_page.dart';
+import '../carte/special_cards_repository.dart';
+import '../rosa/member.dart';
+import '../rosa/rosa_repository.dart';
 import 'clip_service.dart';
 import 'clip_trim_page.dart';
 import 'match.dart';
@@ -74,6 +79,7 @@ class MatchDetailPage extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: [
           MatchCard(match: match),
+          _SpecialCardsSection(match: match, isDirettivo: isDirettivo),
           if (match.notes != null && match.notes!.isNotEmpty)
             Card(
               child: Padding(
@@ -113,6 +119,94 @@ class MatchDetailPage extends ConsumerWidget {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Le carte speciali della partita (portiere, blu automatiche, nero/oro del Direttivo).
+class _SpecialCardsSection extends ConsumerWidget {
+  const _SpecialCardsSection({required this.match, required this.isDirettivo});
+  final ClubMatch match;
+  final bool isDirettivo;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final members = {
+      for (final m in ref.watch(rosaProvider).value ?? const <Member>[])
+        m.id: m,
+    };
+    final cards =
+        (ref.watch(specialCardsProvider).value ?? const <SpecialCard>[])
+            .where((c) => c.matchId == match.id)
+            .toList()
+          ..sort(compareCards);
+    final played = match.outcome != MatchOutcome.daGiocare;
+    final goalkeeper = match.goalkeeperId == null
+        ? null
+        : members[match.goalkeeperId]?.displayName ?? 'Ex membro';
+    if (cards.isEmpty && goalkeeper == null && !isDirettivo) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(
+                  Icons.military_tech_rounded,
+                  size: 18,
+                  color: MilanacColors.gold,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'CARTE SPECIALI',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
+            ),
+            if (goalkeeper != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Portiere della partita: $goalkeeper',
+                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: 4),
+            if (cards.isEmpty)
+              Text(
+                played
+                    ? 'Nessuna carta assegnata per questa partita.'
+                    : 'Le carte si assegnano dopo il risultato.',
+                style: const TextStyle(color: Colors.white54),
+              ),
+            for (final c in cards)
+              SpecialCardRow(card: c, member: members[c.playerId]),
+            if (isDirettivo)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: played
+                      ? () => showAssignCardsSheet(context, match)
+                      : null,
+                  icon: const Icon(Icons.military_tech_rounded),
+                  label: Text(
+                    cards.any((c) => !c.isBlue)
+                        ? 'Modifica carte speciali'
+                        : 'Assegna carte speciali',
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -73,6 +73,7 @@ const appSections = <AppSection>[
   AppSection('/mondo', 'Mondo Proclub', Icons.public_rounded),
   AppSection('/rosa', 'Rosa completa', Icons.groups_rounded),
   AppSection('/carta', 'La mia carta', Icons.style_rounded),
+  AppSection('/carte-speciali', 'Carte speciali', Icons.military_tech_rounded),
   AppSection('/tornei', 'Tornei', Icons.leaderboard_rounded),
   AppSection('/albo-doro', "Albo d'oro", Icons.emoji_events_rounded),
   AppSection('/regolamento', 'Regolamento & Storia', Icons.menu_book_rounded),

@@ -27,10 +27,15 @@ class ClubMatch {
     this.notes,
     this.team = Team.milanac,
     this.tournamentId,
+    this.goalkeeperId,
   });
 
   final String id;
   final MatchKind kind;
+
+  /// Portiere della partita (dalla formazione pubblicata, correggibile dal Direttivo):
+  /// serve per la carta blu elettrico delle tre partite senza subire gol.
+  final String? goalkeeperId;
 
   /// Squadra del club che ha giocato.
   final Team team;
@@ -66,6 +71,7 @@ class ClubMatch {
     notes: m['notes'] as String?,
     team: Team.parse(m['team']) ?? Team.milanac,
     tournamentId: m['tournament_id'] as String?,
+    goalkeeperId: m['goalkeeper_id'] as String?,
   );
 
   Map<String, dynamic> toMap() => {
@@ -80,6 +86,7 @@ class ClubMatch {
     'notes': notes,
     'team': team.name,
     'tournament_id': kind == MatchKind.torneo ? tournamentId : null,
+    'goalkeeper_id': goalkeeperId,
   };
 }
 

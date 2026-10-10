@@ -4,18 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
+import '../carte/special_cards_repository.dart';
 import '../volto/face_view.dart';
 import '../rosa/member.dart';
 import 'card_stats.dart';
 
-/// Versioni speciali della carta, come le carte "in forma" di FUT.
-enum CardSpecial {
-  motm('UOMO PARTITA'),
-  totw('SQUADRA DELLA SETTIMANA');
-
-  const CardSpecial(this.label);
-  final String label;
-}
+export '../carte/special_cards_repository.dart' show CardSpecial;
 
 /// Carta in stile FUT del giocatore. Disegnata a 300×428 e scalata alla larghezza disponibile.
 class FutCard extends StatelessWidget {
@@ -24,13 +18,17 @@ class FutCard extends StatelessWidget {
     required this.member,
     required this.stats,
     this.special,
+    this.bonus = 0,
     this.badges = const [],
   });
   final Member member;
   final CardStats stats;
 
-  /// Carta speciale (Uomo partita, Squadra della settimana) al posto di quella base.
+  /// Carta speciale (nero/oro della settimana, blu elettrico) al posto di quella base.
   final CardSpecial? special;
+
+  /// Bonus della carta speciale sull'overall (+1…+5).
+  final int bonus;
 
   /// Badge dei traguardi da mostrare sulla carta (icona, colore), al massimo 3.
   final List<(IconData, Color)> badges;
@@ -40,8 +38,8 @@ class FutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = switch (special) {
-      CardSpecial.motm => _Palette.motm,
-      CardSpecial.totw => _Palette.totw,
+      CardSpecial.neroOro => _Palette.neroOro,
+      CardSpecial.blu => _Palette.blu,
       null => _Palette.of(tierOf(member.overall)),
     };
     return AspectRatio(
@@ -59,6 +57,7 @@ class FutCard extends StatelessWidget {
                 stats: stats,
                 palette: palette,
                 special: special,
+                bonus: bonus,
                 badges: badges,
               ),
             ),
@@ -73,20 +72,20 @@ class _Palette {
   const _Palette(this.top, this.bottom, this.text, this.line);
   final Color top, bottom, text, line;
 
-  /// Uomo partita: nera e oro.
-  static const motm = _Palette(
+  /// Carta della settimana: nera e oro.
+  static const neroOro = _Palette(
     Color(0xFF2B2B2E),
     Color(0xFF050505),
     Color(0xFFF3D27A),
     Color(0xAAF3D27A),
   );
 
-  /// Squadra della settimana: nera con riflessi rossi e oro.
-  static const totw = _Palette(
-    Color(0xFF3A0A12),
-    Color(0xFF050505),
-    Color(0xFFF6D77F),
-    Color(0xAAF6D77F),
+  /// Blu elettrico: blu acceso con scritte chiare.
+  static const blu = _Palette(
+    Color(0xFF2F7BFF),
+    Color(0xFF061A5C),
+    Color(0xFFEAF2FF),
+    Color(0xAAEAF2FF),
   );
 
   static _Palette of(CardTier tier) => switch (tier) {
@@ -192,12 +191,14 @@ class _CardContent extends StatelessWidget {
     required this.stats,
     required this.palette,
     this.special,
+    this.bonus = 0,
     this.badges = const [],
   });
   final Member member;
   final CardStats stats;
   final _Palette palette;
   final CardSpecial? special;
+  final int bonus;
   final List<(IconData, Color)> badges;
 
   @override
@@ -224,7 +225,7 @@ class _CardContent extends StatelessWidget {
             left: 60,
             right: 60,
             child: Text(
-              special!.label,
+              special!.cardLabel,
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -241,13 +242,33 @@ class _CardContent extends StatelessWidget {
           top: 46,
           child: Column(
             children: [
-              Text(
-                member.overall?.toString() ?? '??',
-                style: const TextStyle(
-                  fontSize: 50,
-                  height: 1,
-                  fontWeight: FontWeight.w900,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    member.overall == null
+                        ? '??'
+                        : '${(member.overall! + bonus).clamp(40, 99)}',
+                    style: const TextStyle(
+                      fontSize: 50,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  if (bonus > 0 && member.overall != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 2, top: 4),
+                      child: Text(
+                        '+$bonus',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                ],
               ),
               Text(
                 member.fieldPosition ?? '–',
@@ -327,7 +348,7 @@ class _CardContent extends StatelessWidget {
         Positioned(
           left: 44,
           right: 44,
-          top: 282,
+          top: 274,
           child: Row(
             children: [
               Expanded(child: _StatColumn(left)),
@@ -341,21 +362,21 @@ class _CardContent extends StatelessWidget {
           Positioned(
             left: 0,
             right: 0,
-            bottom: 46,
+            bottom: 44,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 for (final (icon, color) in badges)
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: 20,
-                    height: 20,
+                    width: 18,
+                    height: 18,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: color,
                       border: Border.all(color: palette.text, width: 1),
                     ),
-                    child: Icon(icon, size: 12, color: Colors.white),
+                    child: Icon(icon, size: 11, color: Colors.white),
                   ),
               ],
             ),

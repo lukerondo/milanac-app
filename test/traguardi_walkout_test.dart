@@ -87,7 +87,7 @@ void main() {
     expect(find.text('ATT'), findsOneWidget); // ruolo rivelato
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
-    expect(find.text('NUOVO ACQUISTO!'), findsOneWidget);
+    expect(find.text('CARTA DELLA SETTIMANA +5'), findsOneWidget);
     await tester.tap(find.text('Continua'));
     await tester.pumpAndSettle();
     expect(find.text('CARTA GIOCATORE'), findsOneWidget);

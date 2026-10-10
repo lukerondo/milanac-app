@@ -5,6 +5,7 @@ import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/local_flags.dart';
 import '../carta/carta_page.dart';
+import '../carte/special_cards_repository.dart';
 import '../rosa/rosa_repository.dart';
 import '../traguardi/achievements.dart';
 import '../traguardi/achievements_view.dart';
@@ -71,6 +72,24 @@ class _CelebrationsState extends ConsumerState<Celebrations> {
         await flags.setString(key, current);
       }
 
+      // Carta speciale ricevuta (nero/oro o blu elettrico): walkout dedicato.
+      final special = ref.read(activeSpecialCardProvider(me.id));
+      if (special != null && mounted) {
+        final specialKey = 'special.seen.${me.id}';
+        if (await flags.getString(specialKey) != special.id) {
+          await flags.setString(specialKey, special.id);
+          if (mounted) {
+            await showWalkout(
+              context,
+              member: member,
+              stats: stats,
+              special: special.kind,
+              bonus: special.bonus,
+            );
+          }
+        }
+      }
+
       final progress = ref.read(achievementsProvider(me.id));
       if (progress != null && mounted) {
         final seenKey = 'achievements.seen.${me.id}';
@@ -100,6 +119,7 @@ class _CelebrationsState extends ConsumerState<Celebrations> {
       // Ricontrolla quando cambiano il profilo (overall) o i traguardi.
       ref.listen(rosaProvider, (_, _) => _check());
       ref.listen(achievementsProvider(meId), (_, _) => _check());
+      ref.listen(activeSpecialCardProvider(meId), (_, _) => _check());
     }
     return widget.child;
   }
