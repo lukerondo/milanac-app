@@ -70,4 +70,33 @@ void main() {
     );
     expect(find.text('Presente · segnata dal Direttivo'), findsOneWidget);
   });
+
+  testWidgets('Rosa e squadre: i membri rimossi si vedono e si riattivano', (
+    tester,
+  ) async {
+    await startAppAt(tester, todayAt(17));
+    await goToSection(tester, 'Sala Direttivo');
+    await tester.scrollUntilVisible(
+      find.text('Rosa e squadre'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Rosa e squadre'));
+    await tester.pumpAndSettle();
+    final page = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(find.text('RIMOSSI'), 300, scrollable: page);
+    expect(find.text('Gigi Ferri'), findsOneWidget);
+    await tester.ensureVisible(find.text('Riattiva'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Riattiva'));
+    await tester.pumpAndSettle();
+    expect(find.text('RIMOSSI'), findsNothing);
+    expect(find.text('Gigi Ferri è di nuovo nella rosa.'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.widgetWithText(ChoiceChip, 'Tutte (6)'),
+      -300,
+      scrollable: page,
+    );
+    expect(find.widgetWithText(ChoiceChip, 'Tutte (6)'), findsOneWidget);
+  });
 }

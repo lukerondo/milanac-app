@@ -225,6 +225,22 @@ class DemoRosaRepository implements RosaRepository {
         accessory: 3,
       ),
     ),
+    // Rimosso dal Direttivo: compare solo in Rosa e squadre, tra i "Rimossi".
+    Member(
+      id: 'p7',
+      displayName: 'Gigi Ferri',
+      firstName: 'Luigi',
+      lastName: 'Ferri',
+      birthYear: 1999,
+      gamertag: 'Ferri_7',
+      role: ClubRole.giocatore,
+      fieldPosition: 'ED',
+      shirtNumber: 7,
+      joinedAt: DateTime(2025, 6, 1),
+      overall: 65,
+      active: false,
+      face: const Face(skin: 1, hair: 2, hairColor: 2, brows: 0, beard: 0),
+    ),
   ];
 
   void _emit() => _controller.add(List.of(_members));
