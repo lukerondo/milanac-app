@@ -55,6 +55,15 @@ android {
         }
     }
 
+    // La stanza vocale è solo audio: le estensioni facoltative di Agora (codec video, lip sync,
+    // audio spaziale, riconoscimento del volto, effetti...) restano fuori dall'APK, circa 40 MB
+    // in meno per architettura. Il nucleo audio (libagora-rtc-sdk) resta.
+    packaging {
+        jniLibs {
+            excludes += setOf("**/libagora_*_extension.so")
+        }
+    }
+
     buildTypes {
         release {
             // Senza key.properties (APK di prova, sviluppo locale) si firma con la chiave di prova.

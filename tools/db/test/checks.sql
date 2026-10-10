@@ -914,3 +914,42 @@ select pg_temp.expect_error(
   $q$select join_voice_room(current_setting('test.stanza')::uuid)$q$, 'chiusa');
 reset role;
 select set_config('milanac.now', '', false);
+
+-- ---------------------------------------------------------------- regolamento d'ingresso (0021)
+-- Chi pubblica una versione la ha già accettata (la 2 l'ha pubblicata a2).
+reset role;
+do $$ begin
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 2,
+    'chi pubblica ha già accettato la versione';
+end $$;
+-- Con una versione pubblicata non si entra senza accettarla.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
+select pg_temp.expect_error($q$select enter_club()$q$, 'regolamento da accettare');
+reset role;
+-- Senza nessuna versione: si entra con il ruolo richiesto, poi il primo del Direttivo pubblica.
+begin;
+delete from rules_versions;
+update app_config set value = crypt('prova-test', gen_salt('bf')) where key = 'direttivo_password_hash';
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000a3', 'r3@example.com');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a3');
+select pg_temp.expect_error($q$select enter_club()$q$, 'Completa prima');
+select complete_registration('Gigi', 'Verdi', 1999, 'VERDI', null, array['milanac'], true, 'prova-test', array['capitano'], 'CC', 8, 'ps5', '{}');
+select enter_club();
+do $$ begin
+  assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a3') = 'direttivo',
+    'senza regolamento si entra con il ruolo richiesto';
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a3') is null,
+    'nessuna versione accettata';
+end $$;
+select enter_club();  -- ripetibile
+insert into rules_articles (sort_order, title, body) values (0, 'Art. 1 – Ingresso', 'Benvenuto nel club.');
+do $$ begin
+  assert (select publish_rules()) = 1, 'prima versione';
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a3') = 1,
+    'chi pubblica la prima versione la ha accettata';
+end $$;
+select pg_temp.expect_error($q$select enter_club()$q$, 'regolamento da accettare');
+reset role;
+rollback;

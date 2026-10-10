@@ -97,6 +97,8 @@ e link nella tabella `news` e cancella quelle più vecchie di 60 giorni.
 - **Database**: il workflow *Database* applica le nuove migrazioni solo se quella prova passa.
 - **Funzioni**: il workflow *Funzioni* pubblica la funzione Supabase `notify` (notifiche personali).
 - **APK**: Actions → *CI* → *Run workflow* → scarica l'artifact `milanac-apk` (usa `env/prod.json`).
+  `MILANAC-arm64.apk` (circa 70 MB) è quello da installare sui telefoni; `MILANAC.apk` contiene
+  anche i processori a 32 bit. Le estensioni video di Agora restano fuori dal pacchetto.
 - **Rilascio Android (.aab firmato)**: Actions → *Rilascio Android*.
 - **iOS**: Codemagic (`codemagic.yaml`) → TestFlight.
 - Guida completa per gli store: [`docs/PUBBLICAZIONE.md`](docs/PUBBLICAZIONE.md).

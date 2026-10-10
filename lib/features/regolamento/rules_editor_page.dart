@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme.dart';
 import 'rules_repository.dart';
 
 /// Editor del Direttivo: la bozza degli articoli, da pubblicare come nuova versione.
 class RulesEditorPage extends ConsumerStatefulWidget {
-  const RulesEditorPage({super.key});
+  const RulesEditorPage({super.key, this.firstTime = false});
+
+  /// Primo ingresso del Direttivo senza regolamento pubblicato: spiega cosa fare,
+  /// si può rimandare e, pubblicato, si va alla Home.
+  final bool firstTime;
 
   @override
   ConsumerState<RulesEditorPage> createState() => _RulesEditorPageState();
@@ -98,7 +103,12 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
       final n = await ref.read(rulesRepositoryProvider).publish();
       ref.invalidate(latestRulesProvider);
       _toast('Versione $n pubblicata: tutti dovranno accettarla.');
-      if (mounted) Navigator.of(context).pop();
+      if (!mounted) return;
+      if (widget.firstTime) {
+        context.go('/');
+      } else {
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       _toast('Pubblicazione non riuscita: $e');
     } finally {
@@ -106,13 +116,83 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
     }
   }
 
+  Widget _body(List<RulesArticle> list) {
+    final content = list.isEmpty
+        ? const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Text(
+                'Nessun articolo: aggiungi il primo e poi pubblica.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+          )
+        : ReorderableListView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+            itemCount: list.length,
+            onReorderItem: (from, to) => _reorder(list, from, to),
+            itemBuilder: (context, i) {
+              final a = list[i];
+              return Card(
+                key: ValueKey(a.id ?? i),
+                child: ListTile(
+                  leading: ReorderableDragStartListener(
+                    index: i,
+                    child: const Icon(Icons.drag_handle_rounded),
+                  ),
+                  title: Text(a.title),
+                  subtitle: Text(
+                    a.body,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    tooltip: 'Azioni',
+                    onSelected: (v) =>
+                        v == 'edit' ? _edit(a, list.length) : _delete(a),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Modifica')),
+                      PopupMenuItem(value: 'delete', child: Text('Elimina')),
+                    ],
+                  ),
+                  onTap: () => _edit(a, list.length),
+                ),
+              );
+            },
+          );
+    if (!widget.firstTime) return content;
+    return Column(
+      children: [
+        const _FirstTimeIntro(),
+        Expanded(child: content),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final draft = ref.watch(rulesDraftProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BOZZA DEL REGOLAMENTO'),
+        title: Text(
+          widget.firstTime
+              ? 'REGOLAMENTO D\'INGRESSO'
+              : 'BOZZA DEL REGOLAMENTO',
+        ),
+        automaticallyImplyLeading: !widget.firstTime,
         actions: [
+          if (widget.firstTime)
+            TextButton(
+              onPressed: () {
+                ref.read(rulesWriteLaterProvider.notifier).postpone();
+                context.go('/');
+              },
+              child: const Text(
+                'Più tardi',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
           TextButton.icon(
             onPressed: _publishing ? null : _publish,
             icon: const Icon(Icons.publish_rounded, color: MilanacColors.gold),
@@ -133,53 +213,7 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) =>
             Center(child: Text('Impossibile caricare la bozza: $e')),
-        data: (list) => list.isEmpty
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Text(
-                    'Nessun articolo: aggiungi il primo e poi pubblica.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ),
-              )
-            : ReorderableListView.builder(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-                itemCount: list.length,
-                onReorderItem: (from, to) => _reorder(list, from, to),
-                itemBuilder: (context, i) {
-                  final a = list[i];
-                  return Card(
-                    key: ValueKey(a.id ?? i),
-                    child: ListTile(
-                      leading: ReorderableDragStartListener(
-                        index: i,
-                        child: const Icon(Icons.drag_handle_rounded),
-                      ),
-                      title: Text(a.title),
-                      subtitle: Text(
-                        a.body,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: PopupMenuButton<String>(
-                        tooltip: 'Azioni',
-                        onSelected: (v) =>
-                            v == 'edit' ? _edit(a, list.length) : _delete(a),
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'edit', child: Text('Modifica')),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Elimina'),
-                          ),
-                        ],
-                      ),
-                      onTap: () => _edit(a, list.length),
-                    ),
-                  );
-                },
-              ),
+        data: _body,
       ),
     );
   }
@@ -263,5 +297,32 @@ class _ArticleDialogState extends State<_ArticleDialog> {
       ),
       FilledButton(onPressed: _save, child: const Text('Salva')),
     ],
+  );
+}
+
+/// Spiegazione per il primo del Direttivo che entra senza regolamento pubblicato.
+class _FirstTimeIntro extends StatelessWidget {
+  const _FirstTimeIntro();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+    child: Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: MilanacColors.gold.withValues(alpha: .12),
+        border: Border.all(color: MilanacColors.gold.withValues(alpha: .5)),
+      ),
+      child: const Text(
+        'Benvenuto nel Direttivo! Il regolamento d\'ingresso non è ancora stato '
+        'scritto e sei tra i primi a entrare: tocca a te. Aggiungi gli articoli '
+        'con «Nuovo articolo» e premi PUBBLICA: da quel momento ogni membro '
+        'dovrà leggerlo per almeno 2 minuti e accettarlo prima di usare l\'app. '
+        'Se adesso non hai tempo, «Più tardi»: il promemoria resta nella Sala '
+        'Direttivo.',
+        style: TextStyle(color: Colors.white, height: 1.4),
+      ),
+    ),
   );
 }

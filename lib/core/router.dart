@@ -24,6 +24,7 @@ import '../features/musica/musica_page.dart';
 import '../features/presenze/presenze_page.dart';
 import '../features/regolamento/regolamento_page.dart';
 import '../features/regolamento/rules_accept_page.dart';
+import '../features/regolamento/rules_editor_page.dart';
 import '../features/regolamento/rules_repository.dart';
 import '../features/registrazione/registration_page.dart';
 import '../features/risultati/match_detail_page.dart';
@@ -43,6 +44,7 @@ const gatePaths = {
   '/attesa',
   '/registrazione',
   '/regolamento/accetta',
+  '/regolamento/scrivi',
   '/nuova-password',
 };
 
@@ -67,6 +69,7 @@ class _RouterRefresh extends ChangeNotifier {
     ref.listen(profileProvider, (_, _) => notifyListeners());
     ref.listen(passwordRecoveryProvider, (_, _) => notifyListeners());
     ref.listen(latestRulesProvider, (_, _) => notifyListeners());
+    ref.listen(rulesWriteLaterProvider, (_, _) => notifyListeners());
   }
 }
 
@@ -135,6 +138,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           !p.isApproved) {
         return goTo('/regolamento/accetta');
       }
+      // 4) Nessuna versione pubblicata: il primo del Direttivo che entra la scrive
+      //    (con "Più tardi" il promemoria resta solo nella Sala Direttivo).
+      if (p.isDirettivo &&
+          rules.hasValue &&
+          latest == null &&
+          !ref.read(rulesWriteLaterProvider)) {
+        return goTo('/regolamento/scrivi');
+      }
 
       if (reserved && !p.isDirettivo) return '/';
       return gatePaths.contains(loc) ? home() : null;
@@ -153,6 +164,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/regolamento/accetta',
         builder: (_, _) => const RulesAcceptPage(),
+      ),
+      GoRoute(
+        path: '/regolamento/scrivi',
+        builder: (_, _) => const RulesEditorPage(firstTime: true),
       ),
       GoRoute(
         path: '/nuova-password',

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/profile.dart';
+import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/push/device_tokens.dart';
 import '../../core/theme.dart';
@@ -108,7 +110,7 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
           actions: [
             if (!AppConfig.isDemo)
               IconButton(
-                tooltip: 'Esci',
+                tooltip: 'Esci dall\'account',
                 icon: const Icon(Icons.logout_rounded),
                 onPressed: () => logout(ref),
               ),
@@ -129,6 +131,11 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
                   ),
                   const SizedBox(height: 8),
                   const Text('Impossibile caricare il regolamento.'),
+                  Text(
+                    '$e',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
                   TextButton(
                     onPressed: () => ref.invalidate(latestRulesProvider),
                     child: const Text('Riprova'),
@@ -138,7 +145,7 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
             ),
           ),
           data: (version) => version == null
-              ? const Center(child: Text('Nessun regolamento pubblicato.'))
+              ? const _NoRulesYet()
               : Column(
                   children: [
                     const Padding(
@@ -195,6 +202,94 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
                     ),
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Nessuna versione pubblicata: si entra lo stesso. Il Direttivo (o chi ha chiesto di
+/// farne parte) viene invitato a scrivere il regolamento d'ingresso.
+class _NoRulesYet extends ConsumerStatefulWidget {
+  const _NoRulesYet();
+
+  @override
+  ConsumerState<_NoRulesYet> createState() => _NoRulesYetState();
+}
+
+class _NoRulesYetState extends ConsumerState<_NoRulesYet> {
+  bool _busy = false;
+
+  Future<void> _enter(bool direttivo) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(rulesRepositoryProvider).enter();
+      // Con Supabase il profilo si aggiorna da solo e il router prosegue.
+      if (AppConfig.isDemo && mounted) {
+        context.go(direttivo ? '/regolamento/scrivi' : '/');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Ingresso non riuscito: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ref.watch(profileProvider).value;
+    final direttivo =
+        p != null && (p.isDirettivo || p.requestedRole == ClubRole.direttivo);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.menu_book_rounded,
+              size: 52,
+              color: MilanacColors.gold,
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'REGOLAMENTO NON ANCORA PUBBLICATO',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: sportFont,
+                fontSize: 20,
+                letterSpacing: 1.5,
+                color: MilanacColors.gold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              direttivo
+                  ? 'Sei del Direttivo e sei tra i primi a entrare: il regolamento '
+                        'd\'ingresso lo scrivi tu. Entra, aggiungi gli articoli e '
+                        'pubblicalo: da quel momento ogni membro dovrà leggerlo per '
+                        'almeno 2 minuti e accettarlo.'
+                  : 'Il Direttivo non ha ancora scritto il regolamento d\'ingresso. '
+                        'Entra pure: appena sarà pubblicato ti verrà chiesto di '
+                        'leggerlo e accettarlo.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, height: 1.4),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: _busy ? null : () => _enter(direttivo),
+              icon: Icon(
+                direttivo ? Icons.edit_note_rounded : Icons.login_rounded,
+              ),
+              label: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(direttivo ? 'Entra e scrivilo' : 'Entra nel club'),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -30,6 +30,7 @@ import '../risultati/match_editor.dart';
 import '../rosa/member.dart';
 import '../rosa/member_editor.dart';
 import '../rosa/rosa_repository.dart';
+import '../regolamento/rules_repository.dart';
 import '../voce/voice_repository.dart';
 
 /// Sala Direttivo: la stanza riservata dove si gestisce il club.
@@ -60,6 +61,8 @@ class DirettivoPage extends ConsumerWidget {
             .length;
 
     final voiceMinutes = ref.watch(voiceMinutesProvider).value ?? 0;
+    final rules = ref.watch(latestRulesProvider);
+    final noRules = rules.hasValue && rules.value == null;
 
     void push(Widget page) => Navigator.of(
       context,
@@ -144,6 +147,26 @@ class DirettivoPage extends ConsumerWidget {
             ],
           ),
         ),
+        if (noRules)
+          Card(
+            color: MilanacColors.gold.withValues(alpha: .12),
+            child: ListTile(
+              leading: const Icon(
+                Icons.menu_book_rounded,
+                color: MilanacColors.gold,
+              ),
+              title: const Text(
+                'Regolamento d\'ingresso da scrivere',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              subtitle: const Text(
+                'Nessuna versione pubblicata: i nuovi membri entrano senza '
+                'accettarlo. Scrivilo e pubblicalo.',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => context.go('/regolamento/scrivi'),
+            ),
+          ),
         const _Header('Gestione'),
         GridView.count(
           crossAxisCount: 2,

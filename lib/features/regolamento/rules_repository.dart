@@ -76,7 +76,24 @@ abstract class RulesRepository {
 
   /// Accetta la versione [version] (deve essere l'ultima).
   Future<void> accept(int version);
+
+  /// Entra nel club quando non c'è ancora nessuna versione pubblicata: il profilo
+  /// prende il ruolo richiesto; alla prima versione pubblicata tutti la accettano.
+  Future<void> enter();
 }
+
+/// "Più tardi" del primo Direttivo: per questa sessione l'app non riporta
+/// all'editor del regolamento (il promemoria resta nella Sala Direttivo).
+class RulesWriteLater extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void postpone() => state = true;
+}
+
+final rulesWriteLaterProvider = NotifierProvider<RulesWriteLater, bool>(
+  RulesWriteLater.new,
+);
 
 final rulesRepositoryProvider = Provider<RulesRepository>((ref) {
   if (AppConfig.isDemo) return DemoRulesRepository.instance;
@@ -105,6 +122,11 @@ class _SupabaseRulesRepository implements RulesRepository {
         .limit(1)
         .maybeSingle();
     return row == null ? null : RulesVersion.fromMap(row);
+  }
+
+  @override
+  Future<void> enter() async {
+    await _ref.read(supabaseProvider).rpc('enter_club');
   }
 
   @override
@@ -171,6 +193,13 @@ class DemoRulesRepository implements RulesRepository {
   DemoRulesRepository._();
   static final instance = DemoRulesRepository._();
 
+  /// Club senza regolamento pubblicato (primo ingresso del Direttivo).
+  DemoRulesRepository.unpublished() {
+    _version = 0;
+    _draft.clear();
+    _published = [];
+  }
+
   int _version = 1;
   int _nextId = 10;
   final _draft = <RulesArticle>[
@@ -217,11 +246,16 @@ class DemoRulesRepository implements RulesRepository {
   late List<RulesArticle> _published = List.of(_draft);
 
   @override
-  Future<RulesVersion?> latest() async => RulesVersion(
-    number: _version,
-    articles: List.of(_published),
-    publishedAt: DateTime(2026, 9, 1),
-  );
+  Future<RulesVersion?> latest() async => _version == 0
+      ? null
+      : RulesVersion(
+          number: _version,
+          articles: List.of(_published),
+          publishedAt: DateTime(2026, 9, 1),
+        );
+
+  @override
+  Future<void> enter() async {}
 
   @override
   Future<List<RulesArticle>> draft() async => List.of(_draft);
