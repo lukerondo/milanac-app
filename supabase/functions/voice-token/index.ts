@@ -42,7 +42,8 @@ Deno.serve(async (req) => {
   if (!r || r.closed_at) {
     return Response.json({ error: "stanza chiusa" }, { status: 404 });
   }
-  // uid 0: Agora assegna l'identificativo all'ingresso (l'app lo salva nella sessione).
+  // uid 0: il biglietto vale per qualsiasi numero utente; l'app entra con il suo,
+  // ricavato dall'id del profilo, e lo salva nella sessione (così si sa chi parla).
   const token = RtcTokenBuilder.buildTokenWithUid(
     appId, certificate, room, 0, RtcRole.PUBLISHER, TOKEN_SECONDS, TOKEN_SECONDS,
   );
