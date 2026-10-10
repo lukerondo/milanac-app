@@ -123,16 +123,17 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // 1) I tre passi della registrazione.
       if (p == null || !p.registrationCompleted) return goTo('/registrazione');
-      // 2) Account sospeso dal Direttivo.
+      // 2) Account rimosso o sospeso dal Direttivo.
       if (!p.active) return goTo('/attesa');
-      // 3) Il regolamento, nella sua ultima versione.
+      // 3) Il regolamento, nella sua ultima versione. Chi non è ancora entrato nel club
+      //    (ruolo "in attesa") deve accettarlo: la pagina del regolamento gestisce da sola
+      //    caricamento ed errori, così un problema di rete non lo manda alla pagina sbagliata.
       final rules = ref.read(latestRulesProvider);
       if (rules.isLoading) return null;
       final latest = rules.value?.number;
-      if (latest != null && p.rulesAcceptedVersion != latest) {
+      if ((latest != null && p.rulesAcceptedVersion != latest) || !p.isApproved) {
         return goTo('/regolamento/accetta');
       }
-      if (!p.isApproved) return goTo('/attesa');
 
       if (reserved && !p.isDirettivo) return '/';
       return gatePaths.contains(loc) ? home() : null;

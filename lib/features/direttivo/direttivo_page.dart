@@ -416,13 +416,31 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
     }
   }
 
+  /// Un membro rimosso torna nella rosa (e può di nuovo entrare nell'app).
+  Future<void> _reactivate(Member m) async {
+    try {
+      await ref.read(rosaRepositoryProvider).save(m.copyWith(active: true));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${m.displayName} è di nuovo nella rosa.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Modifica non riuscita: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final all = ref.watch(rosaProvider).value ?? const <Member>[];
     final members =
-        (ref.watch(rosaProvider).value ?? const <Member>[])
-            .where((m) => m.active && m.role != ClubRole.pending)
-            .toList()
+        all.where((m) => m.active && m.role != ClubRole.pending).toList()
           ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    final removed = all.where((m) => !m.active).toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final shown = members.where((m) => m.inTeam(_team)).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('ROSA E SQUADRE')),
@@ -481,6 +499,40 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
                 ),
               ),
             ),
+          if (removed.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(4, 16, 4, 4),
+              child: Text(
+                'RIMOSSI',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: Colors.white70,
+                ),
+              ),
+            ),
+            const Text(
+              'Non possono entrare nell\'app finché non vengono riattivati.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            for (final m in removed)
+              Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: MemberAvatar(member: m),
+                  title: Text(
+                    m.displayName,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(m.fullName == m.displayName ? m.roleLabel : m.fullName),
+                  trailing: FilledButton.tonal(
+                    onPressed: () => _reactivate(m),
+                    child: const Text('Riattiva'),
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );

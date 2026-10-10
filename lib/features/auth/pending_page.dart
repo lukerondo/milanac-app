@@ -5,8 +5,9 @@ import '../../core/auth/providers.dart';
 import '../../core/push/device_tokens.dart';
 import '../../core/theme.dart';
 
-/// Account bloccato o rimosso dal Direttivo: non si entra finché non viene riattivato.
-/// Il profilo è ascoltato in tempo reale, quindi la pagina si sblocca da sola.
+/// Account rimosso o sospeso dal Direttivo: non si entra finché non viene riattivato
+/// (Sala Direttivo → Rosa e squadre → Rimossi → Riattiva). Il profilo è ascoltato in
+/// tempo reale, quindi la pagina si sblocca da sola.
 class PendingPage extends ConsumerWidget {
   const PendingPage({super.key});
 
@@ -49,8 +50,9 @@ class PendingPage extends ConsumerWidget {
                           SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Il tuo account è stato sospeso dal Direttivo. '
-                              'Per informazioni contatta un membro del Direttivo.',
+                              'Il tuo account è stato rimosso o sospeso dal Direttivo. '
+                              'Chiedi a un membro del Direttivo di riattivarlo da '
+                              'Rosa e squadre: appena lo fa, questa pagina si sblocca da sola.',
                               style: TextStyle(color: Colors.white70),
                             ),
                           ),
