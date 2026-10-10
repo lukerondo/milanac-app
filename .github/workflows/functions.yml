@@ -42,8 +42,8 @@ jobs:
       - name: Segreti delle funzioni
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          AGORA_APP_ID: ${{ inputs.agora_app_id || secrets.AGORA_APP_ID }}
-          AGORA_APP_CERTIFICATE: ${{ inputs.agora_app_certificate || secrets.AGORA_APP_CERTIFICATE }}
+          AGORA_APP_ID_SECRET: ${{ secrets.AGORA_APP_ID }}
+          AGORA_APP_CERTIFICATE_SECRET: ${{ secrets.AGORA_APP_CERTIFICATE }}
         run: |
           SECRET=$(openssl rand -hex 24)
           echo "::add-mask::$SECRET"
@@ -54,9 +54,16 @@ jobs:
             ARGS+=(FIREBASE_SERVICE_ACCOUNT="$(cat /tmp/fsa.json)")
             rm /tmp/fsa.json
           fi
+          # I codici incollati nel modulo "Run workflow" si leggono dal file dell'evento e si
+          # proteggono subito come i secret (messi in env o nel testo dello script verrebbero
+          # stampati in chiaro). Se mancano, valgono i secret del repository.
+          AGORA_APP_ID=$(jq -r '.inputs.agora_app_id // empty' "$GITHUB_EVENT_PATH")
+          AGORA_APP_CERTIFICATE=$(jq -r '.inputs.agora_app_certificate // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$AGORA_APP_ID" ]; then echo "::add-mask::$AGORA_APP_ID"; fi
+          if [ -n "$AGORA_APP_CERTIFICATE" ]; then echo "::add-mask::$AGORA_APP_CERTIFICATE"; fi
+          AGORA_APP_ID="${AGORA_APP_ID:-$AGORA_APP_ID_SECRET}"
+          AGORA_APP_CERTIFICATE="${AGORA_APP_CERTIFICATE:-$AGORA_APP_CERTIFICATE_SECRET}"
           if [ -n "$AGORA_APP_ID" ] && [ -n "$AGORA_APP_CERTIFICATE" ]; then
-            echo "::add-mask::$AGORA_APP_ID"
-            echo "::add-mask::$AGORA_APP_CERTIFICATE"
             ARGS+=(AGORA_APP_ID="$AGORA_APP_ID" AGORA_APP_CERTIFICATE="$AGORA_APP_CERTIFICATE")
             echo "Stanza vocale: segreti Agora impostati."
           else
