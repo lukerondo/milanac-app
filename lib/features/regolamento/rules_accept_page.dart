@@ -229,6 +229,8 @@ class _NoRulesYetState extends ConsumerState<_NoRulesYet> {
         context.go(direttivo ? '/regolamento/scrivi' : '/');
       }
     } catch (e) {
+      // Se nel frattempo una versione c'è (o è comparsa), la pagina la mostra.
+      ref.invalidate(latestRulesProvider);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Ingresso non riuscito: $e')));
