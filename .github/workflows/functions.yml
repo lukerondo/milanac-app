@@ -4,8 +4,19 @@ name: Funzioni
 # e collega il database. Usa il token personale Supabase (secret SUPABASE_ACCESS_TOKEN o MILANACAPP).
 # FIREBASE_SERVICE_ACCOUNT è facoltativo: senza, la funzione risponde ma non invia notifiche.
 # AGORA_APP_ID e AGORA_APP_CERTIFICATE sono facoltativi: senza, la stanza vocale resta spenta.
+# Si possono mettere come secret di GitHub oppure incollare nel modulo "Run workflow":
+# in entrambi i casi finiscono solo tra i segreti delle funzioni su Supabase.
 on:
   workflow_dispatch:
+    inputs:
+      agora_app_id:
+        description: "App ID di Agora (facoltativo: se vuoto si usa il secret AGORA_APP_ID)"
+        required: false
+        type: string
+      agora_app_certificate:
+        description: "App Certificate di Agora (facoltativo: se vuoto si usa il secret AGORA_APP_CERTIFICATE)"
+        required: false
+        type: string
   push:
     branches: [main, claude/cloud-credits-private-repo-gqfxlp]
     paths: [supabase/functions/**, .github/workflows/functions.yml]
@@ -31,8 +42,8 @@ jobs:
       - name: Segreti delle funzioni
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          AGORA_APP_ID: ${{ secrets.AGORA_APP_ID }}
-          AGORA_APP_CERTIFICATE: ${{ secrets.AGORA_APP_CERTIFICATE }}
+          AGORA_APP_ID_SECRET: ${{ secrets.AGORA_APP_ID }}
+          AGORA_APP_CERTIFICATE_SECRET: ${{ secrets.AGORA_APP_CERTIFICATE }}
         run: |
           SECRET=$(openssl rand -hex 24)
           echo "::add-mask::$SECRET"
@@ -43,11 +54,20 @@ jobs:
             ARGS+=(FIREBASE_SERVICE_ACCOUNT="$(cat /tmp/fsa.json)")
             rm /tmp/fsa.json
           fi
+          # I codici incollati nel modulo "Run workflow" si leggono dal file dell'evento e si
+          # proteggono subito come i secret (messi in env o nel testo dello script verrebbero
+          # stampati in chiaro). Se mancano, valgono i secret del repository.
+          AGORA_APP_ID=$(jq -r '.inputs.agora_app_id // empty' "$GITHUB_EVENT_PATH")
+          AGORA_APP_CERTIFICATE=$(jq -r '.inputs.agora_app_certificate // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$AGORA_APP_ID" ]; then echo "::add-mask::$AGORA_APP_ID"; fi
+          if [ -n "$AGORA_APP_CERTIFICATE" ]; then echo "::add-mask::$AGORA_APP_CERTIFICATE"; fi
+          AGORA_APP_ID="${AGORA_APP_ID:-$AGORA_APP_ID_SECRET}"
+          AGORA_APP_CERTIFICATE="${AGORA_APP_CERTIFICATE:-$AGORA_APP_CERTIFICATE_SECRET}"
           if [ -n "$AGORA_APP_ID" ] && [ -n "$AGORA_APP_CERTIFICATE" ]; then
             ARGS+=(AGORA_APP_ID="$AGORA_APP_ID" AGORA_APP_CERTIFICATE="$AGORA_APP_CERTIFICATE")
             echo "Stanza vocale: segreti Agora impostati."
           else
-            echo "Stanza vocale: segreti Agora assenti (AGORA_APP_ID / AGORA_APP_CERTIFICATE), resta spenta."
+            echo "Stanza vocale: segreti Agora non indicati; restano quelli già su Supabase, se mai impostati."
           fi
           supabase secrets set --project-ref "$REF" "${ARGS[@]}"
       - name: Pubblica le funzioni

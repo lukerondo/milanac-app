@@ -140,6 +140,9 @@ in una stanza, dice che la voce non è ancora attiva.
    `AGORA_APP_ID` e `AGORA_APP_CERTIFICATE`.
 4. **Actions → Funzioni → Run workflow**: carica i segreti in Supabase e pubblica le funzioni
    `notify` e `voice-token` (il log dice "Stanza vocale: segreti Agora impostati").
+   In alternativa al passo 3, i due codici si possono incollare direttamente nel modulo
+   *Run workflow* (campi *App ID di Agora* e *App Certificate di Agora*): finiscono solo tra i
+   segreti delle funzioni su Supabase e non compaiono nel log.
 L'App Certificate non sta mai nell'app: i biglietti d'ingresso (token validi 3 ore) li firma la
 funzione `voice-token` solo per chi ha accesso al canale. Per controllare: `select jobname from
 cron.job;` deve mostrare anche `stanze-vocali` (chiude le stanze abbandonate) e
