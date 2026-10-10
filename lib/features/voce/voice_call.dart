@@ -116,7 +116,11 @@ class VoiceCall extends Notifier<VoiceCallState> {
       _speakSub = engine.speaking.listen((s) {
         if (state.isActive) state = state.copyWith(speaking: s);
       });
-      await engine.join(ticket, uid);
+      await engine.join(
+        ticket,
+        uid,
+        refreshToken: () async => (await repo.ticket(roomId)).token,
+      );
       await engine.setSpeakerphone(true);
       final session = sessionId;
       _heartbeat = Timer.periodic(const Duration(minutes: 1), (_) {

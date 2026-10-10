@@ -48,20 +48,22 @@ final channelVoiceRoomProvider = Provider.family<VoiceRoom?, String>(
       .firstOrNull,
 );
 
-final voiceSessionsProvider = StreamProvider.family<List<VoiceSession>, String>(
-  (ref, roomId) => ref.watch(voiceRepositoryProvider).watchSessions(roomId),
-);
+final voiceSessionsProvider = StreamProvider.autoDispose
+    .family<List<VoiceSession>, String>(
+      (ref, roomId) => ref.watch(voiceRepositoryProvider).watchSessions(roomId),
+    );
 
 /// Chi è dentro la stanza adesso, nell'ordine di ingresso.
-final voiceParticipantsProvider = Provider.family<List<VoiceSession>, String>(
-  (ref, roomId) =>
-      (ref.watch(voiceSessionsProvider(roomId)).value ?? const [])
-          .where((s) => s.isActive)
-          .toList()
-        ..sort((a, b) => a.joinedAt.compareTo(b.joinedAt)),
-);
+final voiceParticipantsProvider = Provider.autoDispose
+    .family<List<VoiceSession>, String>(
+      (ref, roomId) =>
+          (ref.watch(voiceSessionsProvider(roomId)).value ?? const [])
+              .where((s) => s.isActive)
+              .toList()
+            ..sort((a, b) => a.joinedAt.compareTo(b.joinedAt)),
+    );
 
-final voiceMinutesProvider = FutureProvider<int>(
+final voiceMinutesProvider = FutureProvider.autoDispose<int>(
   (ref) => ref.watch(voiceRepositoryProvider).minutesThisMonth(),
 );
 

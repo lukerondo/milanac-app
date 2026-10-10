@@ -11,8 +11,13 @@ abstract class VoiceEngine {
   /// I numeri utente Agora di chi sta parlando in questo momento.
   Stream<Set<int>> get speaking;
 
-  /// Entra nella stanza con il proprio numero utente.
-  Future<void> join(VoiceTicket ticket, int uid);
+  /// Entra nella stanza con il proprio numero utente; [refreshToken] fornisce
+  /// un biglietto nuovo quando quello in uso sta per scadere (dopo 3 ore).
+  Future<void> join(
+    VoiceTicket ticket,
+    int uid, {
+    Future<String> Function()? refreshToken,
+  });
 
   Future<void> setMuted(bool muted);
 
@@ -40,7 +45,11 @@ class AgoraVoiceEngine implements VoiceEngine {
   Stream<Set<int>> get speaking => _speaking.stream;
 
   @override
-  Future<void> join(VoiceTicket ticket, int uid) async {
+  Future<void> join(
+    VoiceTicket ticket,
+    int uid, {
+    Future<String> Function()? refreshToken,
+  }) async {
     _uid = uid;
     final engine = createAgoraRtcEngine();
     _engine = engine;
@@ -73,6 +82,7 @@ class AgoraVoiceEngine implements VoiceEngine {
           }
         },
         onAudioVolumeIndication: (_, speakers, _, _) => _onVolumes(speakers),
+        onTokenPrivilegeWillExpire: (_, _) => _renew(refreshToken),
       ),
     );
     await engine.enableAudio();
@@ -101,6 +111,15 @@ class AgoraVoiceEngine implements VoiceEngine {
         'La stanza non risponde: controlla la connessione e riprova.',
       ),
     );
+  }
+
+  // Il biglietto sta per scadere: se ne chiede uno nuovo e si rinnova senza uscire.
+  Future<void> _renew(Future<String> Function()? refreshToken) async {
+    if (refreshToken == null) return;
+    try {
+      final token = await refreshToken();
+      await _engine?.renewToken(token);
+    } catch (_) {}
   }
 
   // Agora avvisa due volte: una per il proprio microfono (uid 0) e una per gli altri.
@@ -149,7 +168,11 @@ class DemoVoiceEngine implements VoiceEngine {
   Stream<Set<int>> get speaking => _speaking.stream;
 
   @override
-  Future<void> join(VoiceTicket ticket, int uid) async {
+  Future<void> join(
+    VoiceTicket ticket,
+    int uid, {
+    Future<String> Function()? refreshToken,
+  }) async {
     _speaking.add({?speakingUid});
   }
 

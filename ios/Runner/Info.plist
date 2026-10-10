@@ -17,7 +17,7 @@
 		<key>NSCameraUsageDescription</key>
 		<string>Serve per registrare le clip degli highlights.</string>
 		<key>NSMicrophoneUsageDescription</key>
-		<string>Serve per registrare l'audio delle clip degli highlights.</string>
+		<string>Serve per i messaggi vocali, i replay della lavagna e la stanza vocale.</string>
 		<key>CFBundleURLTypes</key>
 		<array>
 			<dict>
