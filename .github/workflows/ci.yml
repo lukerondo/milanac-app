@@ -70,7 +70,8 @@ jobs:
       - run: flutter pub get
       - name: APK per tutti i telefoni
         run: |
-          flutter build apk --release --dart-define-from-file=env/prod.json
+          # Solo i processori dei telefoni (32 e 64 bit): senza x86, usato dagli emulatori, pesa un terzo in meno.
+          flutter build apk --release --target-platform android-arm,android-arm64 --dart-define-from-file=env/prod.json
           cp build/app/outputs/flutter-apk/app-release.apk MILANAC.apk
       # Versione leggera (circa metà) per i telefoni a 64 bit, comoda da mandare in chat.
       # --split-per-abi tiene nel file solo le librerie di quella architettura (anche quelle dei plugin);

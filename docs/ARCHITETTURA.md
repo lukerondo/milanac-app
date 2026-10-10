@@ -73,6 +73,12 @@ Gli articoli vivono in una **bozza** (`rules_articles`, solo Direttivo). "Pubbli
 `rules_versions` con la fotografia degli articoli e manda la notifica `rules`. Ogni profilo
 ricorda la versione accettata (`rules_accepted_version`): se non è l'ultima, l'app mostra la
 pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti (non mostrati).
+Finché non esiste **nessuna versione pubblicata** nessuno resta bloccato: chi ha completato la
+registrazione entra con `enter_club()` (prende il ruolo richiesto, senza versione accettata); il
+primo del Direttivo che entra trova l'editor del regolamento d'ingresso con la spiegazione
+(`/regolamento/scrivi`; "Più tardi" lo rimanda e lascia il promemoria nella Sala Direttivo).
+Chi pubblica una versione risulta averla già accettata; tutti gli altri la leggono e la
+accettano al primo accesso successivo.
 
 ## 4. Sezioni dell'app
 
@@ -323,6 +329,7 @@ la testata e il link, la descrizione rimanda all'articolo originale.
 | 5 GB traffico/mese | ~1.000 visualizzazioni clip/mese | cache locale dei video, preferire i link per video lunghi |
 | pausa dopo 7 gg inattivi | app ferma | job notizie ogni 3h la tiene attiva |
 | Agora Free: 10.000 minuti-partecipante/mese | 4 persone per un'ora = 240 minuti | contatore nella Sala Direttivo, stanze chiuse da sole quando vuote |
+| Peso dell'APK (Agora porta circa 75 MB di librerie native per architettura) | APK arm64 ≈ 70 MB, universale ≈ 180 MB | le estensioni facoltative di Agora (video, lip sync, effetti) restano fuori (`packaging.jniLibs.excludes`), l'APK universale non include x86, sul Play Store l'app bundle manda solo la parte del telefono |
 
 ## 8. Struttura del codice
 
