@@ -35,8 +35,12 @@ class VoiceRecorder {
   }
 
   /// Ferma la registrazione e restituisce il file con la durata in secondi
-  /// (null se è troppo corta per valere un messaggio).
-  Future<({Uint8List bytes, int seconds})?> stop() async {
+  /// (null se è troppo corta per valere un messaggio). Con [keepFile] il file
+  /// temporaneo resta sul telefono (per riascoltarlo prima di inviarlo).
+  Future<({Uint8List bytes, int seconds, String path})?> stop({
+    int maxSeconds = maxVoiceSeconds,
+    bool keepFile = false,
+  }) async {
     final started = _startedAt;
     _startedAt = null;
     final path = await _recorder?.stop();
@@ -46,11 +50,17 @@ class VoiceRecorder {
       final bytes = await file.readAsBytes();
       final seconds = DateTime.now().difference(started).inMilliseconds / 1000;
       if (bytes.isEmpty || seconds < 1) return null;
-      return (bytes: bytes, seconds: seconds.round().clamp(1, maxVoiceSeconds));
+      return (
+        bytes: bytes,
+        seconds: seconds.round().clamp(1, maxSeconds),
+        path: path,
+      );
     } finally {
-      try {
-        await file.delete();
-      } catch (_) {}
+      if (!keepFile) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
     }
   }
 

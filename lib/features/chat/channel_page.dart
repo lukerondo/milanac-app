@@ -14,6 +14,9 @@ import '../../core/theme.dart';
 import '../../shared/link_text.dart';
 import '../../shared/member_photo.dart';
 import '../carte/special_cards_repository.dart';
+import '../lavagna/board_model.dart';
+import '../lavagna/board_painter.dart';
+import '../lavagna/replay_pages.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'chat_repository.dart';
@@ -915,12 +918,17 @@ class _Bubble extends ConsumerWidget {
             ),
           if (message.replyTo != null)
             _Quote(message: quoted, author: quotedAuthor, mine: mine),
+          if (message.isReplay)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 4),
+              child: _ReplayBubble(message: message),
+            ),
           if (message.hasImage)
             Padding(
               padding: const EdgeInsets.only(top: 4, bottom: 4),
               child: _ChatImage(message: message),
             ),
-          if (message.hasAudio)
+          if (message.hasAudio && !message.isReplay)
             Padding(
               padding: const EdgeInsets.only(top: 4, bottom: 2),
               child: _VoiceBubble(message: message, mine: mine),
@@ -1029,6 +1037,70 @@ class _Quote extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Replay della lavagna: il campo con il pulsante Play (si riproduce nell'app).
+class _ReplayBubble extends StatelessWidget {
+  const _ReplayBubble({required this.message});
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final board = BoardState.fromJson(
+      (message.meta['board'] as Map?)?.cast<String, dynamic>(),
+    );
+    final title = (message.meta['title'] as String?) ?? 'Schema';
+    return SizedBox(
+      width: 210,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.draw_rounded, size: 15, color: MilanacColors.gold),
+              SizedBox(width: 4),
+              Text(
+                'SCHEMA CON AUDIO',
+                style: TextStyle(
+                  color: MilanacColors.gold,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              BoardPreview(state: board),
+              if (!message.isExpired)
+                IconButton.filled(
+                  tooltip: 'Riproduci il replay',
+                  style: IconButton.styleFrom(
+                    backgroundColor: MilanacColors.red,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.all(14),
+                  ),
+                  onPressed: () => Navigator.of(context, rootNavigator: true).push(
+                    MaterialPageRoute(builder: (_) => ReplayPage(message: message)),
+                  ),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 32),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          if (message.durationS != null && !message.isExpired)
+            Text(
+              '${formatSeconds(message.durationS!)} · scade dopo 3 giorni',
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// L'allegato (foto o vocale) è scaduto dopo 60 giorni.

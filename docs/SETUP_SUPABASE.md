@@ -118,7 +118,8 @@ Le notifiche (promemoria, assenze, eventi, video, notizie, carte speciali) parto
 `notify`: il workflow **Funzioni** la ripubblica da solo quando il codice arriva su `main`.
 
 ## 12. Pulizia degli allegati della chat (pg_cron + funzione notify)
-Foto e vocali della chat scadono dopo 60 giorni (il messaggio resta con "Allegato scaduto").
+Foto e vocali della chat scadono dopo 60 giorni, i replay della lavagna dopo 3 (il messaggio
+resta con "Allegato scaduto").
 La migrazione `0018` programma `expire_attachments()` ogni notte alle 3:15 (ora del server):
 toglie gli allegati scaduti dai messaggi, mette i file nella tabella `storage_cleanup` e chiama
 la funzione `notify` con l'evento `cleanup`, che li elimina dal bucket `chat` con la chiave di

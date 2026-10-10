@@ -32,7 +32,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Titolo'),
-      'Uscita dal basso',
+      'Ripartenza veloce',
     );
     await tester.enterText(
       find.widgetWithText(TextField, 'Spiegazione'),
@@ -41,9 +41,9 @@ void main() {
     await tester.ensureVisible(find.text('Salva tattica'));
     await tester.tap(find.text('Salva tattica'));
     await tester.pumpAndSettle();
-    expect(find.text('Uscita dal basso'), findsOneWidget);
+    expect(find.text('Ripartenza veloce'), findsOneWidget);
 
-    await tester.tap(find.text('Uscita dal basso'));
+    await tester.tap(find.text('Ripartenza veloce'));
     await tester.pumpAndSettle();
     expect(find.text('TATTICA'), findsOneWidget);
     expect(find.text('Il portiere apre sul DC destro.'), findsOneWidget);

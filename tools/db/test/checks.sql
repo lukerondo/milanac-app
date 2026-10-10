@@ -656,6 +656,9 @@ select pg_temp.expect_error(
   'messages_audio_duration_check');
 select pg_temp.expect_error(
   $q$insert into messages (channel_id, audio_path, duration_s) select id, '00000000-0000-0000-0000-0000000000e1/x.m4a', 121 from channels where slug = 'main'$q$,
+  'messages_voice_duration_check');
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, audio_path, duration_s, replay_path) select id, '00000000-0000-0000-0000-0000000000e1/x.m4a', 301, '00000000-0000-0000-0000-0000000000e1/x.json' from channels where slug = 'main'$q$,
   'messages_duration_s_check');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
 insert into messages (channel_id, body, reply_to)
@@ -816,3 +819,45 @@ do $$ begin
   assert (select image_path from tournaments where id = '00000000-0000-0000-0000-0000000000a9') like '%/logo.jpg', 'foto salvata';
 end $$;
 reset role;
+
+-- Lavagna tattica: gli schemi con la lavagna li salva il Direttivo; il replay in chat dura
+-- fino a 5 minuti (i vocali normali 2) e scade dopo 3 giorni.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into tactics (title, module, team, board)
+values ('Uscita dal basso', '4-3-3', 'milanac', '{"module": "4-3-3", "tokens": [{"id": "k1", "x": 0.5, "y": 0.9}], "arrows": [], "heat": []}');
+select pg_temp.expect_error(
+  $q$insert into tactics (title, team) values ('X', 'primavera')$q$, 'tactics_team_check');
+select pg_temp.expect_error(
+  $q$insert into tactics (title, board) values ('X', '[1, 2]')$q$, 'tactics_board_check');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+update tactics set board = '{}' where title = 'Uscita dal basso';  -- ignorato dalle policy
+do $$ begin
+  assert (select board->>'module' from tactics where title = 'Uscita dal basso') = '4-3-3',
+    'il giocatore legge la lavagna ma non la modifica';
+end $$;
+-- Replay: audio fino a 5 minuti più il file delle azioni; un vocale normale resta a 2 minuti.
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, audio_path, duration_s) select id, '00000000-0000-0000-0000-0000000000e1/v.m4a', 200 from channels where slug = 'tattiche'$q$,
+  'messages_voice_duration_check');
+insert into messages (id, channel_id, audio_path, duration_s, replay_path, meta)
+  select '00000000-0000-0000-0000-0000000000c9', id, '00000000-0000-0000-0000-0000000000e1/replay.m4a', 200,
+         '00000000-0000-0000-0000-0000000000e1/replay.json', '{"type": "replay", "title": "Uscita dal basso"}'
+  from channels where slug = 'tattiche';
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select expires_at between now() + interval '2 days 23 hours' and now() + interval '3 days 1 hour'
+          from messages where id = '00000000-0000-0000-0000-0000000000c9'), 'il replay scade dopo 3 giorni';
+  assert (select last_type from chat_overview() where channel_id = (select id from channels where slug = 'tattiche')) = 'replay',
+    'il riepilogo dice che l''ultimo messaggio è un replay';
+end $$;
+reset role;
+delete from net.calls;
+select set_config('milanac.now', (now() + interval '4 days')::text, false);
+do $$ begin
+  assert expire_attachments() = 1, 'il replay scaduto';
+  assert (select replay_path is null and audio_path is null and expired_at is not null
+          from messages where id = '00000000-0000-0000-0000-0000000000c9'), 'il messaggio resta senza i file';
+  assert (select count(*) from storage_cleanup where path like '%/replay.%') = 2, 'audio e azioni in coda';
+end $$;
+select set_config('milanac.now', '', false);

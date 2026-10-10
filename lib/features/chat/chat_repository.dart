@@ -7,11 +7,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../lavagna/board_model.dart';
 
 const chatBucket = 'chat';
 
-/// Durata massima di un messaggio vocale.
+/// Durata massima di un messaggio vocale e di un replay della lavagna.
 const maxVoiceSeconds = 120;
+const maxReplaySeconds = 300;
 
 /// Canale della chat (tabella `channels`).
 class Channel {
@@ -75,12 +77,14 @@ class ChatMessage {
     this.imagePath,
     this.audioPath,
     this.durationS,
+    this.replayPath,
     this.replyTo,
     this.expiresAt,
     this.expiredAt,
     this.meta = const {},
     this.localImage,
     this.localAudio,
+    this.localReplay,
   });
 
   final String id;
@@ -94,6 +98,9 @@ class ChatMessage {
   final String? audioPath;
   final int? durationS;
 
+  /// Replay della lavagna: file JSON con le azioni e i tempi (l'audio è in [audioPath]).
+  final String? replayPath;
+
   /// Messaggio a cui si risponde (stesso canale).
   final String? replyTo;
 
@@ -103,12 +110,17 @@ class ChatMessage {
   final Map<String, dynamic> meta;
   final DateTime createdAt;
 
-  /// Solo demo: foto e vocale tenuti in memoria.
+  /// Solo demo: foto, vocale e replay tenuti in memoria.
   final Uint8List? localImage;
   final Uint8List? localAudio;
+  final Uint8List? localReplay;
 
   bool get hasImage => imagePath != null || localImage != null;
   bool get hasAudio => audioPath != null || localAudio != null;
+  bool get hasReplay => replayPath != null || localReplay != null;
+
+  /// Replay della lavagna (anche scaduto: resta il titolo).
+  bool get isReplay => meta['type'] == 'replay';
   bool get isExpired => expiredAt != null;
   bool get hasText => body != null && body!.trim().isNotEmpty;
 
@@ -119,7 +131,9 @@ class ChatMessage {
   String get systemType => (meta['type'] as String?) ?? '';
 
   /// Testo breve per anteprime e citazioni.
-  String get summary => hasText
+  String get summary => isReplay
+      ? '🎬 Schema con audio${meta['title'] == null ? '' : ': ${meta['title']}'}'
+      : hasText
       ? body!.trim()
       : hasImage
       ? '📷 Foto'
@@ -141,6 +155,7 @@ class ChatMessage {
       imagePath: m['image_path'] as String?,
       audioPath: m['audio_path'] as String?,
       durationS: (m['duration_s'] as num?)?.toInt(),
+      replayPath: m['replay_path'] as String?,
       replyTo: m['reply_to'] as String?,
       expiresAt: when(m['expires_at']),
       expiredAt: when(m['expired_at']),
@@ -159,6 +174,7 @@ class ChannelOverview {
     this.lastIsSystem = false,
     this.lastHasImage = false,
     this.lastHasAudio = false,
+    this.lastType,
     this.lastAt,
   });
 
@@ -168,11 +184,16 @@ class ChannelOverview {
   final bool lastIsSystem;
   final bool lastHasImage;
   final bool lastHasAudio;
+
+  /// Tipo dell'ultimo messaggio (replay, announcement, formation...).
+  final String? lastType;
   final DateTime? lastAt;
 
   String get preview {
     final empty = lastBody == null || lastBody!.isEmpty;
-    final text = lastHasImage && empty
+    final text = lastType == 'replay'
+        ? '🎬 Schema con audio'
+        : lastHasImage && empty
         ? 'Foto'
         : lastHasAudio && empty
         ? 'Messaggio vocale'
@@ -196,6 +217,7 @@ abstract class ChatRepository {
     Uint8List? image,
     Uint8List? audio,
     int? durationS,
+    Uint8List? replay,
     String? replyTo,
     Map<String, dynamic>? meta,
   });
@@ -208,6 +230,9 @@ abstract class ChatRepository {
   Future<void> setMuted(String channelId, bool muted);
   Future<String> imageUrl(String path);
   Future<String> audioUrl(String path);
+
+  /// Il file delle azioni di un replay (JSON); null in demo se non è in memoria.
+  Future<Uint8List?> replayBytes(ChatMessage message);
 
   /// Chiude gli stream interni.
   void dispose() {}
@@ -291,6 +316,7 @@ class _SupabaseChatRepository extends ChatRepository {
           lastIsSystem: r['last_kind'] == 'system',
           lastHasImage: (r['last_has_image'] as bool?) ?? false,
           lastHasAudio: (r['last_has_audio'] as bool?) ?? false,
+          lastType: r['last_type'] as String?,
           lastAt: r['last_at'] == null
               ? null
               : DateTime.parse(r['last_at'] as String).toLocal(),
@@ -341,6 +367,7 @@ class _SupabaseChatRepository extends ChatRepository {
     Uint8List? image,
     Uint8List? audio,
     int? durationS,
+    Uint8List? replay,
     String? replyTo,
     Map<String, dynamic>? meta,
   }) async {
@@ -348,6 +375,17 @@ class _SupabaseChatRepository extends ChatRepository {
     final stamp = DateTime.now().microsecondsSinceEpoch;
     String? imagePath;
     String? audioPath;
+    String? replayPath;
+    if (replay != null) {
+      replayPath = '$uid/$stamp.replay.json';
+      await _client.storage
+          .from(chatBucket)
+          .uploadBinary(
+            replayPath,
+            replay,
+            fileOptions: const FileOptions(contentType: 'application/json'),
+          );
+    }
     if (image != null) {
       imagePath = '$uid/$stamp.jpg';
       await _client.storage
@@ -375,7 +413,11 @@ class _SupabaseChatRepository extends ChatRepository {
       'audio_path': audioPath,
       'duration_s': audio == null
           ? null
-          : (durationS ?? 1).clamp(1, maxVoiceSeconds),
+          : (durationS ?? 1).clamp(
+              1,
+              replay == null ? maxVoiceSeconds : maxReplaySeconds,
+            ),
+      'replay_path': replayPath,
       'reply_to': replyTo,
       'meta': meta,
     });
@@ -384,7 +426,11 @@ class _SupabaseChatRepository extends ChatRepository {
   @override
   Future<void> delete(ChatMessage m) async {
     await _client.from('messages').delete().eq('id', m.id);
-    final files = [m.imagePath, m.audioPath].whereType<String>().toList();
+    final files = [
+      m.imagePath,
+      m.audioPath,
+      m.replayPath,
+    ].whereType<String>().toList();
     if (files.isNotEmpty) {
       // Se l'allegato è di un altro e chi elimina non è del Direttivo, lo toglie la
       // pulizia notturna (il database lo mette in coda).
@@ -443,6 +489,13 @@ class _SupabaseChatRepository extends ChatRepository {
 
   @override
   Future<String> audioUrl(String path) => imageUrl(path);
+
+  @override
+  Future<Uint8List?> replayBytes(ChatMessage m) async {
+    final path = m.replayPath;
+    if (path == null) return m.localReplay;
+    return _client.storage.from(chatBucket).download(path);
+  }
 }
 
 /// Chat in memoria per la demo e i test.
@@ -496,6 +549,20 @@ class DemoChatRepository extends ChatRepository {
         body:
             'Guardate come si difende in 11 contro 11: https://youtu.be/dQw4w9WgXcQ',
         createdAt: now.subtract(const Duration(hours: 6)),
+      ),
+      ChatMessage(
+        id: 'm7',
+        channelId: 'c-tattiche',
+        authorId: 'demo',
+        durationS: 20,
+        localReplay: demoReplay().toBytes(),
+        meta: {
+          'type': 'replay',
+          'title': 'Uscita dal basso',
+          'board': demoReplay().initial.toPreviewJson(),
+          'duration_ms': 20000,
+        },
+        createdAt: now.subtract(const Duration(hours: 5)),
       ),
     ]);
     // Generale letto fino a 2 ore e mezza fa: gli ultimi due messaggi sono nuovi.
@@ -581,6 +648,7 @@ class DemoChatRepository extends ChatRepository {
           lastIsSystem: last?.isSystem ?? false,
           lastHasImage: last?.hasImage ?? false,
           lastHasAudio: last?.hasAudio ?? false,
+          lastType: last?.meta['type'] as String?,
           lastAt: last?.createdAt,
         );
       }(),
@@ -617,6 +685,7 @@ class DemoChatRepository extends ChatRepository {
     Uint8List? image,
     Uint8List? audio,
     int? durationS,
+    Uint8List? replay,
     String? replyTo,
     Map<String, dynamic>? meta,
   }) async {
@@ -628,7 +697,8 @@ class DemoChatRepository extends ChatRepository {
         body: body,
         localImage: image,
         localAudio: audio,
-        durationS: audio == null ? null : durationS,
+        localReplay: replay,
+        durationS: audio == null && replay == null ? null : durationS,
         replyTo: replyTo,
         meta: meta ?? const {},
         createdAt: DateTime.now(),
@@ -664,6 +734,9 @@ class DemoChatRepository extends ChatRepository {
 
   @override
   Future<String> audioUrl(String path) async => '';
+
+  @override
+  Future<Uint8List?> replayBytes(ChatMessage m) async => m.localReplay;
 
   @override
   void dispose() => _changes.close();

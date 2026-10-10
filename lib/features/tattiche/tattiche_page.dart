@@ -7,6 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/auth/providers.dart';
 import '../../core/theme.dart';
 import '../formazione/modules.dart';
+import '../lavagna/board_model.dart';
+import '../lavagna/board_page.dart';
+import '../lavagna/board_painter.dart';
 import 'tactics_repository.dart';
 
 /// Tattiche: gli schemi del club con immagine e spiegazione (li pubblica il Direttivo).
@@ -20,12 +23,27 @@ class TattichePage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: isDirettivo
-          ? FloatingActionButton.extended(
-              heroTag: 'tattica',
-              backgroundColor: MilanacColors.red,
-              onPressed: () => showTacticEditor(context),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Nuova tattica'),
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FloatingActionButton.extended(
+                  heroTag: 'tattica',
+                  backgroundColor: MilanacColors.surfaceHigh,
+                  foregroundColor: Colors.white,
+                  onPressed: () => showTacticEditor(context),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Nuova tattica'),
+                ),
+                const SizedBox(height: 10),
+                FloatingActionButton.extended(
+                  heroTag: 'lavagna',
+                  backgroundColor: MilanacColors.red,
+                  onPressed: () => openBoard(context),
+                  icon: const Icon(Icons.draw_rounded),
+                  label: const Text('Lavagna'),
+                ),
+              ],
             )
           : null,
       body: const _TacticsTab(),
@@ -92,7 +110,9 @@ class _TacticCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (tactic.hasImage)
+          if (tactic.hasBoard)
+            _BoardThumb(tactic.board!)
+          else if (tactic.hasImage)
             AspectRatio(aspectRatio: 16 / 9, child: _TacticImage(tactic)),
           Padding(
             padding: const EdgeInsets.all(14),
@@ -110,6 +130,15 @@ class _TacticCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (tactic.hasBoard)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Icon(
+                          Icons.draw_rounded,
+                          size: 18,
+                          color: MilanacColors.gold,
+                        ),
+                      ),
                     if (tactic.module != null) _ModuleChip(tactic.module!),
                   ],
                 ),
@@ -126,6 +155,26 @@ class _TacticCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    ),
+  );
+}
+
+/// Lo schema della lavagna ritagliato in formato 16:9 (la parte centrale del campo).
+class _BoardThumb extends StatelessWidget {
+  const _BoardThumb(this.board);
+  final BoardState board;
+
+  @override
+  Widget build(BuildContext context) => AspectRatio(
+    aspectRatio: 16 / 9,
+    child: FittedBox(
+      fit: BoxFit.cover,
+      clipBehavior: Clip.hardEdge,
+      child: SizedBox(
+        width: 340,
+        height: 340 / boardAspect,
+        child: CustomPaint(painter: BoardPainter(board, showNames: false)),
       ),
     ),
   );
@@ -209,7 +258,25 @@ class TacticPage extends ConsumerWidget {
           : ListView(
               padding: const EdgeInsets.only(bottom: 32),
               children: [
-                if (t.hasImage)
+                if (t.hasBoard)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Column(
+                      children: [
+                        BoardPreview(state: t.board!, showNames: true),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed: () =>
+                              openBoard(context, tactic: t, readOnly: !isDirettivo),
+                          icon: const Icon(Icons.draw_rounded),
+                          label: Text(
+                            isDirettivo ? 'Apri la lavagna' : 'Guarda sulla lavagna',
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (t.hasImage)
                   AspectRatio(
                     aspectRatio: 4 / 3,
                     child: InteractiveViewer(
