@@ -10,6 +10,9 @@ import '../../core/config.dart';
 
 const chatBucket = 'chat';
 
+/// Durata massima di un messaggio vocale.
+const maxVoiceSeconds = 120;
+
 /// Canale della chat (tabella `channels`).
 class Channel {
   const Channel({
@@ -60,7 +63,7 @@ class Channel {
 }
 
 /// Messaggio (tabella `messages`). I messaggi "system" sono scritti dal database
-/// (es. ritardi e assenze nel canale Presenze).
+/// (formazione pubblicata, carte speciali della giornata).
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -70,8 +73,14 @@ class ChatMessage {
     this.isSystem = false,
     this.body,
     this.imagePath,
+    this.audioPath,
+    this.durationS,
+    this.replyTo,
+    this.expiresAt,
+    this.expiredAt,
     this.meta = const {},
     this.localImage,
+    this.localAudio,
   });
 
   final String id;
@@ -80,27 +89,65 @@ class ChatMessage {
   final bool isSystem;
   final String? body;
   final String? imagePath;
+
+  /// Messaggio vocale: file nel bucket e durata in secondi.
+  final String? audioPath;
+  final int? durationS;
+
+  /// Messaggio a cui si risponde (stesso canale).
+  final String? replyTo;
+
+  /// Foto e vocali scadono dopo 60 giorni: il messaggio resta con "Allegato scaduto".
+  final DateTime? expiresAt;
+  final DateTime? expiredAt;
   final Map<String, dynamic> meta;
   final DateTime createdAt;
 
-  /// Solo demo: foto tenuta in memoria.
+  /// Solo demo: foto e vocale tenuti in memoria.
   final Uint8List? localImage;
+  final Uint8List? localAudio;
 
   bool get hasImage => imagePath != null || localImage != null;
+  bool get hasAudio => audioPath != null || localAudio != null;
+  bool get isExpired => expiredAt != null;
+  bool get hasText => body != null && body!.trim().isNotEmpty;
 
   /// Avviso ufficiale del Direttivo (evidenziato in chat, titolo dedicato nella notifica).
   bool get isAnnouncement => meta['type'] == 'announcement';
 
-  factory ChatMessage.fromMap(Map<String, dynamic> m) => ChatMessage(
-    id: m['id'] as String,
-    channelId: m['channel_id'] as String,
-    authorId: m['author_id'] as String?,
-    isSystem: m['kind'] == 'system',
-    body: m['body'] as String?,
-    imagePath: m['image_path'] as String?,
-    meta: (m['meta'] as Map?)?.cast<String, dynamic>() ?? const {},
-    createdAt: DateTime.parse(m['created_at'] as String).toLocal(),
-  );
+  /// Tipo del messaggio automatico (formation, special_cards...).
+  String get systemType => (meta['type'] as String?) ?? '';
+
+  /// Testo breve per anteprime e citazioni.
+  String get summary => hasText
+      ? body!.trim()
+      : hasImage
+      ? '📷 Foto'
+      : hasAudio
+      ? '🎤 Messaggio vocale'
+      : isExpired
+      ? 'Allegato scaduto'
+      : '';
+
+  factory ChatMessage.fromMap(Map<String, dynamic> m) {
+    DateTime? when(Object? v) =>
+        v == null ? null : DateTime.parse(v as String).toLocal();
+    return ChatMessage(
+      id: m['id'] as String,
+      channelId: m['channel_id'] as String,
+      authorId: m['author_id'] as String?,
+      isSystem: m['kind'] == 'system',
+      body: m['body'] as String?,
+      imagePath: m['image_path'] as String?,
+      audioPath: m['audio_path'] as String?,
+      durationS: (m['duration_s'] as num?)?.toInt(),
+      replyTo: m['reply_to'] as String?,
+      expiresAt: when(m['expires_at']),
+      expiredAt: when(m['expired_at']),
+      meta: (m['meta'] as Map?)?.cast<String, dynamic>() ?? const {},
+      createdAt: when(m['created_at'])!,
+    );
+  }
 }
 
 /// Riepilogo di un canale per la lista: non letti e ultimo messaggio.
@@ -111,6 +158,7 @@ class ChannelOverview {
     this.lastAuthor,
     this.lastIsSystem = false,
     this.lastHasImage = false,
+    this.lastHasAudio = false,
     this.lastAt,
   });
 
@@ -119,11 +167,15 @@ class ChannelOverview {
   final String? lastAuthor;
   final bool lastIsSystem;
   final bool lastHasImage;
+  final bool lastHasAudio;
   final DateTime? lastAt;
 
   String get preview {
-    final text = lastHasImage && (lastBody == null || lastBody!.isEmpty)
+    final empty = lastBody == null || lastBody!.isEmpty;
+    final text = lastHasImage && empty
         ? 'Foto'
+        : lastHasAudio && empty
+        ? 'Messaggio vocale'
         : lastBody ?? '';
     if (lastIsSystem || lastAuthor == null) return text;
     return '$lastAuthor: $text';
@@ -142,13 +194,20 @@ abstract class ChatRepository {
     String channelId, {
     String? body,
     Uint8List? image,
+    Uint8List? audio,
+    int? durationS,
+    String? replyTo,
     Map<String, dynamic>? meta,
   });
   Future<void> delete(ChatMessage message);
   Future<void> markRead(String channelId);
+
+  /// Ultima lettura del canale (per il separatore "Nuovi messaggi").
+  Future<DateTime?> lastReadAt(String channelId);
   Future<Set<String>> mutedChannels();
   Future<void> setMuted(String channelId, bool muted);
   Future<String> imageUrl(String path);
+  Future<String> audioUrl(String path);
 
   /// Chiude gli stream interni.
   void dispose() {}
@@ -191,6 +250,10 @@ final chatImageUrlProvider = FutureProvider.family<String, String>(
   (ref, path) => ref.watch(chatRepositoryProvider).imageUrl(path),
 );
 
+final chatAudioUrlProvider = FutureProvider.family<String, String>(
+  (ref, path) => ref.watch(chatRepositoryProvider).audioUrl(path),
+);
+
 class _SupabaseChatRepository extends ChatRepository {
   _SupabaseChatRepository(this._ref);
   final Ref _ref;
@@ -227,6 +290,7 @@ class _SupabaseChatRepository extends ChatRepository {
           lastAuthor: r['last_author'] as String?,
           lastIsSystem: r['last_kind'] == 'system',
           lastHasImage: (r['last_has_image'] as bool?) ?? false,
+          lastHasAudio: (r['last_has_audio'] as bool?) ?? false,
           lastAt: r['last_at'] == null
               ? null
               : DateTime.parse(r['last_at'] as String).toLocal(),
@@ -275,24 +339,44 @@ class _SupabaseChatRepository extends ChatRepository {
     String channelId, {
     String? body,
     Uint8List? image,
+    Uint8List? audio,
+    int? durationS,
+    String? replyTo,
     Map<String, dynamic>? meta,
   }) async {
-    String? path;
+    final uid = _client.auth.currentUser!.id;
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    String? imagePath;
+    String? audioPath;
     if (image != null) {
-      path =
-          '${_client.auth.currentUser!.id}/${DateTime.now().microsecondsSinceEpoch}.jpg';
+      imagePath = '$uid/$stamp.jpg';
       await _client.storage
           .from(chatBucket)
           .uploadBinary(
-            path,
+            imagePath,
             image,
             fileOptions: const FileOptions(contentType: 'image/jpeg'),
+          );
+    }
+    if (audio != null) {
+      audioPath = '$uid/$stamp.m4a';
+      await _client.storage
+          .from(chatBucket)
+          .uploadBinary(
+            audioPath,
+            audio,
+            fileOptions: const FileOptions(contentType: 'audio/mp4'),
           );
     }
     await _client.from('messages').insert({
       'channel_id': channelId,
       'body': body,
-      'image_path': path,
+      'image_path': imagePath,
+      'audio_path': audioPath,
+      'duration_s': audio == null
+          ? null
+          : (durationS ?? 1).clamp(1, maxVoiceSeconds),
+      'reply_to': replyTo,
       'meta': meta,
     });
   }
@@ -300,9 +384,11 @@ class _SupabaseChatRepository extends ChatRepository {
   @override
   Future<void> delete(ChatMessage m) async {
     await _client.from('messages').delete().eq('id', m.id);
-    if (m.imagePath != null) {
-      // Se la foto è di un altro e chi elimina non è del Direttivo, resta nel bucket.
-      await _client.storage.from(chatBucket).remove([m.imagePath!]);
+    final files = [m.imagePath, m.audioPath].whereType<String>().toList();
+    if (files.isNotEmpty) {
+      // Se l'allegato è di un altro e chi elimina non è del Direttivo, lo toglie la
+      // pulizia notturna (il database lo mette in coda).
+      await _client.storage.from(chatBucket).remove(files);
     }
   }
 
@@ -314,6 +400,18 @@ class _SupabaseChatRepository extends ChatRepository {
       'last_read_at': DateTime.now().toUtc().toIso8601String(),
     });
     _refreshOverview.add(null);
+  }
+
+  @override
+  Future<DateTime?> lastReadAt(String channelId) async {
+    final row = await _client
+        .from('channel_reads')
+        .select('last_read_at')
+        .eq('channel_id', channelId)
+        .eq('user_id', _client.auth.currentUser!.id)
+        .maybeSingle();
+    final v = row?['last_read_at'] as String?;
+    return v == null ? null : DateTime.parse(v).toLocal();
   }
 
   @override
@@ -342,6 +440,9 @@ class _SupabaseChatRepository extends ChatRepository {
   @override
   Future<String> imageUrl(String path) =>
       _client.storage.from(chatBucket).createSignedUrl(path, 60 * 60 * 6);
+
+  @override
+  Future<String> audioUrl(String path) => imageUrl(path);
 }
 
 /// Chat in memoria per la demo e i test.
@@ -350,6 +451,15 @@ class DemoChatRepository extends ChatRepository {
     final now = DateTime.now();
     _messages.addAll([
       ChatMessage(
+        id: 'm5',
+        channelId: 'c-main',
+        authorId: 'p3',
+        body: 'Il gol di ieri 🔥',
+        expiresAt: now.subtract(const Duration(days: 1)),
+        expiredAt: now.subtract(const Duration(hours: 5)),
+        createdAt: now.subtract(const Duration(days: 1, hours: 2)),
+      ),
+      ChatMessage(
         id: 'm1',
         channelId: 'c-main',
         authorId: 'p2',
@@ -357,10 +467,19 @@ class DemoChatRepository extends ChatRepository {
         createdAt: now.subtract(const Duration(hours: 3)),
       ),
       ChatMessage(
+        id: 'm4',
+        channelId: 'c-main',
+        authorId: 'p2',
+        audioPath: 'demo/voce.m4a',
+        durationS: 12,
+        createdAt: now.subtract(const Duration(hours: 2, minutes: 10)),
+      ),
+      ChatMessage(
         id: 'm2',
         channelId: 'c-main',
         authorId: 'p3',
         body: 'Ci sono 💪',
+        replyTo: 'm1',
         createdAt: now.subtract(const Duration(hours: 2)),
       ),
       ChatMessage(
@@ -370,7 +489,17 @@ class DemoChatRepository extends ChatRepository {
         body: 'Stasera provo la build nuova da DC',
         createdAt: now.subtract(const Duration(hours: 1)),
       ),
+      ChatMessage(
+        id: 'm6',
+        channelId: 'c-tattiche',
+        authorId: 'demo',
+        body:
+            'Guardate come si difende in 11 contro 11: https://youtu.be/dQw4w9WgXcQ',
+        createdAt: now.subtract(const Duration(hours: 6)),
+      ),
     ]);
+    // Generale letto fino a 2 ore e mezza fa: gli ultimi due messaggi sono nuovi.
+    _reads['c-main'] = now.subtract(const Duration(hours: 2, minutes: 30));
   }
 
   static const _channels = [
@@ -451,6 +580,7 @@ class DemoChatRepository extends ChatRepository {
           lastAuthor: last == null ? null : _names[last.authorId],
           lastIsSystem: last?.isSystem ?? false,
           lastHasImage: last?.hasImage ?? false,
+          lastHasAudio: last?.hasAudio ?? false,
           lastAt: last?.createdAt,
         );
       }(),
@@ -485,6 +615,9 @@ class DemoChatRepository extends ChatRepository {
     String channelId, {
     String? body,
     Uint8List? image,
+    Uint8List? audio,
+    int? durationS,
+    String? replyTo,
     Map<String, dynamic>? meta,
   }) async {
     _messages.add(
@@ -494,6 +627,9 @@ class DemoChatRepository extends ChatRepository {
         authorId: 'demo',
         body: body,
         localImage: image,
+        localAudio: audio,
+        durationS: audio == null ? null : durationS,
+        replyTo: replyTo,
         meta: meta ?? const {},
         createdAt: DateTime.now(),
       ),
@@ -514,6 +650,9 @@ class DemoChatRepository extends ChatRepository {
   }
 
   @override
+  Future<DateTime?> lastReadAt(String channelId) async => _reads[channelId];
+
+  @override
   Future<Set<String>> mutedChannels() async => Set.of(_muted);
 
   @override
@@ -522,6 +661,9 @@ class DemoChatRepository extends ChatRepository {
 
   @override
   Future<String> imageUrl(String path) async => '';
+
+  @override
+  Future<String> audioUrl(String path) async => '';
 
   @override
   void dispose() => _changes.close();

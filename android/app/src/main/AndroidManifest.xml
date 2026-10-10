@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Messaggi vocali nella chat -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="MILANAC"
         android:name="${applicationName}"
