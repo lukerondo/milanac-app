@@ -114,8 +114,19 @@ Se il workflow Database si ferma sulla riga `create extension if not exists pg_c
 l'estensione a mano (Dashboard → **Database → Extensions** → cerca `pg_cron` → abilita) e rilancia
 il workflow. Per controllare: SQL Editor → `select jobname, schedule from cron.job;` e
 `select * from cron.job_run_details order by start_time desc limit 10;`.
-Le notifiche (promemoria, assenze, eventi, video, notizie) partono dalla funzione `notify`: il
-workflow **Funzioni** la ripubblica da solo quando il codice arriva su `main`.
+Le notifiche (promemoria, assenze, eventi, video, notizie, carte speciali) partono dalla funzione
+`notify`: il workflow **Funzioni** la ripubblica da solo quando il codice arriva su `main`.
+
+## 12. Pulizia degli allegati della chat (pg_cron + funzione notify)
+Foto e vocali della chat scadono dopo 60 giorni (il messaggio resta con "Allegato scaduto").
+La migrazione `0018` programma `expire_attachments()` ogni notte alle 3:15 (ora del server):
+toglie gli allegati scaduti dai messaggi, mette i file nella tabella `storage_cleanup` e chiama
+la funzione `notify` con l'evento `cleanup`, che li elimina dal bucket `chat` con la chiave di
+servizio (nessun segreto in più da configurare). I file dei messaggi eliminati seguono la stessa
+strada. Se una notte la rimozione fallisce, le righe restano in coda e si riprova la notte dopo.
+Per controllare: SQL Editor → `select * from storage_cleanup;` (vuota = tutto pulito) e
+`select jobname, schedule from cron.job;` (devono esserci `presenze`, `pulizia-cron` e
+`allegati-scaduti`).
 
 ## Sicurezza
 - La chiave **publishable** (`sb_publishable_…`) è nel repository: va bene, è pensata per stare nell'app.
