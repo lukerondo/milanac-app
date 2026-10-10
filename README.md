@@ -34,7 +34,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | **Nuova app · 2** | Home con i riquadri Mondo Proclub (video dei creator proposti dai giocatori e pubblicati dal Direttivo; notizie con avvisi di aggiornamento FC 27 e console) e Presenze (serata di oggi, risposta entro le 18:30). Presenze a calendario con promemoria alle 18:00 e assenze automatiche alle 18:30 (pg_cron), eventi con notifica, canali Generale / Milan AC / Milan AC Futuro / Tattiche / Comunicazioni / Direttivo, Sala Direttivo con correzioni dopo la scadenza, formazione annunciata in Comunicazioni e PDF con le mini carte. | ✅ |
 | **Nuova app · 3** | Chat in stile Telegram (risposte citate, vocali fino a 2 minuti, foto e vocali che scadono dopo 60 giorni, link cliccabili, "Nuovi messaggi"), carte speciali al posto dei voti (nero/oro della settimana assegnata dal Direttivo per reparto con bonus +1…+5, blu elettrico automatica per tripletta o tre partite senza subire gol, annuncio in Comunicazioni, walkout e traguardi dedicati), Rosa con mini carte, ricerca e filtri, Tornei con foto o logo. | ✅ |
 | **Nuova app · 4** | Lavagna tattica in Tattiche e schemi: gettoni dei giocatori delle due squadre (dalla formazione), pennello heatmap, frecce continue o tratteggiate, annulla, schemi salvati con immagine esportata; registrazione del replay (voce e mosse sincronizzate, fino a 5 minuti) con anteprima e invio in chat, dove si riproduce nell'app e sparisce dopo 3 giorni. | ✅ |
-| Nuova app · 5 | Stanza vocale (Agora) e rifiniture | ⏳ |
+| **Nuova app · 5** | Stanza vocale in ogni chat (Agora): cuffie nella barra, *Entra* / *Apri la stanza* con un tocco, microfono e vivavoce, cerchio verde su chi parla, avviso "stanza aperta" a chi è nel canale, chiusura automatica quando esce l'ultimo; minuti del mese nella Sala Direttivo (10.000 gratis). Rifiniture: errori con "Riprova", larghezza massima su tablet. | ✅ |
 
 ## Provare l'app subito (modalità demo)
 
@@ -76,6 +76,9 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
    update profiles set club_role = 'direttivo' where display_name = 'Il tuo nome';
    ```
    Da lì in poi è il Direttivo ad approvare gli altri dall'app.
+7. **Stanza vocale** (facoltativa): serve un account Agora gratuito; App ID e App Certificate vanno
+   nei secret `AGORA_APP_ID` e `AGORA_APP_CERTIFICATE` di GitHub (vedi `docs/SETUP_SUPABASE.md`, § 13).
+   Senza, l'app funziona lo stesso e la stanza dice che la voce non è ancora attiva.
 
 ## Notizie automatiche
 

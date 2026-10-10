@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme.dart';
+import '../voce/voice_repository.dart';
 import 'chat_repository.dart';
 
 /// Elenco dei canali con messaggi non letti e ultimo messaggio.
@@ -51,6 +52,15 @@ class ChatListPage extends ConsumerWidget {
                     padding: EdgeInsets.only(left: 4),
                     child: Icon(
                       Icons.lock_rounded,
+                      size: 16,
+                      color: MilanacColors.gold,
+                    ),
+                  ),
+                if (ref.watch(channelVoiceRoomProvider(c.id)) != null)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: Icon(
+                      Icons.headset_mic_rounded,
                       size: 16,
                       color: MilanacColors.gold,
                     ),

@@ -129,6 +129,23 @@ Per controllare: SQL Editor → `select * from storage_cleanup;` (vuota = tutto 
 `select jobname, schedule from cron.job;` (devono esserci `presenze`, `pulizia-cron` e
 `allegati-scaduti`).
 
+## 13. Stanza vocale (Agora)
+La voce non passa da Supabase: usa Agora (piano gratuito, 10.000 minuti-partecipante al mese;
+4 persone per un'ora = 240 minuti). Senza i segreti qui sotto l'app funziona lo stesso ma, entrando
+in una stanza, dice che la voce non è ancora attiva.
+1. https://console.agora.io → account gratuito → **Create project**: nome `MILANAC`, caso d'uso
+   *Voice call*, autenticazione **Secured mode: APP ID + Token**.
+2. Dal progetto copia l'**App ID** e, sotto *Primary certificate*, l'**App Certificate**.
+3. GitHub → milanac-app → **Settings → Secrets and variables → Actions** → due secret:
+   `AGORA_APP_ID` e `AGORA_APP_CERTIFICATE`.
+4. **Actions → Funzioni → Run workflow**: carica i segreti in Supabase e pubblica le funzioni
+   `notify` e `voice-token` (il log dice "Stanza vocale: segreti Agora impostati").
+L'App Certificate non sta mai nell'app: i biglietti d'ingresso (token validi 3 ore) li firma la
+funzione `voice-token` solo per chi ha accesso al canale. Per controllare: `select jobname from
+cron.job;` deve mostrare anche `stanze-vocali` (chiude le stanze abbandonate) e
+`select * from voice_rooms where closed_at is null;` elenca le stanze aperte adesso.
+Sul telefono l'app chiede il permesso del microfono la prima volta che si entra.
+
 ## Sicurezza
 - La chiave **publishable** (`sb_publishable_…`) è nel repository: va bene, è pensata per stare nell'app.
 - La chiave **secret** (`sb_secret_…`) NON va mai messa nell'app né nel repository:

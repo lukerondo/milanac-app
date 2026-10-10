@@ -30,6 +30,7 @@ import '../risultati/match_editor.dart';
 import '../rosa/member.dart';
 import '../rosa/member_editor.dart';
 import '../rosa/rosa_repository.dart';
+import '../voce/voice_repository.dart';
 
 /// Sala Direttivo: la stanza riservata dove si gestisce il club.
 /// Visibile solo al Direttivo (menu filtrato e redirect nel router).
@@ -57,6 +58,8 @@ class DirettivoPage extends ConsumerWidget {
                 const <SharedLink>[])
             .where((l) => !l.isPublished)
             .length;
+
+    final voiceMinutes = ref.watch(voiceMinutesProvider).value ?? 0;
 
     void push(Widget page) => Navigator.of(
       context,
@@ -131,6 +134,12 @@ class DirettivoPage extends ConsumerWidget {
                 label: proposals == 1 ? 'video proposto' : 'video proposti',
                 highlight: proposals > 0,
                 onTap: () => context.go('/mondo'),
+              ),
+              _Stat(
+                value: voiceMinutes,
+                label: 'minuti voce su 10.000',
+                highlight: voiceMinutes > voiceMinutesPerMonth * .8,
+                onTap: () => context.go('/chat'),
               ),
             ],
           ),
@@ -525,7 +534,9 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
                     m.displayName,
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  subtitle: Text(m.fullName == m.displayName ? m.roleLabel : m.fullName),
+                  subtitle: Text(
+                    m.fullName == m.displayName ? m.roleLabel : m.fullName,
+                  ),
                   trailing: FilledButton.tonal(
                     onPressed: () => _reactivate(m),
                     child: const Text('Riattiva'),

@@ -1,3 +1,7 @@
+// Il plugin agora_rtc_engine compila con l'SDK indicato qui (altrimenti usa il 31, troppo
+// vecchio per le librerie AndroidX di oggi): lo allineiamo a quello dell'app (Flutter: 36).
+extra["compileSdkVersion"] = 36
+
 allprojects {
     repositories {
         google()

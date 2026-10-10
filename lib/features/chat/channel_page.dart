@@ -21,12 +21,16 @@ import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'chat_repository.dart';
 import 'voice_player.dart';
+import '../voce/voice_room_sheet.dart';
 import 'voice_recorder.dart';
 
 /// Conversazione di un canale, in stile Telegram (aperta anche dalle notifiche: `/chat/<slug>`).
 class ChannelPage extends ConsumerStatefulWidget {
-  const ChannelPage({super.key, required this.slug});
+  const ChannelPage({super.key, required this.slug, this.openVoice = false});
   final String slug;
+
+  /// Apre subito il foglio della stanza vocale (dalla notifica "stanza aperta").
+  final bool openVoice;
 
   @override
   ConsumerState<ChannelPage> createState() => _ChannelPageState();
@@ -42,6 +46,7 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
   bool _sending = false;
   bool _hasText = false;
   bool _showJump = false;
+  bool _voiceShown = false;
   DateTime? _readUpTo;
 
   /// Ultima lettura prima di aprire il canale: sopra il primo messaggio arrivato dopo
@@ -239,6 +244,12 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
         .firstOrNull;
     _channel = channel;
     if (channel != null && !_readBeforeRequested) _loadReadBefore(channel);
+    if (channel != null && widget.openVoice && !_voiceShown) {
+      _voiceShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showVoiceRoom(context, channel);
+      });
+    }
     final muted =
         channel != null &&
         (ref.watch(mutedChannelsProvider).value?.contains(channel.id) ?? false);
@@ -255,6 +266,7 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
         ),
         title: Text(channel?.name.toUpperCase() ?? 'CHAT'),
         actions: [
+          if (channel != null) VoiceRoomButton(channel: channel),
           if (channel != null)
             IconButton(
               tooltip: muted ? 'Riattiva notifiche' : 'Silenzia canale',
@@ -272,6 +284,7 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                VoiceRoomBanner(channel: channel),
                 Expanded(
                   child: Stack(
                     children: [
@@ -285,7 +298,9 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
                             backgroundColor: MilanacColors.surfaceHigh,
                             foregroundColor: Colors.white,
                             onPressed: _jumpToBottom,
-                            child: const Icon(Icons.keyboard_arrow_down_rounded),
+                            child: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                            ),
                           ),
                         ),
                     ],
@@ -610,7 +625,9 @@ class _ReplyStrip extends StatelessWidget {
     decoration: BoxDecoration(
       color: MilanacColors.surfaceHigh,
       borderRadius: BorderRadius.circular(10),
-      border: const Border(left: BorderSide(color: MilanacColors.gold, width: 3)),
+      border: const Border(
+        left: BorderSide(color: MilanacColors.gold, width: 3),
+      ),
     ),
     child: Row(
       children: [
@@ -758,25 +775,25 @@ class _SystemMessage extends StatelessWidget {
       child: GestureDetector(
         onTap: route == null ? null : () => context.push(route),
         child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .12),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: .4)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 8),
-            Flexible(child: Text(message.body ?? '')),
-            const SizedBox(width: 8),
-            Text(
-              DateFormat('HH:mm').format(message.createdAt),
-              style: const TextStyle(fontSize: 11, color: Colors.white38),
-            ),
-          ],
-        ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: .4)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Flexible(child: Text(message.body ?? '')),
+              const SizedBox(width: 8),
+              Text(
+                DateFormat('HH:mm').format(message.createdAt),
+                style: const TextStyle(fontSize: 11, color: Colors.white38),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1003,7 +1020,11 @@ class _Bubble extends ConsumerWidget {
 
 /// Il messaggio citato dentro una bolla.
 class _Quote extends StatelessWidget {
-  const _Quote({required this.message, required this.author, required this.mine});
+  const _Quote({
+    required this.message,
+    required this.author,
+    required this.mine,
+  });
   final ChatMessage? message;
   final String? author;
   final bool mine;
@@ -1015,7 +1036,9 @@ class _Quote extends StatelessWidget {
     decoration: BoxDecoration(
       color: Colors.black.withValues(alpha: mine ? .25 : .3),
       borderRadius: BorderRadius.circular(8),
-      border: const Border(left: BorderSide(color: MilanacColors.gold, width: 3)),
+      border: const Border(
+        left: BorderSide(color: MilanacColors.gold, width: 3),
+      ),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1083,9 +1106,12 @@ class _ReplayBubble extends StatelessWidget {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.all(14),
                   ),
-                  onPressed: () => Navigator.of(context, rootNavigator: true).push(
-                    MaterialPageRoute(builder: (_) => ReplayPage(message: message)),
-                  ),
+                  onPressed: () =>
+                      Navigator.of(context, rootNavigator: true).push(
+                        MaterialPageRoute(
+                          builder: (_) => ReplayPage(message: message),
+                        ),
+                      ),
                   icon: const Icon(Icons.play_arrow_rounded, size: 32),
                 ),
             ],

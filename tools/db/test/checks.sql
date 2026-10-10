@@ -861,3 +861,56 @@ do $$ begin
   assert (select count(*) from storage_cleanup where path like '%/replay.%') = 2, 'audio e azioni in coda';
 end $$;
 select set_config('milanac.now', '', false);
+
+-- Stanza vocale: una per canale, avviso solo all'apertura, si chiude quando esce l'ultimo;
+-- chi sparisce senza uscire viene fatto uscire dal controllo di pg_cron; minuti del mese.
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+select set_config('milanac.now', '', false);
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$select open_voice_room((select id from channels where slug = 'futuro'))$q$, 'non disponibile');
+select set_config('test.stanza', open_voice_room((select id from channels where slug = 'main'))::text, false);
+do $$ begin
+  assert (select open_voice_room((select id from channels where slug = 'main'))::text) = current_setting('test.stanza'),
+    'aprendo di nuovo si entra nella stessa stanza';
+  assert (select count(*) from voice_sessions where left_at is null) = 1, 'una sessione attiva';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+select set_config('test.sessione_e2', join_voice_room(current_setting('test.stanza')::uuid, 12345)::text, false);
+select voice_heartbeat(current_setting('test.sessione_e2')::uuid, true);
+do $$ begin
+  assert (select count(*) from voice_sessions where room_id = current_setting('test.stanza')::uuid and left_at is null) = 2,
+    'due dentro';
+  assert (select muted from voice_sessions where id = current_setting('test.sessione_e2')::uuid), 'muto registrato';
+  assert (select agora_uid from voice_sessions where id = current_setting('test.sessione_e2')::uuid) = 12345, 'uid Agora';
+end $$;
+select leave_voice_room(current_setting('test.sessione_e2')::uuid);
+do $$ begin
+  assert (select closed_at is null from voice_rooms where id = current_setting('test.stanza')::uuid),
+    'la stanza resta aperta finché c''è qualcuno';
+end $$;
+reset role;
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' = 'voice_room') = 1, 'un solo avviso di stanza aperta';
+  assert (select count(*) from cron.job where jobname = 'stanze-vocali') = 1, 'controllo delle stanze ogni minuto';
+end $$;
+-- Dieci minuti dopo e1 non ha più dato segni di vita: esce d'ufficio e la stanza si chiude.
+select set_config('milanac.now', (now() + interval '10 minutes')::text, false);
+select voice_tick();
+do $$ begin
+  assert (select count(*) from voice_sessions where left_at is null) = 0, 'sessione abbandonata chiusa';
+  assert (select closed_at is not null from voice_rooms where id = current_setting('test.stanza')::uuid), 'stanza chiusa';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert voice_minutes() between 1 and 11, 'minuti del mese contati';
+  assert voice_minutes(date '2001-01-01') = 0, 'nessun minuto in un altro mese';
+end $$;
+select pg_temp.expect_error(
+  $q$select join_voice_room(current_setting('test.stanza')::uuid)$q$, 'chiusa');
+reset role;
+select set_config('milanac.now', '', false);

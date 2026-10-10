@@ -131,7 +131,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final rules = ref.read(latestRulesProvider);
       if (rules.isLoading) return null;
       final latest = rules.value?.number;
-      if ((latest != null && p.rulesAcceptedVersion != latest) || !p.isApproved) {
+      if ((latest != null && p.rulesAcceptedVersion != latest) ||
+          !p.isApproved) {
         return goTo('/regolamento/accetta');
       }
 
@@ -175,7 +176,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Conversazione a schermo intero (anche dalle notifiche).
       GoRoute(
         path: '/chat/:slug',
-        builder: (_, state) => ChannelPage(slug: state.pathParameters['slug']!),
+        builder: (_, state) => ChannelPage(
+          slug: state.pathParameters['slug']!,
+          openVoice: state.uri.queryParameters['stanza'] == '1',
+        ),
       ),
       // Lavagna tattica: nuova o uno schema salvato.
       GoRoute(path: '/lavagna', builder: (_, _) => const BoardPage()),

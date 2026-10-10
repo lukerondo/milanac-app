@@ -155,7 +155,14 @@ pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti 
     Foto e vocali scadono dopo 60 giorni: il messaggio resta con "Allegato scaduto" (pulizia
     notturna). Il **replay della lavagna** arriva come riquadro con il campo e il pulsante
     Play: si riproduce nell'app (audio più mosse, pochi KB, non è un video) e scade dopo 3
-    giorni. Non letti, canali silenziabili, notifiche.
+    giorni. Non letti, canali silenziabili, notifiche. **Stanza vocale** (Agora): le cuffie
+    nella barra di ogni canale aprono il foglio della stanza: chi c'è (volto, cerchio verde su
+    chi parla, microfono barrato su chi è in muto), *Entra* o *Apri la stanza*, microfono,
+    vivavoce, *Esci*. Chi apre la stanza avvisa i membri del canale (la notifica apre la chat
+    con il foglio già aperto); sotto la barra il banner "Stanza vocale aperta · N dentro" e,
+    durante la chiamata, cronometro, microfono ed esci sempre a portata di dito (si può
+    cambiare pagina senza uscire). La stanza si chiude quando esce l'ultimo o dopo 3 minuti
+    senza segni di vita dell'app. Sul web la stanza non è disponibile.
 16. **Tornei** – foto o logo (caricati dal Direttivo), link al sito, squadra, stato,
     classifica facoltativa compilata dal Direttivo, partite collegate.
 17. **Colonna sonora** – ognuno sceglie un file audio dal proprio telefono (es. compilation
@@ -177,7 +184,7 @@ pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti 
     carta) alla prima apertura dopo l'approvazione, quando l'overall sale e quando arriva una
     carta speciale (con i suoi colori); rivedibile dalla carta.
 21. **Sala Direttivo** – contatori (senza risposta stasera, formazioni da pubblicare, video
-    proposti) e azioni: presenze di stasera (correzioni anche dopo le 18:30), formazioni,
+    proposti, minuti voce del mese su 10.000) e azioni: presenze di stasera (correzioni anche dopo le 18:30), formazioni,
     nuovo evento, avviso a tutti (in Comunicazioni), nuovo risultato, rosa e squadre,
     Mondo Proclub, chat del Direttivo, contatti social.
 
@@ -263,6 +270,18 @@ alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assen
 le 18:30 dalle policy (`attendance_open`); il Direttivo corregge sempre. Nei test l'ora si fissa
 con l'impostazione `milanac.now` (`app_now()`).
 
+Stanza vocale (migrazione `0020`): `voice_rooms` (una aperta per canale, `opened_by`,
+`closed_at`) e `voice_sessions` (ingressi con `agora_uid`, `heartbeat_at`, `muted`, `left_at`),
+lette in tempo reale dall'app e scritte solo dalle funzioni `open_voice_room` (crea o riusa la
+stanza, avvisa i membri del canale con l'evento `voice_room`), `join_voice_room`,
+`voice_heartbeat` (ogni minuto dall'app), `leave_voice_room` (chiude la stanza se è vuota) e
+`voice_minutes(mese)` (minuti-partecipante, per la Sala Direttivo). `voice_tick()` gira ogni
+minuto con pg_cron (`stanze-vocali`): segna uscito chi non dà segni di vita da 3 minuti e chiude
+le stanze rimaste vuote. L'audio non passa da Supabase: va su Agora (`agora_rtc_engine`, profilo
+comunicazione, solo audio); il biglietto d'ingresso lo firma la funzione Edge `voice-token`
+(token di 3 ore, App Certificate solo nei segreti) per chi ha accesso al canale. Il numero
+utente Agora è ricavato dall'id del profilo (`agoraUidFor`), così si sa subito chi parla.
+
 Storage buckets: `avatars`, `trophies`, `match-media`, `tactics`, `chat` (foto e vocali),
 `tournaments` (tutti privati, letti tramite URL firmati, con limiti di dimensione e tipo di
 file).
@@ -303,6 +322,7 @@ la testata e il link, la descrizione rimanda all'articolo originale.
 | 1 GB file | clip 15s a 720p ≈ 3–5 MB → ~200 clip | compressione in app, foto max 1600px, archiviazione clip vecchie |
 | 5 GB traffico/mese | ~1.000 visualizzazioni clip/mese | cache locale dei video, preferire i link per video lunghi |
 | pausa dopo 7 gg inattivi | app ferma | job notizie ogni 3h la tiene attiva |
+| Agora Free: 10.000 minuti-partecipante/mese | 4 persone per un'ora = 240 minuti | contatore nella Sala Direttivo, stanze chiuse da sole quando vuote |
 
 ## 8. Struttura del codice
 
@@ -313,7 +333,8 @@ milanac-app/
     core/      theme/ (rossonero), router/, supabase/, auth/, widgets/
     features/  intro/ auth/ registrazione/ home/ mondo/ news/ rosa/ carta/ carte/ formazione/
                calendario/ risultati/ presenze/ chat/ tornei/ albo_doro/ regolamento/
-               tattiche/ lavagna/ musica/ traguardi/ walkout/ volto/ direttivo/ impostazioni/
+               tattiche/ lavagna/ voce/ musica/ traguardi/ walkout/ volto/ direttivo/
+               impostazioni/
   assets/      video/intro.mp4, images/ (stemma, sala trofei), fonts/
   supabase/    migrations/ (schema + RLS), seed.sql
   tools/news_fetcher/   script raccolta notizie
@@ -335,4 +356,5 @@ milanac-app/
 
 Nuova app (ottobre 2026, vedi README): 1 fondamenta e ingresso · 2 Home, Mondo Proclub,
 presenze a calendario, Sala Direttivo, PDF della formazione · 3 chat stile Telegram, carte
-speciali, rosa con mini carte, tornei · 4 lavagna tattica con replay · 5 stanza vocale (Agora).
+speciali, rosa con mini carte, tornei · 4 lavagna tattica con replay · 5 stanza vocale (Agora)
+e rifiniture.
