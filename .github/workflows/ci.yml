@@ -24,33 +24,29 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: Test raccoglitore notizie
-        run: |
-          python3 -m unittest discover -s tools/news_fetcher/tests
-          python3 -m unittest discover -s tools/notifier/tests
+        run: python3 -m unittest discover -s tools/news_fetcher/tests
 
   # Prova le migrazioni su un PostgreSQL vuoto (con le parti di Supabase simulate) e
   # verifica le regole di sicurezza: un errore qui blocca l'applicazione al database vero.
   sql:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
+      # PostgreSQL 16 è già installato sul runner (spento): lo avviamo invece di scaricare
+      # l'immagine da Docker Hub, che limita i download dai runner condivisi.
+      - name: Avvia PostgreSQL
+        run: |
+          sudo systemctl start postgresql.service
+          cd / && sudo -u postgres psql -qc "alter user postgres password 'postgres'"
       - run: tools/db/test/run.sh
 
-  # APK di prova: a ogni pull request, a ogni modifica di main o a mano.
-  # Viene pubblicato come file .apk nella release "APK di prova" (comodo da scaricare dal telefono).
+  # APK di prova: a ogni pull request (solo come artifact), a ogni modifica di main o a mano
+  # (pubblicato nella release "APK di prova", comoda da scaricare dal telefono).
   apk:
     if: >
       github.event_name == 'pull_request' ||
@@ -76,11 +72,13 @@ jobs:
         run: |
           flutter build apk --release --dart-define-from-file=env/prod.json
           cp build/app/outputs/flutter-apk/app-release.apk MILANAC.apk
-      # Versione leggera (circa metà) per i telefoni moderni, comoda da mandare in chat.
+      # Versione leggera (circa metà) per i telefoni a 64 bit, comoda da mandare in chat.
+      # --split-per-abi tiene nel file solo le librerie di quella architettura (anche quelle dei plugin);
+      # il numero di versione resta quello dell'APK completo, così si passa dall'uno all'altro senza disinstallare.
       - name: APK solo arm64
         run: |
-          flutter build apk --release --target-platform android-arm64 --dart-define-from-file=env/prod.json
-          cp build/app/outputs/flutter-apk/app-release.apk MILANAC-arm64.apk
+          flutter build apk --release --split-per-abi --android-project-arg force-version-code-ignoring-abi=true --dart-define-from-file=env/prod.json
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk MILANAC-arm64.apk
       - uses: actions/upload-artifact@v4
         with:
           name: milanac-apk
@@ -97,7 +95,10 @@ jobs:
               assert der in open(apk, "rb").read(), f"{apk} non è firmato con la chiave di prova"
           print("Firma corretta.")
           PY
+      # Solo a mano o da main: le build delle pull request restano come artifact, così la release
+      # non viene sostituita a ogni push (un download a metà sostituzione dà un APK rotto).
       - name: Pubblica nella release "APK di prova"
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

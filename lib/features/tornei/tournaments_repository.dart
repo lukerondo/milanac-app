@@ -247,7 +247,7 @@ class DemoTournamentsRepository implements TournamentsRepository {
         goalsAgainst: 4,
       ),
       StandingRow(
-        teamName: 'MILANAC',
+        teamName: 'Milan AC',
         won: 2,
         drawn: 1,
         goalsFor: 7,

@@ -36,8 +36,21 @@ void main() {
     await tester.tap(find.byTooltip('Impostazioni'));
     await tester.pumpAndSettle();
     expect(find.text('IMPOSTAZIONI'), findsOneWidget);
-    expect(find.text('DATI ANAGRAFICI'), findsOneWidget);
+    expect(find.text('DATI PERSONALI'), findsOneWidget);
 
+    // Il volto si cambia in una pagina dedicata.
+    await tester.tap(find.text('Cambia il volto'));
+    await tester.pumpAndSettle();
+    expect(find.text('IL TUO VOLTO'), findsOneWidget);
+    await tester.tap(find.text('A caso'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('SALVA'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Volto aggiornato'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.widgetWithText(TextField, 'Città'));
     await tester.enterText(find.widgetWithText(TextField, 'Città'), 'Milano');
     await tester.ensureVisible(find.text('Nazionalità'));
     await tester.tap(find.text('Non indicata'));

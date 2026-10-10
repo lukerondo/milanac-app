@@ -88,6 +88,8 @@ void main() {
       find.text('Pubblica la formazione di stasera'),
       200,
     );
+    await tester.ensureVisible(find.text('Pubblica la formazione di stasera'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Pubblica la formazione di stasera'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Pubblica'));

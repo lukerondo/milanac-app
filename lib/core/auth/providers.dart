@@ -9,9 +9,10 @@ final supabaseProvider = Provider<SupabaseClient>(
   (ref) => Supabase.instance.client,
 );
 
-final authRepositoryProvider = Provider<AuthRepository>(
-  (ref) => AuthRepository(ref.watch(supabaseProvider)),
-);
+final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  if (AppConfig.isDemo) return DemoAuthRepository();
+  return SupabaseAuthRepository(ref.watch(supabaseProvider));
+});
 
 /// Sessione corrente (null = non autenticato). In demo è sempre "autenticato".
 final sessionProvider = StreamProvider<Session?>((ref) {
@@ -22,8 +23,31 @@ final sessionProvider = StreamProvider<Session?>((ref) {
       .startWith(auth.currentSession);
 });
 
+/// true dopo aver aperto il link "password dimenticata": l'app chiede la nuova password.
+final passwordRecoveryProvider = NotifierProvider<PasswordRecovery, bool>(
+  PasswordRecovery.new,
+);
+
+class PasswordRecovery extends Notifier<bool> {
+  @override
+  bool build() {
+    if (!AppConfig.isDemo) {
+      final sub = ref.watch(supabaseProvider).auth.onAuthStateChange.listen((
+        e,
+      ) {
+        if (e.event == AuthChangeEvent.passwordRecovery) state = true;
+      });
+      ref.onDispose(sub.cancel);
+    }
+    return false;
+  }
+
+  void start() => state = true;
+  void done() => state = false;
+}
+
 /// Profilo del club dell'utente loggato, aggiornato in tempo reale
-/// (così quando il Direttivo approva l'utente, l'app si sblocca da sola).
+/// (registrazione completata, regolamento accettato, ruolo assegnato).
 final profileProvider = StreamProvider<Profile?>((ref) {
   if (AppConfig.isDemo) return Stream.value(Profile.demo);
   final session = ref.watch(sessionProvider).value;

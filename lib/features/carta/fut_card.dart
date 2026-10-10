@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
+import '../volto/face_view.dart';
 import '../rosa/member.dart';
 import 'card_stats.dart';
 
@@ -201,7 +202,8 @@ class _CardContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final surname = member.displayName.trim().split(' ').last.toUpperCase();
+    // Il nome sulla carta è quello scelto alla registrazione, tutto in maiuscolo.
+    final surname = member.displayName.trim().toUpperCase();
     String pct(int? v) => v == null ? '–' : '$v';
     final left = [
       (pct(stats.presence), 'PRE'),
@@ -263,7 +265,7 @@ class _CardContent extends StatelessWidget {
                     style: const TextStyle(fontSize: 26, height: 1.1),
                   ),
                 ),
-              Image.asset('assets/images/stemma_milano_fc.png', height: 38),
+              Image.asset('assets/images/stemma_256.png', height: 38),
               const SizedBox(height: 6),
               if (member.platform != null)
                 Text(
@@ -432,6 +434,8 @@ class _Portrait extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final face = member.face;
+    if (face != null) return FaceView(face: face, size: 170);
     final photo = memberPhoto(ref, member);
     final silhouette = Stack(
       alignment: Alignment.center,

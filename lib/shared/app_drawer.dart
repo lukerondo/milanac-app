@@ -3,16 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/auth/profile.dart';
 import '../core/auth/providers.dart';
-import '../core/push/device_tokens.dart';
-import '../core/config.dart';
+import '../core/teams.dart';
 import '../core/theme.dart';
 import '../features/chat/chat_list_page.dart';
 import '../features/chat/chat_repository.dart';
-import '../features/privacy/privacy_page.dart';
 import 'club_links.dart';
 import 'club_links_editor.dart';
 import 'sections.dart';
+
+/// Nome del club nel menu: dipende dalla squadra del membro
+/// (chi è solo in Milan AC Futuro vede il nome della sua squadra).
+String clubTitleFor(Profile? profile) {
+  final teams = profile?.teams ?? const {Team.milanac};
+  return teams.contains(Team.milanac)
+      ? 'MILAN AC PRO CLUB'
+      : 'MILAN AC FUTURO PRO CLUB';
+}
 
 class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key, required this.currentPath});
@@ -24,6 +32,12 @@ class AppDrawer extends ConsumerWidget {
     final profile = ref.watch(profileProvider).value;
     final links = ref.watch(clubLinksProvider).value ?? const <ClubLink>[];
     final unread = ref.watch(chatUnreadProvider);
+    final isDirettivo = profile?.isDirettivo ?? false;
+
+    List<AppSection> visible(SectionGroup g) => [
+      for (final s in appSections)
+        if (s.group == g && (!s.direttivoOnly || isDirettivo)) s,
+    ];
 
     return Drawer(
       child: SafeArea(
@@ -31,7 +45,7 @@ class AppDrawer extends ConsumerWidget {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [MilanacColors.redDark, MilanacColors.black],
@@ -44,23 +58,39 @@ class AppDrawer extends ConsumerWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: Image.asset('assets/images/stemma.png', height: 84),
+                    child: Image.asset(
+                      'assets/images/stemma_256.png',
+                      height: 84,
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'MILANAC PRO CLUB',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 18,
-                      letterSpacing: 1.5,
+                  Text(
+                    clubTitleFor(profile),
+                    style: const TextStyle(
+                      fontFamily: sportFont,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 19,
+                      letterSpacing: 2,
                       color: MilanacColors.gold,
                     ),
                   ),
-                  if (profile != null)
+                  if (profile != null) ...[
+                    const SizedBox(height: 6),
                     Text(
-                      '${profile.displayName} · ${profile.isDirettivo ? 'Direttivo' : 'Giocatore'}',
-                      style: const TextStyle(color: Colors.white70),
+                      profile.fullName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
                     ),
+                    Text(
+                      profile.roleLabel,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -68,9 +98,23 @@ class AppDrawer extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  for (final s in appSections)
-                    if (!s.direttivoOnly || (profile?.isDirettivo ?? false))
+                  for (final g in SectionGroup.values) ...[
+                    if (g.label.isNotEmpty && visible(g).isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                        child: Text(
+                          g.label.toUpperCase(),
+                          style: const TextStyle(
+                            fontFamily: sportFont,
+                            fontSize: 12,
+                            letterSpacing: 2,
+                            color: MilanacColors.gold,
+                          ),
+                        ),
+                      ),
+                    for (final s in visible(g))
                       ListTile(
+                        dense: true,
                         leading: Icon(s.icon),
                         title: Text(s.title),
                         trailing: s.path == '/chat' && unread > 0
@@ -86,35 +130,6 @@ class AppDrawer extends ConsumerWidget {
                           context.go(s.path);
                         },
                       ),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.privacy_tip_outlined),
-                    title: const Text('Privacy'),
-                    onTap: () {
-                      final root = Navigator.of(context, rootNavigator: true);
-                      Navigator.of(context).pop();
-                      root.push(
-                        MaterialPageRoute(builder: (_) => const PrivacyPage()),
-                      );
-                    },
-                  ),
-                  if (!AppConfig.isDemo) ...[
-                    ListTile(
-                      leading: const Icon(Icons.logout_rounded),
-                      title: const Text('Esci'),
-                      onTap: () => logout(ref),
-                    ),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.person_off_outlined,
-                        color: Colors.redAccent,
-                      ),
-                      title: const Text(
-                        'Elimina il mio account',
-                        style: TextStyle(color: Colors.redAccent),
-                      ),
-                      onTap: () => _confirmDeleteAccount(context, ref),
-                    ),
                   ],
                 ],
               ),
@@ -134,7 +149,7 @@ class AppDrawer extends ConsumerWidget {
                         mode: LaunchMode.externalApplication,
                       ),
                     ),
-                  if (profile?.isDirettivo ?? false)
+                  if (isDirettivo)
                     IconButton(
                       tooltip: 'Modifica contatti',
                       icon: const Icon(
@@ -157,40 +172,6 @@ class AppDrawer extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-Future<void> _confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (c) => AlertDialog(
-      title: const Text('Eliminare il tuo account?'),
-      content: const Text(
-        'Verranno cancellati definitivamente il tuo account, il profilo e lo storico delle '
-        'presenze. Per rientrare nel club dovrai essere approvato di nuovo dal Direttivo.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(c, false),
-          child: const Text('Annulla'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-          onPressed: () => Navigator.pop(c, true),
-          child: const Text('Elimina'),
-        ),
-      ],
-    ),
-  );
-  if (ok != true) return;
-  try {
-    await ref.read(authRepositoryProvider).deleteAccount();
-    messenger.showSnackBar(const SnackBar(content: Text('Account eliminato.')));
-  } catch (e) {
-    messenger.showSnackBar(
-      SnackBar(content: Text('Eliminazione non riuscita: $e')),
     );
   }
 }

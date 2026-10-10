@@ -1,5 +1,5 @@
 {
-  "_info": "Fonti delle notizie. type: rss (RSS o Atom). category: categoria predefinita (tornei, aggiornamenti, ultimate_team, pro_clubs). require: almeno una di queste parole deve comparire in titolo o descrizione (filtro di pertinenza). Le fonti che non rispondono vengono saltate.",
+  "_info": "Fonti delle notizie. type: rss (RSS o Atom). category: categoria predefinita (tornei, aggiornamenti, ultimate_team, pro_clubs, console). require: almeno una di queste parole deve comparire in titolo o descrizione (filtro di pertinenza). Le fonti che non rispondono vengono saltate.",
   "sources": [
     {
       "name": "Google News · FVPA",
@@ -76,6 +76,31 @@
       "category": "pro_clubs",
       "url": "https://www.reddit.com/r/FIFAProClubs/top/.rss?t=day",
       "max_items": 5
+    },
+    {
+      "name": "Google News · PlayStation 5",
+      "category": "console",
+      "url": "https://news.google.com/rss/search?q=PS5+(%22aggiornamento+di+sistema%22+OR+%22software+di+sistema%22+OR+firmware)&hl=it&gl=IT&ceid=IT:it",
+      "require": [
+        "software di sistema",
+        "aggiornamento di sistema",
+        "firmware",
+        "system update"
+      ],
+      "max_items": 3
+    },
+    {
+      "name": "Google News · Xbox",
+      "category": "console",
+      "url": "https://news.google.com/rss/search?q=Xbox+(%22aggiornamento+di+sistema%22+OR+%22system+update%22+OR+firmware+OR+dashboard)&hl=it&gl=IT&ceid=IT:it",
+      "require": [
+        "software di sistema",
+        "aggiornamento di sistema",
+        "firmware",
+        "system update",
+        "dashboard"
+      ],
+      "max_items": 3
     }
   ]
 }

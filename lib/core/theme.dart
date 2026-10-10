@@ -1,18 +1,27 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
-/// Palette rossonera del club.
+/// Palette rossonera del club (i colori istituzionali della vecchia app).
 class MilanacColors {
-  static const red = Color(0xFFC8102E);
-  static const redDark = Color(0xFF8E0B20);
+  static const red = Color(0xFFC61C23);
+  static const redDark = Color(0xFF8A1118);
   static const gold = Color(0xFFD4AF37);
-  static const black = Color(0xFF0B0B0D);
-  static const surface = Color(0xFF17171B);
-  static const surfaceHigh = Color(0xFF222228);
+  static const black = Color(0xFF000000);
+  static const surface = Color(0xFF1A1A1A);
+  static const surfaceHigh = Color(0xFF262626);
+
+  /// Rosso più chiaro per il testo su sfondo nero: resta leggibile anche piccolo.
+  static const redText = Color(0xFFFF5A61);
 }
 
-/// Font sportivo condensato per titoli, numeri e carte (come nell'interfaccia di FC).
-const sportFont = 'BarlowCondensed';
+/// Font sportivo condensato per titoli, numeri e carte (come nella vecchia app).
+const sportFont = 'Oswald';
+
+/// Carattere della pergamena (regolamento e storia).
+const serifFont = 'CormorantGaramond';
+
+/// Carattere calligrafico per firme e titoli solenni.
+const scriptFont = 'GreatVibes';
 
 ThemeData buildTheme() {
   final scheme =
@@ -31,31 +40,20 @@ ThemeData buildTheme() {
     colorScheme: scheme,
     brightness: Brightness.dark,
   );
-  TextStyle? sport(TextStyle? t, {FontWeight weight = FontWeight.w800}) =>
-      t?.copyWith(fontFamily: sportFont, fontWeight: weight, letterSpacing: .3);
+  // Oswald ha i pesi 400-700: i titoli usano il 700.
+  TextStyle? sport(TextStyle? t, {FontWeight weight = FontWeight.w700}) =>
+      t?.copyWith(fontFamily: sportFont, fontWeight: weight, letterSpacing: .4);
 
   return base.copyWith(
     scaffoldBackgroundColor: MilanacColors.black,
     textTheme: base.textTheme.copyWith(
-      displayLarge: sport(base.textTheme.displayLarge, weight: FontWeight.w900),
-      displayMedium: sport(
-        base.textTheme.displayMedium,
-        weight: FontWeight.w900,
-      ),
-      displaySmall: sport(base.textTheme.displaySmall, weight: FontWeight.w900),
-      headlineLarge: sport(
-        base.textTheme.headlineLarge,
-        weight: FontWeight.w900,
-      ),
-      headlineMedium: sport(
-        base.textTheme.headlineMedium,
-        weight: FontWeight.w900,
-      ),
-      headlineSmall: sport(
-        base.textTheme.headlineSmall,
-        weight: FontWeight.w900,
-      ),
-      titleLarge: sport(base.textTheme.titleLarge),
+      displayLarge: sport(base.textTheme.displayLarge),
+      displayMedium: sport(base.textTheme.displayMedium),
+      displaySmall: sport(base.textTheme.displaySmall),
+      headlineLarge: sport(base.textTheme.headlineLarge),
+      headlineMedium: sport(base.textTheme.headlineMedium),
+      headlineSmall: sport(base.textTheme.headlineSmall),
+      titleLarge: sport(base.textTheme.titleLarge, weight: FontWeight.w600),
     ),
     appBarTheme: const AppBarTheme(
       backgroundColor: MilanacColors.black,
@@ -64,9 +62,9 @@ ThemeData buildTheme() {
       centerTitle: true,
       titleTextStyle: TextStyle(
         fontFamily: sportFont,
-        fontSize: 23,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.6,
+        fontSize: 22,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 2,
         color: Colors.white,
       ),
     ),
@@ -88,8 +86,8 @@ ThemeData buildTheme() {
         textStyle: const TextStyle(
           fontFamily: sportFont,
           fontSize: 17,
-          fontWeight: FontWeight.w800,
-          letterSpacing: .6,
+          fontWeight: FontWeight.w600,
+          letterSpacing: .8,
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),

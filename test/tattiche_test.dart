@@ -24,38 +24,8 @@ Future<void> openTattiche(WidgetTester tester) async {
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
-  testWidgets('Build: filtro per ruolo e nuovo video', (tester) async {
-    await openTattiche(tester);
-    expect(find.text('La build da attaccante più forte'), findsOneWidget);
-
-    await tester.tap(find.text('Aggiungi build'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Titolo'),
-      'Build DC impassabile',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Link'),
-      'youtu.be/abc123',
-    );
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('DC').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Salva'));
-    await tester.pumpAndSettle();
-    expect(find.text('Build DC impassabile'), findsOneWidget);
-
-    await tester.tap(find.widgetWithText(ChoiceChip, 'ATT'));
-    await tester.pumpAndSettle();
-    expect(find.text('Build DC impassabile'), findsNothing);
-    expect(find.text('La build da attaccante più forte'), findsOneWidget);
-  });
-
   testWidgets('Tattiche: il Direttivo pubblica uno schema', (tester) async {
     await openTattiche(tester);
-    await tester.tap(find.text('Tattiche'));
-    await tester.pumpAndSettle();
     expect(find.text('Pressing alto dopo palla persa'), findsOneWidget);
 
     await tester.tap(find.text('Nuova tattica'));

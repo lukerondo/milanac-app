@@ -134,6 +134,8 @@ class DemoAttendanceRepository implements AttendanceRepository {
         status: e.status,
         arrivalTime: e.arrivalTime,
         note: e.note,
+        // Come il database: chi risponde per un altro (il Direttivo) resta registrato.
+        setBy: e.playerId == 'demo' ? null : 'demo',
       ),
     );
     _emit();

@@ -9,6 +9,7 @@ import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
+import 'formation_pdf.dart';
 import 'formation_repository.dart';
 import 'modules.dart';
 import 'pitch_painter.dart';
@@ -258,6 +259,21 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
               },
             ),
           ),
+          if (formation.isPublished || canEdit) ...[
+            const SizedBox(height: 10),
+            Center(
+              child: OutlinedButton.icon(
+                onPressed: () => shareFormationPdf(
+                  context,
+                  formation: formation,
+                  members: allMembers,
+                  bench: bench,
+                ),
+                icon: const Icon(Icons.picture_as_pdf_rounded),
+                label: const Text('PDF con le mini carte'),
+              ),
+            ),
+          ],
           if (!canEdit && isDirettivo) ...[
             const SizedBox(height: 12),
             _OpenEditorButton(),

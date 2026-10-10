@@ -30,6 +30,11 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | F | Voti dopo la partita, carta "Uomo partita", Squadra della settimana | ✅ |
 | G | Traguardi sbloccabili (badge su profilo e carta) e walkout stile FUT | ✅ |
 | – | Restyling: font sportivo, sfondo stadio, card a vetro, transizioni, vibrazioni | ✅ |
+| **Nuova app · 1** | Brand della vecchia app (colori, Oswald, stemma), accesso con email e password, registrazione in tre passi (dati, squadra e ruolo con password del Direttivo, volto disegnato), regolamento su pergamena con versioni e accettazione obbligatoria, Impostazioni con volto e account. Via voti, Uomo partita e Top 11. | ✅ |
+| **Nuova app · 2** | Home con i riquadri Mondo Proclub (video dei creator proposti dai giocatori e pubblicati dal Direttivo; notizie con avvisi di aggiornamento FC 27 e console) e Presenze (serata di oggi, risposta entro le 18:30). Presenze a calendario con promemoria alle 18:00 e assenze automatiche alle 18:30 (pg_cron), eventi con notifica, canali Generale / Milan AC / Milan AC Futuro / Tattiche / Comunicazioni / Direttivo, Sala Direttivo con correzioni dopo la scadenza, formazione annunciata in Comunicazioni e PDF con le mini carte. | ✅ |
+| Nuova app · 3 | Chat stile Telegram (vocali, foto), carte speciali della settimana, rosa con mini carte, tornei | ⏳ |
+| Nuova app · 4 | Lavagna tattica con replay | ⏳ |
+| Nuova app · 5 | Stanza vocale (Agora) e rifiniture | ⏳ |
 
 ## Provare l'app subito (modalità demo)
 

@@ -18,6 +18,17 @@ final newsProvider = FutureProvider<List<NewsItem>>((ref) async {
 
 final _demoNews = <NewsItem>[
   NewsItem(
+    title: 'PS5: disponibile l\'aggiornamento di sistema 26.02-12.00',
+    summary:
+        'Nuovo firmware per PlayStation 5: migliorie alle prestazioni e alla stabilità. '
+        'Aggiorna la console prima di entrare in lobby.',
+    url: 'https://www.playstation.com/it-it/support/hardware/ps5/system-software/',
+    source: 'PlayStation',
+    category: 'console',
+    platform: 'ps5',
+    publishedAt: DateTime.now().subtract(const Duration(hours: 20)),
+  ),
+  NewsItem(
     title: 'EA SPORTS FC 27: disponibile il Title Update 1.0.3',
     summary:
         'Piccolo aggiornamento correttivo per Ultimate Team, The Grounds e Carriera. '
@@ -25,7 +36,7 @@ final _demoNews = <NewsItem>[
     url: 'https://www.ea.com/games/ea-sports-fc/fc-27/news/title-update-v1-0-3',
     source: 'EA SPORTS',
     category: 'aggiornamenti',
-    publishedAt: DateTime(2026, 10, 2),
+    publishedAt: DateTime.now().subtract(const Duration(days: 1)),
   ),
   NewsItem(
     title: 'FVPA: aperte le iscrizioni ai tornei Pro Club su FC 27',

@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth/providers.dart';
@@ -16,7 +15,6 @@ import '../rosa/member_editor.dart';
 import '../rosa/rosa_repository.dart';
 import '../traguardi/achievements.dart';
 import '../traguardi/achievements_view.dart';
-import '../voti/ratings_repository.dart';
 import '../walkout/celebrations.dart';
 import '../walkout/walkout_page.dart';
 import 'card_stats.dart';
@@ -71,7 +69,6 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
   bool _sharing = false;
 
   /// Mostra la carta base anche se c'è quella speciale di Uomo partita.
-  bool _baseCard = false;
 
   Future<void> _share(Member m) async {
     setState(() => _sharing = true);
@@ -112,7 +109,6 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
       return const Center(child: CircularProgressIndicator());
     }
     final isMine = me?.id == member.id;
-    final motm = ref.watch(recentMvpProvider(member.id));
     final isDirettivo = me?.isDirettivo ?? false;
 
     return ListView(
@@ -129,7 +125,6 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                 child: FutCard(
                   member: member,
                   stats: stats,
-                  special: motm != null && !_baseCard ? CardSpecial.motm : null,
                   badges: [
                     for (final a in topBadges(
                       ref.watch(achievementsProvider(member.id)) ?? const [],
@@ -141,35 +136,12 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
             ),
           ),
         ),
-        if (motm != null) ...[
-          const SizedBox(height: 8),
-          Center(
-            child: SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: false, label: Text('Uomo partita')),
-                ButtonSegment(value: true, label: Text('Carta base')),
-              ],
-              selected: {_baseCard},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => setState(() => _baseCard = s.first),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              'Uomo partita il ${DateFormat('d MMMM', 'it').format(motm.playedAt)} '
-              '(media ${motm.average.toStringAsFixed(1)})',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: MilanacColors.gold),
-            ),
-          ),
-        ],
         const SizedBox(height: 12),
         if (isMine && member.overall == null)
           const Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Text(
-              'Completa la tua carta: scegli il tuo overall, il ruolo e lo stile di gioco.',
+              'Il Direttivo non ha ancora assegnato il tuo overall: intanto scegli ruolo e stile di gioco.',
               textAlign: TextAlign.center,
               style: TextStyle(color: MilanacColors.gold),
             ),
@@ -282,31 +254,24 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
   Future<void> _save() async {
     setState(() => _saving = true);
     final style = _style.text.trim();
-    final updated = Member(
-      id: widget.member.id,
-      displayName: widget.member.displayName,
-      role: widget.member.role,
-      joinedAt: widget.member.joinedAt,
-      gamertag: widget.member.gamertag,
-      avatarUrl: widget.member.avatarUrl,
-      active: widget.member.active,
-      requestedRole: widget.member.requestedRole,
-      teams: widget.member.teams,
+    final updated = widget.member.copyWith(
       fieldPosition: _position,
       shirtNumber: int.tryParse(_number.text),
       overall: _overall,
       playStyle: style.isEmpty ? null : style,
       platform: _platform,
-      avatarPath: widget.member.avatarPath,
-      birthDate: widget.member.birthDate,
-      city: widget.member.city,
-      nationality: widget.member.nationality,
-      preferredFoot: widget.member.preferredFoot,
     );
     try {
       final rootContext = Navigator.of(context, rootNavigator: true).context;
       final before = widget.member.overall;
-      await ref.read(rosaRepositoryProvider).saveCard(updated);
+      final repo = ref.read(rosaRepositoryProvider);
+      // L'overall lo decide il Direttivo: solo lui lo salva.
+      if ((ref.read(profileProvider).value?.isDirettivo ?? false) &&
+          _overall != before) {
+        await repo.save(updated);
+      } else {
+        await repo.saveCard(updated);
+      }
       if (mounted) Navigator.of(context).pop();
       // Overall salito: walkout subito (e segnato come visto su questo telefono).
       if (before != null && _overall > before && rootContext.mounted) {
@@ -337,6 +302,7 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final preview = Member(
       id: widget.member.id,
       displayName: widget.member.displayName,
@@ -360,35 +326,44 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
           children: [
             Text('La carta', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Text(
-                  '$_overall',
-                  style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w900,
-                    color: switch (tierOf(preview.overall)) {
-                      CardTier.rossonera => MilanacColors.red,
-                      CardTier.oro => MilanacColors.gold,
-                      CardTier.argento => const Color(0xFFC9CED6),
-                      _ => const Color(0xFFD9A273),
-                    },
-                  ),
+            if (!isDirettivo)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'L\'overall lo assegna il Direttivo.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
                 ),
-                const SizedBox(width: 8),
-                const Text('OVERALL'),
-                Expanded(
-                  child: Slider(
-                    value: _overall.toDouble(),
-                    min: 40,
-                    max: 99,
-                    divisions: 59,
-                    label: '$_overall',
-                    onChanged: (v) => setState(() => _overall = v.round()),
+              ),
+            if (isDirettivo)
+              Row(
+                children: [
+                  Text(
+                    '$_overall',
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
+                      color: switch (tierOf(preview.overall)) {
+                        CardTier.rossonera => MilanacColors.red,
+                        CardTier.oro => MilanacColors.gold,
+                        CardTier.argento => const Color(0xFFC9CED6),
+                        _ => const Color(0xFFD9A273),
+                      },
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  const Text('OVERALL'),
+                  Expanded(
+                    child: Slider(
+                      value: _overall.toDouble(),
+                      min: 40,
+                      max: 99,
+                      divisions: 59,
+                      label: '$_overall',
+                      onChanged: (v) => setState(() => _overall = v.round()),
+                    ),
+                  ),
+                ],
+              ),
             const SizedBox(height: 8),
             Row(
               children: [

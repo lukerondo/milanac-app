@@ -19,6 +19,8 @@ class Channel {
     this.description,
     this.icon = 'chat',
     this.direttivoOnly = false,
+    this.team,
+    this.direttivoWrites = false,
   });
 
   final String id;
@@ -30,10 +32,16 @@ class Channel {
   /// Canale riservato al Direttivo (Sala Direttivo).
   final bool direttivoOnly;
 
+  /// Canale di una squadra (milanac o futuro): lo vede chi ci gioca.
+  final String? team;
+
+  /// Vi scrive solo il Direttivo (Comunicazioni).
+  final bool direttivoWrites;
+
   IconData get iconData => switch (icon) {
     'forum' => Icons.forum_rounded,
-    'presenze' => Icons.how_to_reg_rounded,
-    'fantacalcio' => Icons.emoji_events_rounded,
+    'team' => Icons.groups_rounded,
+    'campaign' => Icons.campaign_rounded,
     'tattiche' => Icons.draw_rounded,
     'direttivo' => Icons.admin_panel_settings_rounded,
     _ => Icons.chat_rounded,
@@ -46,6 +54,8 @@ class Channel {
     description: m['description'] as String?,
     icon: (m['icon'] as String?) ?? 'chat',
     direttivoOnly: (m['direttivo_only'] as bool?) ?? false,
+    team: m['team'] as String?,
+    direttivoWrites: (m['direttivo_writes'] as bool?) ?? false,
   );
 }
 
@@ -355,11 +365,9 @@ class DemoChatRepository extends ChatRepository {
       ),
       ChatMessage(
         id: 'm3',
-        channelId: 'c-presenze',
-        authorId: 'p3',
-        isSystem: true,
-        body: 'Luca Bianchi stasera arriva in ritardo, alle 21:50 · Esco tardi da lavoro',
-        meta: const {'type': 'attendance', 'status': 'ritardo'},
+        channelId: 'c-milanac',
+        authorId: 'p4',
+        body: 'Stasera provo la build nuova da DC',
         createdAt: now.subtract(const Duration(hours: 1)),
       ),
     ]);
@@ -369,23 +377,25 @@ class DemoChatRepository extends ChatRepository {
     Channel(
       id: 'c-main',
       slug: 'main',
-      name: 'MILANAC Main',
-      description: 'Il canale di tutto il club',
+      name: 'Generale',
+      description: 'La chat di tutto il club',
       icon: 'forum',
     ),
     Channel(
-      id: 'c-presenze',
-      slug: 'presenze',
-      name: 'Presenze',
-      description: 'Ritardi e assenze arrivano qui in automatico',
-      icon: 'presenze',
+      id: 'c-milanac',
+      slug: 'milanac',
+      name: 'Milan AC',
+      description: 'La chat della prima squadra',
+      icon: 'team',
+      team: 'milanac',
     ),
     Channel(
-      id: 'c-fanta',
-      slug: 'fantacalcio',
-      name: 'Fantacalcio',
-      description: 'Aste, scambi e sfottò',
-      icon: 'fantacalcio',
+      id: 'c-futuro',
+      slug: 'futuro',
+      name: 'Milan AC Futuro',
+      description: 'La chat del Futuro',
+      icon: 'team',
+      team: 'futuro',
     ),
     Channel(
       id: 'c-tattiche',
@@ -393,6 +403,15 @@ class DemoChatRepository extends ChatRepository {
       name: 'Tattiche & Schemi',
       description: 'Idee, schemi e video',
       icon: 'tattiche',
+    ),
+    Channel(
+      id: 'c-comunicazioni',
+      slug: 'comunicazioni',
+      name: 'Comunicazioni',
+      description:
+          'Avvisi ufficiali del Direttivo: formazioni, eventi, regolamento',
+      icon: 'campaign',
+      direttivoWrites: true,
     ),
     Channel(
       id: 'c-direttivo',
@@ -441,6 +460,7 @@ class DemoChatRepository extends ChatRepository {
     'demo': 'Demo Direttivo',
     'p2': 'Marco Rossi',
     'p3': 'Luca Bianchi',
+    'p4': 'Andrea Neri',
   };
 
   @override

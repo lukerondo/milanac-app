@@ -62,7 +62,7 @@ void main() {
   });
 
   testWidgets('Calendario: il Direttivo crea un evento', (tester) async {
-    await open(tester, 'Calendario partite');
+    await open(tester, 'Calendario');
     expect(find.text('PROSSIMI APPUNTAMENTI'), findsOneWidget);
 
     await tester.tap(find.text('Nuovo evento'));
@@ -83,7 +83,7 @@ void main() {
   testWidgets('Risultati: nuova partita e link agli highlights', (
     tester,
   ) async {
-    await open(tester, 'Risultati partite');
+    await open(tester, 'Risultati');
     expect(find.text('Dinamo Pixel'), findsOneWidget);
 
     await tester.tap(find.text('Nuova partita'));
@@ -92,7 +92,7 @@ void main() {
       find.widgetWithText(TextField, 'Avversario'),
       'Inter Digitale',
     );
-    await tester.enterText(find.widgetWithText(TextField, 'MILANAC'), '4');
+    await tester.enterText(find.widgetWithText(TextField, 'MILAN AC'), '4');
     await tester.enterText(find.widgetWithText(TextField, 'Avversari'), '0');
     await tester.ensureVisible(find.text('Salva partita'));
     await tester.pumpAndSettle();

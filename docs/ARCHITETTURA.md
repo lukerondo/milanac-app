@@ -34,41 +34,74 @@ con un unico codice.
 | Yahoo | **provider OIDC personalizzato** (`https://api.login.yahoo.com`) | supportato da Supabase come custom OIDC |
 | **Apple** | provider nativo Supabase | **obbligatorio su iOS** (regola App Store 4.8: se offri login social devi offrire anche "Accedi con Apple") |
 
-Al primo accesso l'utente è in stato **"in attesa"**: un membro del Direttivo lo approva e gli assegna
-il ruolo. Così nessun estraneo vede i dati del club.
+| **Email e password** | Supabase Auth (email confermata con link; password dimenticata via email) | serve un servizio SMTP (vedi `docs/SETUP_SUPABASE.md`) |
+
+### Registrazione (nuova app)
+
+Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `complete_registration`:
+
+1. **Chi sei**: nome, cognome, anno di nascita (li vede solo il Direttivo), **nome sulla carta**
+   (è il nome mostrato in tutta l'app: `display_name`), motto.
+2. **Squadra e ruolo**: Milan AC o Milan AC Futuro (entrambe solo per il Direttivo); "Faccio parte
+   del Direttivo" richiede la **password del club** (solo l'hash bcrypt sta in `app_config`,
+   si cambia dall'app con `set_direttivo_password`) e almeno un'etichetta tra Capitano,
+   Reclutatore, Organizzatore, Gestore; ruolo in campo, numero, piattaforma.
+3. **Il tuo volto**: avatar disegnato dall'app (parametri in `profiles.face`), usato in rosa, chat,
+   carta e walkout.
+
+Il profilo resta `pending` finché non si **accetta il regolamento** (`accept_rules`): da lì il ruolo
+richiesto diventa effettivo. Non serve nessuna approvazione del Direttivo; il Direttivo può
+comunque sospendere un membro (`active = false`).
 
 ## 3. Ruoli e permessi
 
-- **Direttivo** (= Esecutivo): crea/modifica rosa, formazione, calendario, risultati e media,
-  albo d'oro, regolamento/storia, contatti social.
-- **Giocatore**: legge tutto, gestisce **solo le proprie** presenze, la propria carta FUT
-  (overall, ruolo, stile, piattaforma), scrive in chat e aggiunge link (build, playlist).
-  Non può cambiarsi ruolo, squadra, stato o data d'ingresso (lo impedisce un trigger).
-- **Squadre**: ogni membro è in **MILANAC**, in **MILANAC FUTURO** (riserve) o in entrambe;
-  le assegna il Direttivo all'approvazione o dalla scheda del membro.
-- **In attesa**: vede solo la schermata "account in approvazione".
+- **Direttivo**: crea/modifica rosa, formazione, calendario, risultati e media, albo d'oro,
+  regolamento (bozza + pubblicazione) e storia, contatti social; assegna l'**overall** delle carte.
+- **Giocatore**: legge tutto, gestisce **solo le proprie** presenze, i propri dati e il proprio
+  volto, la propria carta (ruolo, numero, stile, piattaforma, non l'overall), scrive in chat e
+  aggiunge link. Non può cambiarsi ruolo, squadra, stato, overall o data d'ingresso (trigger).
+- **Squadre**: Milan AC e Milan AC Futuro; i giocatori stanno in una sola squadra, chi è del
+  Direttivo può stare in entrambe.
+- **Registrazione in corso** (`pending`): vede solo i passi della registrazione e il regolamento.
+- **Sospeso** (`active = false`): vede solo la pagina "account non attivo".
 
 I permessi sono applicati nel database con **Row Level Security** (non solo nell'interfaccia).
+
+### Regolamento con versioni
+
+Gli articoli vivono in una **bozza** (`rules_articles`, solo Direttivo). "Pubblica" crea una riga in
+`rules_versions` con la fotografia degli articoli e manda la notifica `rules`. Ogni profilo
+ricorda la versione accettata (`rules_accepted_version`): se non è l'ultima, l'app mostra la
+pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti (non mostrati).
 
 ## 4. Sezioni dell'app
 
 1. **Intro** – video MP4 (10–15s) incluso nell'app, barra di caricamento + stemma sovrapposti.
    Durante il video l'app carica sessione e dati. Tap per saltare.
-2. **Home / Notizie** – card con: fonte, data, titolo, **breve descrizione** e bottone
-   **"Leggi la notizia"** che apre il link originale. Filtri: *Tornei (FVPA/VPL)*, *Aggiornamenti FC 27*,
-   *Ultimate Team*, *Pro Clubs*. Banner in evidenza quando esce un nuovo **Title Update**
-   ("Aggiorna il gioco prima del match!") + notifica push.
-3. **Menu laterale** (drawer):
-   - Notizie · Chat · Presenze · Formazione · Calendario · Risultati · Tornei · Rosa completa ·
-     La mia carta · Squadra della settimana · Tattiche & Build · Albo d'oro ·
-     Regolamento & Storia · Colonna sonora (+ Sala Direttivo, visibile solo al Direttivo)
+2. **Home** – due riquadri. **Mondo Proclub**: ultimo video dei creator, avviso di
+   aggiornamento FC 27 e della propria console, scorciatoie a video e notizie.
+   **Presenze**: la serata di oggi della propria squadra (allenamento delle 21:30 o l'evento
+   del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi.
+3. **Menu laterale** (drawer), a gruppi, con stemma, nome del club, nome e cognome e ruolo:
+   - *Squadra*: Presenze · Formazione · Calendario · Risultati · Chat
+   - *Club*: Mondo Proclub · Rosa completa · La mia carta · Tornei · Albo d'oro ·
+     Regolamento & Storia · Tattiche & Build · Colonna sonora
+   - *Direttivo*: Sala Direttivo (solo per chi ne fa parte)
    - in fondo: icone social + sito web (modificabili dal Direttivo)
+3b. **Mondo Proclub** – scheda *Video*: i video dei creator pubblicati dal Direttivo,
+   filtrabili per ruolo; i giocatori ne propongono (notifica al Direttivo, che pubblica o
+   scarta; notifica a chi ha proposto). Scheda *Notizie*: card con fonte, data, titolo,
+   descrizione breve e "Leggi la notizia"; filtri *Aggiornamenti FC 27*, *Console*, *Tornei*,
+   *Pro Clubs*, *Ultimate Team*; avviso in evidenza per un nuovo Title Update o un
+   aggiornamento della console.
 4. **Rosa completa** – foto, nome/gamertag, ruolo nel club (*Direttivo* / *Giocatore*),
    ruolo in campo, numero, data di ingresso.
 5. **Formazione** – campo verde stile San Siro (disegnato in Flutter), scelta modulo
    (4-3-3, 4-2-3-1, 3-5-2…), 11 bollini: il Direttivo tocca un bollino e assegna il giocatore.
 6. **Calendario** – vista mensile + lista; tipi evento: *Partita torneo*, *Amichevole*,
-   *Allenamento*, *Riunione*, *Altro*. Solo il Direttivo crea eventi.
+   *Allenamento*, *Riunione*, *Altro*. Solo il Direttivo crea eventi (notifica alla squadra
+   o a tutti). Ogni giorno compare l'allenamento automatico delle 21:30 per la squadra che
+   non ha altro in programma.
 7. **Risultati** – partite (torneo/amichevole, avversario, punteggio, marcatori).
    Per ogni partita il Direttivo allega media in **due modi**:
    - **Link** (YouTube, Twitch, Instagram, TikTok…) → riprodotto/aperto nell'app
@@ -80,38 +113,44 @@ I permessi sono applicati nel database con **Row Level Security** (non solo nell
    Tocco su un trofeo → dettaglio (competizione, data, finale, foto).
    Evoluzione futura: trofei 3D ruotabili (`.glb`).
 9. **Regolamento & Storia** – una pagina con due schede, testo formattato modificabile dal Direttivo.
-10. **Presenze** – per ogni serata (default **21:30**) il giocatore segna:
-    *Presente* · *Presente ma arrivo alle __:__* · *Assente* (+ nota).
-    Lista del giorno con lo stato di tutti; accanto a ogni giocatore lo **storico**
-    (ultime presenze, % presenze, ritardi). Promemoria push il giorno della partita.
+10. **Presenze** – a calendario: oggi cerchiato in rosso, un puntino per ogni evento. Per il
+    giorno scelto: la serata della squadra, la propria risposta (*Presente* · *In ritardo*
+    con orario e nota obbligatoria · *Assente* con nota facoltativa), totali e gli elenchi
+    (senza risposta, presenti, in ritardo, assenti). Le risposte chiudono alle **18:30**
+    (anche per i giorni successivi si risponde in anticipo); alle 18:00 promemoria a chi
+    non ha risposto; alle 18:30 chi non ha risposto diventa "assente, non ha risposto"
+    (in grigio, conta come assenza). Dopo, solo il Direttivo corregge, e resta registrato.
+    Scheda *Statistiche*: percentuale, puntuali, ritardi e assenze per giocatore.
 
-11. **Stasera** (in cima alla Home) – evento della serata delle proprie squadre (o allenamento
-    delle 21:30), risposta rapida alla presenza, conteggi, formazione pubblicata (titolare/panchina).
+11. **Riquadro Presenze in Home** – la serata di oggi con la risposta rapida (vedi Home).
 12. **Formazione pubblicata** – una formazione per squadra; resta in bozza finché il Direttivo non
-    la pubblica, poi ogni giocatore della squadra riceve la notifica personale.
+    la pubblica, poi ogni giocatore della squadra riceve la notifica personale (titolare con
+    ruolo o panchina), l'annuncio compare in *Comunicazioni* e chiunque può scaricare il
+    **PDF con le mini carte** (campo, volto, nome, ruolo, overall, panchina).
 13. **Carta FUT** – "La mia carta" e carte in Rosa: overall scelto dal giocatore (livelli bronzo,
     argento, oro, rossonera 85+), statistiche dal club (presenze, puntualità, serate, gol dai
     marcatori, mesi nel club, % vittorie), condivisione come immagine.
-14. **Tattiche & Build** – video dei creator con le build per ruolo (chiunque aggiunge) e schemi
-    del club con immagine e spiegazione (Direttivo).
-15. **Chat** – canali MILANAC Main, Presenze (ritardi/assenze automatici), Fantacalcio,
-    Tattiche & Schemi; foto, non letti, canali silenziabili, notifiche.
+14. **Tattiche & Build** – schemi del club con immagine e spiegazione (Direttivo); i video dei
+    creator stanno in Mondo Proclub (la lavagna arriva con la fase 4).
+15. **Chat** – canali Generale, Milan AC, Milan AC Futuro (visibili a chi ci gioca),
+    Tattiche & Schemi, Comunicazioni (scrive solo il Direttivo: avvisi, formazioni), Sala
+    Direttivo (riservato); foto, non letti, canali silenziabili, notifiche.
 16. **Tornei** – link al sito, squadra, stato, classifica facoltativa compilata dal Direttivo,
     partite collegate.
 17. **Colonna sonora** – ognuno sceglie un file audio dal proprio telefono (es. compilation
     FIFA): suona in loop, muto sempre in alto. Nessuna canzone è inclusa nell'app (diritti);
     playlist e video ufficiali su YouTube/Spotify condivisi come link.
-18. **Voti e Uomo partita** – quando il Direttivo inserisce il risultato, i giocatori della
-    squadra ricevono la notifica e danno un voto da 1 a 10 ai compagni (non a se stessi).
-    I voti dei singoli restano segreti: si vedono solo media e classifica. Il più votato
-    (almeno 2 voti) riceve la carta speciale nera e oro **Uomo partita**.
-19. **Squadra della settimana** – i migliori 11 per media voto della settimana (lunedì–domenica),
-    per squadra, con carte speciali; elenco degli ultimi Uomini partita.
-20. **Traguardi** – 13 badge (bronzo, argento, oro, leggenda): presenze, gol, Uomo partita,
-    Squadra della settimana, un mese senza ritardi, un anno nel club, overall 85+.
-    I 3 più rari compaiono sulla carta; festa a schermo intero quando se ne sblocca uno.
-21. **Walkout** – animazione stile pacchetti FUT (luci, bandiera, ruolo, stemma, giro della
+18. **Carte speciali** (fase 3) – al posto dei voti: dopo ogni partita ufficiale il Direttivo
+    sceglie un giocatore per reparto per la carta nero/oro della settimana (bonus fino a +5,
+    vale 7 giorni); carta blu elettrico automatica per tripletta o portiere imbattuto 3 volte.
+19. **Traguardi** – 9 badge (bronzo, argento, oro, leggenda): presenze, gol, un mese senza
+    ritardi, un anno nel club, overall 85+ (quelli legati alle carte speciali arrivano in fase 3).
+20. **Walkout** – animazione stile pacchetti FUT (luci, bandiera, ruolo, stemma, giro della
     carta) alla prima apertura dopo l'approvazione e quando l'overall sale; rivedibile dalla carta.
+21. **Sala Direttivo** – contatori (senza risposta stasera, formazioni da pubblicare, video
+    proposti) e azioni: presenze di stasera (correzioni anche dopo le 18:30), formazioni,
+    nuovo evento, avviso a tutti (in Comunicazioni), nuovo risultato, rosa e squadre,
+    Mondo Proclub, chat del Direttivo, contatti social.
 
 ## 5. Modello dati (Supabase / PostgreSQL)
 
@@ -142,14 +181,32 @@ channels      id, slug, name, description, icon   messages  id, channel_id, auth
               body, image_path, meta              channel_mutes / channel_reads (per utente)
 tournaments   id, name, organizer, url, team, status, starts_on, ends_on, notes
 tournament_standings  tournament_id, team_name, won, drawn, lost, goals_for, goals_against, is_us
-match_ratings match_id, voter_id, player_id, rating(1-10)   -- ognuno vede solo i propri voti
+rules_articles id, sort_order, title, body                -- bozza del Direttivo
+rules_versions number, snapshot(jsonb), published_at       -- versioni pubblicate del regolamento
+profiles      + first_name, last_name, birth_year, motto, direttivo_roles[], face(jsonb),
+                registration_completed_at, rules_accepted_version, rules_accepted_at
+app_config    + direttivo_password_hash (bcrypt)
+-- dalla migrazione 0017
+attendance    + auto (assenza automatica), set_by (chi ha corretto); nota obbligatoria per il ritardo
+daily_jobs    day, job, done_at                    -- promemoria e assenze fatti una volta al giorno
+channels      + team (milanac|futuro), direttivo_writes   -- Generale, Milan AC, Futuro, Tattiche, Comunicazioni, Direttivo
+shared_links  category(musica|video) + status(proposto|pubblicato), published_by, published_at
+news          + platform (ps5|xbox) per la categoria console
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
-pubblicazione formazione → notifica, nuovo messaggio → notifica, presenze → messaggio in *Presenze*,
-`chat_overview()` (non letti + ultimo messaggio per canale), risultato inserito → notifica
-"vota i compagni", `match_rating_summary()` / `match_mvps()` / `team_of_the_week()` /
-`player_stats()` (medie e conteggi senza rivelare chi ha votato cosa).
+pubblicazione formazione → notifica + annuncio in *Comunicazioni*, nuovo messaggio → notifica,
+nuovo evento → notifica, `chat_overview()` (non letti + ultimo messaggio per canale),
+risultato inserito → notifica alla squadra, `complete_registration()` / `accept_rules()` /
+`publish_rules()` / `set_direttivo_password()` (registrazione e regolamento), `player_stats()`
+(numeri per i traguardi), video proposto / pubblicato → notifica, notizia su aggiornamenti o
+console → notifica (al massimo una ogni 12 ore per tipo).
+
+Lavori automatici con **pg_cron**: `attendance_tick()` gira ogni minuto e, in ora italiana,
+alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assenze automatiche
+(una volta sola al giorno, grazie a `daily_jobs`). Le risposte dei giocatori sono bloccate dopo
+le 18:30 dalle policy (`attendance_open`); il Direttivo corregge sempre. Nei test l'ora si fissa
+con l'impostazione `milanac.now` (`app_now()`).
 
 Storage buckets: `avatars`, `trophies`, `match-media`, `tactics`, `chat` (tutti privati, letti
 tramite URL firmati, con limiti di dimensione e tipo di file).
@@ -163,7 +220,8 @@ Script (Dart o Python) eseguito da **GitHub Actions ogni 3 ore**:
 1. legge le fonti (RSS dove esiste, altrimenti pagina HTML o JSON pubblico);
 2. estrae **titolo, data, link, immagine e una descrizione breve** (max ~300 caratteri, mai l'articolo intero);
 3. classifica per categoria con parole chiave; scarta duplicati (`url` unico);
-4. salva in `news` (la notifica push per i Title Update arriverà con la fase 8);
+4. salva in `news`; un trigger manda l'avviso push per gli aggiornamenti di FC 27 (a tutti) e
+   delle console (a chi ha quella piattaforma nel profilo), al massimo uno ogni 12 ore per tipo;
 5. cancella le notizie più vecchie di 60 giorni.
 
 L'esecuzione regolare tiene anche **attivo** il progetto Supabase Free (che va in pausa dopo 7 giorni di inattività).
@@ -176,6 +234,7 @@ L'esecuzione regolare tiene anche **attivo** il progetto Supabase Free (che va i
 | Aggiornamenti | Google News IT + EN: "FC 27" + title update / aggiornamento / patch |
 | Ultimate Team | Google News: "FC 27" + "Ultimate Team" · FifaUltimateTeam.it (feed) |
 | Pro Clubs | Google News: "FC 27" + Pro Clubs / The Grounds · Reddit r/FIFAProClubs (top del giorno) |
+| Console | Google News: PS5 / Xbox + aggiornamento di sistema, firmware (categoria `console`, con piattaforma) |
 
 Google News raccoglie anche EA SPORTS, Everyeye, FUTBIN e le altre testate: per queste mostriamo
 la testata e il link, la descrizione rimanda all'articolo originale.
@@ -216,3 +275,7 @@ milanac-app/
 8. Icone, store listing, privacy policy, pubblicazione Play Store / App Store
 9. Stasera e formazione pubblicata · squadre MILANAC/FUTURO · carta FUT · Tattiche & Build ·
    chat a canali · tornei · colonna sonora
+
+Nuova app (ottobre 2026, vedi README): 1 fondamenta e ingresso · 2 Home, Mondo Proclub,
+presenze a calendario, Sala Direttivo, PDF della formazione · 3 chat stile Telegram, carte
+speciali, rosa con mini carte, tornei · 4 lavagna tattica con replay · 5 stanza vocale (Agora).

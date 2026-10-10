@@ -24,26 +24,26 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
-    // Badge dei non letti nel menu (2 in Main + 1 in Presenze).
-    expect(find.text('3'), findsOneWidget);
+    // Badge dei non letti nel menu (2 in Generale + 1 in Milan AC).
+    expect(
+      find.descendant(of: find.byType(Drawer), matching: find.text('3')),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Chat'));
     await tester.pumpAndSettle();
 
-    expect(find.text('MILANAC Main'), findsOneWidget);
-    expect(find.text('Fantacalcio'), findsOneWidget);
+    expect(find.text('Generale'), findsOneWidget);
+    expect(find.text('Comunicazioni'), findsOneWidget);
     expect(find.text('Luca Bianchi: Ci sono 💪'), findsOneWidget);
 
-    // Presenze: messaggio automatico del ritardo.
-    await tester.tap(find.text('Presenze'));
+    // Milan AC: la chat della squadra.
+    await tester.tap(find.text('Milan AC'));
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('arriva in ritardo, alle 21:50'),
-      findsOneWidget,
-    );
+    expect(find.text('Stasera provo la build nuova da DC'), findsOneWidget);
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('MILANAC Main'));
+    await tester.tap(find.text('Generale'));
     await tester.pumpAndSettle();
     expect(find.text('Stasera tutti in lobby alle 21:15!'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'Forza MILANAC!');
