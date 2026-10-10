@@ -30,8 +30,15 @@ void main() {
   testWidgets('Rosa: modifica del numero di maglia', (tester) async {
     await startApp(tester);
     await openSection(tester, 'Rosa completa');
+    // L'elenco classico (la vista predefinita sono le mini carte).
+    await tester.tap(find.text('Elenco'));
+    await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Marco Rossi'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Marco Rossi'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Marco Rossi'));
     await tester.pumpAndSettle();
@@ -65,7 +72,11 @@ void main() {
     await tester.tap(find.text('Rosa e squadre'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(ChoiceChip, 'FUTURO (2)'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Marco Rossi'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Marco Rossi'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     final rossiCard = find.ancestor(
       of: find.text('Marco Rossi'),
       matching: find.byType(Card),
@@ -89,9 +100,15 @@ void main() {
 
     // Filtro FUTURO in Rosa: Neri (entrambe), Verdi e ora Rossi.
     await openSection(tester, 'Rosa completa');
+    await tester.tap(find.text('Elenco'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO (3)'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Paolo Verdi'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Paolo Verdi'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Andrea Neri'), findsOneWidget);
     expect(find.text('Luca Bianchi'), findsNothing);
   });

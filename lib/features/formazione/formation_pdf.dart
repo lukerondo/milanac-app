@@ -9,47 +9,12 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/theme.dart';
+import '../carta/mini_card.dart';
 import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
 import '../volto/face_view.dart';
 import 'modules.dart';
 import 'pitch_painter.dart';
-
-/// Colori della mini carta: carta speciale (nero/oro, blu elettrico) o il livello dell'overall.
-(Color, Color, Color) _cardColors(int? overall, SpecialCard? special) =>
-    switch (special?.kind) {
-      CardSpecial.neroOro => (
-        const Color(0xFF2B2B2E),
-        const Color(0xFF050505),
-        const Color(0xFFF3D27A),
-      ),
-      CardSpecial.blu => (
-        const Color(0xFF2F7BFF),
-        const Color(0xFF061A5C),
-        const Color(0xFFEAF2FF),
-      ),
-      null => _tierColors(overall),
-    };
-
-(Color, Color, Color) _tierColors(int? overall) => switch (overall) {
-  null => (const Color(0xFF34343C), const Color(0xFF17171B), Colors.white),
-  < 65 => (
-    const Color(0xFFD9A273),
-    const Color(0xFF8A5530),
-    const Color(0xFF3B2414),
-  ),
-  < 75 => (
-    const Color(0xFFF1F3F6),
-    const Color(0xFF9AA1AB),
-    const Color(0xFF23272E),
-  ),
-  < 85 => (
-    const Color(0xFFFBE3A0),
-    const Color(0xFFC99A2E),
-    const Color(0xFF3A2A08),
-  ),
-  _ => (const Color(0xFFC8102E), const Color(0xFF0B0B0D), const Color(0xFFF6D77F)),
-};
 
 /// Larghezza "logica" del disegno (il campo come appare nell'app); il PNG è più grande.
 const _logicalWidth = 360.0;
@@ -122,7 +87,7 @@ void _paintMiniCard(
   SpecialCard? special,
 ) {
   final rect = Rect.fromCenter(center: center, width: _cardW, height: _cardH);
-  final (top, bottom, text) = _cardColors(m.overall, special);
+  final (top, bottom, text) = miniCardColors(m.overall, special);
   final rr = RRect.fromRectAndRadius(rect, const Radius.circular(9));
   canvas.drawRRect(
     rr.shift(const Offset(0, 2)),

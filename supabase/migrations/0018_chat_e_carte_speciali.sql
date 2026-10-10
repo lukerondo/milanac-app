@@ -475,3 +475,21 @@ do $$ begin
   alter publication supabase_realtime add table public.special_cards;
 exception when duplicate_object then null;
 end $$;
+
+-- ---------------------------------------------------------------- 4) tornei: foto o logo
+alter table public.tournaments add column if not exists image_path text;
+alter table public.tournaments drop constraint if exists tournaments_image_path_check;
+alter table public.tournaments add constraint tournaments_image_path_check
+  check (image_path is null or image_path like id::text || '/%');
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('tournaments', 'tournaments', false, 5 * 1024 * 1024,
+        array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+drop policy if exists "foto tornei leggibili dai membri" on storage.objects;
+create policy "foto tornei leggibili dai membri" on storage.objects for select
+  using (bucket_id = 'tournaments' and is_member());
+drop policy if exists "direttivo carica foto tornei" on storage.objects;
+create policy "direttivo carica foto tornei" on storage.objects for all
+  using (bucket_id = 'tournaments' and is_direttivo())
+  with check (bucket_id = 'tournaments' and is_direttivo());

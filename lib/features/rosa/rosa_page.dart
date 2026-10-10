@@ -8,9 +8,21 @@ import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
 import '../carta/carta_page.dart';
 import '../carta/fut_card.dart';
+import '../carta/mini_card.dart';
 import '../carte/special_cards_repository.dart';
 import 'member.dart';
 import 'rosa_repository.dart';
+
+/// Come si guarda la rosa: mini carte (predefinita), carte grandi o elenco.
+enum RosaView {
+  mini('Mini', Icons.grid_view_rounded),
+  carte('Carte', Icons.style_rounded),
+  elenco('Elenco', Icons.view_list_rounded);
+
+  const RosaView(this.label, this.icon);
+  final String label;
+  final IconData icon;
+}
 
 class RosaPage extends ConsumerStatefulWidget {
   const RosaPage({super.key});
@@ -20,11 +32,44 @@ class RosaPage extends ConsumerStatefulWidget {
 }
 
 class _RosaPageState extends ConsumerState<RosaPage> {
-  /// Squadra mostrata (null = tutte).
-  Team? _team;
+  final _search = TextEditingController();
+  String _query = '';
 
-  /// Vista a carte FUT invece dell'elenco.
-  bool _cards = false;
+  /// Squadra mostrata (null = tutte), reparto (null = tutti), solo Direttivo.
+  Team? _team;
+  String? _reparto;
+  bool _onlyDirettivo = false;
+  RosaView _view = RosaView.mini;
+
+  @override
+  void initState() {
+    super.initState();
+    _search.addListener(() {
+      final q = _search.text.trim().toLowerCase();
+      if (q != _query) setState(() => _query = q);
+    });
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Ricerca per nome sulla carta, nome e cognome o gamertag; filtri per squadra,
+  /// reparto e Direttivo.
+  bool _matches(Member m) {
+    if (!m.inTeam(_team)) return false;
+    if (_reparto != null && repartoOf(m.fieldPosition) != _reparto) return false;
+    if (_onlyDirettivo && m.role != ClubRole.direttivo) return false;
+    if (_query.isEmpty) return true;
+    final text = [
+      m.displayName,
+      m.fullName,
+      m.gamertag ?? '',
+    ].join(' ').toLowerCase();
+    return text.contains(_query);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,22 +80,44 @@ class _RosaPageState extends ConsumerState<RosaPage> {
       error: (e, _) =>
           Center(child: Text('Errore nel caricamento della rosa.\n$e')),
       data: (all) {
-        final active = all.where((m) => m.active).toList();
-        final members = active.where((m) => m.role != ClubRole.pending);
-        final shown = members.where((m) => m.inTeam(_team));
+        final members = all
+            .where((m) => m.active && m.role != ClubRole.pending)
+            .toList();
+        final shown = members.where(_matches).toList();
         final direttivo = shown
             .where((m) => m.role == ClubRole.direttivo)
             .toList();
         final giocatori = shown
             .where((m) => m.role == ClubRole.giocatore)
             .toList();
+        final byOverall = List.of(shown)
+          ..sort((a, b) => (b.overall ?? 0).compareTo(a.overall ?? 0));
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
             _Summary(
-              total: direttivo.length + giocatori.length,
-              direttivo: direttivo.length,
+              total: members.length,
+              direttivo: members
+                  .where((m) => m.role == ClubRole.direttivo)
+                  .length,
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _search,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Cerca per nome, cognome o gamertag',
+                prefixIcon: const Icon(Icons.search_rounded),
+                isDense: true,
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Cancella',
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: _search.clear,
+                      ),
+              ),
             ),
             const SizedBox(height: 8),
             TeamFilter(
@@ -62,43 +129,77 @@ class _RosaPageState extends ConsumerState<RosaPage> {
                   t: members.where((m) => m.teams.contains(t)).length,
               },
             ),
-            const SizedBox(height: 8),
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(
-                  value: false,
-                  icon: Icon(Icons.view_list_rounded),
-                  label: Text('Elenco'),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                ChoiceChip(
+                  label: const Text('Tutti i reparti'),
+                  selected: _reparto == null,
+                  onSelected: (_) => setState(() => _reparto = null),
                 ),
-                ButtonSegment(
-                  value: true,
-                  icon: Icon(Icons.style_rounded),
-                  label: Text('Carte'),
+                for (final r in reparti)
+                  ChoiceChip(
+                    label: Text(r),
+                    tooltip: repartoLabels[r],
+                    selected: _reparto == r,
+                    onSelected: (_) => setState(() => _reparto = r),
+                  ),
+                FilterChip(
+                  avatar: const Icon(Icons.star_rounded, size: 16),
+                  label: const Text('Solo Direttivo'),
+                  selected: _onlyDirettivo,
+                  onSelected: (v) => setState(() => _onlyDirettivo = v),
                 ),
               ],
-              selected: {_cards},
-              onSelectionChanged: (s) => setState(() => _cards = s.first),
             ),
-            if (_cards) ...[
-              const SizedBox(height: 12),
-              _CardGrid(
-                members: [...direttivo, ...giocatori]
-                  ..sort((a, b) => (b.overall ?? 0).compareTo(a.overall ?? 0)),
-              ),
-            ] else ...[
-              const _Header('Direttivo', icon: Icons.star_rounded),
-              for (final m in direttivo) _MemberTile(member: m),
-              const _Header('Giocatori', icon: Icons.sports_soccer_rounded),
-              if (giocatori.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    'Nessun giocatore in rosa.',
-                    style: TextStyle(color: Colors.white54),
+            const SizedBox(height: 8),
+            SegmentedButton<RosaView>(
+              segments: [
+                for (final v in RosaView.values)
+                  ButtonSegment(
+                    value: v,
+                    icon: Icon(v.icon),
+                    label: Text(v.label),
                   ),
+              ],
+              selected: {_view},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) => setState(() => _view = s.first),
+            ),
+            const SizedBox(height: 12),
+            if (shown.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Nessun membro corrisponde ai filtri.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white54),
                 ),
-              for (final m in giocatori) _MemberTile(member: m),
-            ],
+              )
+            else
+              switch (_view) {
+                RosaView.mini => MiniCardGrid(
+                  members: byOverall,
+                  onTap: (m) => openPlayerCard(context, m.id),
+                ),
+                RosaView.carte => _CardGrid(members: byOverall),
+                RosaView.elenco => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (direttivo.isNotEmpty)
+                      const _Header('Direttivo', icon: Icons.star_rounded),
+                    for (final m in direttivo) _MemberTile(member: m),
+                    if (giocatori.isNotEmpty)
+                      const _Header(
+                        'Giocatori',
+                        icon: Icons.sports_soccer_rounded,
+                      ),
+                    for (final m in giocatori) _MemberTile(member: m),
+                  ],
+                ),
+              },
           ],
         );
       },
@@ -115,7 +216,7 @@ class _Summary extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         child: Row(
           children: [
             Expanded(
@@ -167,7 +268,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+    padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
     child: Row(
       children: [
         Icon(icon, size: 18, color: MilanacColors.red),
@@ -187,11 +288,6 @@ class _Header extends StatelessWidget {
   );
 }
 
-void _openCard(BuildContext context, Member m) => Navigator.of(
-  context,
-  rootNavigator: true,
-).push(MaterialPageRoute(builder: (_) => PlayerCardPage(memberId: m.id)));
-
 /// Griglia di carte FUT (due per riga), ordinate per overall.
 class _CardGrid extends ConsumerWidget {
   const _CardGrid({required this.members});
@@ -208,7 +304,7 @@ class _CardGrid extends ConsumerWidget {
     children: [
       for (final m in members)
         GestureDetector(
-          onTap: () => _openCard(context, m),
+          onTap: () => openPlayerCard(context, m.id),
           child: Consumer(
             builder: (context, ref, _) {
               final stats = ref.watch(cardStatsProvider(m.id));
@@ -235,6 +331,7 @@ class _MemberTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final joined = DateFormat('d MMM yyyy', 'it').format(member.joinedAt);
+    final special = ref.watch(activeSpecialCardProvider(member.id));
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -259,6 +356,8 @@ class _MemberTile extends ConsumerWidget {
               children: [
                 for (final t in Team.values)
                   if (member.teams.contains(t)) TeamBadge(t, small: true),
+                if (special != null)
+                  Icon(special.kind.icon, size: 14, color: special.kind.color),
               ],
             ),
           ],
@@ -300,7 +399,7 @@ class _MemberTile extends ConsumerWidget {
             ),
           ],
         ),
-        onTap: () => _openCard(context, member),
+        onTap: () => openPlayerCard(context, member.id),
       ),
     );
   }

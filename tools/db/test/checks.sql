@@ -796,3 +796,23 @@ do $$ begin
   assert (player_stats('00000000-0000-0000-0000-0000000000e1')->>'nero_oro')::int = 1, 'carte nero/oro nelle statistiche';
 end $$;
 reset role;
+
+-- Tornei: la foto (o il logo) la carica solo il Direttivo, nella cartella del torneo.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into tournaments (id, name, team) values ('00000000-0000-0000-0000-0000000000a9', 'Coppa Rossonera', 'milanac');
+insert into storage.objects (bucket_id, name) values ('tournaments', '00000000-0000-0000-0000-0000000000a9/logo.jpg');
+update tournaments set image_path = '00000000-0000-0000-0000-0000000000a9/logo.jpg'
+  where id = '00000000-0000-0000-0000-0000000000a9';
+select pg_temp.expect_error(
+  $q$update tournaments set image_path = 'altrove/logo.jpg' where id = '00000000-0000-0000-0000-0000000000a9'$q$,
+  'tournaments_image_path_check');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$insert into storage.objects (bucket_id, name) values ('tournaments', '00000000-0000-0000-0000-0000000000a9/altra.jpg')$q$,
+  'row-level security');
+do $$ begin
+  assert (select count(*) from storage.objects where bucket_id = 'tournaments') = 1, 'il membro vede la foto del torneo';
+  assert (select image_path from tournaments where id = '00000000-0000-0000-0000-0000000000a9') like '%/logo.jpg', 'foto salvata';
+end $$;
+reset role;

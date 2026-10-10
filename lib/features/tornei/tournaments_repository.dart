@@ -1,11 +1,18 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart' show ImageProvider, MemoryImage, NetworkImage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/teams.dart';
+
+const tournamentsBucket = 'tournaments';
+
+/// Solo demo: foto dei tornei tenute in memoria (percorso → contenuto).
+final demoTournamentPhotos = <String, Uint8List>{};
 
 enum TournamentStatus {
   iscrizioni('Iscrizioni aperte'),
@@ -34,6 +41,7 @@ class Tournament {
     this.startsOn,
     this.endsOn,
     this.notes,
+    this.imagePath,
   });
 
   final String id;
@@ -45,6 +53,9 @@ class Tournament {
   final DateTime? startsOn;
   final DateTime? endsOn;
   final String? notes;
+
+  /// Foto o logo nel bucket "tornei" (cartella = id del torneo).
+  final String? imagePath;
 
   factory Tournament.fromMap(Map<String, dynamic> m) {
     DateTime? date(Object? v) => v == null ? null : DateTime.parse(v as String);
@@ -58,6 +69,7 @@ class Tournament {
       startsOn: date(m['starts_on']),
       endsOn: date(m['ends_on']),
       notes: m['notes'] as String?,
+      imagePath: m['image_path'] as String?,
     );
   }
 
@@ -72,6 +84,7 @@ class Tournament {
       'starts_on': day(startsOn),
       'ends_on': day(endsOn),
       'notes': notes,
+      'image_path': imagePath,
     };
   }
 }
@@ -146,7 +159,24 @@ abstract class TournamentsRepository {
 
   /// Sostituisce l'intera classifica del torneo.
   Future<void> saveStandings(String tournamentId, List<StandingRow> rows);
+
+  /// Carica la foto (o il logo) del torneo e la collega; restituisce il percorso.
+  Future<String> uploadImage(String tournamentId, Uint8List bytes);
+
+  /// URL temporaneo della foto (null in demo: si usa la copia in memoria).
+  Future<String?> imageUrl(String path);
 }
+
+/// Immagine del torneo: dalla memoria (demo) o dal bucket privato.
+final tournamentImageProvider = FutureProvider.family<ImageProvider?, String>((
+  ref,
+  path,
+) async {
+  final local = demoTournamentPhotos[path];
+  if (local != null) return MemoryImage(local);
+  final url = await ref.watch(tournamentsRepositoryProvider).imageUrl(path);
+  return url == null || url.isEmpty ? null : NetworkImage(url);
+});
 
 final tournamentsRepositoryProvider = Provider<TournamentsRepository>((ref) {
   if (AppConfig.isDemo) return DemoTournamentsRepository();
@@ -218,6 +248,29 @@ class _SupabaseTournamentsRepository implements TournamentsRepository {
       for (final r in rows) r.toMap(tournamentId),
     ]);
   }
+
+  @override
+  Future<String> uploadImage(String tournamentId, Uint8List bytes) async {
+    final path =
+        '$tournamentId/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await _client.storage
+        .from(tournamentsBucket)
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(contentType: 'image/jpeg'),
+        );
+    await _client
+        .from('tournaments')
+        .update({'image_path': path})
+        .eq('id', tournamentId);
+    return path;
+  }
+
+  @override
+  Future<String?> imageUrl(String path) => _client.storage
+      .from(tournamentsBucket)
+      .createSignedUrl(path, 7 * 24 * 3600);
 }
 
 class DemoTournamentsRepository implements TournamentsRepository {
@@ -286,6 +339,7 @@ class DemoTournamentsRepository implements TournamentsRepository {
       startsOn: t.startsOn,
       endsOn: t.endsOn,
       notes: t.notes,
+      imagePath: t.imagePath,
     );
     final i = _tournaments.indexWhere((x) => x.id == id);
     i >= 0 ? _tournaments[i] = saved : _tournaments.insert(0, saved);
@@ -307,4 +361,31 @@ class DemoTournamentsRepository implements TournamentsRepository {
   @override
   Future<void> saveStandings(String id, List<StandingRow> rows) async =>
       _standings[id] = List.of(rows);
+
+  @override
+  Future<String> uploadImage(String tournamentId, Uint8List bytes) async {
+    final path = '$tournamentId/foto.jpg';
+    demoTournamentPhotos[path] = bytes;
+    final i = _tournaments.indexWhere((x) => x.id == tournamentId);
+    if (i >= 0) {
+      final t = _tournaments[i];
+      _tournaments[i] = Tournament(
+        id: t.id,
+        name: t.name,
+        organizer: t.organizer,
+        url: t.url,
+        team: t.team,
+        status: t.status,
+        startsOn: t.startsOn,
+        endsOn: t.endsOn,
+        notes: t.notes,
+        imagePath: path,
+      );
+      _changes.add(null);
+    }
+    return path;
+  }
+
+  @override
+  Future<String?> imageUrl(String path) async => null;
 }
