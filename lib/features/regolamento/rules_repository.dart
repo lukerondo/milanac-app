@@ -100,9 +100,13 @@ final rulesRepositoryProvider = Provider<RulesRepository>((ref) {
   return _SupabaseRulesRepository(ref);
 });
 
-final latestRulesProvider = FutureProvider<RulesVersion?>(
-  (ref) => ref.watch(rulesRepositoryProvider).latest(),
-);
+final latestRulesProvider = FutureProvider<RulesVersion?>((ref) {
+  // Il router lo legge già all'avvio, prima del login, quando le policy non mostrano
+  // nessuna versione: si ricarica a ogni cambio di utente, così dopo l'accesso non resta
+  // in memoria un "nessun regolamento" che non c'è.
+  ref.watch(sessionProvider.select((s) => s.value?.user.id));
+  return ref.watch(rulesRepositoryProvider).latest();
+});
 
 final rulesDraftProvider = FutureProvider<List<RulesArticle>>(
   (ref) => ref.watch(rulesRepositoryProvider).draft(),
