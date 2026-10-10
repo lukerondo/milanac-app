@@ -15,6 +15,7 @@
 //   { kind: "news", id }                    → aggiornamento FC 27 (a tutti) o di una console (per piattaforma)
 //   { kind: "special_card", id }            → al giocatore: ha ricevuto una carta nero/oro o blu elettrico
 //   { kind: "special_cards_week", match }   → alla squadra: le carte speciali della giornata
+//   { kind: "voice_room", id }              → ai membri del canale: qualcuno ha aperto la stanza vocale
 //   { kind: "cleanup" }                     → nessuna notifica: rimuove dallo Storage i file in coda
 //                                             (allegati della chat scaduti o eliminati)
 //
@@ -48,6 +49,7 @@ Deno.serve(async (req) => {
   else if (kind === "news") pushes = await newsPushes(db, id);
   else if (kind === "special_card") pushes = await specialCardPushes(db, id);
   else if (kind === "special_cards_week") pushes = await specialCardsWeekPushes(db, match);
+  else if (kind === "voice_room") pushes = await voiceRoomPushes(db, id);
   else return new Response("unknown kind", { status: 400 });
 
   const account = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
@@ -326,6 +328,39 @@ async function specialCardsWeekPushes(db: SupabaseClient, matchId: string): Prom
     route: "/carte-speciali",
     data: { match: m.id },
   }));
+}
+
+// ------------------------------------------------------------------ stanza vocale
+
+async function voiceRoomPushes(db: SupabaseClient, roomId: string): Promise<Push[]> {
+  const { data: room } = await db
+    .from("voice_rooms")
+    .select("id, channel_id, opened_by, channels(name, slug, team, direttivo_only), profiles(display_name)")
+    .eq("id", roomId).single();
+  if (!room) return [];
+  // deno-lint-ignore no-explicit-any
+  const channel = (room as any).channels;
+  // deno-lint-ignore no-explicit-any
+  const opener = (room as any).profiles?.display_name ?? "Un compagno";
+  let q = db.from("profiles").select("id").eq("active", true);
+  if (channel?.direttivo_only) q = q.eq("club_role", "direttivo");
+  else {
+    q = q.neq("club_role", "pending");
+    if (channel?.team) q = q.contains("teams", [channel.team]);
+  }
+  const { data: members } = await q;
+  const { data: mutes } = await db
+    .from("channel_mutes").select("user_id").eq("channel_id", room.channel_id);
+  const muted = new Set((mutes ?? []).map((m) => m.user_id));
+  return (members ?? [])
+    .filter((m) => m.id !== room.opened_by && !muted.has(m.id))
+    .map((m) => ({
+      userId: m.id,
+      title: `🎧 Stanza vocale aperta in #${channel?.name ?? "chat"}`,
+      body: `${opener} ha aperto la stanza: entra con un tocco.`,
+      route: `/chat/${channel?.slug ?? ""}?stanza=1`,
+      data: { channel: channel?.slug ?? "", voice: room.id },
+    }));
 }
 
 // ------------------------------------------------------------------ pulizia dello Storage
