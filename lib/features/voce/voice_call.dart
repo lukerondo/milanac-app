@@ -282,7 +282,7 @@ class VoiceCall extends Notifier<VoiceCallState> {
   }
 
   /// La chiamata è caduta (sessione chiusa dal server, rete assente, connessione
-  /// persa): si esce del tutto e lo si dice, anche a foglio della stanza chiuso.
+  /// persa): si esce del tutto e lo si dice, anche con la stanza ridotta a striscia.
   void _drop(int attempt, String message) {
     if (attempt != _attempt || state.phase != VoicePhase.inRoom) return;
     _attempt++;

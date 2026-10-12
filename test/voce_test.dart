@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:milanac/core/appearance.dart';
 import 'package:milanac/core/audio_focus.dart';
 import 'package:milanac/core/push/device_tokens.dart';
 import 'package:milanac/features/chat/chat_repository.dart';
@@ -16,6 +17,9 @@ import 'package:milanac/features/voce/voice_room_sheet.dart';
 
 import 'helpers.dart';
 import 'home_test.dart';
+
+/// Titolo della card della stanza di Milan AC (il nome del canale non va a capo).
+const _cardMilan = 'Stanza vocale aperta · Milan AC';
 
 const _generale = Channel(id: 'c-main', slug: 'main', name: 'Generale');
 const _tattiche = Channel(
@@ -113,67 +117,116 @@ void main() {
     );
   });
 
-  testWidgets(
-    'Stanza vocale: chi c\'è, entra, microfono, esci; apri una stanza nuova',
-    (tester) async {
-      final container = await startAppAt(tester, todayAt(17));
-      await goToSection(tester, 'Chat');
-      // Nell'elenco solo Milan AC ha le cuffie: la sua stanza è aperta.
-      expect(find.byIcon(Icons.headset_mic_rounded), findsOneWidget);
-      await tester.tap(find.text('Milan AC'));
-      await tester.pumpAndSettle();
-      expect(find.text('Stanza vocale aperta · 2 dentro'), findsOneWidget);
+  testWidgets('Stanza vocale: card nella chat, stanza a schermo intero, '
+      'microfono, riduci a striscia, esci; apri una stanza nuova', (
+    tester,
+  ) async {
+    final container = await startAppAt(tester, todayAt(17));
+    await goToPath(tester, '/chat/milanac');
+    // Sotto la barra la card della stanza aperta, con chi c'è dentro.
+    expect(find.text(_cardMilan), findsOneWidget);
+    expect(find.text('Marco e Luca sono dentro'), findsOneWidget);
 
-      await tester.tap(find.text('Entra'));
-      await tester.pumpAndSettle();
-      // Nel foglio: Marco (sta parlando), Luca (in muto) e io.
-      expect(find.byType(VoiceRoomSheet), findsOneWidget);
-      expect(find.text('Marco'), findsOneWidget);
-      expect(find.text('Luca'), findsOneWidget);
-      expect(find.text('Tu'), findsOneWidget);
-      expect(find.text('3 dentro'), findsOneWidget);
-      final call = container.read(voiceCallProvider);
-      expect(call.phase, VoicePhase.inRoom);
-      expect(call.speaking, {agoraUidFor('p2')});
-      final mutedInSheet = find.descendant(
-        of: find.byType(VoiceRoomSheet),
-        matching: find.byIcon(Icons.mic_off_rounded),
-      );
-      expect(mutedInSheet, findsOneWidget);
-      expect(find.text('Sei nella stanza vocale'), findsOneWidget);
+    await tester.tap(find.text('Entra'));
+    await tester.pumpAndSettle();
+    // La stanza a schermo intero: Marco (sta parlando), Luca (in muto) e io.
+    final room = find.byType(VoiceRoomPage);
+    Finder inRoom(Finder f) => find.descendant(of: room, matching: f);
+    expect(room, findsOneWidget);
+    expect(inRoom(find.text('#MILAN AC')), findsOneWidget);
+    expect(inRoom(find.text('Stanza vocale · 0:00')), findsOneWidget);
+    expect(inRoom(find.text('Marco')), findsOneWidget);
+    expect(inRoom(find.text('Sta parlando')), findsOneWidget);
+    expect(inRoom(find.text('Luca')), findsOneWidget);
+    expect(inRoom(find.text('Microfono spento')), findsOneWidget);
+    expect(inRoom(find.text('Tu')), findsOneWidget);
+    expect(inRoom(find.text('In ascolto')), findsOneWidget);
+    expect(inRoom(find.textContaining('Aperta da Marco Rossi')), findsOneWidget);
+    final call = container.read(voiceCallProvider);
+    expect(call.phase, VoicePhase.inRoom);
+    expect(call.speaking, {agoraUidFor('p2')});
+    final mutedIcons = inRoom(find.byIcon(Icons.mic_off_rounded));
+    expect(mutedIcons, findsOneWidget);
 
-      // Microfono spento: lo vedo su di me e sul pulsante.
-      await tester.tap(find.text('Microfono'));
-      await tester.pumpAndSettle();
-      expect(container.read(voiceCallProvider).muted, isTrue);
-      expect(mutedInSheet, findsNWidgets(3));
+    // Microfono spento: lo vedo su di me e sul pulsante.
+    await tester.tap(find.text('Microfono'));
+    await tester.pumpAndSettle();
+    expect(container.read(voiceCallProvider).muted, isTrue);
+    expect(inRoom(find.text('Microfono spento')), findsNWidgets(2));
+    expect(mutedIcons, findsNWidgets(3));
 
-      await tester.tap(find.text('Esci'));
-      await tester.pumpAndSettle();
-      expect(find.byType(VoiceRoomSheet), findsNothing);
-      expect(container.read(voiceCallProvider).phase, VoicePhase.idle);
-      expect(find.text('Stanza vocale aperta · 2 dentro'), findsOneWidget);
+    // Riduci: si torna alla chat con la chiamata ridotta a striscia.
+    await tester.tap(
+      find.byTooltip('Riduci la stanza a una striscia e torna alla chat'),
+    );
+    await tester.pumpAndSettle();
+    expect(room, findsNothing);
+    expect(find.text('Sei nella stanza vocale'), findsOneWidget);
+    expect(find.text('#Milan AC · 0:00'), findsOneWidget);
+    await tester.tap(find.byTooltip('Riattiva il microfono'));
+    await tester.pumpAndSettle();
+    expect(container.read(voiceCallProvider).muted, isFalse);
 
-      // Generale: nessuna stanza. La apro io, esco e si chiude.
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Generale'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Stanza vocale aperta'), findsNothing);
-      await tester.tap(find.byTooltip('Stanza vocale'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Nessuno è in stanza'), findsOneWidget);
-      await tester.tap(find.text('Apri la stanza'));
-      await tester.pumpAndSettle();
-      expect(find.text('1 dentro'), findsOneWidget);
-      expect(find.text('Tu'), findsOneWidget);
-      expect(find.text('Sei nella stanza vocale'), findsOneWidget);
-      await tester.tap(find.text('Esci'));
-      await tester.pumpAndSettle();
-      expect(find.text('Sei nella stanza vocale'), findsNothing);
-      expect(find.textContaining('Stanza vocale aperta'), findsNothing);
-    },
-  );
+    // Un tocco sulla striscia riapre la stanza; Esci la chiude e torna alla chat.
+    await tester.tap(find.text('Sei nella stanza vocale'));
+    await tester.pumpAndSettle();
+    expect(room, findsOneWidget);
+    await tester.tap(find.text('Esci'));
+    await tester.pumpAndSettle();
+    expect(room, findsNothing);
+    expect(container.read(voiceCallProvider).phase, VoicePhase.idle);
+    expect(find.text(_cardMilan), findsOneWidget);
+
+    // Generale: nessuna stanza. La apro io dalla barra in alto, esco e si chiude.
+    await goToPath(tester, '/chat/main');
+    expect(find.textContaining('Stanza vocale aperta'), findsNothing);
+    await tester.tap(find.byTooltip('Stanza vocale'));
+    await tester.pumpAndSettle();
+    expect(inRoom(find.textContaining('Nessuno è in stanza')), findsOneWidget);
+    await tester.tap(find.text('Apri la stanza'));
+    await tester.pumpAndSettle();
+    expect(inRoom(find.text('Tu')), findsOneWidget);
+    expect(inRoom(find.textContaining('Aperta da te')), findsOneWidget);
+    await tester.tap(find.text('Esci'));
+    await tester.pumpAndSettle();
+    expect(room, findsNothing);
+    expect(find.text('Sei nella stanza vocale'), findsNothing);
+    expect(find.textContaining('Stanza vocale aperta'), findsNothing);
+  });
+
+  testWidgets('Tema chiaro: card, pulsante, stanza e striscia senza errori', (
+    tester,
+  ) async {
+    final container = await startAppAt(tester, todayAt(17));
+    await container.read(appearanceProvider.notifier).set(Appearance.chiaro);
+    await tester.pumpAndSettle();
+    await goToPath(tester, '/chat/milanac');
+    expect(
+      Theme.of(tester.element(find.text('Marco e Luca sono dentro'))).brightness,
+      Brightness.light,
+    );
+    expect(find.byTooltip('Stanza vocale'), findsOneWidget);
+
+    await tester.tap(find.text('Entra'));
+    await tester.pumpAndSettle();
+    // La stanza resta scura come nella tavola.
+    expect(
+      Theme.of(tester.element(find.text('Sta parlando'))).brightness,
+      Brightness.dark,
+    );
+    await tester.tap(
+      find.byTooltip('Riduci la stanza a una striscia e torna alla chat'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Sei nella stanza vocale'), findsOneWidget);
+    await tester.tap(find.byTooltip('Spegni il microfono'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Esci dalla stanza'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sei nella stanza vocale'), findsNothing);
+    expect(find.text(_cardMilan), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Esci mentre entra: niente sessione, motore o segni di vita '
       'lasciati aperti', (tester) async {
