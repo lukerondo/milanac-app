@@ -35,4 +35,18 @@ void main() {
       'Il bonus va da +1 a +5',
     );
   });
+
+  test('riferimento a un dato che non c\'è più: niente messaggio grezzo', () {
+    const fk = PostgrestException(
+      message:
+          'insert or update on table "matches" violates foreign key constraint '
+          '"matches_goalkeeper_id_fkey"',
+      code: '23503',
+    );
+    expect(
+      friendlyError(fk, action: 'Salvataggio non riuscito'),
+      'Salvataggio non riuscito: un elemento collegato non esiste più o è '
+      'ancora in uso. Aggiorna e riprova.',
+    );
+  });
 }

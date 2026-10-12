@@ -9,7 +9,8 @@
 --     giocatore uscito dal club non compare tra i titolari dell'annuncio.
 --  5) Classifica dei tornei e contatti social si salvano in una sola transazione.
 --  6) Nome, cognome e nascita li vedono solo l'interessato e il Direttivo (tabella a parte:
---     prima erano colonne di profiles, leggibili da ogni membro).
+--     prima erano colonne di profiles, leggibili da ogni membro); i profili di chi non è
+--     ancora entrato (con il nome dell'account) li vedono solo lui e il Direttivo.
 --  7) Nuovo ingresso nel club: avviso nella Sala Direttivo (e notifica al Direttivo).
 --  8) Tempo reale anche per classifica dei tornei, notizie, contatti del club, versioni del
 --     regolamento e dati anagrafici.
@@ -165,10 +166,10 @@ begin
     where s.match_id = m.id and s.kind = 'nero_oro'
       and not exists (select 1 from unnest(kept, reps) as k(pid, rep)
                       where k.pid = s.player_id and k.rep = s.reparto)
-    returning s.player_id, s.starts_at, s.ends_at, s.assigned_by
+    returning s.id, s.player_id, s.starts_at, s.ends_at
   )
   select coalesce(jsonb_object_agg(player_id, jsonb_build_object(
-           'starts_at', starts_at, 'ends_at', ends_at)), '{}'::jsonb)
+           'id', id, 'starts_at', starts_at, 'ends_at', ends_at)), '{}'::jsonb)
     into moved
   from gone where player_id = any(kept);
   for a in select * from jsonb_array_elements(p_awards) loop
@@ -184,10 +185,12 @@ begin
     if cid is not null then
       update special_cards set bonus = b, assigned_by = auth.uid() where id = cid;
     elsif prev is not null then
-      insert into special_cards (player_id, kind, reparto, bonus, reason, match_id, team,
+      -- Stessa carta (stesso id, l'app non la festeggia di nuovo) nel reparto nuovo.
+      insert into special_cards (id, player_id, kind, reparto, bonus, reason, match_id, team,
                                  assigned_by, starts_at, ends_at)
-      values (pid, 'nero_oro', rep, b, 'Carta della settimana', m.id, m.team, auth.uid(),
-              (prev->>'starts_at')::timestamptz, (prev->>'ends_at')::timestamptz);
+      values ((prev->>'id')::uuid, pid, 'nero_oro', rep, b, 'Carta della settimana', m.id,
+              m.team, auth.uid(), (prev->>'starts_at')::timestamptz,
+              (prev->>'ends_at')::timestamptz);
     else
       perform give_special_card(pid, 'nero_oro', rep, b, 'Carta della settimana', m.id, m.team);
       n := n + 1;
@@ -219,27 +222,33 @@ create trigger formations_server_time before update of published_at on public.fo
 
 -- Il portiere dell'ultima formazione PUBBLICATA (il posto 0 è il portiere in ogni modulo);
 -- per le formazioni pubblicate prima dei giocatori "congelati" vale ancora il posto POR.
+-- Solo se il suo profilo esiste ancora (chi ha eliminato l'account non si assegna).
 create or replace function public.formation_goalkeeper(p_team text) returns uuid
 language sql stable security definer set search_path = public as $$
-  select case when f.published_players is not null
-              then nullif(f.published_players->>'0', '')::uuid
-              else (select s.player_id from formation_slots s
-                    where s.formation_id = f.id and s.label = 'POR' limit 1) end
-  from formations f
-  where f.team = p_team and f.published_at is not null
-  order by f.published_at desc
-  limit 1
+  select p.id
+  from (select case when f.published_players is not null
+                    then nullif(f.published_players->>'0', '')::uuid
+                    else (select s.player_id from formation_slots s
+                          where s.formation_id = f.id and s.label = 'POR' limit 1) end as gk
+        from formations f
+        where f.team = p_team and f.published_at is not null
+        order by f.published_at desc
+        limit 1) last
+  join profiles p on p.id = last.gk
 $$;
 revoke all on function public.formation_goalkeeper(text) from public, anon, authenticated;
 
 -- Il portiere si ricava dalla formazione al primo risultato e ogni volta che si sceglie di
--- nuovo "dalla formazione" (portiere vuoto con il risultato già inserito).
+-- nuovo "dalla formazione" (portiere vuoto con il risultato già inserito). Se invece lo
+-- svuota il database perché quel portiere ha eliminato l'account (on delete set null), il
+-- suo profilo non c'è più: lo storico resta com'è, senza un portiere preso da oggi.
 create or replace function public.matches_before_write() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if new.goalkeeper_id is null and new.goals_for is not null and new.goals_against is not null
      and (tg_op = 'INSERT' or old.goals_for is null or old.goals_against is null
-          or old.goalkeeper_id is not null) then
+          or (old.goalkeeper_id is not null
+              and exists (select 1 from profiles where id = old.goalkeeper_id))) then
     new.goalkeeper_id := formation_goalkeeper(new.team);
   end if;
   return new;
@@ -457,6 +466,12 @@ begin
 end $$;
 revoke all on function public.complete_registration(text, text, int, text, text, text[], boolean, text, text[], text, int, text, jsonb) from public, anon;
 grant execute on function public.complete_registration(text, text, int, text, text, text[], boolean, text, text[], text, int, text, jsonb) to authenticated;
+
+-- Chi non è ancora entrato ha come nome quello dell'account (Google, Apple) o la parte
+-- della mail prima della @: il suo profilo lo vedono solo lui e il Direttivo.
+drop policy if exists "profili leggibili" on public.profiles;
+create policy "profili leggibili" on public.profiles for select
+  using (id = auth.uid() or is_direttivo() or (is_member() and club_role <> 'pending'));
 
 -- ---------------------------------------------------------------- 7) nuovo ingresso
 -- Chiunque abbia l'app può registrarsi ed entrare accettando il regolamento: il Direttivo lo

@@ -43,8 +43,10 @@ final rosaRepositoryProvider = Provider<RosaRepository>((ref) {
 });
 
 final rosaProvider = StreamProvider<List<Member>>((ref) {
-  // Al cambio di account si ricarica con i permessi del nuovo utente.
+  // Al cambio di account si ricarica con i permessi del nuovo utente; anche quando
+  // si entra o si esce dal Direttivo (i dati anagrafici degli altri li riceve solo lui).
   ref.watch(currentUserIdProvider);
+  ref.watch(profileProvider.select((p) => p.value?.isDirettivo ?? false));
   return ref.watch(rosaRepositoryProvider).watchAll();
 });
 

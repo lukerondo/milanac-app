@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -79,6 +81,39 @@ class _PresenzePageState extends ConsumerState<PresenzePage> {
 
   static int _tabOf(String? tab) => tab == 'statistiche' ? 1 : 0;
 
+  /// La pagina aperta senza un giorno chiesto segue oggi: tornando nell'app (per
+  /// esempio dalla notifica delle 18:00, dopo una notte con l'app in memoria) e, con
+  /// l'app aperta, passata la mezzanotte (controllo ogni minuto).
+  AppLifecycleListener? _lifecycle;
+  Timer? _midnight;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _backToToday);
+    _midnight = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _backToToday(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    _midnight?.cancel();
+    super.dispose();
+  }
+
+  void _backToToday() {
+    if (!mounted || widget.initialDay != null) return;
+    final today = _dayToOpen(null);
+    if (_day == today) return;
+    setState(() {
+      _day = today;
+      _focused = today;
+    });
+  }
+
   /// Il giorno chiesto dalla rotta (anche uno qualsiasi, da una notifica) dentro i limiti
   /// del calendario; senza richiesta, oggi in Italia.
   DateTime _dayToOpen(DateTime? requested) {
@@ -137,6 +172,12 @@ class _PresenzePageState extends ConsumerState<PresenzePage> {
     final now = ref.watch(clockProvider)();
     // Oggi in ora italiana, come sul server.
     final today = italianDay(now);
+    // Senza un giorno chiesto la pagina segue oggi: passata la mezzanotte con la pagina
+    // aperta si va al giorno nuovo (non resta "ieri", con le risposte già chiuse).
+    if (widget.initialDay == null && _day.isBefore(today)) {
+      _day = today;
+      _focused = today;
+    }
     final myTeams = me?.teams ?? const {Team.milanac};
     final canPickTeam = myTeams.length > 1 || (me?.isDirettivo ?? false);
     final team = _team ?? mainTeam(myTeams);

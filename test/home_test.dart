@@ -17,12 +17,18 @@ Future<ProviderContainer> startAppAt(
   WidgetTester tester,
   DateTime now, {
   List<Override> overrides = const [],
+
+  /// Orologio che cambia durante il test (al posto di [now] fisso).
+  DateTime Function()? clock,
 }) async {
   tester.view.physicalSize = const Size(1080, 2340);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
-    overrides: [clockProvider.overrideWithValue(() => now), ...overrides],
+    overrides: [
+      clockProvider.overrideWithValue(clock ?? () => now),
+      ...overrides,
+    ],
   );
   addTearDown(container.dispose);
   container.read(introDoneProvider.notifier).complete();

@@ -43,6 +43,11 @@ String friendlyError(Object e, {String action = 'Operazione non riuscita'}) {
       return '$action: non hai il permesso (o il tempo per farlo è scaduto).';
     }
     if (e.code == '23505') return '$action: esiste già.';
+    // Riferimento a qualcosa che non c'è più (o che altri dati usano ancora).
+    if (e.code == '23503') {
+      return '$action: un elemento collegato non esiste più o è ancora in uso. '
+          'Aggiorna e riprova.';
+    }
     // I limiti delle tabelle (check sulla lunghezza dei testi, numeri fuori misura):
     // il messaggio di Postgres è inglese e nomina solo il vincolo.
     if (e.code == '23514' || e.code == '22001' || e.code == '22003') {

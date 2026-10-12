@@ -78,6 +78,25 @@ void main() {
   });
 
   testWidgets(
+    'Classifica aggiornata da un altro telefono: si vede tornando sulla scheda '
+    'Partite da un\'altra scheda',
+    (tester) async {
+      final container = await startAppAt(tester, todayInItalyAt(17));
+      await goToSection(tester, 'Tornei');
+      expect(find.text('Dinamo Pixel'), findsOneWidget);
+      final server = container.read(tournamentsRepositoryProvider);
+      await server.saveStandings('tr1', const [
+        StandingRow(teamName: 'Atletico Virtuale', won: 3),
+      ]);
+      await tapTab(tester, 'Home');
+      await tapTab(tester, 'Partite');
+      await tester.pumpAndSettle();
+      expect(find.text('Atletico Virtuale'), findsOneWidget);
+      expect(find.text('Dinamo Pixel'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'Classifica aggiornata da un altro telefono: si vede al ritorno in '
     'primo piano, aprendo il torneo e trascinando in giù',
     (tester) async {
@@ -166,95 +185,104 @@ void main() {
     expect(saved.endsOn?.day, 20);
   });
 
-  testWidgets(
-    'Nuovo torneo: se la foto non parte, "Salva" di nuovo non crea un '
-    'doppione; la foto sostituita sparisce',
-    (tester) async {
-      final repo = _FlakyPhotos();
-      final container = await startAppAt(
-        tester,
-        todayInItalyAt(17),
-        overrides: [tournamentsRepositoryProvider.overrideWithValue(repo)],
-      );
-      // La galleria del telefono: restituisce un'immagine vera.
-      final dir = Directory.systemTemp.createTempSync('milanac_tornei');
-      addTearDown(() => dir.deleteSync(recursive: true));
-      final photo = File('${dir.path}/logo.png')..writeAsBytesSync(_png);
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+  testWidgets('Nuovo torneo: se la foto non parte, "Salva" di nuovo non crea un '
+      'doppione; la foto sostituita sparisce', (tester) async {
+    final repo = _FlakyPhotos();
+    final container = await startAppAt(
+      tester,
+      todayInItalyAt(17),
+      overrides: [tournamentsRepositoryProvider.overrideWithValue(repo)],
+    );
+    // La galleria del telefono: restituisce un'immagine vera.
+    final dir = Directory.systemTemp.createTempSync('milanac_tornei');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final photo = File('${dir.path}/logo.png')..writeAsBytesSync(_png);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/image_picker'),
+      (call) async => photo.path,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('plugins.flutter.io/image_picker'),
-        (call) async => photo.path,
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/image_picker'),
-          null,
-        ),
-      );
-      Future<void> pickPhoto(String label) async {
-        await tester.ensureVisible(find.text(label));
-        await tester.pumpAndSettle();
-        // Il file si legge davvero dal disco: fuori dal tempo finto dei test.
-        await tester.runAsync(() async {
-          await tester.tap(find.text(label));
-          await Future<void>.delayed(const Duration(milliseconds: 200));
-        });
-        await tester.pump();
-      }
-
-      Future<void> save() async {
-        await tester.ensureVisible(find.text('Salva torneo'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Salva torneo'));
-        await tester.pumpAndSettle();
-      }
-
-      List<Tournament> named(String name) => [
-        for (final t in container.read(tournamentsProvider).value!)
-          if (t.name == name) t,
-      ];
-
-      await goToSection(tester, 'Tornei');
-      await tester.tap(find.text('Nuovo torneo'));
+        null,
+      ),
+    );
+    // Le immagini caricate dai byte (anteprima della foto scelta compresa).
+    final previews = find.byWidgetPredicate(
+      (w) => w is Image && w.image is MemoryImage,
+    );
+    Future<void> pickPhoto(String label) async {
+      await tester.ensureVisible(find.text(label));
       await tester.pumpAndSettle();
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Nome del torneo'),
-        'Coppa Lombardia',
-      );
-      await pickPhoto('Foto o logo del torneo');
-      repo.failUploads = 1;
-      await save();
-      expect(find.textContaining('Nessuna connessione'), findsOneWidget);
-      expect(named('Coppa Lombardia'), hasLength(1));
-      // Il messaggio sparisce da solo.
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
-
-      // Di nuovo: lo stesso torneo, con la foto.
-      await save();
+      final before = previews.evaluate().length;
+      // Il file si legge davvero dal disco, fuori dal tempo finto dei test: si
+      // aspetta l'anteprima nuova (fino a 5 secondi, con il computer carico può
+      // tardare) invece di un'attesa fissa.
+      await tester.runAsync(() async {
+        await tester.tap(find.text(label));
+        for (var i = 0; i < 100; i++) {
+          if (previews.evaluate().length > before) break;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump();
+        }
+      });
+      await tester.pump();
       expect(
-        find.text('Nuovo torneo'),
-        findsOneWidget,
-        reason: 'foglio chiuso',
+        previews.evaluate().length,
+        greaterThan(before),
+        reason: 'foto scelta',
       );
-      final created = named('Coppa Lombardia');
-      expect(created, hasLength(1));
-      final first = created.single.imagePath!;
-      expect(demoTournamentPhotos, contains(first));
+    }
 
-      // Foto cambiata: la vecchia si toglie, a torneo aggiornato.
-      await tester.tap(find.text('COPPA LOMBARDIA'));
+    Future<void> save() async {
+      await tester.ensureVisible(find.text('Salva torneo'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Modifica torneo'));
+      await tester.tap(find.text('Salva torneo'));
       await tester.pumpAndSettle();
-      await pickPhoto('Cambia foto o logo');
-      await save();
-      final second = named('Coppa Lombardia').single.imagePath!;
-      expect(second, isNot(first));
-      expect(demoTournamentPhotos, contains(second));
-      expect(demoTournamentPhotos, isNot(contains(first)));
-      demoTournamentPhotos.remove(second);
-    },
-  );
+    }
+
+    List<Tournament> named(String name) => [
+      for (final t in container.read(tournamentsProvider).value!)
+        if (t.name == name) t,
+    ];
+
+    await goToSection(tester, 'Tornei');
+    await tester.tap(find.text('Nuovo torneo'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nome del torneo'),
+      'Coppa Lombardia',
+    );
+    await pickPhoto('Foto o logo del torneo');
+    repo.failUploads = 1;
+    await save();
+    expect(find.textContaining('Nessuna connessione'), findsOneWidget);
+    expect(named('Coppa Lombardia'), hasLength(1));
+    // Il messaggio sparisce da solo.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    // Di nuovo: lo stesso torneo, con la foto.
+    await save();
+    expect(find.text('Nuovo torneo'), findsOneWidget, reason: 'foglio chiuso');
+    final created = named('Coppa Lombardia');
+    expect(created, hasLength(1));
+    final first = created.single.imagePath!;
+    expect(demoTournamentPhotos, contains(first));
+
+    // Foto cambiata: la vecchia si toglie, a torneo aggiornato.
+    await tester.tap(find.text('COPPA LOMBARDIA'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Modifica torneo'));
+    await tester.pumpAndSettle();
+    await pickPhoto('Cambia foto o logo');
+    await save();
+    final second = named('Coppa Lombardia').single.imagePath!;
+    expect(second, isNot(first));
+    expect(demoTournamentPhotos, contains(second));
+    expect(demoTournamentPhotos, isNot(contains(first)));
+    demoTournamentPhotos.remove(second);
+  });
 }
 
 /// Tornei della demo con il caricamento della foto che non riesce per [failUploads]

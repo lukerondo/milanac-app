@@ -44,88 +44,92 @@ class _NewsListState extends ConsumerState<NewsList> {
     final platform = ref.watch(profileProvider).value?.platform;
     final p = context.pal;
 
-    return RefreshIndicator(
-      // Un aggiornamento fallito lo mostra la pagina (striscia o "Riprova").
-      onRefresh: () =>
-          ref.refresh(newsProvider.future).then((_) {}, onError: (_) {}),
-      child: AsyncView(
-        value: news,
-        onRetry: () => ref.invalidate(newsProvider),
-        action: 'Impossibile caricare le notizie',
-        data: (items) {
-          final filtered = _category == 'tutte'
-              ? items
-              : items.where((n) => n.category == _category).toList();
-          final now = DateTime.now();
-          // Da fare prima della partita: l'ultimo aggiornamento del gioco e quello
-          // della console (la propria, se l'ha indicata nel profilo).
-          final todo = _category != 'tutte'
-              ? const <NewsItem>[]
-              : [
-                  ?items
-                      .where((n) => n.isGameUpdate && n.isRecent(now))
-                      .firstOrNull,
-                  ?items
-                      .where(
-                        (n) =>
-                            n.isConsoleUpdate &&
-                            n.isRecent(now) &&
-                            (platform == null || n.platform == platform),
-                      )
-                      .firstOrNull,
-                ];
+    // Tornando sulla scheda Club (Mondo resta in memoria) le notizie si rileggono.
+    return OnVisible(
+      onVisible: () => ref.invalidate(newsProvider),
+      child: RefreshIndicator(
+        // Un aggiornamento fallito lo mostra la pagina (striscia o "Riprova").
+        onRefresh: () =>
+            ref.refresh(newsProvider.future).then((_) {}, onError: (_) {}),
+        child: AsyncView(
+          value: news,
+          onRetry: () => ref.invalidate(newsProvider),
+          action: 'Impossibile caricare le notizie',
+          data: (items) {
+            final filtered = _category == 'tutte'
+                ? items
+                : items.where((n) => n.category == _category).toList();
+            final now = DateTime.now();
+            // Da fare prima della partita: l'ultimo aggiornamento del gioco e quello
+            // della console (la propria, se l'ha indicata nel profilo).
+            final todo = _category != 'tutte'
+                ? const <NewsItem>[]
+                : [
+                    ?items
+                        .where((n) => n.isGameUpdate && n.isRecent(now))
+                        .firstOrNull,
+                    ?items
+                        .where(
+                          (n) =>
+                              n.isConsoleUpdate &&
+                              n.isRecent(now) &&
+                              (platform == null || n.platform == platform),
+                        )
+                        .firstOrNull,
+                  ];
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final c in newsCategories.entries)
-                    FilterPill(
-                      label: c.value,
-                      selected: _category == c.key,
-                      onTap: () => setState(() => _category = c.key),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (todo.isNotEmpty) ...[
-                const SectionLabel('Da fare prima della partita'),
-                const SizedBox(height: 10),
-                for (final n in todo)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: UpdateBanner(item: n),
-                  ),
-                const SizedBox(height: 8),
-              ],
-              const SectionLabel('Notizie'),
-              const SizedBox(height: 10),
-              if (filtered.isEmpty)
-                AppCard(
-                  child: Text(
-                    'Nessuna notizia in questa categoria.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 15, color: p.textMuted),
-                  ),
-                )
-              else
-                AppCard(
-                  padding: EdgeInsets.zero,
-                  child: Column(
-                    children: [
-                      for (final (i, n) in filtered.indexed) ...[
-                        if (i > 0) const Divider(indent: 16, endIndent: 16),
-                        NewsCard(item: n),
-                      ],
-                    ],
-                  ),
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final c in newsCategories.entries)
+                      FilterPill(
+                        label: c.value,
+                        selected: _category == c.key,
+                        onTap: () => setState(() => _category = c.key),
+                      ),
+                  ],
                 ),
-            ],
-          );
-        },
+                const SizedBox(height: 16),
+                if (todo.isNotEmpty) ...[
+                  const SectionLabel('Da fare prima della partita'),
+                  const SizedBox(height: 10),
+                  for (final n in todo)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: UpdateBanner(item: n),
+                    ),
+                  const SizedBox(height: 8),
+                ],
+                const SectionLabel('Notizie'),
+                const SizedBox(height: 10),
+                if (filtered.isEmpty)
+                  AppCard(
+                    child: Text(
+                      'Nessuna notizia in questa categoria.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 15, color: p.textMuted),
+                    ),
+                  )
+                else
+                  AppCard(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      children: [
+                        for (final (i, n) in filtered.indexed) ...[
+                          if (i > 0) const Divider(indent: 16, endIndent: 16),
+                          NewsCard(item: n),
+                        ],
+                      ],
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

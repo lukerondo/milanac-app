@@ -110,7 +110,8 @@ class _MatchScaffold extends ConsumerWidget {
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final ok = await _confirm(
       context,
-      'Eliminare la partita e tutti i suoi media?',
+      'Eliminare la partita con i suoi media e le carte speciali che ha '
+      'assegnato?',
     );
     if (ok != true || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);

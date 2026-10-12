@@ -334,7 +334,8 @@ class DemoSpecialCardsRepository extends SpecialCardsRepository {
   }
 
   /// Come `assign_special_cards` del database: un giocatore riceve una sola carta,
-  /// un reparto ne ha una sola; chi cambia reparto riceve una carta nuova.
+  /// un reparto ne ha una sola; chi cambia reparto (o bonus) tiene la sua carta, con
+  /// le stesse date e senza nuovi avvisi.
   @override
   Future<int> assign(ClubMatch match, List<CardAward> awards) async {
     final players = <String>{};
@@ -347,12 +348,11 @@ class DemoSpecialCardsRepository extends SpecialCardsRepository {
         throw AppError('Una sola carta nero/oro per reparto (${a.reparto})');
       }
     }
-    final kept = {for (final a in awards) (a.playerId, a.reparto)};
     _cards.removeWhere(
       (c) =>
           c.matchId == match.id &&
           c.kind == CardSpecial.neroOro &&
-          !kept.contains((c.playerId, c.reparto)),
+          !players.contains(c.playerId),
     );
     final now = DateTime.now();
     var added = 0;
@@ -365,7 +365,7 @@ class DemoSpecialCardsRepository extends SpecialCardsRepository {
         (c) => same(c) && c.kind == CardSpecial.neroOro,
       );
       if (i >= 0) {
-        _cards[i] = _cards[i].copyWith(bonus: a.bonus);
+        _cards[i] = _cards[i].copyWith(bonus: a.bonus, reparto: a.reparto);
       } else {
         _cards.add(
           SpecialCard(

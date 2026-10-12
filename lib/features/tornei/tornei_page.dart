@@ -40,57 +40,62 @@ class TorneiPage extends ConsumerWidget {
               label: const Text('Nuovo torneo'),
             )
           : null,
-      body: AsyncView(
-        value: tournaments,
-        onRetry: () => ref.invalidate(tournamentsProvider),
-        data: (all) {
-          final current =
-              all.where((t) => t.status != TournamentStatus.concluso).toList()
-                ..sort(
-                  (a, b) => _order
-                      .indexOf(a.status)
-                      .compareTo(_order.indexOf(b.status)),
-                );
-          final done = all
-              .where((t) => t.status == TournamentStatus.concluso)
-              .toList();
-          return RefreshIndicator(
-            onRefresh: () => _refreshStandings(ref, current),
-            child: ListView(
-              // Si trascina in giù anche con pochi tornei.
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              children: [
-                if (all.isEmpty)
-                  AppCard(
-                    child: Text(
-                      'Nessun torneo registrato.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: context.pal.textMuted,
+      // Tornando sulla scheda Partite le classifiche si rileggono (non arrivano in tempo
+      // reale prima della migrazione 0025).
+      body: OnVisible(
+        onVisible: () => ref.invalidate(standingsProvider),
+        child: AsyncView(
+          value: tournaments,
+          onRetry: () => ref.invalidate(tournamentsProvider),
+          data: (all) {
+            final current =
+                all.where((t) => t.status != TournamentStatus.concluso).toList()
+                  ..sort(
+                    (a, b) => _order
+                        .indexOf(a.status)
+                        .compareTo(_order.indexOf(b.status)),
+                  );
+            final done = all
+                .where((t) => t.status == TournamentStatus.concluso)
+                .toList();
+            return RefreshIndicator(
+              onRefresh: () => _refreshStandings(ref, current),
+              child: ListView(
+                // Si trascina in giù anche con pochi tornei.
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                children: [
+                  if (all.isEmpty)
+                    AppCard(
+                      child: Text(
+                        'Nessun torneo registrato.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: context.pal.textMuted,
+                        ),
                       ),
                     ),
-                  ),
-                for (final t in current)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: _TournamentCard(tournament: t),
-                  ),
-                if (done.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  const SectionLabel('Conclusi'),
-                  const SizedBox(height: 10),
-                  for (final t in done)
+                  for (final t in current)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: _TournamentCard(tournament: t),
                     ),
+                  if (done.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    const SectionLabel('Conclusi'),
+                    const SizedBox(height: 10),
+                    for (final t in done)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: _TournamentCard(tournament: t),
+                      ),
+                  ],
                 ],
-              ],
-            ),
-          );
-        },
+              ),
+            );
+          },
+        ),
       ),
     );
   }

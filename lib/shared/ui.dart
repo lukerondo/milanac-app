@@ -315,3 +315,34 @@ class IconTile extends StatelessWidget {
     );
   }
 }
+
+/// Chiama [onVisible] quando [child] torna a vedersi dopo essere stato nascosto: le
+/// schede della barra in basso restano vive in memoria mentre se ne guarda un'altra, e
+/// i dati che non arrivano in tempo reale si rileggono al ritorno (come la Formazione).
+class OnVisible extends StatefulWidget {
+  const OnVisible({super.key, required this.onVisible, required this.child});
+  final VoidCallback onVisible;
+  final Widget child;
+
+  @override
+  State<OnVisible> createState() => _OnVisibleState();
+}
+
+class _OnVisibleState extends State<OnVisible> {
+  bool _visible = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = TickerMode.valuesOf(context).enabled;
+    if (visible && !_visible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onVisible();
+      });
+    }
+    _visible = visible;
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}

@@ -88,7 +88,7 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
         title: const Text('Pubblicare la nuova versione?'),
         content: const Text(
           'Tutti i membri riceveranno la notifica e dovranno leggere e accettare '
-          'di nuovo il regolamento al prossimo accesso.',
+          'di nuovo il regolamento: chi ha l\'app aperta lo vede subito.',
         ),
         actions: [
           TextButton(

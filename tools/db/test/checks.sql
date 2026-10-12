@@ -1372,6 +1372,9 @@ end $$;
 reset role;
 update special_cards set starts_at = now() - interval '2 days', ends_at = now() + interval '5 days'
   where match_id = '00000000-0000-0000-0000-0000000000b3' and kind = 'nero_oro';
+select set_config('test.carta_e1', (select id::text from special_cards
+  where match_id = '00000000-0000-0000-0000-0000000000b3' and kind = 'nero_oro'
+    and player_id = '00000000-0000-0000-0000-0000000000e1'), false);
 delete from net.calls;
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
@@ -1382,6 +1385,9 @@ reset role;
 do $$ begin
   assert (select reparto from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
           and kind = 'nero_oro' and player_id = '00000000-0000-0000-0000-0000000000e1') = 'DIF', 'reparto cambiato';
+  assert (select id::text from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
+          and kind = 'nero_oro' and player_id = '00000000-0000-0000-0000-0000000000e1')
+         = current_setting('test.carta_e1'), 'stessa carta (l''app non la festeggia di nuovo)';
   assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
           and kind = 'nero_oro' and starts_at < now() - interval '1 day') = 2, 'stesse date di prima';
   assert (select bonus from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
@@ -1539,4 +1545,63 @@ do $$ begin
          = 'Nuovo ingresso: NUOVO (Nuovo Arrivato) · Giocatore · Milan AC Futuro · DC. Se non lo conoscete, toglietelo dalla Rosa.',
     'avviso con nome, ruolo e squadra';
   assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 1, 'e la notifica al Direttivo';
+end $$;
+
+-- Profili di chi non è ancora entrato (nome dell'account o della mail): solo lui e il Direttivo.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert (select count(*) from profiles where club_role = 'pending') = 0,
+    'un giocatore non vede chi è ancora in attesa';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select count(*) from profiles where club_role = 'pending') >= 1, 'il Direttivo sì';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  assert (select count(*) from profiles) = 1, 'chi è in attesa vede solo sé stesso';
+end $$;
+reset role;
+select pg_temp.as_user(null);
+
+-- Un portiere elimina l'account: lo storico delle sue partite non prende il portiere della
+-- formazione di oggi, l'eliminazione riesce e non nascono carte.
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ac', 'portiere@example.com');
+update profiles set club_role = 'giocatore', display_name = 'PORTIERE', teams = array['futuro'],
+  field_position = 'POR' where id = '00000000-0000-0000-0000-0000000000ac';
+update formations set published_at = now() + interval '1 minute',
+  published_players = '{"0": "00000000-0000-0000-0000-0000000000e2"}'
+  where id = current_setting('test.formazione')::uuid;
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against, goalkeeper_id) values
+  ('00000000-0000-0000-0000-0000000000f7', 'torneo', 'Lince', now() + interval '40 days', 'futuro', 1, 0,
+   '00000000-0000-0000-0000-0000000000ac'),
+  ('00000000-0000-0000-0000-0000000000f8', 'torneo', 'Tigre', now() + interval '41 days', 'futuro', 1, 0,
+   '00000000-0000-0000-0000-0000000000ac');
+delete from net.calls;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000ac');
+select delete_my_account();
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert not exists (select 1 from profiles where id = '00000000-0000-0000-0000-0000000000ac'), 'account eliminato';
+  assert (select count(*) from matches where id in ('00000000-0000-0000-0000-0000000000f7',
+          '00000000-0000-0000-0000-0000000000f8') and goalkeeper_id is null) = 2,
+    'le sue partite restano senza portiere (non quello della formazione di oggi)';
+  assert (select count(*) from net.calls where body->>'kind' = 'special_card') = 0, 'nessuna carta nuova';
+end $$;
+-- Il portiere della formazione pubblicata non c'è più: i risultati si salvano senza.
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ae', 'secondo@example.com');
+update profiles set club_role = 'giocatore', display_name = 'SECONDO', teams = array['futuro']
+  where id = '00000000-0000-0000-0000-0000000000ae';
+update formations set published_at = now() + interval '2 minutes',
+  published_players = '{"0": "00000000-0000-0000-0000-0000000000ae"}'
+  where id = current_setting('test.formazione')::uuid;
+delete from auth.users where id = '00000000-0000-0000-0000-0000000000ae';
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against)
+values ('00000000-0000-0000-0000-0000000000f9', 'amichevole', 'Puma', now() + interval '42 days', 'futuro', 2, 2);
+do $$ begin
+  assert (select goalkeeper_id from matches where id = '00000000-0000-0000-0000-0000000000f9') is null,
+    'risultato salvato senza portiere';
 end $$;

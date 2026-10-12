@@ -24,6 +24,9 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter analyze
+      # Codice impaginato come lo vuole `dart format` (lo stesso comando in locale lo sistema).
+      - name: Formattazione
+        run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter test
       - name: Test raccoglitore notizie
         run: python3 -m unittest discover -s tools/news_fetcher/tests

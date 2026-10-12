@@ -438,6 +438,24 @@ void main() {
     },
   );
 
+  testWidgets('passata la mezzanotte, il promemoria delle 18:00 apre il giorno '
+      'nuovo', (tester) async {
+    var now = italyAt(2026, 10, 12, 23, 50);
+    final container = await startAppAt(tester, now, clock: () => now);
+    await goToSection(tester, 'Presenze');
+    expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+
+    // L'app resta aperta (o in memoria) fino al giorno dopo; la notifica riporta alla
+    // stessa rotta.
+    now = italyAt(2026, 10, 13, 18);
+    await tester.pump(const Duration(minutes: 1));
+    container.read(routerProvider).go('/presenze');
+    await tester.pumpAndSettle();
+    expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+    expect(find.text('LUNEDÌ 12 OTTOBRE · MILAN AC'), findsNothing);
+    expect(find.text('La tua risposta, entro le 18:30'), findsOneWidget);
+  });
+
   testWidgets('giorno chiesto fuori dal calendario: si apre il più vicino', (
     tester,
   ) async {

@@ -115,7 +115,7 @@ void main() {
   );
 
   test('assegnazione (demo come il server): un giocatore, una carta; '
-      'il cambio di reparto dà una carta nuova', () async {
+      'chi cambia reparto tiene la sua carta', () async {
     final repo = DemoSpecialCardsRepository();
     addTearDown(repo.dispose);
     await expectLater(
@@ -154,19 +154,30 @@ void main() {
       ]),
       0,
     );
-    // Scambio di reparto: due carte nuove, le vecchie spariscono.
+    final before = {
+      for (final c in await repo.watchAll().first)
+        if (c.matchId == 'm2') c.playerId: c,
+    };
+    // Scambio di reparto: le stesse carte (stesso id, stesse date), nessuna nuova.
     expect(
       await repo.assign(_brianza, const [
         CardAward(playerId: 'p6', reparto: 'POR'),
         CardAward(playerId: 'p4', reparto: 'CEN'),
       ]),
-      2,
+      0,
     );
-    final mine = (await repo.watchAll().first)
-        .where((c) => c.matchId == 'm2')
-        .map((c) => '${c.playerId}:${c.reparto}')
-        .toSet();
-    expect(mine, {'p6:POR', 'p4:CEN'});
+    final after = [
+      for (final c in await repo.watchAll().first)
+        if (c.matchId == 'm2') c,
+    ];
+    expect(
+      {for (final c in after) '${c.playerId}:${c.reparto}'},
+      {'p6:POR', 'p4:CEN'},
+    );
+    for (final c in after) {
+      expect(c.id, before[c.playerId]!.id);
+      expect(c.startsAt, before[c.playerId]!.startsAt);
+    }
   });
 
   testWidgets('Assegnazione: le carte già date si leggono solo quando arrivano '
