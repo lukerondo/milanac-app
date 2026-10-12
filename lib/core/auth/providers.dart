@@ -5,6 +5,7 @@ import '../../features/intro/intro_state.dart';
 import '../config.dart';
 import '../push/push_service.dart';
 import 'auth_repository.dart';
+import 'private_data.dart';
 import 'profile.dart';
 
 final supabaseProvider = Provider<SupabaseClient>(
@@ -101,17 +102,24 @@ class DemoProfile extends Notifier<Profile> {
 }
 
 /// Profilo del club dell'utente loggato, aggiornato in tempo reale
-/// (registrazione completata, regolamento accettato, ruolo assegnato).
+/// (registrazione completata, regolamento accettato, ruolo assegnato), con i propri
+/// dati anagrafici (`profile_private`).
 final profileProvider = StreamProvider<Profile?>((ref) {
   if (AppConfig.isDemo) return Stream.value(ref.watch(demoProfileProvider));
   final userId = ref.watch(currentUserIdProvider);
   if (userId == null) return Stream.value(null);
-  return ref
-      .watch(supabaseProvider)
+  final client = ref.watch(supabaseProvider);
+  final profile = client
       .from('profiles')
       .stream(primaryKey: ['id'])
-      .eq('id', userId)
-      .map((rows) => rows.isEmpty ? null : Profile.fromMap(rows.first));
+      .eq('id', userId);
+  return combineLatest(
+    profile,
+    watchPrivateRows(client, id: userId),
+    (rows, private) => rows.isEmpty
+        ? null
+        : Profile.fromMap(withPrivateRow(rows.first, private[userId])),
+  );
 });
 
 extension _StartWith<T> on Stream<T> {
