@@ -74,6 +74,8 @@ class ClubPage extends ConsumerWidget {
       children: [
         AppCard(
           hero: true,
+          borderColor: p.isDark ? p.importantBorder : null,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
               Image.asset('assets/images/stemma_256.png', height: 64),
