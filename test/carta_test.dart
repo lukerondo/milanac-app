@@ -174,23 +174,6 @@ void main() {
     expect(afterMidnight.presence, 67);
   });
 
-  test('ora italiana: ora solare e ora legale', () {
-    // Ora solare (UTC+1).
-    expect(italianDay(DateTime.utc(2026, 1, 10, 22, 59)), DateTime(2026, 1, 10));
-    expect(italianDay(DateTime.utc(2026, 1, 10, 23)), DateTime(2026, 1, 11));
-    // L'ora legale comincia il 29 marzo 2026 alle 01:00 UTC.
-    expect(italianDay(DateTime.utc(2026, 3, 28, 23, 30)), DateTime(2026, 3, 29));
-    expect(italianDay(DateTime.utc(2026, 3, 29, 21, 59)), DateTime(2026, 3, 29));
-    expect(italianDay(DateTime.utc(2026, 3, 29, 22)), DateTime(2026, 3, 30));
-    // Ora legale (UTC+2).
-    expect(italianDay(DateTime.utc(2026, 7, 1, 21, 59)), DateTime(2026, 7, 1));
-    expect(italianDay(DateTime.utc(2026, 7, 1, 22)), DateTime(2026, 7, 2));
-    // Finisce il 25 ottobre 2026 alle 01:00 UTC.
-    expect(italianDay(DateTime.utc(2026, 10, 24, 22, 30)), DateTime(2026, 10, 25));
-    expect(italianDay(DateTime.utc(2026, 10, 25, 22, 30)), DateTime(2026, 10, 25));
-    expect(italianDay(DateTime.utc(2026, 10, 25, 23)), DateTime(2026, 10, 26));
-  });
-
   test('traguardi: i numeri si ricaricano con una carta nuova o una presenza', () async {
     final stats = _CountingStats();
     final container = ProviderContainer(

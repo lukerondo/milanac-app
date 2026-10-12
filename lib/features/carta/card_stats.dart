@@ -1,4 +1,5 @@
 import '../../core/auth/profile.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../presenze/attendance.dart';
 import '../risultati/match.dart';
@@ -45,14 +46,7 @@ class CardStats {
     final today = now ?? DateTime.now();
     // Le risposte date in anticipo per i giorni che devono ancora venire non
     // contano: solo fino a oggi in ora italiana, come sul server.
-    final until = italianDay(today);
-    final mine = attendance
-        .where(
-          (e) =>
-              e.playerId == m.id &&
-              !DateTime(e.date.year, e.date.month, e.date.day).isAfter(until),
-        )
-        .toList();
+    final mine = historyOf(m.id, attendance, italianDay(today));
     final stats = AttendanceStats(mine);
     final came = stats.present + stats.late;
     final months =
@@ -75,21 +69,6 @@ class CardStats {
           : (record.wins / record.played * 100).round(),
     );
   }
-}
-
-/// Il giorno di calendario in Italia (Europe/Rome) nell'istante [t], senza ora (come
-/// le date delle presenze): ora solare UTC+1, ora legale UTC+2 dall'ultima domenica
-/// di marzo all'ultima di ottobre (il cambio è alle 01:00 UTC).
-DateTime italianDay(DateTime t) {
-  final utc = t.toUtc();
-  DateTime lastSunday(int month) {
-    final last = DateTime.utc(utc.year, month + 1, 0);
-    return DateTime.utc(utc.year, month, last.day - last.weekday % 7, 1);
-  }
-
-  final summer = !utc.isBefore(lastSunday(3)) && utc.isBefore(lastSunday(10));
-  final it = utc.add(Duration(hours: summer ? 2 : 1));
-  return DateTime(it.year, it.month, it.day);
 }
 
 /// Gol di [m] nelle partite giocate dalle sue squadre: in ogni partita i marcatori si

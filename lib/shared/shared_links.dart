@@ -6,7 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/auth/providers.dart';
 import '../core/config.dart';
-import '../core/push/push_service.dart' show messengerKey;
+import '../core/push/push_service.dart' show showAppMessage;
 
 /// Sezioni che usano i link condivisi (tabella `shared_links`):
 /// la colonna sonora e i video dei creator di Mondo Proclub.
@@ -285,11 +285,7 @@ Future<bool> openExternalLink(
       ok = false;
     }
   }
-  if (!ok) {
-    messengerKey.currentState?.showSnackBar(
-      const SnackBar(content: Text('Impossibile aprire il link.')),
-    );
-  }
+  if (!ok) showAppMessage('Impossibile aprire il link.');
   return ok;
 }
 
