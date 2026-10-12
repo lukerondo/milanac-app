@@ -165,12 +165,14 @@ accettano al primo accesso successivo.
     notturna). Il **replay della lavagna** arriva come riquadro con il campo e il pulsante
     Play: si riproduce nell'app (audio più mosse, pochi KB, non è un video) e scade dopo 3
     giorni. Non letti, canali silenziabili, notifiche. **Stanza vocale** (Agora): le cuffie
-    nella barra di ogni canale aprono il foglio della stanza: chi c'è (volto, cerchio verde su
-    chi parla, microfono barrato su chi è in muto), *Entra* o *Apri la stanza*, microfono,
-    vivavoce, *Esci*. Chi apre la stanza avvisa i membri del canale (la notifica apre la chat
-    con il foglio già aperto); sotto la barra il banner "Stanza vocale aperta · N dentro" e,
-    durante la chiamata, cronometro, microfono ed esci sempre a portata di dito (si può
-    cambiare pagina senza uscire). La stanza si chiude quando esce l'ultimo o dopo 3 minuti
+    nella barra di ogni canale aprono la stanza a schermo intero (sempre scura): chi c'è
+    (volto, bordo e alone d'oro su chi parla, microfono barrato su chi è in muto, "In
+    ascolto"), *Entra* o *Apri la stanza*, microfono, vivavoce, *Esci*; la freccia giù la
+    riduce a una striscia. Chi apre la stanza avvisa i membri del canale (la notifica apre la
+    chat con la stanza già aperta); sotto la barra la card "Stanza vocale aperta · canale —
+    Marco e Luca sono dentro — Entra" e, durante la chiamata, la striscia con cronometro,
+    microfono ed esci sempre a portata di dito (un tocco riapre la stanza; si può cambiare
+    pagina senza uscire). La stanza si chiude quando esce l'ultimo o dopo 3 minuti
     senza segni di vita dell'app. Sul web la stanza non è disponibile.
 16. **Tornei** – foto o logo (caricati dal Direttivo), link al sito, squadra, stato,
     classifica facoltativa compilata dal Direttivo, partite collegate.

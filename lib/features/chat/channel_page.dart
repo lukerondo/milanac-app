@@ -33,7 +33,7 @@ class ChannelPage extends ConsumerWidget {
   const ChannelPage({super.key, required this.slug, this.openVoice = false});
   final String slug;
 
-  /// Apre subito il foglio della stanza vocale (dalla notifica "stanza aperta").
+  /// Apre subito la stanza vocale (dalla notifica "stanza aperta").
   final bool openVoice;
 
   static void _exit(BuildContext context) =>
