@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../core/config.dart';
 import '../../core/theme.dart';
 import 'intro_state.dart';
 
@@ -32,7 +33,8 @@ class _IntroPageState extends ConsumerState<IntroPage>
           ..addStatusListener((s) {
             if (s == AnimationStatus.completed) _finish();
           });
-    _start();
+    // Build senza configurazione: l'intro resta ferma sull'errore.
+    if (!AppConfig.isMisconfigured) _start();
   }
 
   Future<void> _start() async {
@@ -64,7 +66,10 @@ class _IntroPageState extends ConsumerState<IntroPage>
     }
   }
 
-  void _finish() => ref.read(introDoneProvider.notifier).complete();
+  void _finish() {
+    if (AppConfig.isMisconfigured) return;
+    ref.read(introDoneProvider.notifier).complete();
+  }
 
   @override
   void dispose() {
@@ -75,7 +80,11 @@ class _IntroPageState extends ConsumerState<IntroPage>
 
   @override
   Widget build(BuildContext context) {
+    if (AppConfig.isMisconfigured) return const _ConfigError();
     final video = _video;
+    // Intro finita (o saltata) ma la pagina è ancora qui: si aspetta il profilo dal
+    // server, il router prosegue da solo appena arriva.
+    final waiting = ref.watch(introDoneProvider);
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
@@ -122,15 +131,25 @@ class _IntroPageState extends ConsumerState<IntroPage>
                     ),
                     const SizedBox(height: 4),
                     TextButton.icon(
-                      onPressed: _finish,
+                      onPressed: waiting ? null : _finish,
                       style: TextButton.styleFrom(
                         foregroundColor: Colors.white70,
+                        disabledForegroundColor: Colors.white70,
                         minimumSize: const Size(120, 44),
                       ),
-                      icon: const Icon(Icons.skip_next_rounded),
-                      label: const Text(
-                        'SALTA',
-                        style: TextStyle(
+                      icon: waiting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white70,
+                              ),
+                            )
+                          : const Icon(Icons.skip_next_rounded),
+                      label: Text(
+                        waiting ? 'UN ATTIMO…' : 'SALTA',
+                        style: const TextStyle(
                           fontFamily: sportFont,
                           fontSize: 15,
                           letterSpacing: 2,
@@ -146,6 +165,47 @@ class _IntroPageState extends ConsumerState<IntroPage>
       ),
     );
   }
+}
+
+/// Build di release compilata senza le chiavi del server: niente demo, solo l'errore.
+class _ConfigError extends StatelessWidget {
+  const _ConfigError();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.black,
+    body: SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset('assets/images/stemma_256.png', height: 96),
+              const SizedBox(height: 20),
+              const Text(
+                'APP NON CONFIGURATA',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: sportFont,
+                  fontSize: 20,
+                  letterSpacing: 2,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Questa versione è stata compilata senza il collegamento al server '
+                'del club (manca env/prod.json). Installa la versione ufficiale.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /// Riquadro scuro arrotondato con lo stemma a sinistra e la barra di caricamento.
