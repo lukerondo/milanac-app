@@ -8,6 +8,7 @@ import '../core/teams.dart';
 import '../core/theme.dart';
 import '../features/chat/chat_repository.dart';
 import '../features/musica/musica_page.dart';
+import '../features/musica/soundtrack.dart';
 import '../features/rosa/rosa_repository.dart';
 import '../features/walkout/celebrations.dart';
 import 'member_photo.dart';
@@ -113,8 +114,17 @@ class SectionFrame extends ConsumerWidget {
           title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
           actions: [
             ...actions,
-            const SoundtrackButton(),
-            const ProfileButton(),
+            // Il muto della colonna sonora resta sempre in alto (se c'è un brano).
+            if (ref.watch(soundtrackProvider.select((s) => s.hasTrack)))
+              const SoundtrackButton(),
+            if (section.tab == MainTab.home && isTabRoot)
+              IconButton(
+                tooltip: 'Notifiche',
+                icon: const Icon(Icons.notifications_none_rounded),
+                onPressed: () =>
+                    context.push('/impostazioni?sezione=notifiche'),
+              ),
+            if (isTabRoot) const ProfileButton(),
           ],
           bottom: const PreferredSize(
             preferredSize: Size.fromHeight(1),
