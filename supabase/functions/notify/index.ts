@@ -52,6 +52,9 @@ Deno.serve(async (req) => {
   else if (kind === "voice_room") pushes = await voiceRoomPushes(db, id);
   else return new Response("unknown kind", { status: 400 });
 
+  const category = CATEGORY[kind];
+  if (category && pushes.length > 0) pushes = await withoutMuted(db, pushes, category);
+
   const account = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
   if (!account) {
     return Response.json({ skipped: "firebase non configurato", pushes: pushes.length });
@@ -59,6 +62,26 @@ Deno.serve(async (req) => {
   const sent = await sendAll(db, JSON.parse(account), pushes);
   return Response.json({ pushes: pushes.length, sent });
 });
+
+/// Notifiche che si possono spegnere in Impostazioni → Notifiche (le altre arrivano sempre).
+const CATEGORY: Record<string, string> = {
+  event: "presenze",
+  attendance_reminder: "presenze",
+  attendance_auto_absent: "presenze",
+  chat_message: "chat",
+  voice_room: "chat",
+  news: "notizie",
+};
+
+/// Toglie chi ha spento questa categoria (profiles.notify_prefs: { presenze|chat|notizie: false }).
+async function withoutMuted(db: SupabaseClient, pushes: Push[], category: string): Promise<Push[]> {
+  const ids = [...new Set(pushes.map((p) => p.userId))];
+  const { data } = await db.from("profiles").select("id, notify_prefs").in("id", ids);
+  const off = new Set(
+    (data ?? []).filter((r) => r.notify_prefs?.[category] === false).map((r) => r.id),
+  );
+  return pushes.filter((p) => !off.has(p.userId));
+}
 
 const TEAM_NAMES: Record<string, string> = { milanac: "Milan AC", futuro: "Milan AC Futuro" };
 const PLATFORM_NAMES: Record<string, string> = { ps5: "PlayStation", xbox: "Xbox" };
