@@ -5,18 +5,22 @@ import '../../core/teams.dart';
 import '../../core/theme.dart';
 
 enum EventType {
-  torneo('Partita torneo', Icons.emoji_events_rounded, MilanacColors.red),
-  amichevole('Amichevole', Icons.handshake_rounded, Color(0xFF3B82F6)),
-  allenamento('Allenamento', Icons.fitness_center_rounded, Color(0xFF2E9E5B)),
-  riunione('Riunione', Icons.groups_rounded, MilanacColors.gold),
-  altro('Altro', Icons.event_rounded, Colors.white54);
+  torneo('Partita ufficiale', Icons.emoji_events_rounded),
+  amichevole('Amichevole', Icons.handshake_rounded),
+  allenamento('Allenamento', Icons.fitness_center_rounded),
+  riunione('Riunione', Icons.groups_rounded),
+  altro('Altro', Icons.event_rounded);
 
-  const EventType(this.label, this.icon, this.color);
+  const EventType(this.label, this.icon);
   final String label;
   final IconData icon;
-  final Color color;
 
   bool get isMatch => this == torneo || this == amichevole;
+}
+
+/// Colore di un tipo di evento nel tema in uso: le partite in oro, il resto neutro.
+extension EventTypeColors on AppPalette {
+  Color eventColor(EventType t) => t.isMatch ? accentText : textSecondary;
 }
 
 /// Evento del calendario (tabella `events`).

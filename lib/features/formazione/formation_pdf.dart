@@ -67,18 +67,18 @@ void _paintEmptySlot(Canvas canvas, Offset center, String label) {
     center,
     16,
     Paint()
-      ..color = Colors.black.withValues(alpha: .35)
+      ..color = MilanacColors.ink.withValues(alpha: .4)
       ..style = PaintingStyle.fill,
   );
   canvas.drawCircle(
     center,
     16,
     Paint()
-      ..color = Colors.white70
+      ..color = MilanacColors.ivory.withValues(alpha: .7)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5,
   );
-  _text(canvas, label, center, 10, FontWeight.w800, Colors.white);
+  _text(canvas, label, center, 10, FontWeight.w800, MilanacColors.ivory);
 }
 
 void _paintMiniCard(
@@ -93,7 +93,7 @@ void _paintMiniCard(
   final rr = RRect.fromRectAndRadius(rect, const Radius.circular(9));
   canvas.drawRRect(
     rr.shift(const Offset(0, 2)),
-    Paint()..color = Colors.black.withValues(alpha: .35),
+    Paint()..color = MilanacColors.black.withValues(alpha: .35),
   );
   canvas.drawRRect(
     rr,
@@ -126,14 +126,14 @@ void _paintMiniCard(
     FacePainter(
       face,
       crop: FaceCrop.head,
-      background: Colors.white.withValues(alpha: .18),
+      background: MilanacColors.ivory.withValues(alpha: .18),
     ).paint(canvas, const Size(faceR * 2, faceR * 2));
     canvas.restore();
   } else {
     canvas.drawCircle(
       faceCenter,
       faceR,
-      Paint()..color = Colors.white.withValues(alpha: .18),
+      Paint()..color = MilanacColors.ivory.withValues(alpha: .18),
     );
     _text(
       canvas,
@@ -225,8 +225,9 @@ Future<Uint8List> buildFormationPdf({
       if (members[formation.players[i]] case final m?)
         '${slot.label} ${m.displayName}',
   ];
-  const red = PdfColor.fromInt(0xFFC61C23);
-  const gold = PdfColor.fromInt(0xFFD4AF37);
+  // Sul foglio bianco i titoli sono in oro scuro, la riga in oro pieno.
+  final title = PdfColor.fromInt(MilanacColors.goldDeep.toARGB32());
+  final gold = PdfColor.fromInt(MilanacColors.gold.toARGB32());
 
   final doc = pw.Document(
     title: 'Formazione ${formation.team.label}',
@@ -248,7 +249,7 @@ Future<Uint8List> buildFormationPdf({
                 children: [
                   pw.Text(
                     'FORMAZIONE ${formation.team.label.toUpperCase()}',
-                    style: pw.TextStyle(font: bold, fontSize: 22, color: red),
+                    style: pw.TextStyle(font: bold, fontSize: 22, color: title),
                   ),
                   pw.Text(
                     '${when[0].toUpperCase()}${when.substring(1)} · modulo ${formation.module}',
@@ -267,7 +268,7 @@ Future<Uint8List> buildFormationPdf({
           pw.SizedBox(height: 12),
           pw.Text(
             'TITOLARI',
-            style: pw.TextStyle(font: bold, fontSize: 12, color: red),
+            style: pw.TextStyle(font: bold, fontSize: 12, color: title),
           ),
           pw.Text(
             starters.isEmpty ? 'Da definire' : starters.join(' · '),
@@ -276,7 +277,7 @@ Future<Uint8List> buildFormationPdf({
           pw.SizedBox(height: 6),
           pw.Text(
             'PANCHINA',
-            style: pw.TextStyle(font: bold, fontSize: 12, color: red),
+            style: pw.TextStyle(font: bold, fontSize: 12, color: title),
           ),
           pw.Text(
             bench.isEmpty

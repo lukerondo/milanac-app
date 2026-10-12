@@ -49,3 +49,27 @@ ClubEvent eveningEvent(
 /// Squadra "principale" di un membro: Milan AC se ci gioca (anche con il Futuro).
 Team mainTeam(Set<Team> teams) =>
     teams.contains(Team.milanac) ? Team.milanac : Team.futuro;
+
+/// Nome della squadra nei selettori e nei filtri ("Milan AC", "Futuro").
+String teamTabLabel(Team t) => t == Team.milanac ? 'Milan AC' : 'Futuro';
+
+/// Titolo e dettaglio di una partita dal titolo dell'evento: "FVPA – 3ª giornata vs
+/// Atletico Virtuale" diventa "Milan AC – Atletico Virtuale" con "FVPA – 3ª giornata".
+/// Senza "vs" nel titolo resta il titolo com'è.
+({String title, String? detail, String? opponent}) matchHeadline(
+  ClubEvent e,
+  Team team,
+) {
+  final m = RegExp(
+    r'^(.*?)\s+vs\.?\s+(.+)$',
+    caseSensitive: false,
+  ).firstMatch(e.title.trim());
+  if (m == null) return (title: e.title, detail: null, opponent: null);
+  final before = m.group(1)!.trim();
+  final opponent = m.group(2)!.trim();
+  return (
+    title: '${team.label} – $opponent',
+    detail: before.isEmpty ? null : before,
+    opponent: opponent,
+  );
+}

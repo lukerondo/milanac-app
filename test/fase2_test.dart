@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/regolamento/rules_reader.dart';
 import 'package:milanac/main.dart';
+import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
 
@@ -71,7 +72,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rosa e squadre'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ChoiceChip, 'FUTURO (2)'), findsOneWidget);
+    expect(find.widgetWithText(FilterPill, 'Futuro · 2'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Marco Rossi'),
       200,
@@ -79,7 +80,7 @@ void main() {
     );
     final rossiCard = find.ancestor(
       of: find.text('Marco Rossi'),
-      matching: find.byType(Card),
+      matching: find.byType(AppCard),
     );
     await tester.ensureVisible(rossiCard);
     await tester.pumpAndSettle();
@@ -90,11 +91,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.widgetWithText(ChoiceChip, 'FUTURO (3)'),
-      -300,
-    );
-    expect(find.widgetWithText(ChoiceChip, 'FUTURO (3)'), findsOneWidget);
+    // I filtri restano in alto.
+    expect(find.widgetWithText(FilterPill, 'Futuro · 3'), findsOneWidget);
     tester.state<NavigatorState>(find.byType(Navigator).first).pop();
     await tester.pumpAndSettle();
 
