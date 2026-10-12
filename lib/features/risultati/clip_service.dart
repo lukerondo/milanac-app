@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:video_compress/video_compress.dart';
 
+import '../../core/errors.dart';
+
 /// Durata massima delle clip caricate dal Direttivo.
 const maxClipSeconds = 15;
 
@@ -41,34 +43,51 @@ class ClipService {
         ? max(0, (total - start - length).floor())
         : length.ceil();
 
-    final info = await VideoCompress.compressVideo(
-      path,
-      quality: VideoQuality.MediumQuality,
-      startTime: start,
-      duration: durationArg,
-      includeAudio: true,
-      deleteOrigin: false,
-    );
-    final file = info?.file;
-    if (file == null) {
-      throw const ClipException('Compressione del video non riuscita.');
-    }
-
-    final seconds = ((info!.duration ?? length * 1000) / 1000).round();
-    if (seconds > maxClipSeconds + 1) {
-      throw const ClipException(
-        'La clip supera i 15 secondi: riprova scegliendo un altro inizio.',
+    try {
+      final info = await VideoCompress.compressVideo(
+        path,
+        quality: VideoQuality.MediumQuality,
+        startTime: start,
+        duration: durationArg,
+        includeAudio: true,
+        deleteOrigin: false,
       );
+      final file = info?.file;
+      if (file == null) {
+        throw const ClipException('Compressione del video non riuscita.');
+      }
+
+      final seconds = ((info!.duration ?? length * 1000) / 1000).round();
+      if (seconds > maxClipSeconds + 1) {
+        throw const ClipException(
+          'La clip supera i 15 secondi: riprova scegliendo un altro inizio.',
+        );
+      }
+      final bytes = await file.readAsBytes();
+      return PreparedClip(bytes, seconds.clamp(1, maxClipSeconds));
+    } finally {
+      // Il file compresso resta nella cache del plugin: si toglie sempre,
+      // anche quando la compressione fallisce o la clip è troppo lunga.
+      try {
+        await VideoCompress.deleteAllCache();
+      } catch (_) {}
     }
-    final bytes = await file.readAsBytes();
-    await VideoCompress.deleteAllCache();
-    return PreparedClip(bytes, seconds.clamp(1, maxClipSeconds));
+  }
+
+  /// Cancella la copia temporanea del video (o della foto) scelto: image_picker
+  /// la lascia nella cache dell'app e altrimenti resterebbe lì.
+  static Future<void> discard(String path) async {
+    if (kIsWeb) return;
+    try {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    } catch (_) {
+      // Già tolta o non accessibile: niente da fare.
+    }
   }
 }
 
-class ClipException implements Exception {
-  const ClipException(this.message);
-  final String message;
-  @override
-  String toString() => message;
+/// Errore della preparazione della clip, con il testo da mostrare.
+class ClipException extends AppError {
+  const ClipException(super.message);
 }

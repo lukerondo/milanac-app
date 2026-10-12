@@ -18,10 +18,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          # Versione fissa (la stessa usata in sviluppo): build riproducibili.
+          flutter-version: "3.47.7"
           channel: stable
           cache: true
       - run: flutter pub get
       - run: flutter analyze
+      # Codice impaginato come lo vuole `dart format` (lo stesso comando in locale lo sistema).
+      - name: Formattazione
+        run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter test
       - name: Test raccoglitore notizie
         run: python3 -m unittest discover -s tools/news_fetcher/tests
@@ -65,36 +70,87 @@ jobs:
           java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
+          # Versione fissa (la stessa usata in sviluppo): build riproducibili.
+          flutter-version: "3.47.7"
           channel: stable
           cache: true
+      # Chiave di firma: quella privata se c'è il secret (la stessa dell'App Bundle per Google
+      # Play, vedi "Rilascio Android"), altrimenti la chiave di prova del repository, che è
+      # pubblica. Le password passano dall'ambiente, non dal testo dello script.
+      - name: Chiave di firma
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::Secret ANDROID_KEYSTORE_BASE64 assente: APK firmati con la chiave di prova del repository (pubblica). Vedi docs/PUBBLICAZIONE.md."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          printf 'storeFile=upload-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
+          echo "APK firmati con la chiave privata (secret ANDROID_KEYSTORE_BASE64)."
       - run: flutter pub get
+      # Simboli di debug fuori dall'APK (in un artifact a parte, per leggere eventuali crash)
+      # e nomi del codice offuscati: l'app pesa qualche MB in meno.
       - name: APK per tutti i telefoni
         run: |
           # Solo i processori dei telefoni (32 e 64 bit): senza x86, usato dagli emulatori, pesa un terzo in meno.
-          flutter build apk --release --target-platform android-arm,android-arm64 --dart-define-from-file=env/prod.json
+          # Librerie compresse: l'APK universale si scarica in metà spazio.
+          flutter build apk --release --target-platform android-arm,android-arm64 \
+            --obfuscate --split-debug-info=build/simboli/universale \
+            --android-project-arg milanac.compressLibs=true \
+            --dart-define-from-file=env/prod.json
           cp build/app/outputs/flutter-apk/app-release.apk MILANAC.apk
       # Versione leggera (circa metà) per i telefoni a 64 bit, comoda da mandare in chat.
       # --split-per-abi tiene nel file solo le librerie di quella architettura (anche quelle dei plugin);
       # il numero di versione resta quello dell'APK completo, così si passa dall'uno all'altro senza disinstallare.
       - name: APK solo arm64
         run: |
-          flutter build apk --release --split-per-abi --android-project-arg force-version-code-ignoring-abi=true --dart-define-from-file=env/prod.json
+          flutter build apk --release --split-per-abi --android-project-arg force-version-code-ignoring-abi=true \
+            --obfuscate --split-debug-info=build/simboli/arm64 \
+            --dart-define-from-file=env/prod.json
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk MILANAC-arm64.apk
+      - name: Peso degli APK
+        run: |
+          for f in MILANAC.apk MILANAC-arm64.apk; do
+            echo "$f: $(du -m "$f" | cut -f1) MB"
+            echo "- $f: $(du -m "$f" | cut -f1) MB" >> "$GITHUB_STEP_SUMMARY"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: milanac-apk
           path: |
             MILANAC.apk
             MILANAC-arm64.apk
-      # Controllo: gli APK di prova devono essere firmati con la chiave fissa (non con una casuale).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: milanac-simboli
+          path: build/simboli/
+          retention-days: 90
+      # Controllo: gli APK devono essere firmati con la chiave attesa, mai con una casuale:
+      # quella privata se c'è il secret (android/key.properties), altrimenti quella di prova.
       - name: Verifica la firma
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          keytool -exportcert -keystore android/app/apk-di-prova.keystore -storepass android -alias androiddebugkey -file prova.der
+          if [ -f android/key.properties ]; then
+            keytool -exportcert -keystore android/app/upload-keystore.jks -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" -file firma.der
+            export CHIAVE="chiave privata"
+          else
+            keytool -exportcert -keystore android/app/apk-di-prova.keystore -storepass android -alias androiddebugkey -file firma.der
+            export CHIAVE="chiave di prova"
+          fi
           python3 - <<'PY'
-          der = open("prova.der", "rb").read()
+          import os
+          chiave = os.environ["CHIAVE"]
+          der = open("firma.der", "rb").read()
           for apk in ("MILANAC.apk", "MILANAC-arm64.apk"):
-              assert der in open(apk, "rb").read(), f"{apk} non è firmato con la chiave di prova"
-          print("Firma corretta.")
+              assert der in open(apk, "rb").read(), f"{apk} non è firmato con la {chiave}"
+          print(f"Firma corretta ({chiave}).")
           PY
       # Solo a mano o da main: le build delle pull request restano come artifact, così la release
       # non viene sostituita a ogni push (un download a metà sostituzione dà un APK rotto).

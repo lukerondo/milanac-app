@@ -1,20 +1,55 @@
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import 'news_item.dart';
 
-/// Ultime notizie (raccolte ogni 3 ore dal job GitHub Actions nella tabella `news`).
-final newsProvider = FutureProvider<List<NewsItem>>((ref) async {
-  if (AppConfig.isDemo) return _demoNews;
-  final rows = await ref
-      .watch(supabaseProvider)
-      .from('news')
-      .select()
-      .order('published_at', ascending: false)
-      .limit(100);
-  return rows.map(NewsItem.fromMap).toList();
+abstract class NewsRepository {
+  /// Le ultime notizie, dalla più recente.
+  Future<List<NewsItem>> latest();
+}
+
+final newsRepositoryProvider = Provider<NewsRepository>((ref) {
+  if (AppConfig.isDemo) return DemoNewsRepository();
+  return _SupabaseNewsRepository(ref);
 });
+
+/// Ultime notizie (raccolte ogni 3 ore dal job GitHub Actions nella tabella `news`).
+/// Non arrivano in tempo reale: si rileggono al ritorno in primo piano (la Home, sempre
+/// aperta, mostra così l'avviso di un aggiornamento appena uscito) e all'apertura
+/// dell'elenco (vedi NewsList), oltre che trascinando in giù.
+final newsProvider = FutureProvider.autoDispose<List<NewsItem>>((ref) {
+  // Si leggono con i permessi di chi è collegato: al cambio di account si ricarica.
+  ref.watch(currentUserIdProvider);
+  final lifecycle = AppLifecycleListener(onResume: ref.invalidateSelf);
+  ref.onDispose(lifecycle.dispose);
+  return ref.watch(newsRepositoryProvider).latest();
+});
+
+class _SupabaseNewsRepository implements NewsRepository {
+  _SupabaseNewsRepository(this._ref);
+  final Ref _ref;
+
+  @override
+  Future<List<NewsItem>> latest() async {
+    final rows = await _ref
+        .read(supabaseProvider)
+        .from('news')
+        .select()
+        .order('published_at', ascending: false)
+        .limit(100);
+    return rows.map(NewsItem.fromMap).toList();
+  }
+}
+
+/// Notizie di esempio (modalità demo e test).
+class DemoNewsRepository implements NewsRepository {
+  final items = List.of(_demoNews);
+
+  @override
+  Future<List<NewsItem>> latest() async => List.of(items);
+}
 
 final _demoNews = <NewsItem>[
   NewsItem(

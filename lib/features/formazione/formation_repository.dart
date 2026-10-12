@@ -2,12 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import '../../core/teams.dart';
 import 'modules.dart';
 
 abstract class FormationRepository {
   /// Formazione attuale della squadra (vuota se non ancora creata).
   Future<Formation> loadCurrent(Team team);
+
+  /// Salva modulo e posti in un colpo solo; con l'id vuoto crea la formazione.
   Future<Formation> save(Formation formation);
 
   /// Pubblica la formazione: parte la notifica personale a ogni membro.
@@ -16,15 +19,35 @@ abstract class FormationRepository {
 
 final formationRepositoryProvider = Provider<FormationRepository>((ref) {
   if (AppConfig.isDemo) return DemoFormationRepository();
-  return _SupabaseFormationRepository(ref);
+  return SupabaseFormationRepository(ref);
 });
 
-final formationProvider = FutureProvider.family<Formation, Team>(
-  (ref, team) => ref.watch(formationRepositoryProvider).loadCurrent(team),
-);
+/// La formazione attuale della squadra. La pubblica il Direttivo da un altro telefono:
+/// si rilegge a ogni apertura della pagina (rilascio automatico), quando entra un altro
+/// account e quando la pagina lo chiede (ritorno in primo piano, trascinamento in giù).
+final formationProvider = FutureProvider.autoDispose.family<Formation, Team>((
+  ref,
+  team,
+) {
+  if (ref.watch(currentUserIdProvider) == null) return Formation(team: team);
+  return ref.watch(formationRepositoryProvider).loadCurrent(team);
+});
 
-class _SupabaseFormationRepository implements FormationRepository {
-  _SupabaseFormationRepository(this._ref);
+/// I posti della formazione come li vuole `save_formation`
+/// (`[{"slot_index", "x", "y", "label", "player_id"}]`, null = posto libero).
+List<Map<String, Object?>> formationSlotsJson(Formation f) => [
+  for (final (i, slot) in f.slots.indexed)
+    {
+      'slot_index': i,
+      'x': slot.x,
+      'y': slot.y,
+      'label': slot.label,
+      'player_id': f.players[i],
+    },
+];
+
+class SupabaseFormationRepository implements FormationRepository {
+  SupabaseFormationRepository(this._ref);
   final Ref _ref;
 
   @override
@@ -69,6 +92,30 @@ class _SupabaseFormationRepository implements FormationRepository {
   @override
   Future<Formation> save(Formation f) async {
     final client = _ref.read(supabaseProvider);
+    String id;
+    try {
+      // Modulo e posti in una sola transazione: se la rete cade a metà non resta
+      // una bozza senza giocatori.
+      id = await client.rpc(
+        'save_formation',
+        params: {
+          'p_id': f.id.isEmpty ? null : f.id,
+          'p_team': f.team.name,
+          'p_module': f.module,
+          'p_slots': formationSlotsJson(f),
+        },
+      ) as String;
+    } catch (e) {
+      if (!isMissingFunction(e)) rethrow;
+      // Database senza save_formation (migrazione non ancora applicata): come prima.
+      id = await _saveInSteps(f);
+    }
+    return f.copyWith(id: id, updatedAt: DateTime.now().toUtc());
+  }
+
+  /// La strada di prima: formazione, poi i posti cancellati e riscritti.
+  Future<String> _saveInSteps(Formation f) async {
+    final client = _ref.read(supabaseProvider);
     final values = {
       'module': f.module,
       'team': f.team.name,
@@ -87,41 +134,41 @@ class _SupabaseFormationRepository implements FormationRepository {
     if (f.id.isNotEmpty) {
       await client.from('formations').update(values).eq('id', id);
     }
-
     await client.from('formation_slots').delete().eq('formation_id', id);
     await client.from('formation_slots').insert([
-      for (final (i, slot) in f.slots.indexed)
-        {
-          'formation_id': id,
-          'slot_index': i,
-          'x': slot.x,
-          'y': slot.y,
-          'label': slot.label,
-          'player_id': f.players[i],
-        },
+      for (final slot in formationSlotsJson(f)) {...slot, 'formation_id': id},
     ]);
-    return f.copyWith(id: id, updatedAt: DateTime.now().toUtc());
+    return id;
   }
 
   @override
   Future<Formation> publish(Formation f) async {
     final saved = f.id.isEmpty ? await save(f) : f;
     final client = _ref.read(supabaseProvider);
-    final now = DateTime.now().toUtc();
-    await client
+    final rows = await client
         .from('formations')
         .update({
-          'published_at': now.toIso8601String(),
+          // L'ora vera la fissa il server (migrazione 0025): si usa quella che torna.
+          'published_at': DateTime.now().toUtc().toIso8601String(),
           'published_by': client.auth.currentUser?.id,
           'published_module': saved.module,
           'published_players': {
             for (final e in saved.players.entries) '${e.key}': e.value,
           },
         })
-        .eq('id', saved.id);
+        .eq('id', saved.id)
+        .select('published_at');
+    // Nessuna riga cambiata (formazione eliminata da un altro telefono, permessi
+    // cambiati): prima risultava pubblicata senza esserlo.
+    if (rows.isEmpty) {
+      throw const AppError(
+        'Formazione non trovata: riapri la pagina e pubblica di nuovo.',
+      );
+    }
+    final publishedAt = DateTime.parse(rows.first['published_at'] as String);
     return saved.copyWith(
-      publishedAt: now,
-      updatedAt: now,
+      publishedAt: publishedAt,
+      updatedAt: publishedAt,
       publishedModule: saved.module,
       publishedPlayers: Map.of(saved.players),
     );

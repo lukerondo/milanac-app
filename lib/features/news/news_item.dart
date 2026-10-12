@@ -33,7 +33,9 @@ class NewsItem {
     url: m['url'] as String,
     source: m['source'] as String,
     category: m['category'] as String,
-    publishedAt: DateTime.parse(m['published_at'] as String),
+    // Ora del telefono: in UTC le notizie uscite tra mezzanotte e le 2 finivano
+    // sul giorno prima.
+    publishedAt: DateTime.parse(m['published_at'] as String).toLocal(),
     imageUrl: m['image_url'] as String?,
     platform: m['platform'] as String?,
   );
@@ -42,11 +44,28 @@ class NewsItem {
 /// Categorie mostrate come filtri nelle notizie.
 const newsCategories = <String, String>{
   'tutte': 'Tutte',
-  'aggiornamenti': 'Aggiornamenti FC 27',
+  'aggiornamenti': 'FC 27',
   'console': 'Console',
   'tornei': 'Tornei',
   'pro_clubs': 'Pro Clubs',
   'ultimate_team': 'Ultimate Team',
+};
+
+/// Etichetta della categoria sopra il titolo di una notizia.
+String newsCategoryTag(String category) => switch (category) {
+  'aggiornamenti' => 'Aggiornamenti FC 27',
+  'console' => 'Console',
+  'tornei' => 'Tornei',
+  'ultimate_team' => 'Ultimate Team',
+  _ => 'Pro Clubs',
+};
+
+/// Sigla breve della piattaforma ("PS5", "Xbox").
+String platformShort(String? platform) => switch (platform) {
+  'ps5' => 'PS5',
+  'xbox' => 'Xbox',
+  'pc' => 'PC',
+  _ => 'Console',
 };
 
 /// Nome della piattaforma come la chiamano i giocatori.

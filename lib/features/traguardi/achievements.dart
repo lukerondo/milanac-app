@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
+import '../carta/card_colors.dart';
 import '../carta/card_stats.dart';
 import '../carta/carta_page.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'player_stats.dart';
 
-/// Livello del badge (colore), dal più comune al più raro.
+/// Livello del badge (colore fisso, come le carte), dal più comune al più raro: i
+/// traguardi leggendari sono neri e oro come la carta della settimana.
 enum BadgeLevel {
-  bronzo(Color(0xFFD9A273)),
-  argento(Color(0xFFC9CED6)),
+  bronzo(CardColors.bronze),
+  argento(CardColors.silver),
   oro(MilanacColors.gold),
-  leggenda(MilanacColors.red);
+  leggenda(CardColors.gold);
 
   const BadgeLevel(this.color);
   final Color color;

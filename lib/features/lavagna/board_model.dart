@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -124,6 +125,24 @@ class BoardState {
 
   bool get isEmpty => tokens.isEmpty && arrows.isEmpty && heat.isEmpty;
 
+  /// Massimo dei punti della heatmap: oltre, lo schema supererebbe il limite di
+  /// 300 KB del database (e la lavagna rallenterebbe).
+  static const maxHeat = 2000;
+
+  bool get heatFull => heat.length >= maxHeat;
+
+  /// In (x, y) il colore della heatmap è già pieno: un altro punto non si vedrebbe
+  /// (diradamento: dove si insiste a lungo non si accumulano punti inutili).
+  bool heatSaturatedAt(double x, double y) {
+    var near = 0;
+    for (final h in heat) {
+      if ((h.x - x).abs() < .02 && (h.y - y).abs() < .02 && ++near >= 12) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   BoardState copyWith({
     String? module,
     String? team,
@@ -234,7 +253,12 @@ class MoveToken extends BoardCommand {
   final String id;
   final double x, y;
   @override
-  Map<String, dynamic> toJson() => {'k': 'mv', 'id': id, 'x': _r(x), 'y': _r(y)};
+  Map<String, dynamic> toJson() => {
+    'k': 'mv',
+    'id': id,
+    'x': _r(x),
+    'y': _r(y),
+  };
 }
 
 class DragEnd extends BoardCommand {
@@ -292,7 +316,8 @@ class Reset extends BoardCommand {
 
 /// La lavagna che si disegna: applica le azioni, tiene la cronologia per "Annulla"
 /// e, se c'è un ascoltatore, gli passa ogni azione (la registrazione del replay).
-class BoardEditor extends ChangeNotifier {
+class BoardEditor extends ChangeNotifier
+    implements ValueListenable<BoardState> {
   BoardEditor([BoardState initial = const BoardState()]) : _state = initial;
 
   BoardState _state;
@@ -302,6 +327,10 @@ class BoardEditor extends ChangeNotifier {
   void Function(BoardCommand command)? onCommand;
 
   BoardState get state => _state;
+
+  @override
+  BoardState get value => _state;
+
   bool get canUndo => _history.isNotEmpty;
 
   /// Carica una lavagna (apertura di uno schema, modulo di partenza): niente cronologia,
@@ -310,6 +339,17 @@ class BoardEditor extends ChangeNotifier {
     _state = s;
     _history.clear();
     notifyListeners();
+  }
+
+  /// Inizia a registrare il replay dalla lavagna attuale. La cronologia di "Annulla"
+  /// riparte da qui: il replay comincia da questa lavagna e non conosce le mosse di
+  /// prima, quindi un annullamento nel vivo deve togliere solo mosse registrate.
+  ReplayRecorder startRecording({int Function()? clock}) {
+    _history.clear();
+    final recorder = ReplayRecorder(_state, clock: clock);
+    onCommand = recorder.record;
+    notifyListeners();
+    return recorder;
   }
 
   /// Numero massimo di passi annullabili.
@@ -397,21 +437,32 @@ class ReplayData {
 
   Uint8List toBytes() => Uint8List.fromList(utf8.encode(jsonEncode(toJson())));
 
-  factory ReplayData.fromJson(Map<String, dynamic> m) => ReplayData(
-    initial: BoardState.fromJson((m['board'] as Map?)?.cast<String, dynamic>()),
-    durationMs: (m['ms'] as num?)?.toInt() ?? 0,
-    events: [
+  factory ReplayData.fromJson(Map<String, dynamic> m) {
+    final events = [
       for (final e in (m['events'] as List?) ?? const [])
         ReplayEvent(
           ((e as Map)['t'] as num).toInt(),
           BoardCommand.fromJson(e.cast<String, dynamic>()),
         ),
-    ],
-  );
+    ];
+    return ReplayData(
+      initial: BoardState.fromJson(
+        (m['board'] as Map?)?.cast<String, dynamic>(),
+      ),
+      // I replay registrati prima avevano la durata arrotondata al secondo, a volte
+      // prima dell'ultima mossa: si allunga fino a lei, così si vede.
+      durationMs: max((m['ms'] as num?)?.toInt() ?? 0, lastEventMs(events)),
+      events: events,
+    );
+  }
 
   factory ReplayData.fromBytes(Uint8List bytes) => ReplayData.fromJson(
     (jsonDecode(utf8.decode(bytes)) as Map).cast<String, dynamic>(),
   );
+
+  /// Istante dell'ultima azione (0 se non ce ne sono).
+  static int lastEventMs(List<ReplayEvent> events) =>
+      events.fold(0, (m, e) => max(m, e.t));
 
   /// La lavagna a un certo istante: rifà le azioni fino a [ms].
   BoardState stateAt(int ms) {
@@ -420,28 +471,41 @@ class ReplayData {
       if (e.t > ms) break;
       editor.apply(e.command);
     }
-    return editor.state;
+    final state = editor.state;
+    editor.dispose();
+    return state;
   }
 
   /// Lo stato finale (dopo tutte le azioni).
-  BoardState get finalState => stateAt(durationMs + 1);
+  BoardState get finalState => stateAt(max(durationMs, lastEventMs(events)));
 }
 
 /// Registra le azioni della lavagna con i tempi mentre si parla.
 class ReplayRecorder {
-  ReplayRecorder(this.initial) : _start = DateTime.now();
+  /// [clock] dà i millisecondi trascorsi (nei test); di norma un cronometro, che non
+  /// risente dei cambi dell'ora del telefono.
+  ReplayRecorder(this.initial, {int Function()? clock})
+    : _clock = clock ?? _stopwatch();
   final BoardState initial;
-  final DateTime _start;
+  final int Function() _clock;
   final _events = <ReplayEvent>[];
 
-  int get elapsedMs => DateTime.now().difference(_start).inMilliseconds;
+  static int Function() _stopwatch() {
+    final s = Stopwatch()..start();
+    return () => s.elapsedMilliseconds;
+  }
+
+  int get elapsedMs => _clock();
 
   void record(BoardCommand c) => _events.add(ReplayEvent(elapsedMs, c));
 
+  /// Il replay registrato. La durata è in millisecondi (quella della voce, se data)
+  /// e non finisce mai prima dell'ultima azione: altrimenti l'ultima mossa non si
+  /// vedrebbe.
   ReplayData finish([int? durationMs]) => ReplayData(
     initial: initial,
     events: List.unmodifiable(_events),
-    durationMs: durationMs ?? elapsedMs,
+    durationMs: max(durationMs ?? elapsedMs, ReplayData.lastEventMs(_events)),
   );
 }
 
@@ -451,21 +515,59 @@ BoardState demoBoard() => BoardState(
   module: '4-3-3',
   team: 'milanac',
   tokens: const [
-    BoardToken(id: 't0', x: .5, y: .92, playerId: 'p4', label: '1', name: 'Andrea Neri', side: 'milanac'),
+    BoardToken(
+      id: 't0',
+      x: .5,
+      y: .92,
+      playerId: 'p4',
+      label: '1',
+      name: 'Andrea Neri',
+      side: 'milanac',
+    ),
     BoardToken(id: 't1', x: .12, y: .72, label: 'TS'),
-    BoardToken(id: 't2', x: .37, y: .76, playerId: 'p3', label: '4', name: 'Luca Bianchi'),
+    BoardToken(
+      id: 't2',
+      x: .37,
+      y: .76,
+      playerId: 'p3',
+      label: '4',
+      name: 'Luca Bianchi',
+    ),
     BoardToken(id: 't3', x: .63, y: .76, label: 'DC'),
     BoardToken(id: 't4', x: .88, y: .72, label: 'TD'),
-    BoardToken(id: 't5', x: .25, y: .5, playerId: 'demo', label: '10', name: 'Demo Direttivo'),
+    BoardToken(
+      id: 't5',
+      x: .25,
+      y: .5,
+      playerId: 'demo',
+      label: '10',
+      name: 'Demo Direttivo',
+    ),
     BoardToken(id: 't6', x: .5, y: .56, label: 'CDC'),
     BoardToken(id: 't7', x: .75, y: .5, label: 'CC'),
     BoardToken(id: 't8', x: .18, y: .24, label: 'AS'),
-    BoardToken(id: 't9', x: .5, y: .17, playerId: 'p2', label: '9', name: 'Marco Rossi'),
+    BoardToken(
+      id: 't9',
+      x: .5,
+      y: .17,
+      playerId: 'p2',
+      label: '9',
+      name: 'Marco Rossi',
+    ),
     BoardToken(id: 't10', x: .82, y: .24, label: 'AD'),
     BoardToken(id: 'a1', x: .5, y: .3, label: 'A', side: 'avversari'),
   ],
-  arrows: const [BoardArrow(x1: .5, y1: .92, x2: .37, y2: .76), BoardArrow(x1: .37, y1: .76, x2: .12, y2: .6, dashed: true)],
-  heat: const [HeatPoint(.12, .55), HeatPoint(.13, .5), HeatPoint(.15, .45), HeatPoint(.16, .4), HeatPoint(.15, .36)],
+  arrows: const [
+    BoardArrow(x1: .5, y1: .92, x2: .37, y2: .76),
+    BoardArrow(x1: .37, y1: .76, x2: .12, y2: .6, dashed: true),
+  ],
+  heat: const [
+    HeatPoint(.12, .55),
+    HeatPoint(.13, .5),
+    HeatPoint(.15, .45),
+    HeatPoint(.16, .4),
+    HeatPoint(.15, .36),
+  ],
 );
 
 /// Replay di esempio (demo): venti secondi in cui il CDC si abbassa tra i centrali,
@@ -482,10 +584,17 @@ ReplayData demoReplay() {
       ReplayEvent(5000 + i * 100, MoveToken('t1', .12, .72 - .3 * i / 20)),
     const ReplayEvent(7100, DragEnd()),
     const ReplayEvent(9000, HeatStart()),
-    for (var i = 0; i < 12; i++) ReplayEvent(9000 + i * 150, Heat(.12 + i * .01, .42 - i * .012)),
+    for (var i = 0; i < 12; i++)
+      ReplayEvent(9000 + i * 150, Heat(.12 + i * .01, .42 - i * .012)),
     const ReplayEvent(10900, HeatEnd()),
-    const ReplayEvent(13000, AddArrow(BoardArrow(x1: .5, y1: .92, x2: .5, y2: .74))),
-    const ReplayEvent(16000, AddArrow(BoardArrow(x1: .5, y1: .74, x2: .14, y2: .44, dashed: true))),
+    const ReplayEvent(
+      13000,
+      AddArrow(BoardArrow(x1: .5, y1: .92, x2: .5, y2: .74)),
+    ),
+    const ReplayEvent(
+      16000,
+      AddArrow(BoardArrow(x1: .5, y1: .74, x2: .14, y2: .44, dashed: true)),
+    ),
   ];
   return ReplayData(initial: initial, events: events, durationMs: 20000);
 }

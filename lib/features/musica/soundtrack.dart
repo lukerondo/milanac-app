@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/audio_focus.dart';
 import '../../core/config.dart';
 import '../intro/intro_state.dart';
 
@@ -65,6 +66,9 @@ abstract class SoundtrackEngine {
   Future<void> seek(Duration position);
   Future<void> setVolume(double volume);
   Duration get position;
+
+  /// Durata del brano caricato (null se non si sa, come nella demo e nei test).
+  Duration? get duration;
   Future<void> dispose();
 }
 
@@ -91,6 +95,8 @@ class JustAudioEngine implements SoundtrackEngine {
   @override
   Duration get position => _player.position;
   @override
+  Duration? get duration => _player.duration;
+  @override
   Future<void> dispose() => _player.dispose();
 }
 
@@ -109,6 +115,8 @@ class SilentEngine implements SoundtrackEngine {
   Future<void> setVolume(double volume) async {}
   @override
   Duration get position => Duration.zero;
+  @override
+  Duration? get duration => null;
   @override
   Future<void> dispose() async {}
 }
@@ -181,9 +189,15 @@ class DeviceSoundtrackStore implements SoundtrackStore {
     final target = File(
       '${dir.path}/colonna_sonora_${DateTime.now().millisecondsSinceEpoch}.$ext',
     );
-    final sink = target.openWrite();
-    await sink.addStream(picked.readAsByteStream());
-    await sink.close();
+    try {
+      final sink = target.openWrite();
+      await sink.addStream(picked.readAsByteStream());
+      await sink.close();
+    } catch (_) {
+      // Copia a metà (spazio finito, file non leggibile): non resta sul telefono.
+      if (await target.exists()) await target.delete();
+      rethrow;
+    }
     return (target.path, picked.name);
   }
 
@@ -229,6 +243,7 @@ class SoundtrackController extends Notifier<SoundtrackState> {
   bool _inForeground = true;
   Timer? _savePosition;
   AppLifecycleListener? _lifecycle;
+  Future<void> _queue = Future.value();
 
   SoundtrackEngine get _engine => ref.read(soundtrackEngineProvider);
   SoundtrackStore get _store => ref.read(soundtrackStoreProvider);
@@ -239,6 +254,9 @@ class SoundtrackController extends Notifier<SoundtrackState> {
     ref.listen(introDoneProvider, (_, done) {
       if (done) _sync();
     });
+    // Vocali, replay e stanza vocale: la musica resta in pausa finché qualcuno usa
+    // l'audio e riprende da sola quando hanno finito tutti.
+    ref.listen(audioFocusProvider, (_, _) => _sync());
     _lifecycle = AppLifecycleListener(
       onHide: () {
         _inForeground = false;
@@ -257,62 +275,89 @@ class SoundtrackController extends Notifier<SoundtrackState> {
     return const SoundtrackState(busy: true);
   }
 
-  Future<void> _restore() async {
-    try {
-      final saved = await _store.read();
-      final path = saved['path'] as String?;
-      final volume = (saved['volume'] as num?)?.toDouble() ?? .5;
-      state = state.copyWith(
-        volume: volume,
-        autoplay: saved['autoplay'] as bool? ?? true,
-        // All'apertura riparte solo con l'avvio automatico attivo.
-        muted:
-            (saved['muted'] as bool? ?? false) ||
-            !(saved['autoplay'] as bool? ?? true),
-      );
-      if (path != null) {
-        await _engine.load(path);
-        await _engine.setVolume(volume);
-        final ms = saved['ms'] as int?;
-        if (ms != null) await _engine.seek(Duration(milliseconds: ms));
-        _path = path;
-        state = state.copyWith(trackName: saved['name'] as String? ?? 'Musica');
-      }
-    } catch (_) {
-      // File sparito o non leggibile: si riparte senza musica.
-      _path = null;
-      state = state.copyWith(clearTrack: true);
-    } finally {
-      state = state.copyWith(busy: false);
-      await _sync();
-    }
+  /// Le operazioni sul lettore si fanno una alla volta, nell'ordine in cui arrivano:
+  /// due richieste insieme (l'app va in secondo piano mentre parte un vocale...)
+  /// non lasciano più la musica accesa in muto o ferma senza motivo.
+  Future<T> _serialized<T>(Future<T> Function() op) {
+    final result = _queue.then((_) => op());
+    _queue = result.then((_) {}, onError: (_) {});
+    return result;
   }
 
-  /// Suona solo se c'è un file, non è in muto, l'app è in primo piano e l'intro è finita.
-  Future<void> _sync() async {
+  Future<void> _restore() async {
+    await _serialized(() async {
+      if (!ref.mounted) return;
+      try {
+        final saved = await _store.read();
+        final path = saved['path'] as String?;
+        final volume = (saved['volume'] as num?)?.toDouble() ?? .5;
+        state = state.copyWith(
+          volume: volume,
+          autoplay: saved['autoplay'] as bool? ?? true,
+          // All'apertura riparte solo con l'avvio automatico attivo.
+          muted:
+              (saved['muted'] as bool? ?? false) ||
+              !(saved['autoplay'] as bool? ?? true),
+        );
+        if (path != null) {
+          await _engine.load(path);
+          await _engine.setVolume(volume);
+          final ms = saved['ms'] as int?;
+          if (ms != null) await _engine.seek(Duration(milliseconds: ms));
+          _path = path;
+          state = state.copyWith(
+            trackName: saved['name'] as String? ?? 'Musica',
+          );
+        }
+      } catch (_) {
+        // File sparito o non leggibile: si riparte senza musica.
+        _path = null;
+        state = state.copyWith(clearTrack: true);
+      }
+    });
+    if (!ref.mounted) return;
+    state = state.copyWith(busy: false);
+    await _sync();
+  }
+
+  /// Suona solo se c'è un file, non è in muto, l'app è in primo piano, l'intro è
+  /// finita e nessun altro sta usando l'audio.
+  Future<void> _sync() => _serialized(() async {
+    if (!ref.mounted) return;
     final shouldPlay =
         _path != null &&
         !state.muted &&
         _inForeground &&
-        ref.read(introDoneProvider);
+        ref.read(introDoneProvider) &&
+        ref.read(audioFocusProvider).isEmpty;
     if (shouldPlay == state.playing) return;
-    if (shouldPlay) {
-      await _engine.play();
-      _savePosition ??= Timer.periodic(
-        const Duration(seconds: 20),
-        (_) => _rememberPosition(),
-      );
-    } else {
-      await _engine.pause();
-      _savePosition?.cancel();
-      _savePosition = null;
-      await _rememberPosition();
+    try {
+      if (shouldPlay) {
+        await _engine.play();
+        _savePosition ??= Timer.periodic(
+          const Duration(seconds: 20),
+          (_) => _rememberPosition(),
+        );
+      } else {
+        await _engine.pause();
+        _savePosition?.cancel();
+        _savePosition = null;
+        await _rememberPosition();
+      }
+      state = state.copyWith(playing: shouldPlay);
+    } catch (_) {
+      // Il lettore non ha risposto: si riprova alla prossima richiesta.
     }
-    state = state.copyWith(playing: shouldPlay);
-  }
+  });
 
   Future<void> _rememberPosition() =>
       _store.write({'ms': _engine.position.inMilliseconds});
+
+  Future<void> _deleteQuietly(String path) async {
+    try {
+      await _store.deleteTrack(path);
+    } catch (_) {}
+  }
 
   /// Pulsante muto. Restituisce false se non c'è ancora una musica scelta.
   Future<bool> toggleMute() async {
@@ -323,40 +368,74 @@ class SoundtrackController extends Notifier<SoundtrackState> {
     return true;
   }
 
-  /// Sceglie un nuovo file dal telefono e lo fa partire.
+  /// Sceglie un nuovo file dal telefono e lo fa partire. Se il telefono non lo sa
+  /// riprodurre (es. .ogg o .opus su iPhone) la copia si cancella, torna la musica
+  /// di prima e l'errore arriva a chi ha chiamato.
   Future<void> pickTrack() async {
     state = state.copyWith(busy: true);
     try {
       final imported = await _store.importTrack();
       if (imported == null) return;
-      final (path, name) = imported;
-      final old = _path;
-      if (state.playing) {
-        await _engine.pause();
-        state = state.copyWith(playing: false);
-      }
-      await _engine.load(path);
-      await _engine.setVolume(state.volume);
-      _path = path;
-      if (old != null && old != path) await _store.deleteTrack(old);
-      await _store.write({'path': path, 'name': name, 'ms': 0, 'muted': false});
-      state = state.copyWith(trackName: name, muted: false);
+      await _serialized(() => _switchTo(imported.$1, imported.$2));
     } finally {
-      state = state.copyWith(busy: false);
-      await _sync();
+      if (ref.mounted) {
+        state = state.copyWith(busy: false);
+        await _sync();
+      }
     }
   }
 
-  Future<void> removeTrack() async {
-    await _engine.stop();
+  Future<void> _switchTo(String path, String name) async {
+    final old = _path;
+    final at = _engine.position;
+    if (state.playing) {
+      await _engine.pause();
+      _savePosition?.cancel();
+      _savePosition = null;
+      state = state.copyWith(playing: false);
+    }
+    try {
+      await _engine.load(path);
+      await _engine.setVolume(state.volume);
+    } catch (_) {
+      await _deleteQuietly(path);
+      await _reload(old, at);
+      rethrow;
+    }
+    _path = path;
+    if (old != null && old != path) await _deleteQuietly(old);
+    await _store.write({'path': path, 'name': name, 'ms': 0, 'muted': false});
+    state = state.copyWith(trackName: name, muted: false);
+  }
+
+  /// Rimette la musica di prima dopo un file nuovo che non si riesce a leggere;
+  /// se non si può, si resta senza musica.
+  Future<void> _reload(String? old, Duration at) async {
+    if (old == null) return;
+    try {
+      await _engine.load(old);
+      await _engine.setVolume(state.volume);
+      await _engine.seek(at);
+    } catch (_) {
+      _path = null;
+      await _deleteQuietly(old);
+      await _store.write({'path': null, 'name': null, 'ms': null});
+      state = state.copyWith(clearTrack: true);
+    }
+  }
+
+  Future<void> removeTrack() => _serialized(() async {
+    try {
+      await _engine.stop();
+    } catch (_) {}
     final old = _path;
     _path = null;
-    if (old != null) await _store.deleteTrack(old);
-    await _store.write({'path': null, 'name': null, 'ms': null});
     _savePosition?.cancel();
     _savePosition = null;
     state = state.copyWith(clearTrack: true, playing: false);
-  }
+    if (old != null) await _deleteQuietly(old);
+    await _store.write({'path': null, 'name': null, 'ms': null});
+  });
 
   Future<void> setVolume(double volume) async {
     state = state.copyWith(volume: volume);

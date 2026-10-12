@@ -35,6 +35,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | **Nuova app · 3** | Chat in stile Telegram (risposte citate, vocali fino a 2 minuti, foto e vocali che scadono dopo 60 giorni, link cliccabili, "Nuovi messaggi"), carte speciali al posto dei voti (nero/oro della settimana assegnata dal Direttivo per reparto con bonus +1…+5, blu elettrico automatica per tripletta o tre partite senza subire gol, annuncio in Comunicazioni, walkout e traguardi dedicati), Rosa con mini carte, ricerca e filtri, Tornei con foto o logo. | ✅ |
 | **Nuova app · 4** | Lavagna tattica in Tattiche e schemi: gettoni dei giocatori delle due squadre (dalla formazione), pennello heatmap, frecce continue o tratteggiate, annulla, schemi salvati con immagine esportata; registrazione del replay (voce e mosse sincronizzate, fino a 5 minuti) con anteprima e invio in chat, dove si riproduce nell'app e sparisce dopo 3 giorni. | ✅ |
 | **Nuova app · 5** | Stanza vocale in ogni chat (Agora): cuffie nella barra, *Entra* / *Apri la stanza* con un tocco, microfono e vivavoce, cerchio verde su chi parla, avviso "stanza aperta" a chi è nel canale, chiusura automatica quando esce l'ultimo; minuti del mese nella Sala Direttivo (10.000 gratis). Rifiniture: errori con "Riprova", larghezza massima su tablet. | ✅ |
+| **Nuova app · 6** | Review completa e correzioni (sicurezza del database, dati in tempo reale ovunque, "Riprova" e nuovi tentativi quando manca la rete, ora italiana, stanza vocale robusta e attiva anche a schermo spento, chat con paginazione ed eliminazioni per tutti), nuovo design **nero oro** (scuro, chiaro o automatico come il telefono) con Barlow e Oswald, **barra in basso a cinque schede** (Home, Presenze, Partite, Chat, Club) al posto del menu laterale, profilo e impostazioni dalla foto in alto, preferenze delle notifiche, ricerca nei messaggi, nome e cognome visibili solo al Direttivo, avviso dei nuovi ingressi nella Sala Direttivo, APK sotto gli 80 MB. | ✅ |
 
 ## Provare l'app subito (modalità demo)
 
@@ -71,11 +72,12 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
    flutter run --dart-define-from-file=env/prod.json
    ```
    **Non** inserire mai nel repository la chiave `secret` / `service_role`.
-6. Fai il primo login, poi nell'SQL Editor nomina il primo Direttivo:
-   ```sql
-   update profiles set club_role = 'direttivo' where display_name = 'Il tuo nome';
-   ```
-   Da lì in poi è il Direttivo ad approvare gli altri dall'app.
+6. Registrati dall'app scegliendo *Faccio parte del Direttivo* con la password del Direttivo
+   (impostata nel database: vedi `docs/SETUP_SUPABASE.md`, § 8): il primo del Direttivo che entra
+   scrive e pubblica il regolamento d'ingresso.
+   Gli altri entrano da soli, completando la registrazione e accettando il regolamento: non c'è
+   un'approvazione, ma il Direttivo riceve l'avviso di ogni nuovo ingresso nella chat *Sala
+   Direttivo* e può togliere dalla Rosa chi non conosce (Sala Direttivo → Rosa e squadre).
 7. **Stanza vocale** (facoltativa): serve un account Agora gratuito; App ID e App Certificate vanno
    nei secret `AGORA_APP_ID` e `AGORA_APP_CERTIFICATE` di GitHub (vedi `docs/SETUP_SUPABASE.md`, § 13).
    Senza, l'app funziona lo stesso e la stanza dice che la voce non è ancora attiva.

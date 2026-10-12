@@ -4,13 +4,12 @@ import 'theme.dart';
 
 /// Le due squadre del club: un giocatore può stare in una o in entrambe.
 enum Team {
-  milanac('Milan AC', 'MILAN AC', MilanacColors.red),
-  futuro('Milan AC Futuro', 'FUTURO', Color(0xFF9CA3AF));
+  milanac('Milan AC', 'MILAN AC'),
+  futuro('Milan AC Futuro', 'FUTURO');
 
-  const Team(this.label, this.short, this.color);
+  const Team(this.label, this.short);
   final String label;
   final String short;
-  final Color color;
 
   static Team? parse(Object? value) => Team.values.asNameMap()[value];
 
@@ -30,7 +29,9 @@ List<String> teamsToJson(Set<Team> teams) => [
     if (teams.contains(t)) t.name,
 ];
 
-/// Etichetta colorata con il nome breve della squadra.
+/// Etichetta con il nome breve della squadra: MILAN AC in oro pieno (uguale nei due
+/// temi), FUTURO a filo con il grigio del tema in uso (un grigio fisso sul bianco del
+/// tema chiaro non si leggeva).
 class TeamBadge extends StatelessWidget {
   const TeamBadge(this.team, {super.key, this.small = false});
   final Team team;
@@ -39,23 +40,24 @@ class TeamBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final filled = team == Team.milanac;
+    final color = filled ? MilanacColors.gold : context.pal.textMuted;
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: small ? 6 : 8,
         vertical: small ? 1 : 3,
       ),
       decoration: BoxDecoration(
-        color: filled ? team.color : Colors.transparent,
-        border: Border.all(color: team.color),
+        color: filled ? color : Colors.transparent,
+        border: Border.all(color: color),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         team.short,
         style: TextStyle(
-          fontSize: small ? 9 : 10,
-          fontWeight: FontWeight.w900,
+          fontSize: small ? 10 : 11,
+          fontWeight: FontWeight.w700,
           letterSpacing: .8,
-          color: filled ? Colors.white : team.color,
+          color: filled ? MilanacColors.ink : color,
         ),
       ),
     );

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Canale delle notifiche push del club: lo stesso id per il manifest (canale
+         predefinito di Firebase) e per MainActivity, che lo crea. -->
+    <string name="canale_avvisi_club" translatable="false">avvisi_club</string>
+</resources>

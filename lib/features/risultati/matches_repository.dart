@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import 'match.dart';
 
@@ -18,7 +19,8 @@ abstract class MatchesRepository {
   Future<String> save(ClubMatch match);
   Future<void> delete(String id);
 
-  Stream<List<MatchMedia>> watchMedia(String matchId);
+  /// Foto, clip e link di tutte le partite.
+  Stream<List<MatchMedia>> watchAllMedia();
   Future<void> addLink(String matchId, String url, {String? caption});
   Future<void> uploadMedia(
     String matchId, {
@@ -36,29 +38,52 @@ abstract class MatchesRepository {
 
 final matchesRepositoryProvider = Provider<MatchesRepository>((ref) {
   if (AppConfig.isDemo) return DemoMatchesRepository();
-  return _SupabaseMatchesRepository(ref);
+  return SupabaseMatchesRepository(ref);
 });
 
-final matchesProvider = StreamProvider<List<ClubMatch>>(
-  (ref) => ref.watch(matchesRepositoryProvider).watchAll(),
-);
+final matchesProvider = StreamProvider<List<ClubMatch>>((ref) {
+  // Al cambio di account si ricarica con i permessi del nuovo utente.
+  ref.watch(currentUserIdProvider);
+  return ref.watch(matchesRepositoryProvider).watchAll();
+});
 
-final matchMediaProvider = StreamProvider.family<List<MatchMedia>, String>(
-  (ref, matchId) => ref.watch(matchesRepositoryProvider).watchMedia(matchId),
-);
+/// I media di tutte le partite: un solo canale in tempo reale per tutte le schede
+/// (prima ne apriva uno ogni partita in elenco) e, senza filtro sul server,
+/// arrivano anche le eliminazioni.
+final allMatchMediaProvider = StreamProvider<List<MatchMedia>>((ref) {
+  ref.watch(currentUserIdProvider);
+  return ref.watch(matchesRepositoryProvider).watchAllMedia();
+});
 
-class _SupabaseMatchesRepository implements MatchesRepository {
-  _SupabaseMatchesRepository(this._ref);
+/// I media di una partita (dallo stream condiviso).
+final matchMediaProvider =
+    Provider.family<AsyncValue<List<MatchMedia>>, String>(
+      (ref, matchId) => ref
+          .watch(allMatchMediaProvider)
+          .whenData(
+            (all) => [
+              for (final m in all)
+                if (m.matchId == matchId) m,
+            ],
+          ),
+    );
+
+class SupabaseMatchesRepository implements MatchesRepository {
+  SupabaseMatchesRepository(this._ref);
   final Ref _ref;
 
   SupabaseClient get _client => _ref.read(supabaseProvider);
 
+  /// Dalla più recente: lo stream ordina solo per orario, le partite della stessa sera
+  /// le mette in fila [newestMatchFirst].
   @override
   Stream<List<ClubMatch>> watchAll() => _client
       .from('matches')
       .stream(primaryKey: ['id'])
       .order('played_at', ascending: false)
-      .map((rows) => rows.map(ClubMatch.fromMap).toList());
+      .map(
+        (rows) => rows.map(ClubMatch.fromMap).toList()..sort(newestMatchFirst),
+      );
 
   @override
   Future<String> save(ClubMatch m) async {
@@ -84,15 +109,26 @@ class _SupabaseMatchesRepository implements MatchesRepository {
       for (final r in media)
         if (r['storage_path'] != null) r['storage_path'] as String,
     ];
-    if (paths.isNotEmpty) await _client.storage.from(mediaBucket).remove(paths);
+    // Prima il database (i media della partita se ne vanno con lei), poi i file: se la
+    // rete cade a metà resta al più un file orfano, mai un media che punta a un file
+    // cancellato. I file non si aspettano: la partita è già sparita (in tempo reale
+    // anche dalla pagina aperta) e la pagina si chiude subito.
     await _client.from('matches').delete().eq('id', id);
+    unawaited(_removeQuietly(paths));
+  }
+
+  /// File in meno nello storage; se non riesce restano file orfani, non un errore.
+  Future<void> _removeQuietly(List<String> paths) async {
+    if (paths.isEmpty) return;
+    try {
+      await _client.storage.from(mediaBucket).remove(paths);
+    } catch (_) {}
   }
 
   @override
-  Stream<List<MatchMedia>> watchMedia(String matchId) => _client
+  Stream<List<MatchMedia>> watchAllMedia() => _client
       .from('match_media')
       .stream(primaryKey: ['id'])
-      .eq('match_id', matchId)
       .order('created_at')
       .map((rows) => rows.map(MatchMedia.fromMap).toList());
 
@@ -126,22 +162,28 @@ class _SupabaseMatchesRepository implements MatchesRepository {
             contentType: type == MediaType.video ? 'video/mp4' : 'image/jpeg',
           ),
         );
-    await _client.from('match_media').insert({
-      'match_id': matchId,
-      'type': type.name,
-      'storage_path': path,
-      'duration_s': durationS,
-      'caption': caption,
-      'uploaded_by': _client.auth.currentUser?.id,
-    });
+    try {
+      await _client.from('match_media').insert({
+        'match_id': matchId,
+        'type': type.name,
+        'storage_path': path,
+        'duration_s': durationS,
+        'caption': caption,
+        'uploaded_by': _client.auth.currentUser?.id,
+      });
+    } on PostgrestException {
+      // Il database l'ha rifiutato: il file resterebbe orfano. Con la rete caduta invece
+      // non si sa se la riga c'è, e il file resta.
+      await _removeQuietly([path]);
+      rethrow;
+    }
   }
 
   @override
   Future<void> deleteMedia(MatchMedia media) async {
-    if (media.storagePath != null) {
-      await _client.storage.from(mediaBucket).remove([media.storagePath!]);
-    }
+    // Prima la riga, poi il file (vedi [delete]).
     await _client.from('match_media').delete().eq('id', media.id);
+    await _removeQuietly([?media.storagePath]);
   }
 
   @override
@@ -152,8 +194,13 @@ class _SupabaseMatchesRepository implements MatchesRepository {
 
 class DemoMatchesRepository implements MatchesRepository {
   DemoMatchesRepository() {
-    final now = DateTime.now();
-    DateTime ago(int d) => DateTime(now.year, now.month, now.day - d, 21, 30);
+    // Ore italiane, come le partite lette dal server.
+    final today = italianClock(DateTime.now());
+    DateTime ago(int d) =>
+        DateTime.utc(today.year, today.month, today.day - d, 21, 30);
+    // Inserite a fine partita, come fa il Direttivo.
+    DateTime insertedAfter(int d) =>
+        fromItalianClock(ago(d)).add(const Duration(hours: 1));
     _matches.addAll([
       ClubMatch(
         id: 'm1',
@@ -162,6 +209,7 @@ class DemoMatchesRepository implements MatchesRepository {
         competition: 'FVPA Serie B – 2ª giornata',
         opponent: 'Dinamo Pixel',
         playedAt: ago(5),
+        createdAt: insertedAfter(5),
         goalsFor: 3,
         goalsAgainst: 1,
         scorers: 'Rossi (2), Bianchi',
@@ -174,6 +222,7 @@ class DemoMatchesRepository implements MatchesRepository {
         kind: MatchKind.amichevole,
         opponent: 'Real Brianza',
         playedAt: ago(9),
+        createdAt: insertedAfter(9),
         home: false,
         goalsFor: 2,
         goalsAgainst: 2,
@@ -185,6 +234,7 @@ class DemoMatchesRepository implements MatchesRepository {
         competition: 'FVPA Serie B – 1ª giornata',
         opponent: 'Sporting Joypad',
         playedAt: ago(12),
+        createdAt: insertedAfter(12),
         goalsFor: 0,
         goalsAgainst: 1,
       ),
@@ -205,9 +255,19 @@ class DemoMatchesRepository implements MatchesRepository {
   final _matchesCtrl = StreamController<List<ClubMatch>>.broadcast();
   final _mediaCtrl = StreamController<void>.broadcast();
   var _nextId = 100;
+  DateTime? _lastInsert;
 
-  List<ClubMatch> get _sorted =>
-      List.of(_matches)..sort((a, b) => b.playedAt.compareTo(a.playedAt));
+  List<ClubMatch> get _sorted => List.of(_matches)..sort(newestMatchFirst);
+
+  /// L'ora di inserimento, come `created_at` del database: sempre successiva alla
+  /// precedente (due salvataggi di fila possono cadere nello stesso istante).
+  DateTime _insertedNow() {
+    final now = DateTime.now().toUtc();
+    final last = _lastInsert;
+    return _lastInsert = last != null && !now.isAfter(last)
+        ? last.add(const Duration(microseconds: 1))
+        : now;
+  }
 
   @override
   Stream<List<ClubMatch>> watchAll() async* {
@@ -218,6 +278,7 @@ class DemoMatchesRepository implements MatchesRepository {
   @override
   Future<String> save(ClubMatch m) async {
     final id = m.id.isEmpty ? 'm${_nextId++}' : m.id;
+    final old = _matches.where((x) => x.id == id).firstOrNull;
     _matches.removeWhere((x) => x.id == id);
     _matches.add(
       ClubMatch(
@@ -225,6 +286,7 @@ class DemoMatchesRepository implements MatchesRepository {
         kind: m.kind,
         opponent: m.opponent,
         playedAt: m.playedAt,
+        createdAt: old?.createdAt ?? _insertedNow(),
         competition: m.competition,
         home: m.home,
         goalsFor: m.goalsFor,
@@ -248,13 +310,10 @@ class DemoMatchesRepository implements MatchesRepository {
     _mediaCtrl.add(null);
   }
 
-  List<MatchMedia> _mediaOf(String matchId) =>
-      _media.where((m) => m.matchId == matchId).toList();
-
   @override
-  Stream<List<MatchMedia>> watchMedia(String matchId) async* {
-    yield _mediaOf(matchId);
-    yield* _mediaCtrl.stream.map((_) => _mediaOf(matchId));
+  Stream<List<MatchMedia>> watchAllMedia() async* {
+    yield List.of(_media);
+    yield* _mediaCtrl.stream.map((_) => List.of(_media));
   }
 
   @override

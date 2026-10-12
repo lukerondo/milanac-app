@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/clock.dart';
 import '../../core/config.dart';
+import '../../core/italian_time.dart';
 import 'attendance.dart';
 
 /// Quanti giorni di storico caricare.
@@ -16,13 +18,20 @@ abstract class AttendanceRepository {
 }
 
 final attendanceRepositoryProvider = Provider<AttendanceRepository>((ref) {
-  if (AppConfig.isDemo) return DemoAttendanceRepository();
+  if (AppConfig.isDemo) {
+    return DemoAttendanceRepository(
+      today: italianDay(ref.read(clockProvider)()),
+    );
+  }
   return _SupabaseAttendanceRepository(ref);
 });
 
+/// Le presenze degli ultimi [historyDays] giorni (e quelle già date per i prossimi),
+/// lette con i permessi dell'utente: si ricaricano quando entra un altro account.
 final attendanceProvider = StreamProvider<List<AttendanceEntry>>((ref) {
-  final from = dayOnly(DateTime.now())
-      .subtract(const Duration(days: historyDays));
+  if (ref.watch(currentUserIdProvider) == null) return Stream.value(const []);
+  final today = italianDay(ref.read(clockProvider)());
+  final from = DateTime(today.year, today.month, today.day - historyDays);
   return ref.watch(attendanceRepositoryProvider).watchSince(from);
 });
 
@@ -47,10 +56,11 @@ class _SupabaseAttendanceRepository implements AttendanceRepository {
   }
 }
 
-/// Storico di esempio in memoria (modalità demo e test).
+/// Storico di esempio in memoria (modalità demo e test), intorno a [today]
+/// (il giorno italiano dell'orologio dell'app).
 class DemoAttendanceRepository implements AttendanceRepository {
-  DemoAttendanceRepository() {
-    final today = dayOnly(DateTime.now());
+  DemoAttendanceRepository({DateTime? today}) {
+    final day = dayOnly(today ?? italianDay(DateTime.now()));
     const pattern = {
       'p2': [
         AttendanceStatus.presente,
@@ -90,7 +100,7 @@ class DemoAttendanceRepository implements AttendanceRepository {
         _entries.add(
           AttendanceEntry(
             playerId: player,
-            date: today.subtract(Duration(days: 2 * (i + 1))),
+            date: DateTime(day.year, day.month, day.day - 2 * (i + 1)),
             status: s,
             arrivalTime: s == AttendanceStatus.ritardo
                 ? '22:00'
@@ -103,7 +113,7 @@ class DemoAttendanceRepository implements AttendanceRepository {
     _entries.add(
       AttendanceEntry(
         playerId: 'p2',
-        date: today,
+        date: day,
         status: AttendanceStatus.ritardo,
         arrivalTime: '21:50',
         note: 'Esco tardi da lavoro',

@@ -67,9 +67,8 @@ class _LinkTextState extends State<LinkText> {
   Future<void> _open(Uri uri) async {
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Non riesco ad aprire $uri')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Non riesco ad aprire $uri')));
     }
   }
 

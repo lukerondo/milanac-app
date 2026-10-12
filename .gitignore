@@ -49,3 +49,6 @@ app.*.map.json
 
 # Python
 __pycache__/
+
+# Copie di lavoro temporanee degli agenti
+/.claude/worktrees/

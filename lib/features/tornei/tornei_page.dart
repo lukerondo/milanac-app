@@ -3,87 +3,160 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
+import '../../shared/shared_links.dart';
+import '../../shared/ui.dart';
 import '../risultati/matches_repository.dart';
-import '../risultati/risultati_page.dart' show MatchCard;
+import '../risultati/result_ui.dart';
+import '../risultati/risultati_page.dart' show MatchList;
 import 'tournaments_repository.dart';
 
-/// Tornei del club: link al sito dell'organizzatore e classifica facoltativa.
-class TorneiPage extends ConsumerStatefulWidget {
+/// Tornei del club (scheda di Partite): una card per torneo con stato, classifica
+/// (per quelli in corso) e link al sito dell'organizzatore, come la tavola.
+class TorneiPage extends ConsumerWidget {
   const TorneiPage({super.key});
 
-  @override
-  ConsumerState<TorneiPage> createState() => _TorneiPageState();
-}
+  static const _order = [
+    TournamentStatus.inCorso,
+    TournamentStatus.iscrizioni,
+    TournamentStatus.concluso,
+  ];
 
-class _TorneiPageState extends ConsumerState<TorneiPage> {
-  Team? _team;
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final tournaments = ref.watch(tournamentsProvider);
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: isDirettivo
           ? FloatingActionButton.extended(
-              backgroundColor: MilanacColors.red,
               onPressed: () => showTournamentEditor(context),
               icon: const Icon(Icons.add_rounded),
               label: const Text('Nuovo torneo'),
             )
           : null,
-      body: tournaments.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
-        data: (all) {
-          final shown = all.where((t) => _team == null || t.team == _team);
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-            children: [
-              TeamFilter(
-                value: _team,
-                onChanged: (t) => setState(() => _team = t),
-              ),
-              if (shown.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 40),
-                  child: Center(
-                    child: Text(
-                      'Nessun torneo registrato.',
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                  ),
-                ),
-              for (final status in [
-                TournamentStatus.inCorso,
-                TournamentStatus.iscrizioni,
-                TournamentStatus.concluso,
-              ])
-                if (shown.any((t) => t.status == status)) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
-                    child: Text(
-                      status.label.toUpperCase(),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
+      // Tornando sulla scheda Partite le classifiche si rileggono (non arrivano in tempo
+      // reale prima della migrazione 0025).
+      body: OnVisible(
+        onVisible: () => ref.invalidate(standingsProvider),
+        child: AsyncView(
+          value: tournaments,
+          onRetry: () => ref.invalidate(tournamentsProvider),
+          data: (all) {
+            final current =
+                all.where((t) => t.status != TournamentStatus.concluso).toList()
+                  ..sort(
+                    (a, b) => _order
+                        .indexOf(a.status)
+                        .compareTo(_order.indexOf(b.status)),
+                  );
+            final done = all
+                .where((t) => t.status == TournamentStatus.concluso)
+                .toList();
+            return RefreshIndicator(
+              onRefresh: () => _refreshStandings(ref, current),
+              child: ListView(
+                // Si trascina in giù anche con pochi tornei.
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                children: [
+                  if (all.isEmpty)
+                    AppCard(
+                      child: Text(
+                        'Nessun torneo registrato.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: context.pal.textMuted,
+                        ),
                       ),
                     ),
-                  ),
-                  for (final t in shown.where((t) => t.status == status))
-                    _TournamentCard(tournament: t),
+                  for (final t in current)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: _TournamentCard(tournament: t),
+                    ),
+                  if (done.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    const SectionLabel('Conclusi'),
+                    const SizedBox(height: 10),
+                    for (final t in done)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: _TournamentCard(tournament: t),
+                      ),
+                  ],
                 ],
-            ],
-          );
-        },
+              ),
+            );
+          },
+        ),
       ),
     );
   }
+
+  /// Le classifiche non arrivano in tempo reale: trascinando in giù si rileggono (senza
+  /// rete la pagina lo segnala e continua a riprovare da sola).
+  static Future<void> _refreshStandings(
+    WidgetRef ref,
+    List<Tournament> shown,
+  ) async {
+    // Si aspettano le classifiche mostrate (quelle dei tornei in corso).
+    final visible = [
+      for (final t in shown)
+        if (t.status == TournamentStatus.inCorso &&
+            ref.exists(standingsProvider(t.id)))
+          standingsProvider(t.id),
+    ];
+    ref.invalidate(standingsProvider);
+    try {
+      await Future.wait([for (final p in visible) ref.read(p.future)])
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
+  }
+}
+
+/// "Milan AC · in corso dal 15 settembre", "Milan AC Futuro · Torneo amatoriale".
+String _subtitle(Tournament t) {
+  String day(DateTime d) => DateFormat('d MMMM', 'it').format(d);
+  final detail = switch (t.status) {
+    TournamentStatus.inCorso when t.startsOn != null =>
+      'in corso dal ${day(t.startsOn!)}',
+    TournamentStatus.iscrizioni when t.startsOn != null =>
+      'inizia il ${day(t.startsOn!)}',
+    TournamentStatus.concluso when t.endsOn != null =>
+      'concluso il ${day(t.endsOn!)}',
+    _ => t.organizer,
+  };
+  return [t.team.label, ?detail].join(' · ');
+}
+
+/// Pillola dello stato: in corso (verde), iscrizioni (ambra), concluso (grigio).
+Widget _statusPill(BuildContext context, TournamentStatus s) {
+  final p = context.pal;
+  final (text, fg, bg) = switch (s) {
+    TournamentStatus.inCorso => ('In corso', p.success, p.successBg),
+    TournamentStatus.iscrizioni => ('Iscrizioni', p.warning, p.warningBg),
+    TournamentStatus.concluso => ('Concluso', p.textSecondary, p.surfaceHigh),
+  };
+  return StatusPill(text, color: fg, background: bg);
+}
+
+/// Sigla del torneo per il riquadro senza logo ("FVPA Serie B" → "FVPA",
+/// "Coppa Riserve" → "CR").
+String tournamentInitials(String name) {
+  final first = name.trim().split(RegExp(r'\s+')).first;
+  final acronym =
+      first.length >= 2 &&
+      first.length <= 5 &&
+      first == first.toUpperCase() &&
+      first.contains(RegExp(r'[A-Z]'));
+  return acronym ? first : initialsOf(name);
 }
 
 class _TournamentCard extends ConsumerWidget {
@@ -92,49 +165,156 @@ class _TournamentCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
     final t = tournament;
-    final standings = ref.watch(standingsProvider(t.id)).value ?? const [];
-    final ourIndex = standings.indexWhere((r) => r.isUs);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-        leading: TournamentLogo(tournament: t),
-        title: Text(
-          t.name,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              [
-                if (t.organizer != null) t.organizer!,
-                if (ourIndex >= 0)
-                  '${ourIndex + 1}° posto · ${standings[ourIndex].points} pt',
-              ].join(' · '),
-            ),
-            const SizedBox(height: 4),
-            TeamBadge(t.team, small: true),
-          ],
-        ),
-        trailing: t.url == null
-            ? const Icon(Icons.chevron_right_rounded)
-            : IconButton(
-                tooltip: 'Sito del torneo',
-                icon: const Icon(Icons.open_in_new_rounded),
-                onPressed: () => _open(t.url!),
+    final live = t.status == TournamentStatus.inCorso;
+    final standings = live
+        ? ref.watch(standingsProvider(t.id)).value ?? const <StandingRow>[]
+        : const <StandingRow>[];
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => TournamentPage(tournamentId: t.id),
               ),
-        onTap: () => Navigator.of(context, rootNavigator: true).push(
-          MaterialPageRoute(builder: (_) => TournamentPage(tournamentId: t.id)),
-        ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  TournamentTile(tournament: t, highlighted: live),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t.name.toUpperCase(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: sportFont,
+                            fontSize: 19,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: .6,
+                            height: 1.2,
+                          ),
+                        ),
+                        Text(
+                          _subtitle(t),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: p.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _statusPill(context, t.status),
+                ],
+              ),
+            ),
+          ),
+          if (standings.isNotEmpty) StandingsTable(rows: standings),
+          if (t.url != null) ...[
+            const Divider(),
+            InkWell(
+              onTap: () => _open(t.url!),
+              child: SizedBox(
+                height: 48,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Sito del torneo',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: p.accentText,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.open_in_new_rounded,
+                      size: 18,
+                      color: p.accentText,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 }
 
-void _open(String url) =>
-    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+void _open(String url) => openExternalLink(url);
+
+/// Riquadro del torneo: il logo caricato o la sigla; in evidenza (oro) se è in corso.
+class TournamentTile extends ConsumerWidget {
+  const TournamentTile({
+    super.key,
+    required this.tournament,
+    this.highlighted = false,
+    this.size = 52,
+  });
+  final Tournament tournament;
+  final bool highlighted;
+  final double size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
+    final path = tournament.imagePath;
+    final image = path == null
+        ? null
+        : ref.watch(tournamentImageProvider(path)).value;
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: highlighted ? p.accentTint : p.surfaceHigh,
+        borderRadius: BorderRadius.circular(size * .23),
+        border: highlighted ? Border.all(color: p.importantBorder) : null,
+      ),
+      child: image != null
+          ? Image(
+              image: image,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(4),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  tournamentInitials(tournament.name),
+                  style: TextStyle(
+                    fontFamily: sportFont,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: .6,
+                    color: highlighted ? p.accentText : p.text,
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
 
 /// Foto o logo del torneo in tondo (icona della coppa se manca).
 class TournamentLogo extends ConsumerWidget {
@@ -144,20 +324,17 @@ class TournamentLogo extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
     final path = tournament.imagePath;
     final image = path == null
         ? null
         : ref.watch(tournamentImageProvider(path)).value;
     return CircleAvatar(
       radius: radius,
-      backgroundColor: MilanacColors.surfaceHigh,
+      backgroundColor: p.surfaceHigh,
       backgroundImage: image,
       child: image == null
-          ? Icon(
-              Icons.leaderboard_rounded,
-              color: MilanacColors.gold,
-              size: radius,
-            )
+          ? Icon(Icons.emoji_events_rounded, color: p.accentText, size: radius)
           : null,
     );
   }
@@ -175,35 +352,61 @@ class _TournamentPhoto extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Image(image: image, height: 180, fit: BoxFit.cover),
+        borderRadius: BorderRadius.circular(18),
+        child: Image(
+          image: image,
+          height: 180,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
       ),
     );
   }
 }
 
 /// Dettaglio: info, sito, classifica e partite del torneo.
-class TournamentPage extends ConsumerWidget {
+class TournamentPage extends ConsumerStatefulWidget {
   const TournamentPage({super.key, required this.tournamentId});
   final String tournamentId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TournamentPage> createState() => _TournamentPageState();
+}
+
+class _TournamentPageState extends ConsumerState<TournamentPage> {
+  @override
+  void initState() {
+    super.initState();
+    // La card dei Tornei tiene la classifica in memoria: aprendo il torneo si rilegge
+    // (intanto si vede quella di prima).
+    final standings = standingsProvider(widget.tournamentId);
+    if (ref.exists(standings)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.invalidate(standings);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tournamentId = widget.tournamentId;
+    final p = context.pal;
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    final t = ref
-        .watch(tournamentsProvider)
-        .value
-        ?.where((x) => x.id == tournamentId)
-        .firstOrNull;
+    final tournaments = ref.watch(tournamentsProvider);
+    final t = tournaments.value?.where((x) => x.id == tournamentId).firstOrNull;
     final standings = ref.watch(standingsProvider(tournamentId));
     final matches = (ref.watch(matchesProvider).value ?? const [])
         .where((m) => m.tournamentId == tournamentId)
         .toList();
-    final dates = DateFormat('d MMM yyyy', 'it');
+    final dates = DateFormat('d MMMM yyyy', 'it');
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('TORNEO'),
+        flexibleSpace: const Align(
+          alignment: Alignment.topCenter,
+          child: GoldRule(),
+        ),
         actions: [
           if (isDirettivo && t != null)
             IconButton(
@@ -211,47 +414,98 @@ class TournamentPage extends ConsumerWidget {
               icon: const Icon(Icons.edit_rounded),
               onPressed: () => showTournamentEditor(context, tournament: t),
             ),
+          const SizedBox(width: 4),
         ],
       ),
       body: t == null
-          ? const Center(child: CircularProgressIndicator())
+          // Lo spinner finché l'elenco non è caricato; poi, se il torneo non c'è
+          // più (eliminato da un altro telefono), lo si dice.
+          ? tournaments.hasError &&
+                    (!tournaments.isLoading || tournaments.retrying)
+                ? ErrorRetry(
+                    message: friendlyError(
+                      tournaments.error!,
+                      action: 'Caricamento non riuscito',
+                    ),
+                    onRetry: () => ref.invalidate(tournamentsProvider),
+                  )
+                : tournaments.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ErrorRetry(
+                    message: 'Torneo non trovato.',
+                    onRetry: () => ref.invalidate(tournamentsProvider),
+                  )
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
                 if (t.imagePath != null) _TournamentPhoto(path: t.imagePath!),
-                Wrap(
-                  spacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    TeamBadge(t.team),
-                    Text(
-                      t.status.label,
-                      style: const TextStyle(color: MilanacColors.gold),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  t.name,
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w900),
-                ),
-                if (t.organizer != null)
-                  Text(
-                    t.organizer!,
-                    style: const TextStyle(color: Colors.white70),
+                AppCard(
+                  important: t.status == TournamentStatus.inCorso,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          TournamentTile(
+                            tournament: t,
+                            highlighted: t.status == TournamentStatus.inCorso,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  t.name.toUpperCase(),
+                                  style: const TextStyle(
+                                    fontFamily: sportFont,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: .6,
+                                    height: 1.15,
+                                  ),
+                                ),
+                                Text(
+                                  t.team.label,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: p.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _statusPill(context, t.status),
+                      ),
+                      if (t.organizer != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Organizzatore: ${t.organizer}',
+                          style: TextStyle(fontSize: 14, color: p.textMuted),
+                        ),
+                      ],
+                      if (t.startsOn != null)
+                        Text(
+                          t.endsOn == null
+                              ? 'Dal ${dates.format(t.startsOn!)}'
+                              : 'Dal ${dates.format(t.startsOn!)} al ${dates.format(t.endsOn!)}',
+                          style: TextStyle(fontSize: 14, color: p.textMuted),
+                        ),
+                      if (t.notes != null && t.notes!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          t.notes!,
+                          style: const TextStyle(fontSize: 15, height: 1.4),
+                        ),
+                      ],
+                    ],
                   ),
-                if (t.startsOn != null)
-                  Text(
-                    t.endsOn == null
-                        ? 'Dal ${dates.format(t.startsOn!)}'
-                        : 'Dal ${dates.format(t.startsOn!)} al ${dates.format(t.endsOn!)}',
-                    style: const TextStyle(color: Colors.white60),
-                  ),
-                if (t.notes != null && t.notes!.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(t.notes!),
-                ],
+                ),
                 if (t.url != null) ...[
                   const SizedBox(height: 12),
                   FilledButton.icon(
@@ -260,57 +514,49 @@ class TournamentPage extends ConsumerWidget {
                     label: const Text('Apri il sito del torneo'),
                   ),
                 ],
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'CLASSIFICA',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ),
-                    if (isDirettivo)
-                      TextButton.icon(
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => StandingsEditorPage(
-                              tournamentId: t.id,
-                              initial: standings.value ?? const [],
-                            ),
-                          ),
-                        ),
-                        icon: const Icon(Icons.edit_note_rounded),
-                        label: const Text('Aggiorna'),
-                      ),
-                  ],
+                const SizedBox(height: 22),
+                SectionLabel(
+                  'Classifica',
+                  trailing: isDirettivo
+                      ? TextButton.icon(
+                          // Solo con la classifica appena caricata: partire da un
+                          // elenco vuoto (o vecchio, mentre si rilegge) e salvare la
+                          // cancellerebbe.
+                          onPressed: standings.hasValue && !standings.isLoading
+                              ? () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => StandingsEditorPage(
+                                      tournamentId: t.id,
+                                      initial: standings.requireValue,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                          icon: const Icon(Icons.edit_note_rounded),
+                          label: const Text('Aggiorna'),
+                        )
+                      : null,
                 ),
-                switch (standings) {
-                  AsyncData(:final value) when value.isNotEmpty =>
-                    StandingsTable(rows: value),
-                  AsyncData() => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Classifica non inserita: si trova sul sito del torneo.',
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                  ),
-                  AsyncError(:final error) => Text('Errore: $error'),
-                  _ => const LinearProgressIndicator(),
-                },
+                const SizedBox(height: 8),
+                AsyncView(
+                  value: standings,
+                  onRetry: () => ref.invalidate(standingsProvider(t.id)),
+                  loading: const LinearProgressIndicator(),
+                  data: (rows) => rows.isNotEmpty
+                      ? AppCard(
+                          padding: EdgeInsets.zero,
+                          child: StandingsTable(rows: rows),
+                        )
+                      : Text(
+                          'Classifica non inserita: si trova sul sito del torneo.',
+                          style: TextStyle(fontSize: 15, color: p.textMuted),
+                        ),
+                ),
                 if (matches.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  const Text(
-                    'PARTITE',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  for (final m in matches) MatchCard(match: m),
+                  const SizedBox(height: 22),
+                  const SectionLabel('Partite'),
+                  const SizedBox(height: 10),
+                  MatchList(matches: matches),
                 ],
               ],
             ),
@@ -318,74 +564,91 @@ class TournamentPage extends ConsumerWidget {
   }
 }
 
-/// Tabella della classifica (Pos, Squadra, G, V, N, P, DR, Pt).
+/// Classifica come nella tavola: #, squadra, G, V, N, P, gol fatti:subiti e punti;
+/// la nostra riga in evidenza.
 class StandingsTable extends StatelessWidget {
   const StandingsTable({super.key, required this.rows});
   final List<StandingRow> rows;
 
   @override
   Widget build(BuildContext context) {
-    const head = TextStyle(
-      color: Colors.white54,
-      fontSize: 12,
+    final p = context.pal;
+    const numbers = [FontFeature.tabularFigures()];
+    final head = TextStyle(
+      fontSize: 13,
       fontWeight: FontWeight.w700,
+      color: p.textMuted,
     );
-    Widget cell(String text, {TextStyle? style, double width = 28}) => SizedBox(
+    Widget cell(String text, {TextStyle? style, double width = 30}) => SizedBox(
       width: width,
-      child: Text(text, textAlign: TextAlign.center, style: style),
+      child: Text(text, textAlign: TextAlign.center, maxLines: 1, style: style),
     );
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          color: p.surfaceHigh,
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+          child: Row(
+            children: [
+              SizedBox(width: 28, child: Text('#', style: head)),
+              Expanded(child: Text('Squadra', style: head)),
+              for (final h in ['G', 'V', 'N', 'P']) cell(h, style: head),
+              cell('Gol', style: head, width: 44),
+              cell('Pt', style: head, width: 44),
+            ],
+          ),
+        ),
+        for (final (i, r) in rows.indexed)
+          Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
+            decoration: BoxDecoration(
+              color: r.isUs ? p.accentTint : null,
+              border: i == 0 ? null : Border(top: BorderSide(color: p.divider)),
+            ),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: r.isUs ? FontWeight.w700 : FontWeight.w500,
+                fontFeatures: numbers,
+                color: p.text,
+              ),
               child: Row(
                 children: [
-                  cell('#', style: head, width: 24),
-                  const Expanded(child: Text('Squadra', style: head)),
-                  for (final h in ['G', 'V', 'N', 'P', 'DR'])
-                    cell(h, style: head),
-                  cell('Pt', style: head, width: 32),
+                  SizedBox(
+                    width: 28,
+                    child: Text(
+                      '${i + 1}',
+                      style: TextStyle(color: r.isUs ? p.accentText : null),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      r.teamName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: r.isUs ? p.accentText : null),
+                    ),
+                  ),
+                  for (final v in [r.played, r.won, r.drawn, r.lost])
+                    cell('$v'),
+                  cell('${r.goalsFor}:${r.goalsAgainst}', width: 44),
+                  cell(
+                    '${r.points}',
+                    width: 44,
+                    style: TextStyle(
+                      fontFamily: sportFont,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: r.isUs ? p.accentText : null,
+                    ),
+                  ),
                 ],
               ),
             ),
-            for (final (i, r) in rows.indexed)
-              Container(
-                color: r.isUs ? MilanacColors.red.withValues(alpha: .22) : null,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Row(
-                  children: [
-                    cell('${i + 1}', width: 24),
-                    Expanded(
-                      child: Text(
-                        r.teamName,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: r.isUs
-                              ? FontWeight.w900
-                              : FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    for (final v in [r.played, r.won, r.drawn, r.lost])
-                      cell('$v'),
-                    cell(r.goalDiff > 0 ? '+${r.goalDiff}' : '${r.goalDiff}'),
-                    cell(
-                      '${r.points}',
-                      width: 32,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: MilanacColors.gold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
+          ),
+      ],
     );
   }
 }
@@ -421,18 +684,30 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
   late TournamentStatus _status =
       widget.tournament?.status ?? TournamentStatus.inCorso;
   late DateTime? _startsOn = widget.tournament?.startsOn;
+  late DateTime? _endsOn = widget.tournament?.endsOn;
   Uint8List? _photo;
   bool _saving = false;
 
+  /// Il torneo nuovo creato da un salvataggio rimasto a metà (la foto non è partita):
+  /// "Salva" di nuovo lo aggiorna invece di crearne un doppione.
+  String? _createdId;
+
   Future<void> _pickPhoto() async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1200,
-      imageQuality: 85,
-    );
-    if (file == null) return;
-    final bytes = await file.readAsBytes();
-    setState(() => _photo = bytes);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (mounted) setState(() => _photo = bytes);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyError(e, action: 'Foto non caricata'))),
+      );
+    }
   }
 
   @override
@@ -449,37 +724,52 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
   Future<void> _save() async {
     var url = _text(_url);
     if (url != null && !url.contains('://')) url = 'https://$url';
-    if (_text(_name) == null ||
-        (url != null && Uri.tryParse(url)?.host.isNotEmpty != true)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Inserisci il nome e un link valido.')),
-      );
+    final startsOn = _startsOn;
+    final endsOn = _endsOn;
+    final error =
+        _text(_name) == null ||
+            (url != null && Uri.tryParse(url)?.host.isNotEmpty != true)
+        ? 'Inserisci il nome e un link valido.'
+        : startsOn != null && endsOn != null && endsOn.isBefore(startsOn)
+        ? 'La data di fine viene prima di quella di inizio.'
+        : null;
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     setState(() => _saving = true);
+    final old = widget.tournament;
     final t = Tournament(
-      id: widget.tournament?.id ?? '',
+      id: _createdId ?? old?.id ?? '',
       name: _text(_name)!,
       organizer: _text(_organizer),
       url: url,
       team: _team,
       status: _status,
-      startsOn: _startsOn,
-      endsOn: widget.tournament?.endsOn,
+      startsOn: startsOn,
+      endsOn: endsOn,
       notes: _text(_notes),
-      imagePath: widget.tournament?.imagePath,
+      imagePath: old?.imagePath,
     );
     try {
       final repo = ref.read(tournamentsRepositoryProvider);
       final id = await repo.save(t);
-      if (_photo != null) await repo.uploadImage(id, _photo!);
+      _createdId = id;
+      final photo = _photo;
+      if (photo != null) {
+        // La foto di prima si toglie solo a foto nuova collegata.
+        await repo.uploadImage(id, photo, replacing: old?.imagePath);
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 
@@ -503,10 +793,23 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
     );
     if (ok != true || !mounted) return;
     final nav = Navigator.of(context);
-    await ref.read(tournamentsRepositoryProvider).delete(widget.tournament!.id);
-    nav
-      ..pop()
-      ..pop();
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(tournamentsRepositoryProvider)
+          .delete(widget.tournament!.id);
+      nav
+        ..pop()
+        ..pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Eliminazione non riuscita')),
+        ),
+      );
+    }
   }
 
   @override
@@ -536,8 +839,10 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
               showSelectedIcon: false,
               onSelectionChanged: (s) => setState(() => _team = s.first),
             ),
+            // I limiti sono quelli della tabella `tournaments`.
             TextField(
               controller: _name,
+              maxLength: 80,
               decoration: const InputDecoration(
                 labelText: 'Nome del torneo',
                 hintText: 'es. FVPA Serie B',
@@ -545,6 +850,7 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
             ),
             TextField(
               controller: _organizer,
+              maxLength: 60,
               decoration: const InputDecoration(
                 labelText: 'Organizzatore (facoltativo)',
               ),
@@ -568,27 +874,22 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
                   ),
               ],
             ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_rounded),
-              title: Text(
-                _startsOn == null
-                    ? 'Data di inizio (facoltativa)'
-                    : 'Inizio: ${DateFormat('d MMMM yyyy', 'it').format(_startsOn!)}',
-              ),
-              onTap: () async {
-                final d = await showDatePicker(
-                  context: context,
-                  initialDate: _startsOn ?? DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(DateTime.now().year + 2),
-                );
-                if (d != null) setState(() => _startsOn = d);
-              },
+            _DateTile(
+              label: 'Inizio',
+              empty: 'Data di inizio (facoltativa)',
+              value: _startsOn,
+              onChanged: (d) => setState(() => _startsOn = d),
+            ),
+            _DateTile(
+              label: 'Fine',
+              empty: 'Data di fine (facoltativa)',
+              value: _endsOn,
+              onChanged: (d) => setState(() => _endsOn = d),
             ),
             TextField(
               controller: _notes,
               maxLines: 3,
+              maxLength: 1000,
               decoration: const InputDecoration(
                 labelText: 'Note (facoltative)',
               ),
@@ -633,14 +934,66 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
             if (widget.tournament != null)
               TextButton(
                 onPressed: _saving ? null : _delete,
-                child: const Text(
+                child: Text(
                   'Elimina torneo',
-                  style: TextStyle(color: Colors.redAccent),
+                  style: TextStyle(color: context.pal.danger),
                 ),
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Una data facoltativa del torneo: si sceglie toccandola e si toglie con la crocetta.
+class _DateTile extends StatelessWidget {
+  const _DateTile({
+    required this.label,
+    required this.empty,
+    required this.value,
+    required this.onChanged,
+  });
+  final String label;
+
+  /// Il testo quando la data non c'è.
+  final String empty;
+  final DateTime? value;
+  final ValueChanged<DateTime?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final day = value;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.event_rounded),
+      title: Text(
+        day == null
+            ? empty
+            : '$label: ${DateFormat('d MMMM yyyy', 'it').format(day)}',
+      ),
+      trailing: day == null
+          ? null
+          : IconButton(
+              tooltip: 'Togli la data (${label.toLowerCase()})',
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => onChanged(null),
+            ),
+      onTap: () async {
+        final first = DateTime(2020);
+        final last = DateTime(DateTime.now().year + 2, 12, 31);
+        // Una data salvata fuori dai limiti del calendario non lo blocca.
+        var initial = day ?? DateTime.now();
+        if (initial.isBefore(first)) initial = first;
+        if (initial.isAfter(last)) initial = last;
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: initial,
+          firstDate: first,
+          lastDate: last,
+        );
+        if (picked != null) onChanged(picked);
+      },
     );
   }
 }
@@ -702,9 +1055,11 @@ class _StandingsEditorPageState extends ConsumerState<StandingsEditorPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 
@@ -713,15 +1068,23 @@ class _StandingsEditorPageState extends ConsumerState<StandingsEditorPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('CLASSIFICA'),
+        flexibleSpace: const Align(
+          alignment: Alignment.topCenter,
+          child: GoldRule(),
+        ),
         actions: [
+          // La barra è sempre scura: l'oro chiaro si legge in tutti e due i temi.
           TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: MilanacColors.goldLight,
+            ),
             onPressed: _saving ? null : _save,
             child: const Text('SALVA'),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: MilanacColors.red,
         onPressed: () => _edit(),
         icon: const Icon(Icons.add_rounded),
         label: const Text('Aggiungi squadra'),
@@ -729,13 +1092,19 @@ class _StandingsEditorPageState extends ConsumerState<StandingsEditorPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
         children: [
-          const Text(
+          Text(
             'Punti e partite giocate si calcolano da vittorie, pareggi e sconfitte. '
             "Tocca una riga per modificarla, tieni premuto per toglierla.",
-            style: TextStyle(color: Colors.white60),
+            style: TextStyle(fontSize: 15, color: context.pal.textMuted),
           ),
-          const SizedBox(height: 8),
-          if (_rows.isNotEmpty) StandingsTable(rows: sortStandings(_rows)),
+          const SizedBox(height: 12),
+          if (_rows.isNotEmpty) ...[
+            AppCard(
+              padding: EdgeInsets.zero,
+              child: StandingsTable(rows: sortStandings(_rows)),
+            ),
+            const SizedBox(height: 8),
+          ],
           for (final (i, r) in _rows.indexed)
             ListTile(
               title: Text(r.teamName),
@@ -743,7 +1112,7 @@ class _StandingsEditorPageState extends ConsumerState<StandingsEditorPage> {
                 'V ${r.won} · N ${r.drawn} · P ${r.lost} · Gol ${r.goalsFor}-${r.goalsAgainst}',
               ),
               trailing: r.isUs
-                  ? const Icon(Icons.star_rounded, color: MilanacColors.gold)
+                  ? Icon(Icons.star_rounded, color: context.pal.accentText)
                   : null,
               onTap: () => _edit(i),
               onLongPress: () => setState(() => _rows.removeAt(i)),
@@ -791,8 +1160,10 @@ class _StandingRowDialogState extends State<_StandingRowDialog> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // I limiti sono quelli della tabella `tournament_standings`.
           TextField(
             controller: _name,
+            maxLength: 60,
             decoration: const InputDecoration(labelText: 'Squadra'),
           ),
           const SizedBox(height: 8),
@@ -807,7 +1178,10 @@ class _StandingRowDialogState extends State<_StandingRowDialog> {
                     controller: value,
                     textAlign: TextAlign.center,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
                     decoration: InputDecoration(labelText: key),
                   ),
                 ),

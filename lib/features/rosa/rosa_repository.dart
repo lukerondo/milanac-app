@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/auth/private_data.dart';
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
@@ -28,25 +29,50 @@ abstract class RosaRepository {
 }
 
 final rosaRepositoryProvider = Provider<RosaRepository>((ref) {
-  if (AppConfig.isDemo) return DemoRosaRepository();
+  if (AppConfig.isDemo) {
+    // Come le regole di `profile_private`: i dati anagrafici degli altri li riceve
+    // solo il Direttivo (vale anche per chi prova la demo da giocatore). Quando cambia
+    // chi guarda (profilo arrivato, altro ruolo) la rosa si rilegge.
+    final repo = DemoRosaRepository(
+      viewer: () => ref.read(profileProvider).value,
+    );
+    ref.listen(profileProvider, (_, _) => repo.refresh());
+    return repo;
+  }
   return _SupabaseRosaRepository(ref);
 });
 
-final rosaProvider = StreamProvider<List<Member>>(
-  (ref) => ref.watch(rosaRepositoryProvider).watchAll(),
-);
+final rosaProvider = StreamProvider<List<Member>>((ref) {
+  // Al cambio di account si ricarica con i permessi del nuovo utente; anche quando
+  // si entra o si esce dal Direttivo (i dati anagrafici degli altri li riceve solo lui).
+  ref.watch(currentUserIdProvider);
+  ref.watch(profileProvider.select((p) => p.value?.isDirettivo ?? false));
+  return ref.watch(rosaRepositoryProvider).watchAll();
+});
 
 class _SupabaseRosaRepository implements RosaRepository {
   _SupabaseRosaRepository(this._ref);
   final Ref _ref;
 
+  /// I profili con i dati anagrafici di `profile_private`: un giocatore riceve solo i
+  /// propri, il Direttivo quelli di tutti (prima della migrazione 0025 arrivano ancora
+  /// con le colonne di `profiles`).
   @override
-  Stream<List<Member>> watchAll() => _ref
-      .read(supabaseProvider)
-      .from('profiles')
-      .stream(primaryKey: ['id'])
-      .order('joined_at', ascending: true)
-      .map((rows) => rows.map(Member.fromMap).toList());
+  Stream<List<Member>> watchAll() {
+    final client = _ref.read(supabaseProvider);
+    final profiles = client
+        .from('profiles')
+        .stream(primaryKey: ['id'])
+        .order('joined_at', ascending: true);
+    return combineLatest(
+      profiles,
+      watchPrivateRows(client),
+      (rows, private) => [
+        for (final r in rows)
+          Member.fromMap(withPrivateRow(r, private[r['id']])),
+      ],
+    );
+  }
 
   @override
   Future<void> save(Member m) async {
@@ -69,11 +95,17 @@ class _SupabaseRosaRepository implements RosaRepository {
 
   @override
   Future<void> saveProfile(Member m) async {
-    await _ref
-        .read(supabaseProvider)
-        .from('profiles')
-        .update(m.personalMap())
-        .eq('id', m.id);
+    final client = _ref.read(supabaseProvider);
+    var fields = m.personalMap();
+    try {
+      await savePrivateRow(client, m.id, m.privateMap());
+    } catch (e) {
+      if (!isMissingTable(e)) rethrow;
+      // Database prima della migrazione 0025: i dati anagrafici stanno ancora in
+      // profiles. Dopo, quelle colonne non ci sono più e lì non vanno mai mandati.
+      fields = {...fields, ...m.privateMap()};
+    }
+    await client.from('profiles').update(fields).eq('id', m.id);
   }
 
   @override
@@ -107,13 +139,17 @@ class _SupabaseRosaRepository implements RosaRepository {
 
 /// Dati di esempio in memoria per la modalità demo e i test.
 class DemoRosaRepository implements RosaRepository {
-  DemoRosaRepository() {
-    _controller = StreamController<List<Member>>.broadcast(
-      onListen: () => _controller.add(List.of(_members)),
+  DemoRosaRepository({this._viewer}) {
+    _changes = StreamController<void>.broadcast(
+      onListen: () => _changes.add(null),
     );
   }
 
-  late final StreamController<List<Member>> _controller;
+  /// Chi guarda la rosa: come per `profile_private` sul server, i dati anagrafici degli
+  /// altri arrivano solo al Direttivo. Senza, si vedono tutti (il Direttivo della demo).
+  final Profile? Function()? _viewer;
+
+  late final StreamController<void> _changes;
 
   final _members = <Member>[
     Member(
@@ -243,18 +279,41 @@ class DemoRosaRepository implements RosaRepository {
     ),
   ];
 
-  void _emit() => _controller.add(List.of(_members));
+  void _emit() => _changes.add(null);
 
-  @override
-  Stream<List<Member>> watchAll() async* {
-    yield List.of(_members);
-    yield* _controller.stream;
+  /// Chi guarda è cambiato: la rosa si rilegge con i suoi permessi.
+  void refresh() => _emit();
+
+  /// La rosa come la riceve chi guarda: i dati anagrafici solo i propri, tutti per il
+  /// Direttivo (nessuno se non si sa ancora chi è).
+  List<Member> _visible() {
+    final viewer = _viewer;
+    if (viewer == null) return List.of(_members);
+    final me = viewer();
+    bool canSee(Member m) => me != null && (me.isDirettivo || me.id == m.id);
+    return [for (final m in _members) canSee(m) ? m : m.withoutPrivateData()];
   }
 
   @override
+  Stream<List<Member>> watchAll() async* {
+    yield _visible();
+    yield* _changes.stream.map((_) => _visible());
+  }
+
+  /// Come l'update di `profiles`: i dati anagrafici (in `profile_private`) restano
+  /// quelli salvati, anche se [m] arriva senza (vista di un giocatore).
+  @override
   Future<void> save(Member m) async {
     final i = _members.indexWhere((x) => x.id == m.id);
-    if (i >= 0) _members[i] = m;
+    if (i >= 0) {
+      final old = _members[i];
+      _members[i] = m.copyWith(
+        firstName: old.firstName,
+        lastName: old.lastName,
+        birthYear: old.birthYear,
+        birthDate: old.birthDate,
+      );
+    }
     _emit();
   }
 
@@ -267,8 +326,22 @@ class DemoRosaRepository implements RosaRepository {
   @override
   Future<void> saveCard(Member m) => save(m);
 
+  /// Come `saveProfile` sul server: i dati anagrafici presenti in [m] sostituiscono
+  /// quelli salvati, quelli che mancano restano.
   @override
-  Future<void> saveProfile(Member m) => save(m);
+  Future<void> saveProfile(Member m) async {
+    final i = _members.indexWhere((x) => x.id == m.id);
+    if (i >= 0) {
+      final old = _members[i];
+      _members[i] = m.copyWith(
+        firstName: m.firstName ?? old.firstName,
+        lastName: m.lastName ?? old.lastName,
+        birthYear: m.birthYear ?? old.birthYear,
+        birthDate: m.birthDate ?? old.birthDate,
+      );
+    }
+    _emit();
+  }
 
   @override
   Future<String> uploadPhoto(Member m, Uint8List jpeg) async {

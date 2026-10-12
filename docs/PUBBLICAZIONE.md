@@ -47,25 +47,54 @@ Prove manuali: Actions → *Notizie* o *Promemoria presenze* → Run workflow co
 
 ## 2. Privacy (obbligatoria per entrambi gli store)
 
-1. In `env/prod.json` imposta `CONTACT_EMAIL` (email del club).
+1. In `env/prod.json` imposta `CONTACT_EMAIL` (email del club). Finché è vuoto l'informativa
+   nell'app dice di scrivere al Direttivo nella chat del club; per gli store serve l'email.
 2. Pubblica il testo di `assets/legal/privacy.md` (sostituendo `{{EMAIL}}`) come **Gist pubblico**
    su https://gist.github.com (gratuito) e usa il suo link come *URL dell'informativa privacy* negli store.
-   La stessa informativa è nell'app: menu → **Privacy**.
-3. Nell'app è presente **Elimina il mio account** (richiesto da Apple) – menu laterale.
+   La stessa informativa è nell'app: foto in alto a destra → Impostazioni → **Privacy**.
+3. Nell'app è presente **Elimina il mio account** (richiesto da Apple) – Impostazioni → Account.
+4. **Servizio in primo piano di tipo microfono** (stanza vocale con lo schermo spento): su Google
+   Play va dichiarato in *Play Console → Contenuti dell'app → Servizi in primo piano* scegliendo
+   "Microfono" e spiegando l'uso ("chiamata vocale di gruppo avviata dall'utente nella chat del
+   club"). Su iOS la modalità *audio* in background è già nell'Info.plist.
 
 ## 3. Android – Google Play
 
 ### Chiave di firma (una volta sola, da conservare per sempre!)
-Su un computer con Java installato:
-```bash
-keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias milanac
-base64 -w0 upload-keystore.jks > keystore.txt     # su Mac: base64 -i upload-keystore.jks -o keystore.txt
-```
-Secrets di GitHub (Settings → Secrets and variables → Actions):
-`ANDROID_KEYSTORE_BASE64` (contenuto di keystore.txt), `ANDROID_KEYSTORE_PASSWORD`,
-`ANDROID_KEY_ALIAS` (`milanac`), `ANDROID_KEY_PASSWORD`.
+Una sola chiave privata firma sia gli **APK di prova** che i giocatori scaricano (workflow *CI*,
+release "APK di prova") sia l'**App Bundle** per Google Play (workflow *Rilascio Android*).
+Finché i secret non ci sono, gli APK di prova si firmano con la chiave di prova del repository
+(`android/app/apk-di-prova.keystore`, password `android`): è pubblica, quindi chiunque potrebbe
+firmare un APK modificato che si installa sopra il nostro come "aggiornamento" e ne eredita la
+sessione. Con la chiave privata questo non è più possibile.
+
+1. Su un computer con Java installato crea la chiave (ti chiede una password: sceglila lunga):
+   ```bash
+   keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias milanac
+   base64 -w0 upload-keystore.jks > keystore.txt     # su Mac: base64 -i upload-keystore.jks -o keystore.txt
+   ```
+2. Secrets di GitHub (Settings → Secrets and variables → Actions → *New repository secret*):
+
+   | Secret | Valore |
+   |---|---|
+   | `ANDROID_KEYSTORE_BASE64` | il contenuto di `keystore.txt` |
+   | `ANDROID_KEYSTORE_PASSWORD` | la password della chiave |
+   | `ANDROID_KEY_ALIAS` | `milanac` |
+   | `ANDROID_KEY_PASSWORD` | la stessa password (keytool usa quella del file anche per la chiave) |
+
+3. Rilancia **Actions → CI → Run workflow**: nel passo *Verifica la firma* deve comparire
+   "Firma corretta (chiave privata)". Cancella `keystore.txt` dal computer.
+
+⚠️ **Al cambio di chiave tutti reinstallano una volta.** Il primo APK firmato con la chiave privata
+non si installa sopra quello vecchio (Android dice "App non installata" o "pacchetto in conflitto"):
+ogni giocatore deve **disinstallare** l'app e installare il nuovo APK, poi rientrare con email e
+password (i dati del club restano sul server; si perdono solo le preferenze del telefono, come
+l'aspetto chiaro o scuro). Avvisa il club in chat prima di pubblicarlo. Dagli APK successivi gli
+aggiornamenti tornano a installarsi sopra.
+
 ⚠️ Salva `upload-keystore.jks` e le password in un posto sicuro (es. gestore password): senza non potrai
-pubblicare aggiornamenti (in quel caso si può chiedere a Google il reset della chiave di caricamento).
+pubblicare aggiornamenti (in quel caso si può chiedere a Google il reset della chiave di caricamento,
+ma gli APK di prova andrebbero reinstallati di nuovo da tutti).
 
 ### Build
 Actions → **Rilascio Android** → Run workflow → scarica l'artifact `milanac-android-N` (file `.aab`).
@@ -82,7 +111,9 @@ Actions → **Rilascio Android** → Run workflow → scarica l'artifact `milana
 5. Dopo i 14 giorni: **Produzione** → nuova release → invia per la revisione.
 
 Sicurezza dei dati (risposte):
-- Raccoglie: nome, email, foto/video (caricati dal Direttivo), ID dispositivo per notifiche.
+- Raccoglie: nome, email, anno di nascita, foto e video, messaggi in-app, registrazioni audio (vocali della
+  chat e replay della lavagna, che scadono), ID dispositivo per le notifiche. La stanza vocale passa da Agora
+  in tempo reale e non viene registrata.
 - Finalità: funzionalità dell'app, gestione account. Nessuna condivisione con terze parti per pubblicità.
 - Dati criptati in transito: sì. L'utente può chiedere l'eliminazione: sì (dall'app).
 
@@ -101,10 +132,10 @@ Sicurezza dei dati (risposte):
 7. App Store Connect → compila la scheda (testi sotto, screenshot 6,7" e 6,5"), **Privacy dell'app**,
    URL privacy, e invia per la revisione.
 
-⚠️ **Account per i revisori Apple**: l'app richiede l'approvazione del Direttivo, quindi Apple non potrebbe
-entrare. Crea un account di prova (es. un account Google dedicato), fai login una volta, approvalo come
-*Giocatore* e scrivi email e password nelle **Note per la revisione** di App Store Connect (idem nella sezione
-*Accesso all'app* della Play Console).
+⚠️ **Account per i revisori Apple**: l'app è riservata ai membri del club (registrazione in tre passi e
+regolamento da accettare). Crea un account di prova con email e password, completa la registrazione come
+*Giocatore* e accetta il regolamento, poi scrivi email e password nelle **Note per la revisione** di App Store
+Connect (idem nella sezione *Accesso all'app* della Play Console). Finita la revisione, toglilo dalla Rosa.
 
 ## 5. Testi per gli store
 
@@ -123,7 +154,7 @@ entrare. Crea un account di prova (es. un account Google dedicato), fai login un
 > • Presenze della serata, con orario di arrivo e storico
 > • Regolamento e storia del club
 >
-> L'accesso è riservato ai membri del club, approvati dal Direttivo.
+> L'accesso è riservato ai membri del club: ci si registra e si accetta il regolamento del club.
 
 **Parole chiave (iOS)**: pro club, fc 27, ea fc, fvpa, clubs, milan, squadra, presenze, formazione
 **Categoria**: Sport

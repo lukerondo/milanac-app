@@ -22,7 +22,6 @@ con un unico codice.
 - `video_player` – intro e clip highlights · `youtube_player_iframe` – video da link
 - `image_picker`, `video_compress`, `video_trimmer` – caricamento media (taglio a 15s)
 - `table_calendar` – calendario · `url_launcher` – apertura notizie/social
-- `sensors_plus` – effetto parallasse 2.5D dell'Albo d'oro
 - `firebase_messaging` – notifiche push
 
 ## 2. Login (Supabase Auth)
@@ -40,7 +39,8 @@ con un unico codice.
 
 Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `complete_registration`:
 
-1. **Chi sei**: nome, cognome, anno di nascita (li vede solo il Direttivo), **nome sulla carta**
+1. **Chi sei**: nome, cognome, anno di nascita (li vedono solo l'interessato e il Direttivo:
+   stanno nella tabella riservata `profile_private`), **nome sulla carta**
    (è il nome mostrato in tutta l'app: `display_name`), motto.
 2. **Squadra e ruolo**: Milan AC o Milan AC Futuro (entrambe solo per il Direttivo); "Faccio parte
    del Direttivo" richiede la **password del club** (solo l'hash bcrypt sta in `app_config`,
@@ -50,8 +50,9 @@ Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `compl
    carta e walkout.
 
 Il profilo resta `pending` finché non si **accetta il regolamento** (`accept_rules`): da lì il ruolo
-richiesto diventa effettivo. Non serve nessuna approvazione del Direttivo; il Direttivo può
-comunque sospendere un membro (`active = false`).
+richiesto diventa effettivo. Non serve nessuna approvazione del Direttivo: ogni nuovo ingresso
+compare però nella Sala Direttivo (messaggio con nome, ruolo e squadra, che arriva anche come
+notifica) e il Direttivo può togliere dalla Rosa chi non conosce (`active = false`).
 
 ## 3. Ruoli e permessi
 
@@ -71,8 +72,8 @@ I permessi sono applicati nel database con **Row Level Security** (non solo nell
 
 Gli articoli vivono in una **bozza** (`rules_articles`, solo Direttivo). "Pubblica" crea una riga in
 `rules_versions` con la fotografia degli articoli e manda la notifica `rules`. Ogni profilo
-ricorda la versione accettata (`rules_accepted_version`): se non è l'ultima, l'app mostra la
-pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti (non mostrati).
+ricorda la versione accettata (`rules_accepted_version`): se non è l'ultima, l'app mostra il
+regolamento e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti (non mostrati).
 Finché non esiste **nessuna versione pubblicata** nessuno resta bloccato: chi ha completato la
 registrazione entra con `enter_club()` (prende il ruolo richiesto, senza versione accettata); il
 primo del Direttivo che entra trova l'editor del regolamento d'ingresso con la spiegazione
@@ -88,12 +89,15 @@ accettano al primo accesso successivo.
    aggiornamento FC 27 e della propria console, scorciatoie a video e notizie.
    **Presenze**: la serata di oggi della propria squadra (allenamento delle 21:30 o l'evento
    del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi.
-3. **Menu laterale** (drawer), a gruppi, con stemma, nome del club, nome e cognome e ruolo:
-   - *Squadra*: Presenze · Formazione · Calendario · Risultati · Chat
-   - *Club*: Mondo Proclub · Rosa completa · La mia carta · Carte speciali · Tornei ·
-     Albo d'oro · Regolamento & Storia · Tattiche & Build · Colonna sonora
-   - *Direttivo*: Sala Direttivo (solo per chi ne fa parte)
-   - in fondo: icone social + sito web (modificabili dal Direttivo)
+3. **Barra in basso a cinque schede** (sempre visibile, ognuna ricorda dove eri rimasto):
+   - *Home* · *Presenze* · *Partite* (Calendario, Risultati, Tornei; da qui Formazione e
+     dettaglio partita) · *Chat* (con i non letti sull'icona) · *Club* (Rosa, Carte speciali,
+     Tattiche, Mondo Proclub, Albo d'oro, Regolamento e Storia, Colonna sonora, Tornei, Sala
+     Direttivo per chi ne fa parte, contatti social modificabili dal Direttivo)
+   - in alto a destra la propria foto: profilo con la carta, i traguardi e le Impostazioni
+     (dati, volto, notifiche, aspetto scuro/chiaro/automatico come il telefono, account);
+   - i vecchi indirizzi delle notifiche (/calendario, /risultati, /tornei, /carta) portano
+     alla nuova posizione; una sottosezione aperta da notifica torna indietro alla sua scheda.
 3b. **Mondo Proclub** – scheda *Video*: i video dei creator pubblicati dal Direttivo,
    filtrabili per ruolo; i giocatori ne propongono (notifica al Direttivo, che pubblica o
    scarta; notifica a chi ha proposto). Scheda *Notizie*: card con fonte, data, titolo,
@@ -115,14 +119,11 @@ accettano al primo accesso successivo.
    Per ogni partita il Direttivo allega media in **due modi**:
    - **Link** (YouTube, Twitch, Instagram, TikTok…) → riprodotto/aperto nell'app
    - **Clip caricata**: video **max 15 secondi** (tagliato nell'app) o foto, compressi prima dell'upload
-8. **Albo d'oro** – scena 2.5D: illustrazione della sala trofei con un giocatore del Pro Club
-   (di spalle) che ammira la bacheca; le mensole sono "vive": i trofei caricati dal Direttivo
-   (PNG trasparente) vengono posizionati sulle mensole, con riflessi, luce e leggero parallasse
-   inclinando il telefono. **Selettore stagione in alto a destra** (es. 2025/26, 2026/27).
-   Tocco su un trofeo → dettaglio (competizione, data, finale, foto).
-   Evoluzione futura: trofei 3D ruotabili (`.glb`).
+8. **Albo d'oro** – stagioni a schede (es. 2025/26, 2026/27), targa con il numero di trofei ed
+   elenco dei trofei caricati dal Direttivo (foto o sagoma disegnata); tocco su un trofeo →
+   dettaglio (competizione, data, finale, foto).
 9. **Regolamento & Storia** – una pagina con due schede, testo formattato modificabile dal Direttivo.
-10. **Presenze** – a calendario: oggi cerchiato in rosso, un puntino per ogni evento. Per il
+10. **Presenze** – settimana a colpo d'occhio (e mese intero): oggi in oro, un puntino per ogni evento. Per il
     giorno scelto: la serata della squadra, la propria risposta (*Presente* · *In ritardo*
     con orario e nota obbligatoria · *Assente* con nota facoltativa), totali e gli elenchi
     (senza risposta, presenti, in ritardo, assenti). Le risposte chiudono alle **18:30**
@@ -162,12 +163,14 @@ accettano al primo accesso successivo.
     notturna). Il **replay della lavagna** arriva come riquadro con il campo e il pulsante
     Play: si riproduce nell'app (audio più mosse, pochi KB, non è un video) e scade dopo 3
     giorni. Non letti, canali silenziabili, notifiche. **Stanza vocale** (Agora): le cuffie
-    nella barra di ogni canale aprono il foglio della stanza: chi c'è (volto, cerchio verde su
-    chi parla, microfono barrato su chi è in muto), *Entra* o *Apri la stanza*, microfono,
-    vivavoce, *Esci*. Chi apre la stanza avvisa i membri del canale (la notifica apre la chat
-    con il foglio già aperto); sotto la barra il banner "Stanza vocale aperta · N dentro" e,
-    durante la chiamata, cronometro, microfono ed esci sempre a portata di dito (si può
-    cambiare pagina senza uscire). La stanza si chiude quando esce l'ultimo o dopo 3 minuti
+    nella barra di ogni canale aprono la stanza a schermo intero (sempre scura): chi c'è
+    (volto, bordo e alone d'oro su chi parla, microfono barrato su chi è in muto, "In
+    ascolto"), *Entra* o *Apri la stanza*, microfono, vivavoce, *Esci*; la freccia giù la
+    riduce a una striscia. Chi apre la stanza avvisa i membri del canale (la notifica apre la
+    chat con la stanza già aperta); sotto la barra la card "Stanza vocale aperta · canale —
+    Marco e Luca sono dentro — Entra" e, durante la chiamata, la striscia con cronometro,
+    microfono ed esci sempre a portata di dito (un tocco riapre la stanza; si può cambiare
+    pagina senza uscire). La stanza si chiude quando esce l'ultimo o dopo 3 minuti
     senza segni di vita dell'app. Sul web la stanza non è disponibile.
 16. **Tornei** – foto o logo (caricati dal Direttivo), link al sito, squadra, stato,
     classifica facoltativa compilata dal Direttivo, partite collegate.
@@ -225,8 +228,9 @@ tournaments   id, name, organizer, url, team, status, starts_on, ends_on, notes
 tournament_standings  tournament_id, team_name, won, drawn, lost, goals_for, goals_against, is_us
 rules_articles id, sort_order, title, body                -- bozza del Direttivo
 rules_versions number, snapshot(jsonb), published_at       -- versioni pubblicate del regolamento
-profiles      + first_name, last_name, birth_year, motto, direttivo_roles[], face(jsonb),
+profiles      + motto, direttivo_roles[], face(jsonb),
                 registration_completed_at, rules_accepted_version, rules_accepted_at
+                (nome, cognome e anno di nascita: dalla 0025 in profile_private)
 app_config    + direttivo_password_hash (bcrypt)
 -- dalla migrazione 0017
 attendance    + auto (assenza automatica), set_by (chi ha corretto); nota obbligatoria per il ritardo
@@ -247,6 +251,11 @@ tournaments   + image_path (foto o logo nel bucket tournaments)
 tactics       + board (jsonb: modulo, squadra, gettoni, frecce, heatmap), team
 messages      + replay_path (JSON delle azioni con i tempi; l'audio in audio_path fino a 300 s);
               un replay scade dopo 3 giorni
+-- dalla migrazione 0024
+profiles      + notify_prefs (jsonb: presenze|chat|notizie = false per spegnerle)
+-- dalla migrazione 0025
+profile_private id(→ profiles), first_name, last_name, birth_year, birth_date, updated_at
+              (RLS: solo l'interessato e il Direttivo leggono e scrivono)
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
@@ -261,7 +270,14 @@ reparto, sostituisce l'elenco precedente, aggiorna l'annuncio in *Comunicazioni*
 `announce_special_cards` e manda gli avvisi `special_card` / `special_cards_week`);
 `award_blue_cards` gira dal trigger del risultato e legge i marcatori con `scorer_goals`
 (nome sulla carta, cognome o gamertag, "Rossi (3)" / "x3") e la serie del portiere;
-`match_number` numera le giornate (partite ufficiali con risultato dal 1° agosto). Chat:
+`match_number` numera le giornate (partite ufficiali con risultato dal 1° agosto). Eliminare
+una partita toglie le sue carte e il loro annuncio e ricontrolla la serie del portiere delle
+due partite ufficiali successive; la blu ha sempre la precedenza sulla nero/oro della stessa
+partita; correggere un bonus o un reparto non manda nuovi avvisi. La formazione pubblicata
+prende l'ora del server e il portiere del risultato viene dalla formazione pubblicata.
+`save_standings` e `save_club_links` (solo Direttivo) salvano classifica e contatti in una
+transazione. Nuovo ingresso (`pending` → giocatore/Direttivo) → messaggio nella Sala Direttivo
+(`on_member_joined`). Chat:
 `messages_before_insert` (risposta nello stesso canale, scadenza a 60 giorni),
 `expire_attachments()` ogni notte alle 3:15 (pg_cron) toglie gli allegati scaduti (foto e
 vocali dopo 60 giorni, replay della lavagna dopo 3), mette i file in `storage_cleanup` e
@@ -285,8 +301,14 @@ stanza, avvisa i membri del canale con l'evento `voice_room`), `join_voice_room`
 minuto con pg_cron (`stanze-vocali`): segna uscito chi non dà segni di vita da 3 minuti e chiude
 le stanze rimaste vuote. L'audio non passa da Supabase: va su Agora (`agora_rtc_engine`, profilo
 comunicazione, solo audio); il biglietto d'ingresso lo firma la funzione Edge `voice-token`
-(token di 3 ore, App Certificate solo nei segreti) per chi ha accesso al canale. Il numero
-utente Agora è ricavato dall'id del profilo (`agoraUidFor`), così si sa subito chi parla.
+(token di un'ora, rinnovato dall'app senza uscire; App Certificate solo nei segreti) solo per
+chi ha una sessione aperta nella stanza. Il numero utente Agora è ricavato dall'id del profilo
+(`agoraUidFor`, stesso calcolo in `agora_uid_for` sul server) e il biglietto vale solo per quel
+numero, così si sa subito chi parla e nessuno entra con il nome di un altro. Una stanza per
+volta (entrando in un'altra si esce dalla prima); finiti i 10.000 minuti gratuiti del mese non
+si entra più fino al primo del mese. Con l'app in background o lo schermo spento la stanza resta
+attiva: su Android con un servizio in primo piano di tipo microfono (notifica fissa "Sei nella
+stanza vocale"), su iOS con la modalità audio in background.
 
 Storage buckets: `avatars`, `trophies`, `match-media`, `tactics`, `chat` (foto e vocali),
 `tournaments` (tutti privati, letti tramite URL firmati, con limiti di dimensione e tipo di
@@ -337,12 +359,13 @@ la testata e il link, la descrizione rimanda all'articolo originale.
 milanac-app/
   lib/
     main.dart
-    core/      theme/ (rossonero), router/, supabase/, auth/, widgets/
+    core/      theme (nero oro, scuro e chiaro), router (5 schede e porte), auth/, push/,
+               errors, audio_focus, appearance, italian_time
     features/  intro/ auth/ registrazione/ home/ mondo/ news/ rosa/ carta/ carte/ formazione/
                calendario/ risultati/ presenze/ chat/ tornei/ albo_doro/ regolamento/
                tattiche/ lavagna/ voce/ musica/ traguardi/ walkout/ volto/ direttivo/
-               impostazioni/
-  assets/      video/intro.mp4, images/ (stemma, sala trofei), fonts/
+               impostazioni/ profilo/ club/ partite/
+  assets/      video/intro.mp4 (720p), images/ (stemma), fonts/ (Oswald, Barlow)
   supabase/    migrations/ (schema + RLS), seed.sql
   tools/news_fetcher/   script raccolta notizie
   .github/workflows/    news.yml, build-android.yml, build-ios.yml, web-pages.yml

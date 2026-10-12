@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/profile.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../risultati/match.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
@@ -19,6 +21,40 @@ Future<void> showAssignCardsSheet(BuildContext context, ClubMatch match) =>
       builder: (_) => _AssignSheet(match: match),
     );
 
+/// Chi può ricevere la nero/oro di [match] (come controlla `assign_special_cards`): i
+/// membri attivi della squadra della partita, tranne chi ne ha già la blu elettrico (la
+/// blu ha la precedenza).
+Set<String> cardCandidates(
+  ClubMatch match,
+  Iterable<Member> rosa,
+  Iterable<SpecialCard> cards,
+) {
+  final blue = {
+    for (final c in cards)
+      if (c.matchId == match.id && c.isBlue) c.playerId,
+  };
+  return {
+    for (final m in rosa)
+      if (m.active &&
+          m.role != ClubRole.pending &&
+          m.inTeam(match.team) &&
+          !blue.contains(m.id))
+        m.id,
+  };
+}
+
+/// Il reparto in cui [playerId] è già premiato, escluso [reparto] (null = nessuno).
+String? repartoTakenBy(
+  Map<String, String?> chosen,
+  String playerId,
+  String reparto,
+) {
+  for (final r in reparti) {
+    if (r != reparto && chosen[r] == playerId) return r;
+  }
+  return null;
+}
+
 class _AssignSheet extends ConsumerStatefulWidget {
   const _AssignSheet({required this.match});
   final ClubMatch match;
@@ -33,6 +69,8 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
   bool _loaded = false;
   bool _saving = false;
 
+  /// Le scelte già fatte si leggono una volta, solo con le carte arrivate davvero:
+  /// partire da un elenco vuoto e salvare cancellerebbe le carte assegnate.
   void _loadExisting(List<SpecialCard> cards) {
     if (_loaded) return;
     _loaded = true;
@@ -45,13 +83,31 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
   }
 
   Future<void> _save() async {
-    setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
+    // Chi non si può più scegliere non si manda (il server lo rifiuterebbe con "non è
+    // della squadra"): la sua carta si toglie, come dice l'avviso sotto il reparto.
+    final candidates = cardCandidates(
+      widget.match,
+      ref.read(rosaProvider).value ?? const [],
+      ref.read(specialCardsProvider).value ?? const [],
+    );
     final awards = [
       for (final r in reparti)
-        if (_chosen[r] case final id?)
+        if (_chosen[r] case final id? when candidates.contains(id))
           CardAward(playerId: id, reparto: r, bonus: _bonus[r] ?? 5),
     ];
+    // Un giocatore, una carta (lo rifiuta anche il server).
+    if (awards.map((a) => a.playerId).toSet().length != awards.length) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Un giocatore riceve una sola carta nero/oro: scegli giocatori diversi.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _saving = true);
     try {
       final n = await ref
           .read(specialCardsRepositoryProvider)
@@ -73,18 +129,40 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
       if (!mounted) return;
       setState(() => _saving = false);
       messenger.showSnackBar(
-        SnackBar(content: Text('Assegnazione non riuscita: $e')),
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Assegnazione non riuscita')),
+        ),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final cards = ref.watch(specialCardsProvider).value ?? const [];
+    final cardsValue = ref.watch(specialCardsProvider);
+    final rosaValue = ref.watch(rosaProvider);
+    if (!cardsValue.hasValue || !rosaValue.hasValue) {
+      final failed = !cardsValue.hasValue ? cardsValue : rosaValue;
+      return SizedBox(
+        height: 220,
+        child: failed.hasError && (!failed.isLoading || failed.retrying)
+            ? ErrorRetry(
+                message: friendlyError(
+                  failed.error!,
+                  action: 'Caricamento non riuscito',
+                ),
+                onRetry: () => ref
+                  ..invalidate(specialCardsProvider)
+                  ..invalidate(rosaProvider),
+              )
+            : const Center(child: CircularProgressIndicator()),
+      );
+    }
+    final cards = cardsValue.requireValue;
     _loadExisting(cards);
     final team = widget.match.team;
+    final rosa = rosaValue.requireValue;
     final members =
-        (ref.watch(rosaProvider).value ?? const <Member>[])
+        rosa
             .where(
               (m) => m.active && m.role != ClubRole.pending && m.inTeam(team),
             )
@@ -95,6 +173,24 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
         .toList();
     final blueIds = blue.map((c) => c.playerId).toSet();
     final byId = {for (final m in members) m.id: m};
+    final candidates = cardCandidates(widget.match, rosa, cards);
+    final everyone = {for (final m in rosa) m.id: m};
+
+    /// Il premiato di prima che non si può più scegliere, con il motivo (null = nessuno).
+    String? lost(String reparto) {
+      final id = _chosen[reparto];
+      if (id == null || candidates.contains(id)) return null;
+      final m = everyone[id];
+      final why = blueIds.contains(id)
+          ? 'ha la blu elettrico di questa partita'
+          : m == null || !m.active || m.role == ClubRole.pending
+          ? 'non è più nella rosa'
+          : 'non gioca più in ${team.label}';
+      return '${m?.displayName ?? 'Un ex membro'} $why: salvando, la sua carta '
+          'nero/oro si toglie.';
+    }
+
+    final p = context.pal;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -113,20 +209,21 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
             ),
             Text(
               matchTitle(widget.match),
-              style: const TextStyle(color: Colors.white60),
+              style: TextStyle(fontSize: 15, color: p.textSecondary),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Un premiato per reparto, con il bonus sull\'overall. La carta vale 7 giorni.',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+            Text(
+              'Un premiato per reparto (una sola carta a testa), con il bonus '
+              'sull\'overall. La carta vale 7 giorni.',
+              style: TextStyle(fontSize: 14, color: p.textMuted),
             ),
             if (blue.isNotEmpty) ...[
               const SizedBox(height: 8),
               for (final c in blue)
                 SpecialCardRow(card: c, member: byId[c.playerId]),
-              const Text(
+              Text(
                 'La blu elettrico è automatica e batte la nero/oro.',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+                style: TextStyle(fontSize: 13, color: p.textMuted),
               ),
             ],
             for (final r in reparti) ...[
@@ -134,7 +231,11 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
               _RepartoPicker(
                 reparto: r,
                 members: members.where((m) => !blueIds.contains(m.id)).toList(),
-                value: _chosen[r],
+                // Chi non si può più scegliere non compare come scelto (e non si
+                // manda): lo dice l'avviso sotto.
+                value: lost(r) == null ? _chosen[r] : null,
+                lost: lost(r),
+                takenBy: (id) => repartoTakenBy(_chosen, id, r),
                 bonus: _bonus[r] ?? 5,
                 onChanged: (id) => setState(() => _chosen[r] = id),
                 onBonus: (b) => setState(() => _bonus[r] = b),
@@ -157,21 +258,44 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
 }
 
 /// Scelta del premiato di un reparto (prima chi gioca in quel reparto) e del bonus.
+/// Chi è già premiato in un altro reparto compare ma non si può scegliere.
 class _RepartoPicker extends StatelessWidget {
   const _RepartoPicker({
     required this.reparto,
     required this.members,
     required this.value,
+    required this.takenBy,
     required this.bonus,
     required this.onChanged,
     required this.onBonus,
+    this.lost,
   });
   final String reparto;
   final List<Member> members;
   final String? value;
+
+  /// Avviso sul premiato di prima che non si può più scegliere (null = nessuno).
+  final String? lost;
+  final String? Function(String playerId) takenBy;
   final int bonus;
   final ValueChanged<String?> onChanged;
   final ValueChanged<int> onBonus;
+
+  /// [other]: il reparto in cui il giocatore ha già la carta (null = libero).
+  static DropdownMenuItem<String?> _item(
+    Member m,
+    String? other,
+    Color disabled,
+  ) => DropdownMenuItem(
+    value: m.id,
+    enabled: other == null,
+    child: Text(
+      '${m.displayName}${m.fieldPosition == null ? '' : ' (${m.fieldPosition})'}'
+      '${other == null ? '' : ' · ha già la carta $other'}',
+      overflow: TextOverflow.ellipsis,
+      style: other == null ? null : TextStyle(color: disabled),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -193,26 +317,41 @@ class _RepartoPicker extends StatelessWidget {
           items: [
             const DropdownMenuItem(value: null, child: Text('Nessuno')),
             for (final m in sorted)
-              DropdownMenuItem(
-                value: m.id,
-                child: Text(
-                  '${m.displayName}${m.fieldPosition == null ? '' : ' (${m.fieldPosition})'}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+              _item(m, takenBy(m.id), context.pal.textDisabled),
           ],
           onChanged: onChanged,
         ),
+        if (lost case final warning?)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 18,
+                  color: context.pal.warning,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    warning,
+                    style: TextStyle(fontSize: 14, color: context.pal.warning),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (value != null)
           Row(
             children: [
               Text(
                 '+$bonus',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: sportFont,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: MilanacColors.gold,
+                  color: context.pal.accentText,
                 ),
               ),
               Expanded(

@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
-import 'package:milanac/features/regolamento/parchment.dart';
+import 'package:milanac/features/regolamento/rules_reader.dart';
+import 'package:milanac/features/rosa/rosa_page.dart';
 import 'package:milanac/main.dart';
+import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
+import 'rosa_view.dart';
 
 Future<void> openSection(WidgetTester tester, String title) =>
     goToSection(tester, title);
@@ -31,8 +34,7 @@ void main() {
     await startApp(tester);
     await openSection(tester, 'Rosa completa');
     // L'elenco classico (la vista predefinita sono le mini carte).
-    await tester.tap(find.text('Elenco'));
-    await tester.pumpAndSettle();
+    await showRosaAs(tester, RosaView.elenco);
 
     await tester.scrollUntilVisible(
       find.text('Marco Rossi'),
@@ -71,7 +73,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rosa e squadre'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ChoiceChip, 'FUTURO (2)'), findsOneWidget);
+    expect(find.widgetWithText(FilterPill, 'Futuro · 2'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Marco Rossi'),
       200,
@@ -79,7 +81,7 @@ void main() {
     );
     final rossiCard = find.ancestor(
       of: find.text('Marco Rossi'),
-      matching: find.byType(Card),
+      matching: find.byType(AppCard),
     );
     await tester.ensureVisible(rossiCard);
     await tester.pumpAndSettle();
@@ -90,19 +92,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.widgetWithText(ChoiceChip, 'FUTURO (3)'),
-      -300,
-    );
-    expect(find.widgetWithText(ChoiceChip, 'FUTURO (3)'), findsOneWidget);
+    // I filtri restano in alto.
+    expect(find.widgetWithText(FilterPill, 'Futuro · 3'), findsOneWidget);
     tester.state<NavigatorState>(find.byType(Navigator).first).pop();
     await tester.pumpAndSettle();
 
     // Filtro FUTURO in Rosa: Neri (entrambe), Verdi e ora Rossi.
     await openSection(tester, 'Rosa completa');
-    await tester.tap(find.text('Elenco'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO (3)'));
+    await showRosaAs(tester, RosaView.elenco);
+    await tester.tap(find.widgetWithText(FilterPill, 'Futuro · 3'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Paolo Verdi'),
@@ -119,13 +117,13 @@ void main() {
     await startApp(tester);
     await openSection(tester, 'Regolamento & Storia');
 
-    // Pergamena con gli articoli dell'ultima versione pubblicata.
-    expect(find.text('REGOLAMENTO'), findsWidgets);
+    // Lettura su fondo scuro con gli articoli dell'ultima versione pubblicata.
+    expect(find.text('Regolamento'), findsWidgets);
     expect(find.text('ORGANIGRAMMA'), findsOneWidget);
     expect(find.textContaining('Versione 1'), findsOneWidget);
 
     // Il Direttivo apre la bozza, aggiunge un articolo e pubblica la versione 2.
-    await tester.tap(find.text('Modifica'));
+    await tester.tap(find.byTooltip('Modifica il regolamento'));
     await tester.pumpAndSettle();
     expect(find.text('BOZZA DEL REGOLAMENTO'), findsOneWidget);
     await tester.tap(find.text('Nuovo articolo'));
@@ -151,24 +149,41 @@ void main() {
       200,
       scrollable: find
           .descendant(
-            of: find.byType(ParchmentSheet),
+            of: find.byType(RulesReader),
             matching: find.byType(Scrollable),
           )
           .first,
     );
     expect(find.text('ART. 4 – CHAT'), findsOneWidget);
 
-    await tester.tap(find.text('Cenni storici'));
+    // Storia: il racconto e, sotto, l'organigramma (dal regolamento).
+    await tester.tap(find.text('Storia'));
     await tester.pumpAndSettle();
     expect(find.text('LA NOSTRA STORIA'), findsOneWidget);
     expect(find.textContaining('settembre 2025'), findsOneWidget);
+    expect(find.byTooltip('Modifica la storia'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('ORGANIGRAMMA'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(StoryReader),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('ORGANIGRAMMA'), findsOneWidget);
   });
 
   testWidgets('Contatti social modificabili dal Direttivo', (tester) async {
     await startApp(tester);
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Instagram'), findsOneWidget);
+    await goToSection(tester, 'Club');
+    await tester.scrollUntilVisible(
+      find.text('Instagram'),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Instagram'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Modifica contatti'));
     await tester.pumpAndSettle();
@@ -180,9 +195,7 @@ void main() {
     await tester.tap(find.text('SALVA'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Instagram'), findsNothing);
-    expect(find.byTooltip('WhatsApp'), findsOneWidget);
+    expect(find.text('Instagram'), findsNothing);
+    expect(find.text('WhatsApp'), findsOneWidget);
   });
 }

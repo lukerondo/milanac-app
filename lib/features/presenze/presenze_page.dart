@@ -1,30 +1,33 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../../shared/member_photo.dart';
+import '../../shared/ui.dart';
 import '../calendario/club_event.dart';
 import '../calendario/events_repository.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'attendance.dart';
 import 'attendance_repository.dart';
+import 'attendance_ui.dart';
 import 'evening.dart';
 
-Color statusColor(AttendanceStatus? s, {bool auto = false}) => switch (s) {
-  AttendanceStatus.presente => const Color(0xFF2E9E5B),
-  AttendanceStatus.ritardo => const Color(0xFFE0A526),
-  AttendanceStatus.assente => auto ? Colors.white38 : MilanacColors.red,
-  null => Colors.white24,
-};
+export 'attendance_ui.dart' show AttendanceStatusButton;
 
 String describeAttendance(AttendanceEntry e) =>
     switch (e.status) {
@@ -35,8 +38,23 @@ String describeAttendance(AttendanceEntry e) =>
     } +
     (e.note == null || e.note!.isEmpty ? '' : ' · ${e.note}');
 
-/// Presenze a calendario: oggi in evidenza, per ogni giorno la serata della squadra,
-/// la propria risposta (entro le 18:30) e gli elenchi; scheda con le statistiche.
+/// Il dettaglio di una risposta in un elenco che ne dice già lo stato: orario e motivo
+/// del ritardo, motivo dell'assenza o "non ha risposto".
+String? attendanceDetail(AttendanceEntry e) {
+  final note = e.note == null || e.note!.isEmpty ? null : e.note;
+  return switch (e.status) {
+    AttendanceStatus.presente => note,
+    AttendanceStatus.ritardo =>
+      'Arrivo alle ${e.arrivalTime}${note == null ? '' : ' · $note'}',
+    AttendanceStatus.assente => e.auto ? 'Non ha risposto' : note,
+  };
+}
+
+String _capitalized(String s) =>
+    s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+
+/// Presenze: la settimana a colpo d'occhio (o il mese intero), la serata del giorno
+/// scelto con la propria risposta (entro le 18:30) e chi c'è; scheda con le statistiche.
 class PresenzePage extends ConsumerStatefulWidget {
   const PresenzePage({super.key, this.initialDay, this.initialTab});
 
@@ -50,37 +68,103 @@ class PresenzePage extends ConsumerStatefulWidget {
   ConsumerState<PresenzePage> createState() => _PresenzePageState();
 }
 
-class _PresenzePageState extends ConsumerState<PresenzePage>
-    with SingleTickerProviderStateMixin {
-  late DateTime _day = dayOnly(widget.initialDay ?? ref.read(clockProvider)());
+class _PresenzePageState extends ConsumerState<PresenzePage> {
+  late DateTime _day = _dayToOpen(widget.initialDay);
+
+  /// Un giorno della settimana (o del mese) mostrata.
   late DateTime _focused = _day;
   Team? _team;
-  late final _tabs = TabController(
-    length: 2,
-    vsync: this,
-    initialIndex: widget.initialTab == 'statistiche' ? 1 : 0,
-  );
+  late int _tab = _tabOf(widget.initialTab);
+
+  /// Il mese intero al posto della settimana.
+  bool _month = false;
+
+  static int _tabOf(String? tab) => tab == 'statistiche' ? 1 : 0;
+
+  /// La pagina aperta senza un giorno chiesto segue oggi: tornando nell'app (per
+  /// esempio dalla notifica delle 18:00, dopo una notte con l'app in memoria) e, con
+  /// l'app aperta, passata la mezzanotte (controllo ogni minuto).
+  AppLifecycleListener? _lifecycle;
+  Timer? _midnight;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _backToToday);
+    _midnight = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _backToToday(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    _midnight?.cancel();
+    super.dispose();
+  }
+
+  void _backToToday() {
+    if (!mounted || widget.initialDay != null) return;
+    final today = _dayToOpen(null);
+    if (_day == today) return;
+    setState(() {
+      _day = today;
+      _focused = today;
+    });
+  }
+
+  /// Il giorno chiesto dalla rotta (anche uno qualsiasi, da una notifica) dentro i limiti
+  /// del calendario; senza richiesta, oggi in Italia.
+  DateTime _dayToOpen(DateTime? requested) {
+    final today = italianDay(ref.read(clockProvider)());
+    return clampToCalendar(requested ?? today, today);
+  }
 
   @override
   void didUpdateWidget(covariant PresenzePage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Stessa pagina, rotta cambiata (es. dalla notifica di un evento).
+    // Stessa pagina, rotta cambiata (una scelta qui, la notifica di un evento o il
+    // promemoria delle 18:00, che riporta a oggi).
     if (widget.initialTab != oldWidget.initialTab) {
-      _tabs.animateTo(widget.initialTab == 'statistiche' ? 1 : 0);
+      setState(() => _tab = _tabOf(widget.initialTab));
     }
-    final day = widget.initialDay;
-    if (day != null && day != oldWidget.initialDay) {
+    if (widget.initialDay != oldWidget.initialDay) {
       setState(() {
-        _day = dayOnly(day);
+        _day = _dayToOpen(widget.initialDay);
         _focused = _day;
       });
     }
   }
 
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
+  /// Scheda e giorno scelti qui stanno nella rotta, come in Partite: così una notifica
+  /// o un collegamento che riporta a `/presenze` cambia sempre la rotta e la pagina lo
+  /// segue (con la scelta tenuta solo nella pagina, una rotta uguale non la toccava).
+  void _goTo({int? tab, DateTime? day}) {
+    final t = tab ?? _tab;
+    // Cambiando solo scheda, una pagina che segue oggi continua a seguirlo (il giorno
+    // non si fissa nella rotta: dopo la mezzanotte resterebbe "ieri").
+    final fixed = day ?? (widget.initialDay == null ? null : _day);
+    context.go(
+      Uri(
+        path: '/presenze',
+        queryParameters: {
+          if (t == 1) 'scheda': 'statistiche',
+          if (fixed != null)
+            'giorno': DateFormat('yyyy-MM-dd').format(dayOnly(fixed)),
+        },
+      ).toString(),
+    );
+  }
+
+  void _select(DateTime day) => _goTo(day: day);
+
+  /// Avanti o indietro di una settimana (di un mese con il mese intero aperto).
+  void _move(int step, DateTime today) {
+    final next = _month
+        ? DateTime(_focused.year, _focused.month + step, 1)
+        : DateTime(_focused.year, _focused.month, _focused.day + 7 * step);
+    setState(() => _focused = clampToCalendar(next, today));
   }
 
   @override
@@ -90,76 +174,91 @@ class _PresenzePageState extends ConsumerState<PresenzePage>
     final attendance = ref.watch(attendanceProvider);
     final events = ref.watch(eventsProvider).value ?? const <ClubEvent>[];
     final now = ref.watch(clockProvider)();
-
-    if (rosa.isLoading || attendance.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+    // Oggi in ora italiana, come sul server.
+    final today = italianDay(now);
+    // Senza un giorno chiesto la pagina segue oggi: passata la mezzanotte con la pagina
+    // aperta si va al giorno nuovo (non resta "ieri", con le risposte già chiuse).
+    if (widget.initialDay == null && _day.isBefore(today)) {
+      _day = today;
+      _focused = today;
     }
-    if (rosa.hasError || attendance.hasError) {
-      return Center(
-        child: Text(
-          'Errore nel caricamento: ${rosa.error ?? attendance.error}',
-        ),
-      );
-    }
-
     final myTeams = me?.teams ?? const {Team.milanac};
     final canPickTeam = myTeams.length > 1 || (me?.isDirettivo ?? false);
     final team = _team ?? mainTeam(myTeams);
-    final members =
-        rosa.value!
-            .where(
-              (m) =>
-                  m.active &&
-                  m.role != ClubRole.pending &&
-                  m.teams.contains(team),
-            )
-            .toList()
-          ..sort((a, b) => a.displayName.compareTo(b.displayName));
-    final entries = attendance.value!;
-    final event = eveningEvent(events, _day, teams: {team});
+    final teamEvents = [
+      for (final e in events)
+        if (e.team == null || e.team == team) e,
+    ];
+
+    void retry() {
+      ref.invalidate(rosaProvider);
+      ref.invalidate(attendanceProvider);
+    }
 
     return Column(
       children: [
-        TabBar(
-          controller: _tabs,
-          indicatorColor: MilanacColors.red,
-          labelColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.calendar_month_rounded), text: 'Calendario'),
-            Tab(icon: Icon(Icons.bar_chart_rounded), text: 'Statistiche'),
-          ],
+        _Band(
+          tab: _tab,
+          onTab: (i) => _goTo(tab: i),
+          picker: _tab != 0
+              ? null
+              : _DayPicker(
+                  day: _day,
+                  focused: _focused,
+                  today: today,
+                  month: _month,
+                  eventsOn: (d) => [
+                    for (final e in teamEvents)
+                      if (isSameDay(e.startsAt, d)) e,
+                  ],
+                  onDay: _select,
+                  onFocus: (f) => setState(() => _focused = dayOnly(f)),
+                  onMove: (step) => _move(step, today),
+                  onToggleMonth: () => setState(() => _month = !_month),
+                ),
         ),
         Expanded(
-          child: TabBarView(
-            controller: _tabs,
-            children: [
-              _CalendarTab(
-                day: _day,
-                focused: _focused,
-                now: now,
-                me: me,
-                team: team,
-                canPickTeam: canPickTeam,
-                members: members,
-                entries: entries,
-                events: events,
-                event: event,
-                onDay: (d, f) => setState(() {
-                  _day = dayOnly(d);
-                  _focused = f;
-                }),
-                onTeam: (t) => setState(() => _team = t),
-              ),
-              _StatsTab(
-                members: members,
-                entries: entries,
-                me: me,
-                now: now,
-                team: team,
-                canPickTeam: canPickTeam,
-                onTeam: (t) => setState(() => _team = t),
-              ),
-            ],
+          child: AsyncView(
+            value: rosa,
+            onRetry: retry,
+            data: (all) => AsyncView(
+              value: attendance,
+              onRetry: retry,
+              data: (entries) {
+                final members =
+                    all
+                        .where(
+                          (m) =>
+                              m.active &&
+                              m.role != ClubRole.pending &&
+                              m.teams.contains(team),
+                        )
+                        .toList()
+                      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+                void onTeam(Team t) => setState(() => _team = t);
+                return _tab == 0
+                    ? _DayView(
+                        day: _day,
+                        now: now,
+                        me: me,
+                        team: team,
+                        canPickTeam: canPickTeam,
+                        onTeam: onTeam,
+                        members: members,
+                        entries: entries,
+                        event: eveningEvent(events, _day, teams: {team}),
+                      )
+                    : _StatsView(
+                        members: members,
+                        entries: entries,
+                        me: me,
+                        now: now,
+                        team: team,
+                        canPickTeam: canPickTeam,
+                        onTeam: onTeam,
+                      );
+              },
+            ),
           ),
         ),
       ],
@@ -167,55 +266,439 @@ class _PresenzePageState extends ConsumerState<PresenzePage>
   }
 }
 
-// ------------------------------------------------------------------ calendario
+/// La fascia in alto: Calendario | Statistiche e, nel calendario, la settimana.
+class _Band extends StatelessWidget {
+  const _Band({required this.tab, required this.onTab, this.picker});
+  final int tab;
+  final ValueChanged<int> onTab;
+  final Widget? picker;
 
-class _CalendarTab extends ConsumerWidget {
-  const _CalendarTab({
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: p.surface,
+        border: Border(bottom: BorderSide(color: p.border)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
+          children: [
+            SegmentedTabs(
+              labels: const ['Calendario', 'Statistiche'],
+              selected: tab,
+              onSelected: onTab,
+            ),
+            if (picker != null) ...[const SizedBox(height: 8), picker!],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// La settimana a colpo d'occhio (oggi in evidenza, pallino oro per le partite e chiaro
+/// per gli altri eventi); toccando il mese si apre il mese intero.
+class _DayPicker extends StatelessWidget {
+  const _DayPicker({
     required this.day,
     required this.focused,
+    required this.today,
+    required this.month,
+    required this.eventsOn,
+    required this.onDay,
+    required this.onFocus,
+    required this.onMove,
+    required this.onToggleMonth,
+  });
+  final DateTime day;
+  final DateTime focused;
+  final DateTime today;
+  final bool month;
+  final List<ClubEvent> Function(DateTime day) eventsOn;
+  final ValueChanged<DateTime> onDay;
+  final ValueChanged<DateTime> onFocus;
+  final ValueChanged<int> onMove;
+  final VoidCallback onToggleMonth;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final monday = DateTime(
+      focused.year,
+      focused.month,
+      focused.day - (focused.weekday - 1),
+    );
+    final week = [
+      for (var i = 0; i < 7; i++)
+        DateTime(monday.year, monday.month, monday.day + i),
+    ];
+    final shown = month || !week.contains(day)
+        ? (month ? focused : week[3])
+        : day;
+    final title = DateFormat('MMMM y', 'it').format(shown).toUpperCase();
+    final first = calendarFirstDay;
+    final last = calendarLastDay(today);
+    return Column(
+      children: [
+        Row(
+          children: [
+            IconButton(
+              tooltip: month ? 'Mese precedente' : 'Settimana precedente',
+              icon: const Icon(Icons.chevron_left_rounded),
+              color: p.text,
+              onPressed: () => onMove(-1),
+            ),
+            Expanded(
+              child: Center(
+                child: Semantics(
+                  button: true,
+                  label: month
+                      ? 'Mostra la settimana'
+                      : 'Mostra il mese intero',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: onToggleMonth,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 44),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                    fontFamily: sportFont,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 17,
+                                    letterSpacing: 1,
+                                    color: p.text,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              month
+                                  ? Icons.expand_less_rounded
+                                  : Icons.expand_more_rounded,
+                              size: 20,
+                              color: p.textMuted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: month ? 'Mese successivo' : 'Settimana successiva',
+              icon: const Icon(Icons.chevron_right_rounded),
+              color: p.text,
+              onPressed: () => onMove(1),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (month)
+          _MonthGrid(
+            day: day,
+            focused: clampToCalendar(focused, today),
+            today: today,
+            eventsOn: eventsOn,
+            onDay: onDay,
+            onFocus: onFocus,
+          )
+        else
+          Row(
+            children: [
+              for (final (i, d) in week.indexed) ...[
+                if (i > 0) const SizedBox(width: 4),
+                Expanded(
+                  child: _DayTile(
+                    day: d,
+                    selected: d == day,
+                    isToday: d == today,
+                    events: eventsOn(d),
+                    enabled: !d.isBefore(first) && !d.isAfter(last),
+                    onTap: () => onDay(d),
+                  ),
+                ),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// Pallino di un giorno con eventi: oro per le partite, chiaro per il resto.
+Color? _dotColor(AppPalette p, List<ClubEvent> events) {
+  if (events.isEmpty) return null;
+  return events.any((e) => e.type.isMatch) ? p.accentText : p.text;
+}
+
+class _DayTile extends StatelessWidget {
+  const _DayTile({
+    required this.day,
+    required this.selected,
+    required this.isToday,
+    required this.events,
+    required this.enabled,
+    required this.onTap,
+  });
+  final DateTime day;
+  final bool selected;
+  final bool isToday;
+  final List<ClubEvent> events;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final dot = _dotColor(p, events);
+    final number = selected
+        ? p.onAccent
+        : !enabled
+        ? p.textDisabled
+        : isToday
+        ? p.accentText
+        : p.text;
+    final weekday = DateFormat('E', 'it').format(day).toUpperCase();
+    final label = [
+      '${_capitalized(DateFormat('EEEE', 'it').format(day))} ${day.day}',
+      if (isToday) 'oggi',
+      if (events.any((e) => e.type.isMatch))
+        'partita'
+      else if (events.isNotEmpty)
+        'evento',
+    ].join(', ');
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? p.accent : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: isToday && !selected
+              ? BorderSide(color: p.importantBorder)
+              : BorderSide.none,
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: enabled ? onTap : null,
+          child: SizedBox(
+            height: 64,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    weekday,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                      color: selected ? p.onAccent : p.textMuted,
+                    ),
+                  ),
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${day.day}',
+                    style: TextStyle(
+                      fontFamily: sportFont,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 20,
+                      height: 1.15,
+                      color: number,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: 6,
+                  child: dot == null
+                      ? null
+                      : DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: selected ? p.onAccent : dot,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const SizedBox(width: 6, height: 6),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Il mese intero (stessi colori della settimana).
+class _MonthGrid extends StatelessWidget {
+  const _MonthGrid({
+    required this.day,
+    required this.focused,
+    required this.today,
+    required this.eventsOn,
+    required this.onDay,
+    required this.onFocus,
+  });
+  final DateTime day;
+  final DateTime focused;
+  final DateTime today;
+  final List<ClubEvent> Function(DateTime day) eventsOn;
+  final ValueChanged<DateTime> onDay;
+  final ValueChanged<DateTime> onFocus;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final dayStyle = TextStyle(color: p.text, fontWeight: FontWeight.w600);
+    final weekdayStyle = TextStyle(
+      color: p.textMuted,
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+    );
+    return TableCalendar<ClubEvent>(
+      locale: 'it',
+      // Gli stessi limiti del Calendario e dell'editor degli eventi.
+      firstDay: calendarFirstDay,
+      lastDay: calendarLastDay(today),
+      focusedDay: focused,
+      currentDay: today,
+      headerVisible: false,
+      rowHeight: 46,
+      startingDayOfWeek: StartingDayOfWeek.monday,
+      // Solo lo scorrimento tra i mesi: in verticale deve scorrere la pagina.
+      availableGestures: AvailableGestures.horizontalSwipe,
+      availableCalendarFormats: const {CalendarFormat.month: 'Mese'},
+      selectedDayPredicate: (d) => isSameDay(d, day),
+      eventLoader: eventsOn,
+      onDaySelected: (selected, _) => onDay(selected),
+      onPageChanged: onFocus,
+      daysOfWeekStyle: DaysOfWeekStyle(
+        weekdayStyle: weekdayStyle,
+        weekendStyle: weekdayStyle,
+      ),
+      calendarStyle: CalendarStyle(
+        outsideDaysVisible: false,
+        defaultTextStyle: dayStyle,
+        weekendTextStyle: dayStyle,
+        disabledTextStyle: TextStyle(color: p.textDisabled),
+        todayDecoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: p.accentText, width: 1.5),
+        ),
+        todayTextStyle: TextStyle(
+          color: p.accentText,
+          fontWeight: FontWeight.w700,
+        ),
+        selectedDecoration: BoxDecoration(
+          color: p.accent,
+          shape: BoxShape.circle,
+        ),
+        selectedTextStyle: TextStyle(
+          color: p.onAccent,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      calendarBuilders: CalendarBuilders(
+        markerBuilder: (context, d, list) {
+          final dot = _dotColor(p, list);
+          if (dot == null) return null;
+          return Positioned(
+            bottom: 4,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: isSameDay(d, day) ? p.onAccent : dot,
+                shape: BoxShape.circle,
+              ),
+              child: const SizedBox(width: 5, height: 5),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Scelta della squadra (per chi è in entrambe e per il Direttivo).
+class _TeamPills extends StatelessWidget {
+  const _TeamPills({required this.team, required this.onTeam});
+  final Team team;
+  final ValueChanged<Team> onTeam;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final t in Team.values)
+          FilterPill(
+            label: teamTabLabel(t),
+            selected: t == team,
+            onTap: () => onTeam(t),
+          ),
+      ],
+    ),
+  );
+}
+
+// ------------------------------------------------------------------ la serata
+
+class _DayView extends ConsumerWidget {
+  const _DayView({
+    required this.day,
     required this.now,
     required this.me,
     required this.team,
     required this.canPickTeam,
+    required this.onTeam,
     required this.members,
     required this.entries,
-    required this.events,
     required this.event,
-    required this.onDay,
-    required this.onTeam,
   });
 
   final DateTime day;
-  final DateTime focused;
   final DateTime now;
   final Profile? me;
   final Team team;
   final bool canPickTeam;
+  final ValueChanged<Team> onTeam;
   final List<Member> members;
   final List<AttendanceEntry> entries;
-  final List<ClubEvent> events;
   final ClubEvent event;
-  final void Function(DateTime day, DateTime focused) onDay;
-  final ValueChanged<Team> onTeam;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final today = dayOnly(now);
-    final isToday = day == today;
-    final past = day.isBefore(today);
+    final p = context.pal;
+    // Oggi e scadenza in ora italiana, come sul server.
+    final today = italianDay(now);
     final open = answersOpen(day, now);
     final ofDay = {
       for (final e in entries.where((e) => e.date == day)) e.playerId: e,
     };
-    final mine = me == null ? null : ofDay[me!.id];
-    final isMember = me != null && members.any((m) => m.id == me!.id);
+    final me = this.me;
+    final mine = me == null ? null : ofDay[me.id];
+    final isMember = me != null && members.any((m) => m.id == me.id);
     final isDirettivo = me?.isDirettivo ?? false;
 
-    List<ClubEvent> on(DateTime d) => events
-        .where(
-          (e) => isSameDay(e.startsAt, d) && (e.team == null || e.team == team),
-        )
-        .toList();
     List<Member> withStatus(AttendanceStatus? s) => members
         .where(
           (m) =>
@@ -223,220 +706,193 @@ class _CalendarTab extends ConsumerWidget {
         )
         .toList();
 
-    final dayLabel = DateFormat('EEEE d MMMM', 'it').format(day);
+    void openHistory(Member m) {
+      // Si prende subito quello che serve per salvare: la riga può cambiare elenco
+      // mentre lo storico è aperto (alle 18:30 l'assenza automatica la sposta).
+      final answer = AttendanceAnswer(context, ref);
+      final entry = ofDay[m.id];
+      showAttendanceHistory(
+        context,
+        member: m,
+        // Le risposte già date per i prossimi giorni non gonfiano la percentuale.
+        history: historyOf(m.id, entries, today),
+        onSetStatus: isDirettivo && m.id != me?.id
+            ? (s) => answer(
+                playerId: m.id,
+                day: day,
+                status: s,
+                current: entry,
+                event: event,
+              )
+            : null,
+        dayLabel: DateFormat('d MMMM', 'it').format(day),
+      );
+    }
+
+    final groups = [
+      ('Presenti', AttendanceStatus.presente),
+      ('In ritardo', AttendanceStatus.ritardo),
+      ('Senza risposta', null),
+      ('Assenti', AttendanceStatus.assente),
+    ];
 
     return ListView(
       key: const ValueKey('presenze-giorno'),
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 32),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        TableCalendar<ClubEvent>(
-          locale: 'it',
-          firstDay: DateTime(now.year - 1, 1, 1),
-          lastDay: DateTime(now.year + 1, 12, 31),
-          focusedDay: focused,
-          currentDay: today,
-          startingDayOfWeek: StartingDayOfWeek.monday,
-          // Solo lo scorrimento tra i mesi: in verticale deve scorrere la pagina.
-          availableGestures: AvailableGestures.horizontalSwipe,
-          availableCalendarFormats: const {CalendarFormat.month: 'Mese'},
-          selectedDayPredicate: (d) => isSameDay(d, day),
-          eventLoader: on,
-          onDaySelected: onDay,
-          onPageChanged: (f) => onDay(day, f),
-          headerStyle: const HeaderStyle(
-            titleCentered: true,
-            formatButtonVisible: false,
-            titleTextStyle: TextStyle(
-              fontFamily: sportFont,
-              fontSize: 18,
-              letterSpacing: 1.5,
-            ),
+        if (canPickTeam) _TeamPills(team: team, onTeam: onTeam),
+        _EveningCard(
+          event: event,
+          team: team,
+          day: day,
+          isToday: day == today,
+          past: day.isBefore(today),
+          open: open,
+          isMember: isMember,
+          mine: mine,
+          onAnswer: (s) => answerAttendance(
+            context,
+            ref,
+            playerId: me!.id,
+            day: day,
+            status: s,
+            current: mine,
+            event: event,
           ),
-          calendarStyle: CalendarStyle(
-            outsideDaysVisible: false,
-            // Oggi cerchiato in rosso; il giorno scelto pieno.
-            todayDecoration: BoxDecoration(
-              border: Border.all(color: MilanacColors.red, width: 2),
-              shape: BoxShape.circle,
-            ),
-            todayTextStyle: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
-            selectedDecoration: const BoxDecoration(
-              color: MilanacColors.red,
-              shape: BoxShape.circle,
-            ),
-            weekendTextStyle: const TextStyle(color: Colors.white70),
-          ),
-          calendarBuilders: CalendarBuilders(
-            markerBuilder: (context, d, list) => list.isEmpty
-                ? null
-                : Positioned(
-                    bottom: 4,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final e in list.take(3))
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 1),
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: e.type.color,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                      ],
+        ),
+        const SizedBox(height: 16),
+        Semantics(
+          label: day == today ? 'Chi c\'è stasera' : 'Chi c\'è',
+          container: true,
+          child: AppCard(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (members.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      'Nessun giocatore in ${team.label}.',
+                      style: TextStyle(color: p.textMuted, fontSize: 15),
                     ),
                   ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        if (canPickTeam)
-          Center(
-            child: SegmentedButton<Team>(
-              segments: [
-                for (final t in Team.values)
-                  ButtonSegment(value: t, label: Text(t.short)),
+                for (final (title, status) in groups)
+                  if (withStatus(status) case final list
+                      when list.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10, bottom: 2),
+                      child: AttendanceGroupLabel(
+                        title: title,
+                        count: list.length,
+                        status: status,
+                      ),
+                    ),
+                    for (final m in list)
+                      AttendanceMemberRow(
+                        member: m,
+                        isMe: m.id == me?.id,
+                        detail: ofDay[m.id] == null
+                            ? null
+                            : attendanceDetail(ofDay[m.id]!),
+                        trailing: memberRoleLabel(m) == null
+                            ? null
+                            : RowTrailingText(memberRoleLabel(m)!),
+                        onTap: () => openHistory(m),
+                      ),
+                  ],
               ],
-              selected: {team},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => onTeam(s.first),
             ),
-          ),
-        // La serata.
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: event.type.color.withValues(alpha: .2),
-              child: Icon(event.type.icon, color: event.type.color),
-            ),
-            title: Text(
-              '${isToday ? 'STASERA' : 'SERATA'} · ${dayLabel[0].toUpperCase()}${dayLabel.substring(1)}',
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1,
-                fontSize: 13,
-              ),
-            ),
-            subtitle: Text(
-              '${event.type.label} alle ${DateFormat('HH:mm').format(event.startsAt)}'
-              '${event.title == event.type.label ? '' : ' · ${event.title}'}',
-            ),
-            trailing: TeamBadge(team, small: true),
           ),
         ),
-        if (isMember)
-          _MyAnswer(
-            mine: mine,
-            open: open,
-            past: past,
-            onAnswer: (s) => answerAttendance(
-              context,
-              ref,
-              playerId: me!.id,
-              day: day,
-              status: s,
-              current: mine,
-              event: event,
-            ),
-          ),
-        _Summary(members: members.length, entries: ofDay.values.toList()),
-        for (final (title, status) in [
-          ('Senza risposta', null),
-          ('Presenti', AttendanceStatus.presente),
-          ('In ritardo', AttendanceStatus.ritardo),
-          ('Assenti', AttendanceStatus.assente),
-        ])
-          _Group(
-            title: title,
-            color: statusColor(status),
-            members: withStatus(status),
-            entries: ofDay,
-            me: me,
-            history: entries,
-            canManage: isDirettivo,
-            day: day,
-            event: event,
-            hideWhenEmpty: status == null,
-          ),
       ],
     );
   }
 }
 
-/// Riquadro con cui il giocatore risponde per la serata scelta.
-class _MyAnswer extends StatelessWidget {
-  const _MyAnswer({
-    required this.mine,
-    required this.open,
+/// La serata del giorno scelto: l'appuntamento e la propria risposta.
+class _EveningCard extends StatelessWidget {
+  const _EveningCard({
+    required this.event,
+    required this.team,
+    required this.day,
+    required this.isToday,
     required this.past,
+    required this.open,
+    required this.isMember,
+    required this.mine,
     required this.onAnswer,
   });
-  final AttendanceEntry? mine;
-  final bool open;
+  final ClubEvent event;
+  final Team team;
+  final DateTime day;
+  final bool isToday;
   final bool past;
+  final bool open;
+  final bool isMember;
+  final AttendanceEntry? mine;
   final ValueChanged<AttendanceStatus> onAnswer;
 
   @override
   Widget build(BuildContext context) {
-    final text = mine != null
-        ? 'La tua risposta: ${describeAttendance(mine!)}'
+    final p = context.pal;
+    final mine = this.mine;
+    final label = isToday
+        ? 'Oggi · ${team.label}'
+        : '${DateFormat('EEEE d MMMM', 'it').format(day)} · ${team.label}';
+    final status = mine != null
+        ? 'La tua risposta: ${describeAttendance(mine)}'
         : past
         ? 'Non hai risposto.'
         : open
-        ? 'Ci sei? Rispondi entro le $attendanceDeadlineLabel.'
+        ? 'La tua risposta, entro le $attendanceDeadlineLabel'
         : 'Non hai risposto entro le $attendanceDeadlineLabel: risulti assente.';
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'LA TUA PRESENZA',
-              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
+    final note = past
+        ? 'Le serate passate non si modificano.'
+        : open
+        ? 'Per il ritardo ti chiediamo il motivo. Dopo le '
+              '$attendanceDeadlineLabel corregge solo il Direttivo.'
+        : 'Risposte chiuse alle $attendanceDeadlineLabel. Per un errore, '
+              'avvisa il Direttivo.';
+    return AppCard(
+      important: isToday,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionLabel(label, gold: isToday),
+          const SizedBox(height: 2),
+          Text(
+            '${event.type.label.toUpperCase()} '
+            '${DateFormat('HH:mm').format(event.startsAt)}',
+            style: TextStyle(
+              fontFamily: sportFont,
+              fontWeight: FontWeight.w600,
+              fontSize: 22,
+              letterSpacing: .4,
+              color: p.text,
             ),
-            const SizedBox(height: 4),
+          ),
+          if (event.title != event.type.label)
             Text(
-              text,
-              style: TextStyle(
-                color: mine == null && open
-                    ? MilanacColors.gold
-                    : Colors.white70,
-              ),
+              event.title,
+              style: TextStyle(color: p.textSecondary, fontSize: 15),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                for (final s in AttendanceStatus.values)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: AttendanceStatusButton(
-                        status: s,
-                        selected: mine?.status == s,
-                        onPressed: open ? () => onAnswer(s) : null,
-                      ),
-                    ),
-                  ),
-              ],
+          if (isMember) ...[
+            const SizedBox(height: 2),
+            Text(
+              status,
+              style: TextStyle(color: p.textSecondary, fontSize: 15),
             ),
-            if (!open)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  past
-                      ? 'Le serate passate non si modificano.'
-                      : 'Risposte chiuse alle $attendanceDeadlineLabel. Per un errore, avvisa il Direttivo.',
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
-                ),
-              ),
+            const SizedBox(height: 12),
+            AttendanceButtons(
+              selected: mine?.status,
+              inline: true,
+              onAnswer: open ? onAnswer : null,
+            ),
+            const SizedBox(height: 12),
+            Text(note, style: TextStyle(color: p.textMuted, fontSize: 14)),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -452,76 +908,69 @@ Future<void> answerAttendance(
   required AttendanceStatus status,
   AttendanceEntry? current,
   ClubEvent? event,
-}) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final input = await editAttendance(
-    context,
-    status: status,
-    initialTime: current?.arrivalTime,
-    initialNote: current?.note,
-    eventStart: event?.startsAt,
-  );
-  if (input == null) return;
-  try {
-    await ref
-        .read(attendanceRepositoryProvider)
-        .save(
-          AttendanceEntry(
-            playerId: playerId,
-            date: day,
-            status: status,
-            arrivalTime: input.time,
-            note: input.note,
-          ),
-        );
-  } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Risposta non salvata: $e')));
-  }
-}
+}) => AttendanceAnswer(context, ref)(
+  playerId: playerId,
+  day: day,
+  status: status,
+  current: current,
+  event: event,
+);
 
-class AttendanceStatusButton extends StatelessWidget {
-  const AttendanceStatusButton({
-    super.key,
-    required this.status,
-    required this.selected,
-    this.onPressed,
-  });
-  final AttendanceStatus status;
-  final bool selected;
-  final VoidCallback? onPressed;
+/// Salva le risposte. Repository, avvisi e navigatore si prendono subito, quando nasce:
+/// mentre i dialoghi sono aperti la riga che li ha aperti può sparire (alle 18:30
+/// l'assenza automatica la sposta in un altro elenco) senza che la risposta si perda.
+class AttendanceAnswer {
+  AttendanceAnswer(BuildContext context, WidgetRef ref)
+    : _repository = ref.read(attendanceRepositoryProvider),
+      _myId = ref.read(currentUserIdProvider),
+      _messenger = ScaffoldMessenger.of(context),
+      _navigator = Navigator.of(context, rootNavigator: true);
 
-  @override
-  Widget build(BuildContext context) {
-    final color = statusColor(status);
-    final icon = switch (status) {
-      AttendanceStatus.presente => Icons.check_circle_rounded,
-      AttendanceStatus.ritardo => Icons.schedule_rounded,
-      AttendanceStatus.assente => Icons.cancel_rounded,
-    };
-    return OutlinedButton(
-      onPressed: onPressed == null
-          ? null
-          : () {
-              HapticFeedback.selectionClick();
-              onPressed!();
-            },
-      style: OutlinedButton.styleFrom(
-        backgroundColor: selected ? color : null,
-        foregroundColor: selected ? Colors.white : color,
-        side: BorderSide(color: onPressed == null ? Colors.white24 : color),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon),
-          const SizedBox(height: 4),
-          FittedBox(child: Text(status.label)),
-        ],
-      ),
+  final AttendanceRepository _repository;
+  final String? _myId;
+  final ScaffoldMessengerState _messenger;
+  final NavigatorState _navigator;
+
+  Future<void> call({
+    required String playerId,
+    required DateTime day,
+    required AttendanceStatus status,
+    AttendanceEntry? current,
+    ClubEvent? event,
+  }) async {
+    final input = await editAttendance(
+      _navigator.context,
+      status: status,
+      initialTime: current?.arrivalTime,
+      initialNote: current?.note,
+      eventStart: event?.startsAt,
     );
+    if (input == null) return;
+    try {
+      await _repository.save(
+        AttendanceEntry(
+          playerId: playerId,
+          date: day,
+          status: status,
+          arrivalTime: input.time,
+          note: input.note,
+        ),
+      );
+    } catch (e) {
+      _messenger.showSnackBar(
+        SnackBar(content: Text(answerErrorText(e, mine: playerId == _myId))),
+      );
+    }
   }
 }
+
+/// Testo per una risposta non salvata. Chi risponde per sé dopo le 18:30 italiane viene
+/// fermato dalle regole del database (42501): glielo si dice in chiaro.
+String answerErrorText(Object e, {required bool mine}) =>
+    mine && e is PostgrestException && e.code == '42501'
+    ? 'Le risposte per stasera si sono chiuse alle $attendanceDeadlineLabel '
+          '(ora italiana).'
+    : friendlyError(e, action: 'Risposta non salvata');
 
 class AttendanceInput {
   const AttendanceInput(this.time, this.note);
@@ -646,205 +1095,10 @@ class _NoteDialogState extends State<_NoteDialog> {
   );
 }
 
-class _Summary extends StatelessWidget {
-  const _Summary({required this.members, required this.entries});
-  final int members;
-  final List<AttendanceEntry> entries;
-
-  @override
-  Widget build(BuildContext context) {
-    int count(AttendanceStatus s) => entries.where((e) => e.status == s).length;
-    final waiting = members - entries.length;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            for (final (label, value, color) in [
-              (
-                'Presenti',
-                count(AttendanceStatus.presente),
-                statusColor(AttendanceStatus.presente),
-              ),
-              (
-                'Ritardi',
-                count(AttendanceStatus.ritardo),
-                statusColor(AttendanceStatus.ritardo),
-              ),
-              (
-                'Assenti',
-                count(AttendanceStatus.assente),
-                statusColor(AttendanceStatus.assente),
-              ),
-              ('Senza risposta', waiting < 0 ? 0 : waiting, Colors.white54),
-            ])
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      '$value',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: color,
-                      ),
-                    ),
-                    FittedBox(
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Un elenco del giorno (presenti, in ritardo, assenti, senza risposta).
-class _Group extends ConsumerWidget {
-  const _Group({
-    required this.title,
-    required this.color,
-    required this.members,
-    required this.entries,
-    required this.me,
-    required this.history,
-    required this.canManage,
-    required this.day,
-    required this.event,
-    this.hideWhenEmpty = false,
-  });
-  final String title;
-  final Color color;
-  final List<Member> members;
-  final Map<String, AttendanceEntry> entries;
-  final Profile? me;
-  final List<AttendanceEntry> history;
-  final bool canManage;
-  final DateTime day;
-  final ClubEvent event;
-  final bool hideWhenEmpty;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (members.isEmpty && hideWhenEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 14, 4, 4),
-          child: Text(
-            '${title.toUpperCase()} (${members.length})',
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
-            ),
-          ),
-        ),
-        if (members.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(left: 4),
-            child: Text('Nessuno.', style: TextStyle(color: Colors.white38)),
-          ),
-        for (final m in members)
-          _MemberTile(
-            member: m,
-            entry: entries[m.id],
-            isMe: m.id == me?.id,
-            history: history.where((e) => e.playerId == m.id).toList()
-              ..sort((a, b) => b.date.compareTo(a.date)),
-            canManage: canManage,
-            day: day,
-            event: event,
-          ),
-      ],
-    );
-  }
-}
-
-class _MemberTile extends ConsumerWidget {
-  const _MemberTile({
-    required this.member,
-    required this.entry,
-    required this.isMe,
-    required this.history,
-    required this.canManage,
-    required this.day,
-    required this.event,
-  });
-  final Member member;
-  final AttendanceEntry? entry;
-  final bool isMe;
-  final List<AttendanceEntry> history;
-  final bool canManage;
-  final DateTime day;
-  final ClubEvent event;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final e = entry;
-    final grey = e?.auto ?? false;
-    return ListTile(
-      dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-      leading: MemberAvatar(member: member, radius: 18),
-      title: Text(
-        isMe ? '${member.displayName} (tu)' : member.displayName,
-        style: TextStyle(
-          fontWeight: FontWeight.w700,
-          color: grey ? Colors.white54 : null,
-        ),
-      ),
-      subtitle: Text(
-        e == null ? 'Non ha ancora risposto' : describeAttendance(e),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: grey ? Colors.white38 : statusColor(e?.status),
-          fontSize: 12.5,
-        ),
-      ),
-      trailing: Text(
-        '${AttendanceStats(history).percent}%',
-        style: const TextStyle(
-          fontWeight: FontWeight.w900,
-          color: MilanacColors.gold,
-        ),
-      ),
-      onTap: () => showAttendanceHistory(
-        context,
-        member: member,
-        history: history,
-        onSetStatus: canManage && !isMe
-            ? (s) => answerAttendance(
-                context,
-                ref,
-                playerId: member.id,
-                day: day,
-                status: s,
-                current: e,
-                event: event,
-              )
-            : null,
-        dayLabel: DateFormat('d MMMM', 'it').format(day),
-      ),
-    );
-  }
-}
-
 // ------------------------------------------------------------------ statistiche
 
-class _StatsTab extends ConsumerWidget {
-  const _StatsTab({
+class _StatsView extends StatelessWidget {
+  const _StatsView({
     required this.members,
     required this.entries,
     required this.me,
@@ -862,48 +1116,30 @@ class _StatsTab extends ConsumerWidget {
   final ValueChanged<Team> onTeam;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final today = dayOnly(now);
-    final rows =
-        [
-          for (final m in members)
-            (
-              m,
-              entries
-                  .where((e) => e.playerId == m.id && !e.date.isAfter(today))
-                  .toList()
-                ..sort((a, b) => b.date.compareTo(a.date)),
-            ),
-        ]..sort((a, b) {
-          final pa = AttendanceStats(a.$2);
-          final pb = AttendanceStats(b.$2);
-          final c = pb.percent.compareTo(pa.percent);
-          return c != 0 ? c : pb.total.compareTo(pa.total);
-        });
+  Widget build(BuildContext context) {
+    final today = italianDay(now);
+    final rows = [for (final m in members) (m, historyOf(m.id, entries, today))]
+      ..sort((a, b) {
+        final pa = AttendanceStats(a.$2);
+        final pb = AttendanceStats(b.$2);
+        final c = pb.percent.compareTo(pa.percent);
+        return c != 0 ? c : pb.total.compareTo(pa.total);
+      });
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 32),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
+        if (canPickTeam) _TeamPills(team: team, onTeam: onTeam),
         Text(
           'Ultimi $historyDays giorni: percentuale di presenze (anche in ritardo), '
           'ritardi e assenze. Le assenze automatiche contano come assenze.',
-          style: const TextStyle(color: Colors.white60, fontSize: 13),
+          style: TextStyle(color: context.pal.textMuted, fontSize: 14),
         ),
-        const SizedBox(height: 8),
-        if (canPickTeam)
-          Center(
-            child: SegmentedButton<Team>(
-              segments: [
-                for (final t in Team.values)
-                  ButtonSegment(value: t, label: Text(t.short)),
-              ],
-              selected: {team},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => onTeam(s.first),
-            ),
-          ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         for (final (m, history) in rows)
-          _StatsRow(member: m, history: history, isMe: m.id == me?.id),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _StatsRow(member: m, history: history, isMe: m.id == me?.id),
+          ),
       ],
     );
   }
@@ -921,60 +1157,56 @@ class _StatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.pal;
     final stats = AttendanceStats(history);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () =>
-            showAttendanceHistory(context, member: member, history: history),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return AppCard(
+      radius: 16,
+      padding: const EdgeInsets.all(12),
+      onTap: () =>
+          showAttendanceHistory(context, member: member, history: history),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  MemberAvatar(member: member, radius: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isMe
-                              ? '${member.displayName} (tu)'
-                              : member.displayName,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        Text(
-                          '${stats.present} puntuale · ${stats.late} ritardi · '
-                          '${stats.absent} assenze'
-                          '${stats.autoAbsent > 0 ? ' (${stats.autoAbsent} senza risposta)' : ''}',
-                          style: const TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+              MemberAvatar(member: member, radius: 19),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isMe ? '${member.displayName} (tu)' : member.displayName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  Text(
-                    '${stats.percent}%',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: MilanacColors.gold,
-                      fontSize: 18,
+                    Text(
+                      '${stats.present} puntuale · ${stats.late} ritardi · '
+                      '${stats.absent} assenze'
+                      '${stats.autoAbsent > 0 ? ' (${stats.autoAbsent} senza risposta)' : ''}',
+                      style: TextStyle(color: p.textMuted, fontSize: 14),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              _HistoryStrip(history: history.take(12).toList()),
+              const SizedBox(width: 8),
+              Text(
+                '${stats.percent}%',
+                style: TextStyle(
+                  fontFamily: sportFont,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 22,
+                  color: p.accentText,
+                ),
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: 10),
+          _HistoryStrip(history: history.take(12).toList()),
+        ],
       ),
     );
   }
@@ -987,28 +1219,26 @@ class _HistoryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.pal;
     if (history.isEmpty) {
-      return const Text(
+      return Text(
         'Nessuno storico',
-        style: TextStyle(color: Colors.white38, fontSize: 12),
+        style: TextStyle(color: p.textMuted, fontSize: 13),
       );
     }
     return Row(
       children: [
-        const Text(
-          'Ultime: ',
-          style: TextStyle(color: Colors.white54, fontSize: 12),
-        ),
+        Text('Ultime: ', style: TextStyle(color: p.textMuted, fontSize: 13)),
         for (final e in history)
           Tooltip(
             message:
                 '${DateFormat('d/M', 'it').format(e.date)} · ${describeAttendance(e)}',
             child: Container(
               margin: const EdgeInsets.only(right: 4),
-              width: 14,
-              height: 14,
+              width: 12,
+              height: 12,
               decoration: BoxDecoration(
-                color: statusColor(e.status, auto: e.auto),
+                color: p.status(e.status, auto: e.auto),
                 shape: BoxShape.circle,
               ),
             ),
@@ -1051,6 +1281,7 @@ class _HistorySheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.pal;
     final stats = AttendanceStats(history);
     return DraggableScrollableSheet(
       expand: false,
@@ -1060,77 +1291,110 @@ class _HistorySheet extends StatelessWidget {
         controller: controller,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         children: [
-          Text(
-            member.displayName,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          Text(
-            'Storico presenze (ultimi $historyDays giorni)',
-            style: const TextStyle(color: Colors.white60),
-          ),
-          const SizedBox(height: 16),
           Row(
             children: [
-              _Pill('${stats.percent}%', 'presenze', MilanacColors.gold),
-              _Pill(
-                '${stats.present}',
-                'puntuale',
-                statusColor(AttendanceStatus.presente),
-              ),
-              _Pill(
-                '${stats.late}',
-                'ritardi',
-                statusColor(AttendanceStatus.ritardo),
-              ),
-              _Pill(
-                '${stats.absent}',
-                'assenze',
-                statusColor(AttendanceStatus.assente),
+              MemberAvatar(member: member, radius: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      member.displayName.toUpperCase(),
+                      style: TextStyle(
+                        fontFamily: sportFont,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 22,
+                        letterSpacing: .4,
+                        color: p.text,
+                      ),
+                    ),
+                    Text(
+                      'Storico presenze (ultimi $historyDays giorni)',
+                      style: TextStyle(color: p.textMuted, fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          if (onSetStatus != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Segna per questo giocatore${dayLabel == null ? '' : ' · $dayLabel'} (Direttivo):',
-            ),
-            const SizedBox(height: 8),
-            Row(
+          const SizedBox(height: 16),
+          AppCard(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
               children: [
-                for (final s in AttendanceStatus.values)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: AttendanceStatusButton(
-                        status: s,
-                        selected: false,
-                        onPressed: () async {
-                          await onSetStatus!(s);
-                          if (context.mounted) Navigator.of(context).pop();
-                        },
-                      ),
-                    ),
-                  ),
+                _Pill('${stats.percent}%', 'presenze', p.accentText),
+                _Pill('${stats.present}', 'puntuale', p.success),
+                _Pill('${stats.late}', 'ritardi', p.warning),
+                _Pill('${stats.absent}', 'assenze', p.danger),
               ],
             ),
+          ),
+          if (onSetStatus != null) ...[
+            const SizedBox(height: 18),
+            Text(
+              'Segna per questo giocatore${dayLabel == null ? '' : ' · $dayLabel'} (Direttivo):',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            AttendanceButtons(
+              selected: null,
+              inline: true,
+              onAnswer: (s) async {
+                await onSetStatus!(s);
+                if (context.mounted) Navigator.of(context).pop();
+              },
+            ),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
+          const SectionLabel('Serate'),
+          const SizedBox(height: 4),
           if (history.isEmpty)
-            const Text(
-              'Nessuna presenza registrata.',
-              style: TextStyle(color: Colors.white54),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Nessuna presenza registrata.',
+                style: TextStyle(color: p.textMuted, fontSize: 15),
+              ),
             ),
           for (final e in history)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                radius: 8,
-                backgroundColor: statusColor(e.status, auto: e.auto),
-              ),
-              title: Text(DateFormat('EEEE d MMMM yyyy', 'it').format(e.date)),
-              subtitle: Text(
-                describeAttendance(e),
-                style: TextStyle(color: e.auto ? Colors.white38 : null),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: p.status(e.status, auto: e.auto),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _capitalized(
+                            DateFormat('EEEE d MMMM yyyy', 'it').format(e.date),
+                          ),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          describeAttendance(e),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: p.status(e.status, auto: e.auto),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
@@ -1152,13 +1416,18 @@ class _Pill extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
+            fontFamily: sportFont,
+            fontWeight: FontWeight.w600,
+            fontSize: 22,
             color: color,
           ),
         ),
         FittedBox(
-          child: Text(label, style: const TextStyle(color: Colors.white60)),
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            style: TextStyle(color: context.pal.textMuted, fontSize: 13),
+          ),
         ),
       ],
     ),

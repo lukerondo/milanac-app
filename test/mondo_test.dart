@@ -3,9 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
+import 'package:milanac/features/news/news_item.dart';
+import 'package:milanac/features/news/news_page.dart';
+import 'package:milanac/features/news/news_repository.dart';
 import 'package:milanac/main.dart';
+import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
+import 'home_test.dart' show startAppAt, todayInItalyAt;
 
 Future<void> openMondo(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2340);
@@ -24,6 +29,19 @@ Future<void> openMondo(WidgetTester tester) async {
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
+  test('notizie: la data è nell\'ora del telefono, non in UTC', () {
+    final n = NewsItem.fromMap({
+      'title': 'Aggiornamento',
+      'url': 'https://www.ea.com/',
+      'source': 'EA SPORTS',
+      'category': 'aggiornamenti',
+      // Mezzanotte e mezza in Italia: in UTC sarebbe ancora il giorno prima.
+      'published_at': '2026-10-12T22:30:00+00:00',
+    });
+    expect(n.publishedAt.isUtc, isFalse);
+    expect(n.publishedAt, DateTime.utc(2026, 10, 12, 22, 30).toLocal());
+  });
+
   testWidgets('Mondo Proclub: il Direttivo pubblica una proposta e aggiunge '
       'un video', (tester) async {
     await openMondo(tester);
@@ -35,14 +53,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('PROPOSTE DA APPROVARE (1)'), findsNothing);
     // Ora è tra i video, filtrabile per ruolo.
-    await tester.tap(find.widgetWithText(ChoiceChip, 'DC'));
+    await tester.tap(find.widgetWithText(FilterPill, 'DC'));
     await tester.pumpAndSettle();
     expect(
       find.text('Difendere in 11 contro 11: i movimenti del DC'),
       findsOneWidget,
     );
     expect(find.text('La build da attaccante più forte'), findsNothing);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Tutti'));
+    await tester.tap(find.widgetWithText(FilterPill, 'Tutti'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Aggiungi video'));
@@ -67,16 +85,93 @@ void main() {
     await openMondo(tester);
     await tester.tap(find.text('Notizie'));
     await tester.pumpAndSettle();
-    expect(find.text('Leggi la notizia'), findsWidgets);
-    // I filtri scorrono in orizzontale: porta in vista "Console".
-    await tester.drag(
-      find.widgetWithText(ChoiceChip, 'Tutte'),
-      const Offset(-400, 0),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Console'));
+    // Prima le cose da fare prima della partita (gioco e console del profilo).
+    expect(find.text('DA FARE PRIMA DELLA PARTITA'), findsOneWidget);
+    expect(find.text('FC 27: Title Update 1.0.3'), findsOneWidget);
+    expect(find.text('PS5: aggiornamento di sistema'), findsOneWidget);
+    expect(find.text('Versione 26.02-12.00 disponibile'), findsOneWidget);
+    expect(find.text('NOTIZIE'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterPill, 'Console'));
     await tester.pumpAndSettle();
     expect(find.textContaining('PS5: disponibile'), findsOneWidget);
     expect(find.textContaining('FVPA: aperte'), findsNothing);
   });
+
+  testWidgets('Mondo: la scheda segue la notifica anche quando arriva una '
+      'seconda volta uguale', (tester) async {
+    await openMondo(tester);
+    expect(find.byType(NewsList), findsNothing, reason: 'si parte dai video');
+    for (var i = 0; i < 2; i++) {
+      await goToPath(tester, '/mondo?scheda=notizie');
+      expect(find.byType(NewsList), findsOneWidget, reason: 'notifica $i');
+      // Intanto si guardano i video.
+      await tester.tap(find.text('Video'));
+      await tester.pumpAndSettle();
+      expect(find.byType(NewsList), findsNothing);
+    }
+  });
+
+  testWidgets(
+    'Notizie: un aggiornamento uscito con l\'app in background compare '
+    'al ritorno in primo piano (anche nella Home) e aprendo l\'elenco',
+    (tester) async {
+      final news = DemoNewsRepository()
+        ..items.removeWhere((n) => n.isGameUpdate);
+      await startAppAt(
+        tester,
+        todayInItalyAt(17),
+        overrides: [newsRepositoryProvider.overrideWithValue(news)],
+      );
+      final home = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(
+        find.text('MONDO PROCLUB'),
+        300,
+        scrollable: home,
+      );
+      expect(find.text('Aggiorna FC 27 prima della partita'), findsNothing);
+
+      // Esce il Title Update mentre il telefono è in tasca.
+      news.items.insert(
+        0,
+        NewsItem(
+          title: 'EA SPORTS FC 27: disponibile il Title Update 1.0.4',
+          summary: '',
+          url: 'https://www.ea.com/fc-27/title-update-1-0-4',
+          source: 'EA SPORTS',
+          category: 'aggiornamenti',
+          publishedAt: DateTime.now(),
+        ),
+      );
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Aggiorna FC 27 prima della partita'), findsOneWidget);
+
+      // Con l'app aperta (la notifica arriva in primo piano): aprendo le notizie.
+      news.items.insert(
+        0,
+        NewsItem(
+          title: 'FVPA: calendario della nuova stagione',
+          summary: '',
+          url: 'https://fvpa.net/calendario',
+          source: 'FVPA',
+          category: 'tornei',
+          publishedAt: DateTime.now(),
+        ),
+      );
+      await goToPath(tester, '/mondo?scheda=notizie');
+      expect(
+        find.text('FVPA: calendario della nuova stagione'),
+        findsOneWidget,
+      );
+    },
+  );
 }

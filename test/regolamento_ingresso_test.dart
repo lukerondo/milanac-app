@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -17,8 +20,9 @@ void main() {
     String path, {
     required RulesRepository rules,
     Profile? profile,
+    Size screen = const Size(360, 780),
   }) async {
-    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.physicalSize = screen * 3;
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
@@ -97,7 +101,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
 
-      // Da ora la pagina di accettazione mostra la pergamena con l'articolo.
+      // Da ora la pagina di accettazione mostra il regolamento con l'articolo.
       container.read(routerProvider).go('/regolamento/accetta');
       await tester.pumpAndSettle();
       expect(find.text('ART. 1 – INGRESSO'), findsOneWidget);
@@ -127,4 +131,229 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
   });
+
+  /// Club con un regolamento di un solo articolo, già pubblicato (versione 1).
+  Future<DemoRulesRepository> shortRules({bool slow = false}) async {
+    final repo = slow ? _SlowRules() : DemoRulesRepository.unpublished();
+    await repo.saveArticle(
+      const RulesArticle(
+        sortOrder: 0,
+        title: 'Art. 1 – Ingresso',
+        body: 'Rispetto e puntualità.',
+      ),
+    );
+    await repo.publish();
+    return repo;
+  }
+
+  ButtonStyleButton acceptButton(WidgetTester tester) => tester.widget(
+    find.ancestor(
+      of: find.text('Ho letto e accetto'),
+      matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+    ),
+  );
+
+  // Tablet in verticale: il regolamento corto sta tutto nello schermo.
+  const tablet = Size(800, 1280);
+
+  testWidgets('Regolamento corto: si accetta senza dover scorrere', (
+    tester,
+  ) async {
+    // Rete lenta: la pagina parte con la rotella, poi arriva il testo.
+    await startAt(
+      tester,
+      '/regolamento/accetta',
+      rules: await shortRules(slow: true),
+      screen: tablet,
+    );
+    expect(find.text('ART. 1 – INGRESSO'), findsOneWidget);
+    expect(find.text('Scorri fino in fondo per poter accettare'), findsNothing);
+    expect(acceptButton(tester).onPressed, isNotNull);
+  });
+
+  testWidgets(
+    'Regolamento comparso dopo un ricaricamento: il pulsante si abilita lo stesso',
+    (tester) async {
+      final repo = DemoRulesRepository.unpublished();
+      await startAt(
+        tester,
+        '/regolamento/accetta',
+        rules: repo,
+        screen: tablet,
+      );
+      expect(find.text('REGOLAMENTO NON ANCORA PUBBLICATO'), findsOneWidget);
+
+      // Nel frattempo un altro del Direttivo lo pubblica: l'ingresso senza regolamento
+      // viene rifiutato e la pagina mostra quello appena uscito.
+      await repo.saveArticle(
+        const RulesArticle(
+          sortOrder: 0,
+          title: 'Art. 1 – Ingresso',
+          body: 'Rispetto e puntualità.',
+        ),
+      );
+      await repo.publish();
+      await tester.tap(find.text('Entra e scrivilo'));
+      await tester.pumpAndSettle();
+      expect(find.text('C\'è un regolamento da accettare'), findsOneWidget);
+      expect(find.text('ART. 1 – INGRESSO'), findsOneWidget);
+      expect(acceptButton(tester).onPressed, isNotNull);
+    },
+  );
+
+  testWidgets(
+    'Nuova versione uscita mentre si legge: si carica e si accetta quella',
+    (tester) async {
+      final repo = await shortRules();
+      await startAt(
+        tester,
+        '/regolamento/accetta',
+        rules: repo,
+        screen: tablet,
+      );
+      expect(find.textContaining('Versione 1'), findsOneWidget);
+
+      // Il Direttivo pubblica la versione 2 mentre il membro legge la 1.
+      await repo.saveArticle(
+        const RulesArticle(
+          sortOrder: 1,
+          title: 'Art. 2 – Novità',
+          body: 'Le amichevoli si giocano il martedì.',
+        ),
+      );
+      await repo.publish();
+      await tester.pump(const Duration(minutes: 2));
+      await tester.tap(find.text('Ho letto e accetto'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'È uscita una nuova versione del regolamento: leggila e accetta.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Versione 2'), findsOneWidget);
+      expect(find.text('ART. 2 – NOVITÀ'), findsOneWidget);
+      // L'avviso copre il pulsante finché non sparisce.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      // La nuova versione si legge da capo: di nuovo il tempo minimo.
+      await tester.tap(find.text('Ho letto e accetto'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Servono 2 minuti di lettura'),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(minutes: 2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ho letto e accetto'));
+      await tester.pumpAndSettle();
+      expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Il tempo di lettura non scorre con l\'app in background', (
+    tester,
+  ) async {
+    Future<void> lifecycle(AppLifecycleState state) =>
+        tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+          SystemChannels.lifecycle.name,
+          SystemChannels.lifecycle.codec.encodeMessage(state.toString()),
+          (_) {},
+        );
+
+    await startAt(
+      tester,
+      '/regolamento/accetta',
+      rules: await shortRules(),
+      screen: tablet,
+    );
+    await lifecycle(AppLifecycleState.paused);
+    await tester.pump(const Duration(minutes: 5));
+    await lifecycle(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ho letto e accetto'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Servono 2 minuti di lettura'), findsOneWidget);
+
+    // In primo piano invece conta.
+    await tester.pump(const Duration(minutes: 2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ho letto e accetto'));
+    await tester.pumpAndSettle();
+    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+  });
+
+  testWidgets(
+    'L\'avviso dei 2 minuti se ne va con la pagina (es. dopo "Esci")',
+    (tester) async {
+      final container = await startAt(
+        tester,
+        '/regolamento/accetta',
+        rules: await shortRules(),
+        screen: tablet,
+      );
+      await tester.tap(find.text('Ho letto e accetto'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Servono 2 minuti di lettura'),
+        findsOneWidget,
+      );
+
+      // Uscita dall'account: il router porta alla pagina di accesso.
+      container.read(routerProvider).go('/login');
+      await tester.pumpAndSettle();
+      expect(find.text('Password dimenticata?'), findsOneWidget);
+      expect(find.textContaining('Servono 2 minuti di lettura'), findsNothing);
+      expect(find.byType(MaterialBanner), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Regolamento nuovo pubblicato da un altro: si rilegge subito, con '
+    'l\'app aperta',
+    (tester) async {
+      final repo = _LiveRules();
+      final container = ProviderContainer(
+        overrides: [rulesRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+      container.listen(latestRulesProvider, (_, _) {});
+      expect(await container.read(latestRulesProvider.future), isNull);
+
+      await repo.saveArticle(
+        const RulesArticle(sortOrder: 0, title: 'Art. 1', body: 'Rispetto.'),
+      );
+      await repo.publish();
+      // Senza l'avviso del tempo reale resta la versione letta prima.
+      await tester.pump();
+      expect(await container.read(latestRulesProvider.future), isNull);
+      repo.live.add(null);
+      await tester.pump();
+      expect((await container.read(latestRulesProvider.future))?.number, 1);
+      // Via i lavori in sospeso del contenitore prima del controllo dei timer.
+      container.dispose();
+    },
+  );
+}
+
+/// Un altro del Direttivo pubblica: l'avviso arriva quando lo decide il test.
+class _LiveRules extends DemoRulesRepository {
+  _LiveRules() : super.unpublished();
+
+  final live = StreamController<void>.broadcast();
+
+  @override
+  Stream<void> published() => live.stream;
+}
+
+/// Il regolamento arriva con qualche secondo di ritardo (rete lenta).
+class _SlowRules extends DemoRulesRepository {
+  _SlowRules() : super.unpublished();
+
+  @override
+  Future<RulesVersion?> latest() async {
+    await Future<void>.delayed(const Duration(seconds: 3));
+    return super.latest();
+  }
 }

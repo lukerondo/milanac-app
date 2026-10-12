@@ -6,9 +6,13 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import '../../core/push/device_tokens.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
+import '../../shared/ui.dart';
+import '../auth/gate_ui.dart';
 import '../rosa/member.dart';
 import '../volto/face.dart';
 import '../volto/face_editor.dart';
@@ -45,6 +49,9 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   bool _direttivo = false;
   final _password = TextEditingController();
   bool _hidden = true;
+
+  /// Password rifiutata dal server (sbagliata o troppi tentativi): evidenziata sul campo.
+  String? _passwordError;
   final _roles = <DirettivoRole>{};
   String? _position;
   final _number = TextEditingController();
@@ -61,6 +68,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
       _lastName,
       _cardName,
       _motto,
+      _birthYear,
       _password,
       _number,
     ]) {
@@ -179,46 +187,98 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     setState(() => _saving = true);
     try {
       await ref.read(registrationRepositoryProvider).complete(_data);
-      HapticFeedback.mediumImpact();
-      // Con Supabase il profilo si aggiorna da solo e il router porta al regolamento;
-      // in demo andiamo noi.
-      if (AppConfig.isDemo && mounted) context.go('/regolamento/accetta');
     } catch (e) {
-      if (mounted) _toast(friendlyRegistrationError(e));
+      if (!mounted) return;
+      if (isDirettivoPasswordError(e)) {
+        // Si torna al passo 2, sul campo della password.
+        setState(() {
+          _step = 1;
+          _passwordError = friendlyRegistrationError(e);
+        });
+        _pages.jumpToPage(1);
+      }
+      _toast(friendlyRegistrationError(e));
+      return;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+    HapticFeedback.mediumImpact();
+    if (!mounted) return;
+    // Il router porta al regolamento appena il profilo riletto risulta completo, senza
+    // aspettare il tempo reale; in demo andiamo noi.
+    ref.invalidate(profileProvider);
+    if (AppConfig.isDemo) context.go('/regolamento/accetta');
+  }
+
+  void _retryProfile() => ref.invalidate(profileProvider);
+
+  /// Profilo non ancora caricato: spinner, oppure l'errore con Riprova (anche mentre si
+  /// riprova da soli) invece di uno spinner senza fine.
+  Widget _profileState(AsyncValue<Profile?> state) {
+    if (state.hasError) {
+      return ErrorRetry(
+        message: friendlyError(
+          state.error!,
+          action: 'Caricamento del profilo non riuscito',
+        ),
+        onRetry: _retryProfile,
+      );
+    }
+    if (state.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ErrorRetry(
+      message: 'Profilo non trovato: riprova, oppure esci e rientra.',
+      onRetry: _retryProfile,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final profile = ref.watch(profileProvider).value;
+    final profileState = ref.watch(profileProvider);
+    final profile = profileState.value;
     if (profile != null) _prefill(profile);
+    final waiting =
+        profile == null && (!AppConfig.isDemo || profileState.hasError);
 
-    return StadiumBackground(
+    // Indietro di Android: al passo precedente (dal primo esce come sempre).
+    return PopScope(
+      canPop: _step == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
       child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          title: const Text('REGISTRAZIONE'),
+        appBar: gateAppBar(
+          title: 'REGISTRAZIONE',
+          automaticallyImplyLeading: false,
           leading: _step > 0
-              ? IconButton(
-                  tooltip: 'Indietro',
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  onPressed: _back,
-                )
-              : null,
+              ? BackArrow(onPressed: _back)
+              : AppConfig.isDemo
+              ? null
+              // Dal primo passo si torna all'accesso (uscendo dall'account).
+              : BackArrow(
+                  tooltip: 'Torna all\'accesso',
+                  onPressed: () => logout(ref),
+                ),
           actions: [
-            if (!AppConfig.isDemo)
-              IconButton(
-                tooltip: 'Esci',
-                icon: const Icon(Icons.logout_rounded),
-                onPressed: () => logout(ref),
+            if (!waiting)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Text(
+                    'Passo ${_step + 1} di 3',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppPalette.dark.textMuted,
+                    ),
+                  ),
+                ),
               ),
           ],
         ),
-        body: profile == null && !AppConfig.isDemo
-            ? const Center(child: CircularProgressIndicator())
+        body: waiting
+            ? _profileState(profileState)
             : Column(
                 children: [
                   _StepHeader(step: _step),
@@ -229,11 +289,34 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
                       children: [_stepWho(), _stepTeam(), _stepFace()],
                     ),
                   ),
-                  _BottomBar(
-                    step: _step,
-                    saving: _saving,
-                    onNext: _next,
-                    onComplete: _complete,
+                  BottomActionBar(
+                    child: Row(
+                      children: [
+                        if (_step > 0) ...[
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _saving ? null : _back,
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(52),
+                              ),
+                              child: const Text('Indietro'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+                        Expanded(
+                          flex: 2,
+                          child: PrimaryButton(
+                            label: _step < 2
+                                ? 'Avanti'
+                                : 'Completa la registrazione',
+                            fontSize: 16,
+                            busy: _saving,
+                            onPressed: _step < 2 ? _next : _complete,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -246,7 +329,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
       constraints: const BoxConstraints(maxWidth: 520),
       child: ListView(
         key: ValueKey('step-$step'),
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         children: children,
       ),
     ),
@@ -254,322 +337,444 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
 
   Widget _stepWho() {
     return _frame(1, [
-      const _Intro(
-        title: 'Chi sei',
+      const _Legend(
+        'Chi sei?',
         text:
             'Nome e cognome li vede solo il Direttivo. Nella rosa, in chat e '
             'sulla carta compare il nome che scegli qui sotto.',
       ),
-      TextField(
-        controller: _firstName,
-        textCapitalization: TextCapitalization.words,
-        autofillHints: const [AutofillHints.givenName],
-        textInputAction: TextInputAction.next,
-        decoration: const InputDecoration(labelText: 'Nome'),
-      ),
-      const SizedBox(height: 10),
-      TextField(
-        controller: _lastName,
-        textCapitalization: TextCapitalization.words,
-        autofillHints: const [AutofillHints.familyName],
-        textInputAction: TextInputAction.next,
-        decoration: const InputDecoration(labelText: 'Cognome'),
-      ),
-      const SizedBox(height: 10),
-      TextField(
-        controller: _birthYear,
-        keyboardType: TextInputType.number,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(4),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: LabeledField(
+              label: 'Nome',
+              child: TextField(
+                controller: _firstName,
+                textCapitalization: TextCapitalization.words,
+                autofillHints: const [AutofillHints.givenName],
+                textInputAction: TextInputAction.next,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: LabeledField(
+              label: 'Cognome',
+              child: TextField(
+                controller: _lastName,
+                textCapitalization: TextCapitalization.words,
+                autofillHints: const [AutofillHints.familyName],
+                textInputAction: TextInputAction.next,
+              ),
+            ),
+          ),
         ],
-        textInputAction: TextInputAction.next,
-        decoration: const InputDecoration(
-          labelText: 'Anno di nascita',
-          hintText: 'Es. 1998',
+      ),
+      const SizedBox(height: 14),
+      LabeledField(
+        label: 'Anno di nascita',
+        child: TextField(
+          controller: _birthYear,
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(4),
+          ],
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(hintText: 'Es. 1998'),
         ),
       ),
-      const SizedBox(height: 18),
-      TextField(
-        controller: _cardName,
-        maxLength: 14,
-        textCapitalization: TextCapitalization.characters,
-        textInputAction: TextInputAction.next,
-        onChanged: (_) => setState(() {}),
-        decoration: const InputDecoration(
-          labelText: 'Nome sulla maglia e sulla carta',
-          helperText: 'Es. ROSSI, IL DIAVOLO, MARIO10',
+      const SizedBox(height: 14),
+      LabeledField(
+        label: 'Nome sulla maglia e sulla carta',
+        child: TextField(
+          controller: _cardName,
+          maxLength: 14,
+          textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.next,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            hintText: 'Es. ROSSI, IL DIAVOLO, MARIO10',
+          ),
         ),
       ),
       _CardNamePreview(name: _cardName.text, face: _face),
-      const SizedBox(height: 10),
-      TextField(
-        controller: _motto,
-        maxLength: 80,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: const InputDecoration(
-          labelText: 'Il tuo motto (facoltativo)',
-          helperText: 'Compare sotto la tua carta',
+      const SizedBox(height: 14),
+      LabeledField(
+        label: 'Il tuo motto (facoltativo)',
+        help: 'Compare sotto la tua carta.',
+        child: TextField(
+          controller: _motto,
+          maxLength: 80,
+          textCapitalization: TextCapitalization.sentences,
         ),
       ),
     ]);
   }
 
   Widget _stepTeam() => _frame(2, [
-    const _Intro(
-      title: 'Squadra e ruolo',
-      text:
-          'I giocatori stanno in una squadra; chi è del Direttivo può stare '
-          'in entrambe.',
+    _Legend(
+      'In quale squadra giochi?',
+      text: _direttivo ? 'Chi è del Direttivo può stare in entrambe.' : null,
     ),
-    const _Label('SQUADRA'),
-    Wrap(
-      spacing: 8,
-      runSpacing: 6,
+    Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final t in Team.values)
-          if (_direttivo)
-            FilterChip(
-              label: Text(t.label),
+        for (final (i, t) in Team.values.indexed) ...[
+          if (i > 0) const SizedBox(width: 10),
+          Expanded(
+            child: _TeamCard(
+              team: t,
               selected: _teams.contains(t),
-              onSelected: (on) => setState(() {
+              onTap: () => setState(() {
+                if (!_direttivo) {
+                  _teams = {t};
+                  return;
+                }
                 final next = {..._teams};
-                on ? next.add(t) : next.remove(t);
+                next.contains(t) ? next.remove(t) : next.add(t);
                 if (next.isNotEmpty) _teams = next;
               }),
-            )
-          else
-            ChoiceChip(
-              label: Text(t.label),
-              selected: _teams.contains(t),
-              onSelected: (_) => setState(() => _teams = {t}),
             ),
+          ),
+        ],
       ],
     ),
-    const SizedBox(height: 12),
-    SwitchListTile(
-      contentPadding: EdgeInsets.zero,
-      value: _direttivo,
-      onChanged: (v) => setState(() {
-        _direttivo = v;
-        if (!v) _teams = {_teams.first};
+    const SizedBox(height: 18),
+    const _SmallLabel('Entri come'),
+    const SizedBox(height: 8),
+    SegmentedTabs(
+      labels: const ['Giocatore', 'Direttivo'],
+      selected: _direttivo ? 1 : 0,
+      onSelected: (i) => setState(() {
+        _direttivo = i == 1;
+        if (!_direttivo) _teams = {_teams.first};
       }),
-      title: const Text('Faccio parte del Direttivo'),
-      subtitle: const Text('Serve la password del club'),
     ),
+    const SizedBox(height: 8),
+    const _Help('Per il Direttivo serve la password del club.'),
     if (_direttivo) ...[
-      TextField(
-        controller: _password,
-        obscureText: _hidden,
-        decoration: InputDecoration(
-          labelText: 'Password del Direttivo',
-          prefixIcon: const Icon(Icons.key_rounded),
-          suffixIcon: IconButton(
-            tooltip: _hidden ? 'Mostra' : 'Nascondi',
-            icon: Icon(
-              _hidden ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+      const SizedBox(height: 14),
+      LabeledField(
+        label: 'Password del Direttivo',
+        child: TextField(
+          controller: _password,
+          obscureText: _hidden,
+          onChanged: (_) {
+            if (_passwordError != null) setState(() => _passwordError = null);
+          },
+          decoration: InputDecoration(
+            errorText: _passwordError,
+            errorMaxLines: 3,
+            suffixIcon: ShowPasswordButton(
+              hidden: _hidden,
+              onPressed: () => setState(() => _hidden = !_hidden),
             ),
-            onPressed: () => setState(() => _hidden = !_hidden),
           ),
         ),
       ),
-      const SizedBox(height: 10),
-      const _Label('RUOLI NEL DIRETTIVO'),
+      const SizedBox(height: 14),
+      const _SmallLabel('Ruoli nel Direttivo'),
+      const SizedBox(height: 8),
       Wrap(
         spacing: 8,
-        runSpacing: 6,
+        runSpacing: 8,
         children: [
           for (final r in DirettivoRole.values)
-            FilterChip(
-              label: Text(r.label),
+            ChoicePill(
+              label: r.label,
               selected: _roles.contains(r),
-              onSelected: (on) =>
-                  setState(() => on ? _roles.add(r) : _roles.remove(r)),
+              onTap: () => setState(
+                () => _roles.contains(r) ? _roles.remove(r) : _roles.add(r),
+              ),
             ),
         ],
       ),
     ],
-    const SizedBox(height: 16),
+    const SizedBox(height: 18),
     Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: DropdownButtonFormField<String>(
-            initialValue: _position,
-            decoration: const InputDecoration(labelText: 'Ruolo in campo'),
-            items: [
-              for (final p in fieldPositions)
-                DropdownMenuItem(value: p, child: Text(p)),
-            ],
-            onChanged: (v) => setState(() => _position = v),
+          flex: 2,
+          child: LabeledField(
+            label: 'Ruolo in campo',
+            child: DropdownButtonFormField<String>(
+              initialValue: _position,
+              isExpanded: true,
+              hint: const Text('Scegli'),
+              items: [
+                for (final p in fieldPositions)
+                  DropdownMenuItem(
+                    value: p,
+                    child: Text(
+                      positionLabel(p),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (v) => setState(() => _position = v),
+            ),
           ),
         ),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 110,
-          child: TextField(
-            controller: _number,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(labelText: 'Numero'),
+        const SizedBox(width: 10),
+        Expanded(
+          child: LabeledField(
+            label: 'Numero',
+            child: TextField(
+              controller: _number,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(2),
+              ],
+            ),
           ),
         ),
       ],
     ),
-    const SizedBox(height: 16),
-    const _Label('PIATTAFORMA'),
+    const SizedBox(height: 18),
+    const _SmallLabel('Piattaforma'),
+    const SizedBox(height: 8),
     Wrap(
       spacing: 8,
-      runSpacing: 6,
+      runSpacing: 8,
       children: [
         for (final p in GamePlatform.values)
-          ChoiceChip(
-            label: Text(p.label),
+          ChoicePill(
+            label: p.label,
             selected: _platform == p,
-            onSelected: (on) => setState(() => _platform = on ? p : null),
+            onTap: () => setState(() => _platform = _platform == p ? null : p),
           ),
       ],
     ),
-    const SizedBox(height: 6),
-    const Text(
+    const SizedBox(height: 8),
+    const _Help(
       'Con la piattaforma ricevi gli avvisi sugli aggiornamenti di console e gioco.',
-      style: TextStyle(color: Colors.white60, fontSize: 12),
     ),
   ]);
 
   Widget _stepFace() => _frame(3, [
-    const _Intro(
-      title: 'Il tuo volto',
+    const _Legend(
+      'Il tuo volto',
       text:
-          'Compare sulla carta, nella rosa e in chat. Puoi cambiarlo quando '
-          'vuoi dalle Impostazioni.',
+          'Compare sulla carta, nella rosa e in chat. Puoi cambiarlo quando vuoi '
+          'dalle Impostazioni.',
     ),
     FaceEditor(face: _face, onChanged: (f) => setState(() => _face = f)),
   ]);
 }
 
+/// Ruolo in campo per esteso, come nel menu ("ATT · Attaccante").
+String positionLabel(String position) {
+  final name = _positionNames[position];
+  return name == null ? position : '$position · $name';
+}
+
+const _positionNames = {
+  'POR': 'Portiere',
+  'DC': 'Difensore centrale',
+  'TD': 'Terzino destro',
+  'TS': 'Terzino sinistro',
+  'CDC': 'Centrocampista difensivo',
+  'CC': 'Centrocampista centrale',
+  'COC': 'Centrocampista offensivo',
+  'ED': 'Esterno destro',
+  'ES': 'Esterno sinistro',
+  'AD': 'Ala destra',
+  'AS': 'Ala sinistra',
+  'ATT': 'Attaccante',
+};
+
+/// I tre passi sotto la barra in alto: fatti, attuale, da fare.
 class _StepHeader extends StatelessWidget {
   const _StepHeader({required this.step});
   final int step;
 
-  static const _titles = ['Chi sei', 'Squadra e ruolo', 'Il tuo volto'];
+  static const _titles = ['Dati', 'Squadra e ruolo', 'Volto'];
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-    child: Column(
-      children: [
-        Row(
-          children: [
-            for (var i = 0; i < 3; i++) ...[
-              Expanded(
-                child: Container(
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: i <= step ? MilanacColors.red : Colors.white12,
-                    borderRadius: BorderRadius.circular(3),
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return SubHeader(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < 3; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: i < step
+                          ? p.chipBorder
+                          : i == step
+                          ? p.accentText
+                          : p.borderStrong,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _titles[i],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: i == step ? FontWeight.w700 : FontWeight.w400,
+                      color: i < step
+                          ? p.textSecondary
+                          : i == step
+                          ? p.text
+                          : p.textMuted,
+                    ),
+                  ),
+                ],
               ),
-              if (i < 2) const SizedBox(width: 6),
-            ],
+            ),
           ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'PASSO ${step + 1} DI 3 · ${_titles[step].toUpperCase()}',
-          style: const TextStyle(
-            fontFamily: sportFont,
-            letterSpacing: 1.5,
-            fontSize: 13,
-            color: Colors.white60,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _BottomBar extends StatelessWidget {
-  const _BottomBar({
-    required this.step,
-    required this.saving,
-    required this.onNext,
-    required this.onComplete,
-  });
-  final int step;
-  final bool saving;
-  final VoidCallback onNext;
-  final VoidCallback onComplete;
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-      child: SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          onPressed: saving ? null : (step < 2 ? onNext : onComplete),
-          icon: saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Icon(
-                  step < 2 ? Icons.arrow_forward_rounded : Icons.check_rounded,
-                ),
-          label: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(step < 2 ? 'Avanti' : 'Completa la registrazione'),
-          ),
-        ),
+        ],
       ),
-    ),
-  );
+    );
+  }
 }
 
-class _Intro extends StatelessWidget {
-  const _Intro({required this.title, required this.text});
+/// Titolo del passo (Oswald) con una riga di spiegazione.
+class _Legend extends StatelessWidget {
+  const _Legend(this.title, {this.text});
   final String title;
-  final String text;
+  final String? text;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
+    padding: const EdgeInsets.only(bottom: 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 4),
-        Text(text, style: const TextStyle(color: Colors.white70)),
+        GateTitle(title),
+        if (text != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            text!,
+            style: TextStyle(
+              color: context.pal.textMuted,
+              fontSize: 14,
+              height: 1.35,
+            ),
+          ),
+        ],
       ],
     ),
   );
 }
 
-class _Label extends StatelessWidget {
-  const _Label(this.text);
+class _SmallLabel extends StatelessWidget {
+  const _SmallLabel(this.text);
   final String text;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Text(
-      text,
-      style: const TextStyle(
-        fontFamily: sportFont,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
-        fontSize: 13,
-        color: MilanacColors.gold,
-      ),
+  Widget build(BuildContext context) => Text(
+    text,
+    style: TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+      color: context.pal.textSecondary,
     ),
   );
+}
+
+class _Help extends StatelessWidget {
+  const _Help(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(text, style: TextStyle(fontSize: 13, color: context.pal.textMuted));
+}
+
+/// Scheda di una squadra: scelta con il bordo e la spunta in oro.
+class _TeamCard extends StatelessWidget {
+  const _TeamCard({
+    required this.team,
+    required this.selected,
+    required this.onTap,
+  });
+  final Team team;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final radius = BorderRadius.circular(14);
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Material(
+        color: selected ? (p.isDark ? p.hero : p.accentTint) : p.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(
+            color: selected ? p.accent : p.borderStrong,
+            width: selected ? 2 : 1.5,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        team.label,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: p.text,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        team == Team.milanac
+                            ? 'Prima squadra'
+                            : 'Seconda squadra',
+                        style: TextStyle(fontSize: 14, color: p.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                if (selected)
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: p.accent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.check_rounded,
+                      size: 15,
+                      color: p.onAccent,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Anteprima del nome come apparirà sulla carta.
@@ -583,16 +788,10 @@ class _CardNamePreview extends StatelessWidget {
     final text = name.trim().isEmpty
         ? 'IL TUO NOME'
         : name.trim().toUpperCase();
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
+    return AppCard(
+      hero: true,
+      radius: 14,
       padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF3A2A08), Color(0xFF1A1A1A)],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: MilanacColors.gold.withValues(alpha: .6)),
-      ),
       child: Row(
         children: [
           ClipOval(
@@ -600,7 +799,7 @@ class _CardNamePreview extends StatelessWidget {
               face: face,
               size: 40,
               crop: FaceCrop.head,
-              background: MilanacColors.surface,
+              background: MilanacColors.surfaceHigh,
             ),
           ),
           const SizedBox(width: 12),
@@ -614,7 +813,7 @@ class _CardNamePreview extends StatelessWidget {
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 2,
-                color: MilanacColors.gold,
+                color: HeroText.accent,
               ),
             ),
           ),
