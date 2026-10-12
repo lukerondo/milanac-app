@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import '../../core/push/device_tokens.dart';
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
@@ -79,6 +80,7 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
   late String? _nationality = widget.member.nationality;
   late PreferredFoot? _foot = widget.member.preferredFoot;
   bool _saving = false;
+  bool _deleting = false;
 
   @override
   void dispose() {
@@ -134,9 +136,9 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
             ),
           );
       HapticFeedback.lightImpact();
-      _toast('Volto aggiornato: lo vedi anche sulla carta.');
+      if (mounted) _toast('Volto aggiornato: lo vedi anche sulla carta.');
     } catch (e) {
-      _toast('Salvataggio non riuscito: $e');
+      if (mounted) _toast(friendlyError(e, action: 'Salvataggio non riuscito'));
     }
   }
 
@@ -176,9 +178,9 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
               motto: _text(_motto),
             ),
           );
-      _toast('Dati salvati.');
+      if (mounted) _toast('Dati salvati.');
     } catch (e) {
-      _toast('Salvataggio non riuscito: $e');
+      if (mounted) _toast(friendlyError(e, action: 'Salvataggio non riuscito'));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -223,11 +225,16 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
       ),
     );
     if (ok != true || !mounted) return;
+    setState(() => _deleting = true);
     try {
+      // Dopo l'eliminazione la sessione si chiude e il router porta al login.
       await ref.read(authRepositoryProvider).deleteAccount();
-      if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      _toast('Eliminazione non riuscita: $e');
+      if (mounted) {
+        _toast(friendlyError(e, action: 'Eliminazione non riuscita'));
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
     }
   }
 
@@ -420,31 +427,78 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
             onTap: _changeDirettivoPassword,
           ),
         if (!AppConfig.isDemo) ...[
+          const LogoutTile(),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.logout_rounded),
-            title: const Text('Esci'),
-            onTap: () {
-              Navigator.of(context).pop();
-              logout(ref);
-            },
-          ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(
-              Icons.person_off_outlined,
-              color: Colors.redAccent,
-            ),
+            leading: _deleting
+                ? const _Waiting()
+                : const Icon(
+                    Icons.person_off_outlined,
+                    color: Colors.redAccent,
+                  ),
             title: const Text(
               'Elimina il mio account',
               style: TextStyle(color: Colors.redAccent),
             ),
-            onTap: _deleteAccount,
+            onTap: _deleting ? null : _deleteAccount,
           ),
         ],
       ],
     );
   }
+}
+
+/// "Esci": prima l'uscita (token delle notifiche, poi la sessione), con l'attesa sul
+/// pulsante; quando la sessione si chiude è il router a portare al login. La pagina non
+/// si chiude prima, così `ref` non si usa mai dopo che è sparita.
+class LogoutTile extends ConsumerStatefulWidget {
+  const LogoutTile({super.key});
+
+  @override
+  ConsumerState<LogoutTile> createState() => _LogoutTileState();
+}
+
+class _LogoutTileState extends ConsumerState<LogoutTile> {
+  bool _busy = false;
+
+  Future<void> _logout() async {
+    setState(() => _busy = true);
+    try {
+      await logout(ref);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(friendlyError(e, action: 'Uscita non riuscita')),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    leading: _busy ? const _Waiting() : const Icon(Icons.logout_rounded),
+    title: const Text('Esci'),
+    onTap: _busy ? null : _logout,
+  );
+}
+
+class _Waiting extends StatelessWidget {
+  const _Waiting();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+    width: 24,
+    height: 24,
+    child: Padding(
+      padding: EdgeInsets.all(2),
+      child: CircularProgressIndicator(strokeWidth: 2),
+    ),
+  );
 }
 
 class _PasswordDialog extends StatefulWidget {

@@ -2,13 +2,28 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
+import '../errors.dart';
 
 /// Metodi di accesso social offerti nella schermata di login.
 enum LoginMethod { google, microsoft, yahoo, apple }
 
 /// Esito della registrazione con email: con la conferma dell'email attiva,
 /// la sessione parte solo dopo aver aperto il link ricevuto.
-enum EmailSignUpResult { needsConfirmation, signedIn }
+enum EmailSignUpResult { needsConfirmation, signedIn, alreadyRegistered }
+
+/// Con la conferma dell'email attiva, Supabase risponde a un'email già registrata come a
+/// una nuova (per non rivelare chi è iscritto) ma senza identità e senza inviare nulla.
+EmailSignUpResult signUpResultOf(AuthResponse res) {
+  if (res.session != null) return EmailSignUpResult.signedIn;
+  final identities = res.user?.identities;
+  if (identities != null && identities.isEmpty) {
+    return EmailSignUpResult.alreadyRegistered;
+  }
+  return EmailSignUpResult.needsConfirmation;
+}
+
+const alreadyRegisteredText =
+    'Esiste già un account con questa email: prova ad accedere o recupera la password.';
 
 abstract class AuthRepository {
   Future<void> signIn(LoginMethod method);
@@ -74,9 +89,7 @@ class SupabaseAuthRepository implements AuthRepository {
       password: password,
       emailRedirectTo: _redirect,
     );
-    return res.session == null
-        ? EmailSignUpResult.needsConfirmation
-        : EmailSignUpResult.signedIn;
+    return signUpResultOf(res);
   }
 
   @override
@@ -95,7 +108,15 @@ class SupabaseAuthRepository implements AuthRepository {
       _client.auth.updateUser(UserAttributes(password: newPassword));
 
   @override
-  Future<void> signOut() => _client.auth.signOut();
+  Future<void> signOut() async {
+    try {
+      await _client.auth.signOut();
+    } on AuthException {
+      // La sessione sul telefono si chiude prima di avvisare il server: se poi manca la
+      // rete il token scade da solo e per l'utente l'uscita è comunque riuscita.
+      if (_client.auth.currentSession != null) rethrow;
+    }
+  }
 
   @override
   Future<void> deleteAccount() async {
@@ -139,7 +160,7 @@ String friendlyAuthError(Object e) {
   }
   if (m.contains('already registered') ||
       m.contains('already been registered')) {
-    return 'Esiste già un account con questa email: prova ad accedere.';
+    return alreadyRegisteredText;
   }
   if (m.contains('password should be')) {
     return 'La password è troppo corta.';
@@ -155,5 +176,32 @@ String friendlyAuthError(Object e) {
       m.contains('failed host')) {
     return 'Nessuna connessione: controlla la rete e riprova.';
   }
-  return 'Operazione non riuscita: $msg';
+  return friendlyError(e);
+}
+
+/// Testo per un errore arrivato con un link (email di conferma, password dimenticata,
+/// ritorno dal login social). null per quelli da non mostrare: la rete durante il rinnovo
+/// della sessione (l'app riprova da sola) e la sessione persa all'avvio (si torna al login).
+String? authLinkErrorText(Object e) {
+  if (e is! AuthException ||
+      e is AuthRetryableFetchException ||
+      e is AuthSessionMissingException ||
+      e.code == 'session_expired' ||
+      e.code == 'session_missing') {
+    return null;
+  }
+  // Errori scritti nel link: error_code finisce in statusCode, error in code
+  // (es. otp_expired, access_denied).
+  final codes = {e.code, e.statusCode};
+  final m = e.message.toLowerCase();
+  if (codes.contains('otp_expired') ||
+      codes.contains('flow_state_not_found') ||
+      codes.contains('flow_state_expired') ||
+      codes.contains('bad_code_verifier') ||
+      m.contains('email link') ||
+      m.contains('code verifier')) {
+    return 'Il link dell\'email non è più valido (scaduto o già usato): '
+        'chiedine uno nuovo.';
+  }
+  return 'Accesso non riuscito: riprova.';
 }

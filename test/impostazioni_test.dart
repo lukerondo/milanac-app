@@ -1,7 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:milanac/core/auth/auth_repository.dart';
+import 'package:milanac/core/auth/providers.dart';
+import 'package:milanac/core/theme.dart';
+import 'package:milanac/features/impostazioni/impostazioni_page.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 import 'package:milanac/shared/member_photo.dart';
@@ -68,4 +74,59 @@ void main() {
     await goToSection(tester, 'La mia carta');
     expect(find.text('🇮🇹'), findsOneWidget);
   });
+
+  testWidgets('Esci: si aspetta l\'uscita sulla pagina, poi niente più ref', (
+    tester,
+  ) async {
+    final auth = _SlowSignOut();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [authRepositoryProvider.overrideWithValue(auth)],
+        child: MaterialApp(
+          theme: buildTheme(),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const Scaffold(body: LogoutTile()),
+                ),
+              ),
+              child: const Text('Impostazioni'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Impostazioni'));
+    await tester.pumpAndSettle();
+
+    // La pagina resta aperta con l'attesa sul pulsante; un secondo tocco non conta.
+    await tester.tap(find.text('Esci'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.tap(find.text('Esci'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(auth.calls, 1);
+    expect(find.byType(LogoutTile), findsOneWidget);
+
+    // Sessione chiusa: il router porta via la pagina mentre il server risponde ancora.
+    Navigator.of(tester.element(find.byType(LogoutTile))).pop();
+    await tester.pumpAndSettle();
+    auth.done.complete();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Impostazioni'), findsOneWidget);
+  });
+}
+
+/// Uscita lenta (rete): finisce quando lo decide il test.
+class _SlowSignOut extends DemoAuthRepository {
+  final done = Completer<void>();
+  int calls = 0;
+
+  @override
+  Future<void> signOut() {
+    calls++;
+    return done.future;
+  }
 }

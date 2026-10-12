@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/providers.dart';
+import '../../core/config.dart';
+import '../../core/push/device_tokens.dart';
 import '../../core/theme.dart';
 
 /// Dopo il link "password dimenticata": scelta della nuova password.
@@ -43,9 +45,10 @@ class _NewPasswordPageState extends ConsumerState<NewPasswordPage> {
       return;
     }
     setState(() => _saving = true);
+    final recovery = ref.read(passwordRecoveryProvider.notifier);
     try {
       await ref.read(authRepositoryProvider).updatePassword(_password.text);
-      ref.read(passwordRecoveryProvider.notifier).done();
+      recovery.done();
       messenger.showSnackBar(
         const SnackBar(content: Text('Password aggiornata.')),
       );
@@ -63,6 +66,14 @@ class _NewPasswordPageState extends ConsumerState<NewPasswordPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: const Text('NUOVA PASSWORD'),
+        actions: [
+          if (!AppConfig.isDemo)
+            IconButton(
+              tooltip: 'Esci',
+              icon: const Icon(Icons.logout_rounded),
+              onPressed: () => logout(ref),
+            ),
+        ],
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -118,6 +129,14 @@ class _NewPasswordPageState extends ConsumerState<NewPasswordPage> {
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Text('Salva la password'),
                   ),
+                ),
+                // Il link ha già fatto entrare: si può tenere la password attuale.
+                TextButton(
+                  onPressed: _saving
+                      ? null
+                      : () =>
+                            ref.read(passwordRecoveryProvider.notifier).done(),
+                  child: const Text('Annulla'),
                 ),
               ],
             ),
