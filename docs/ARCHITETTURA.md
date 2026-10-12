@@ -88,12 +88,15 @@ accettano al primo accesso successivo.
    aggiornamento FC 27 e della propria console, scorciatoie a video e notizie.
    **Presenze**: la serata di oggi della propria squadra (allenamento delle 21:30 o l'evento
    del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi.
-3. **Menu laterale** (drawer), a gruppi, con stemma, nome del club, nome e cognome e ruolo:
-   - *Squadra*: Presenze · Formazione · Calendario · Risultati · Chat
-   - *Club*: Mondo Proclub · Rosa completa · La mia carta · Carte speciali · Tornei ·
-     Albo d'oro · Regolamento & Storia · Tattiche & Build · Colonna sonora
-   - *Direttivo*: Sala Direttivo (solo per chi ne fa parte)
-   - in fondo: icone social + sito web (modificabili dal Direttivo)
+3. **Barra in basso a cinque schede** (sempre visibile, ognuna ricorda dove eri rimasto):
+   - *Home* · *Presenze* · *Partite* (Calendario, Risultati, Tornei; da qui Formazione e
+     dettaglio partita) · *Chat* (con i non letti sull'icona) · *Club* (Rosa, Carte speciali,
+     Tattiche, Mondo Proclub, Albo d'oro, Regolamento e Storia, Colonna sonora, Tornei, Sala
+     Direttivo per chi ne fa parte, contatti social modificabili dal Direttivo)
+   - in alto a destra la propria foto: profilo con la carta, i traguardi e le Impostazioni
+     (dati, volto, notifiche, aspetto scuro/chiaro/come il telefono, account);
+   - i vecchi indirizzi delle notifiche (/calendario, /risultati, /tornei, /carta) portano
+     alla nuova posizione; una sottosezione aperta da notifica torna indietro alla sua scheda.
 3b. **Mondo Proclub** – scheda *Video*: i video dei creator pubblicati dal Direttivo,
    filtrabili per ruolo; i giocatori ne propongono (notifica al Direttivo, che pubblica o
    scarta; notifica a chi ha proposto). Scheda *Notizie*: card con fonte, data, titolo,
@@ -285,8 +288,14 @@ stanza, avvisa i membri del canale con l'evento `voice_room`), `join_voice_room`
 minuto con pg_cron (`stanze-vocali`): segna uscito chi non dà segni di vita da 3 minuti e chiude
 le stanze rimaste vuote. L'audio non passa da Supabase: va su Agora (`agora_rtc_engine`, profilo
 comunicazione, solo audio); il biglietto d'ingresso lo firma la funzione Edge `voice-token`
-(token di 3 ore, App Certificate solo nei segreti) per chi ha accesso al canale. Il numero
-utente Agora è ricavato dall'id del profilo (`agoraUidFor`), così si sa subito chi parla.
+(token di un'ora, rinnovato dall'app senza uscire; App Certificate solo nei segreti) solo per
+chi ha una sessione aperta nella stanza. Il numero utente Agora è ricavato dall'id del profilo
+(`agoraUidFor`, stesso calcolo in `agora_uid_for` sul server) e il biglietto vale solo per quel
+numero, così si sa subito chi parla e nessuno entra con il nome di un altro. Una stanza per
+volta (entrando in un'altra si esce dalla prima); finiti i 10.000 minuti gratuiti del mese non
+si entra più fino al primo del mese. Con l'app in background o lo schermo spento la stanza resta
+attiva: su Android con un servizio in primo piano di tipo microfono (notifica fissa "Sei nella
+stanza vocale"), su iOS con la modalità audio in background.
 
 Storage buckets: `avatars`, `trophies`, `match-media`, `tactics`, `chat` (foto e vocali),
 `tournaments` (tutti privati, letti tramite URL firmati, con limiti di dimensione e tipo di

@@ -50,8 +50,12 @@ Prove manuali: Actions → *Notizie* o *Promemoria presenze* → Run workflow co
 1. In `env/prod.json` imposta `CONTACT_EMAIL` (email del club).
 2. Pubblica il testo di `assets/legal/privacy.md` (sostituendo `{{EMAIL}}`) come **Gist pubblico**
    su https://gist.github.com (gratuito) e usa il suo link come *URL dell'informativa privacy* negli store.
-   La stessa informativa è nell'app: menu → **Privacy**.
-3. Nell'app è presente **Elimina il mio account** (richiesto da Apple) – menu laterale.
+   La stessa informativa è nell'app: foto in alto a destra → Impostazioni → **Privacy**.
+3. Nell'app è presente **Elimina il mio account** (richiesto da Apple) – Impostazioni → Account.
+4. **Servizio in primo piano di tipo microfono** (stanza vocale con lo schermo spento): su Google
+   Play va dichiarato in *Play Console → Contenuti dell'app → Servizi in primo piano* scegliendo
+   "Microfono" e spiegando l'uso ("chiamata vocale di gruppo avviata dall'utente nella chat del
+   club"). Su iOS la modalità *audio* in background è già nell'Info.plist.
 
 ## 3. Android – Google Play
 
