@@ -100,8 +100,9 @@ class _SupabaseRegistrationRepository implements RegistrationRepository {
 }
 
 class DemoRegistrationRepository implements RegistrationRepository {
-  /// Password del Direttivo della demo (sul server c'è solo il suo hash).
-  static const direttivoPassword = 'milanac2026!';
+  /// Password del Direttivo della sola demo: quella vera esiste solo come hash sul
+  /// server e non va mai scritta nel codice.
+  static const direttivoPassword = 'demo-direttivo';
 
   RegistrationData? last;
   String? newPassword;

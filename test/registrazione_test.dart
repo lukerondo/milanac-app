@@ -96,7 +96,7 @@ void main() {
     expect(find.text('Password del Direttivo'), findsOneWidget);
     await tester.enterText(
       labeledField('Password del Direttivo'),
-      'milanac2026!',
+      DemoRegistrationRepository.direttivoPassword,
     );
     await reveal(tester, 2, find.text('Capitano'));
     await tester.tap(find.text('Capitano'));
@@ -134,7 +134,10 @@ void main() {
     expect(sent.cardName, 'Il Diavolo');
     expect(sent.birthYear, 1995);
     expect(sent.direttivo, isTrue);
-    expect(sent.direttivoPassword, 'milanac2026!');
+    expect(
+      sent.direttivoPassword,
+      DemoRegistrationRepository.direttivoPassword,
+    );
     expect(sent.direttivoRoles, hasLength(2));
     expect(sent.fieldPosition, 'ATT');
     expect(sent.face.hair, FacePart.hair.options.indexOf('Ciuffo'));
