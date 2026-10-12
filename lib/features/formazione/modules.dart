@@ -1,3 +1,4 @@
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 
 /// Una posizione in campo: [x] da 0 (sinistra) a 1 (destra),
@@ -147,21 +148,25 @@ class Formation {
 
   bool get isPublished => publishedAt != null;
 
-  /// Pubblicata oggi (vale come formazione "di stasera").
-  bool get isPublishedToday {
-    final p = publishedAt?.toLocal();
-    final now = DateTime.now();
+  /// Pubblicata nel giorno italiano [day] (vale come formazione "di stasera").
+  bool isPublishedOn(DateTime day) {
+    final p = publishedAt == null ? null : italianClock(publishedAt!);
     return p != null &&
-        p.year == now.year &&
-        p.month == now.month &&
-        p.day == now.day;
+        p.year == day.year &&
+        p.month == day.month &&
+        p.day == day.day;
   }
 
-  /// Modificata dopo l'ultima pubblicazione.
-  bool get hasUnpublishedChanges =>
-      publishedAt != null &&
-      updatedAt != null &&
-      updatedAt!.isAfter(publishedAt!.add(const Duration(seconds: 2)));
+  /// Modificata dopo l'ultima pubblicazione: modulo o giocatori diversi da quelli che
+  /// hanno ricevuto i giocatori. Si confronta il contenuto, non gli orari (il salvataggio
+  /// usa l'ora del server, la pubblicazione quella del telefono).
+  bool get hasUnpublishedChanges {
+    if (publishedAt == null) return false;
+    final published = publishedPlayers ?? const <int, String>{};
+    return (publishedModule ?? module) != module ||
+        published.length != players.length ||
+        players.entries.any((e) => published[e.key] != e.value);
+  }
 
   /// Posizione (es. "CC") del giocatore, o null se in panchina.
   String? positionOf(String playerId) {

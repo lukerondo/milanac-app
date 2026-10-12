@@ -4,12 +4,28 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/clock.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../presenze/evening.dart';
 import 'club_event.dart';
 import 'event_editor.dart';
 import 'events_repository.dart';
+
+/// I prossimi [count] appuntamenti dopo [now] (un istante), dal più vicino: non si conta
+/// sull'ordine in cui arrivano gli eventi.
+List<ClubEvent> upcomingEvents(
+  Iterable<ClubEvent> events,
+  DateTime now, {
+  int count = 5,
+}) {
+  final from = italianClock(now);
+  return sortedByStart(events.where((e) => e.startsAt.isAfter(from)))
+      .take(count)
+      .toList();
+}
 
 class CalendarioPage extends ConsumerStatefulWidget {
   const CalendarioPage({super.key});
@@ -19,13 +35,16 @@ class CalendarioPage extends ConsumerStatefulWidget {
 }
 
 class _CalendarioPageState extends ConsumerState<CalendarioPage> {
-  DateTime _focused = DateTime.now();
-  DateTime _selected = DateTime.now();
+  // Oggi in Italia, come le presenze.
+  late DateTime _focused = italianDay(ref.read(clockProvider)());
+  late DateTime _selected = _focused;
 
   @override
   Widget build(BuildContext context) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final events = ref.watch(eventsProvider);
+    final now = ref.watch(clockProvider)();
+    final today = italianDay(now);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -37,27 +56,25 @@ class _CalendarioPageState extends ConsumerState<CalendarioPage> {
               label: const Text('Nuovo evento'),
             )
           : null,
-      body: events.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore nel caricamento: $e')),
+      body: AsyncView(
+        value: events,
+        onRetry: () => ref.invalidate(eventsProvider),
         data: (all) {
+          // Giorni e orari degli eventi sono già in ora italiana.
           List<ClubEvent> on(DateTime day) =>
               all.where((e) => isSameDay(e.startsAt, day)).toList();
           final dayEvents = withTrainings(on(_selected), _selected);
-          final now = DateTime.now();
-          final upcoming = all
-              .where((e) => e.startsAt.isAfter(now))
-              .take(5)
-              .toList();
+          final upcoming = upcomingEvents(all, now);
 
           return ListView(
             padding: const EdgeInsets.only(bottom: 96),
             children: [
               TableCalendar<ClubEvent>(
                 locale: 'it',
-                firstDay: DateTime(2024),
-                lastDay: DateTime(now.year + 3),
-                focusedDay: _focused,
+                firstDay: calendarFirstDay,
+                lastDay: calendarLastDay(today),
+                focusedDay: clampToCalendar(_focused, today),
+                currentDay: today,
                 startingDayOfWeek: StartingDayOfWeek.monday,
                 availableGestures: AvailableGestures.horizontalSwipe,
                 availableCalendarFormats: const {CalendarFormat.month: 'Mese'},

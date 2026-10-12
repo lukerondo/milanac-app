@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../../shared/member_photo.dart';
 import '../calendario/club_event.dart';
 import '../calendario/events_repository.dart';
@@ -52,7 +56,7 @@ class PresenzePage extends ConsumerStatefulWidget {
 
 class _PresenzePageState extends ConsumerState<PresenzePage>
     with SingleTickerProviderStateMixin {
-  late DateTime _day = dayOnly(widget.initialDay ?? ref.read(clockProvider)());
+  late DateTime _day = _dayToOpen(widget.initialDay);
   late DateTime _focused = _day;
   Team? _team;
   late final _tabs = TabController(
@@ -60,6 +64,13 @@ class _PresenzePageState extends ConsumerState<PresenzePage>
     vsync: this,
     initialIndex: widget.initialTab == 'statistiche' ? 1 : 0,
   );
+
+  /// Il giorno chiesto dalla rotta (anche uno qualsiasi, da una notifica) dentro i limiti
+  /// del calendario; senza richiesta, oggi in Italia.
+  DateTime _dayToOpen(DateTime? requested) {
+    final today = italianDay(ref.read(clockProvider)());
+    return clampToCalendar(requested ?? today, today);
+  }
 
   @override
   void didUpdateWidget(covariant PresenzePage oldWidget) {
@@ -71,7 +82,7 @@ class _PresenzePageState extends ConsumerState<PresenzePage>
     final day = widget.initialDay;
     if (day != null && day != oldWidget.initialDay) {
       setState(() {
-        _day = dayOnly(day);
+        _day = _dayToOpen(day);
         _focused = _day;
       });
     }
@@ -91,22 +102,40 @@ class _PresenzePageState extends ConsumerState<PresenzePage>
     final events = ref.watch(eventsProvider).value ?? const <ClubEvent>[];
     final now = ref.watch(clockProvider)();
 
-    if (rosa.isLoading || attendance.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (rosa.hasError || attendance.hasError) {
-      return Center(
-        child: Text(
-          'Errore nel caricamento: ${rosa.error ?? attendance.error}',
-        ),
-      );
+    void retry() {
+      ref.invalidate(rosaProvider);
+      ref.invalidate(attendanceProvider);
     }
 
+    return AsyncView(
+      value: rosa,
+      onRetry: retry,
+      data: (all) => AsyncView(
+        value: attendance,
+        onRetry: retry,
+        data: (entries) => _content(
+          me: me,
+          all: all,
+          entries: entries,
+          events: events,
+          now: now,
+        ),
+      ),
+    );
+  }
+
+  Widget _content({
+    required Profile? me,
+    required List<Member> all,
+    required List<AttendanceEntry> entries,
+    required List<ClubEvent> events,
+    required DateTime now,
+  }) {
     final myTeams = me?.teams ?? const {Team.milanac};
     final canPickTeam = myTeams.length > 1 || (me?.isDirettivo ?? false);
     final team = _team ?? mainTeam(myTeams);
     final members =
-        rosa.value!
+        all
             .where(
               (m) =>
                   m.active &&
@@ -115,7 +144,6 @@ class _PresenzePageState extends ConsumerState<PresenzePage>
             )
             .toList()
           ..sort((a, b) => a.displayName.compareTo(b.displayName));
-    final entries = attendance.value!;
     final event = eveningEvent(events, _day, teams: {team});
 
     return Column(
@@ -200,7 +228,8 @@ class _CalendarTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final today = dayOnly(now);
+    // Oggi e scadenza in ora italiana, come sul server.
+    final today = italianDay(now);
     final isToday = day == today;
     final past = day.isBefore(today);
     final open = answersOpen(day, now);
@@ -231,9 +260,10 @@ class _CalendarTab extends ConsumerWidget {
       children: [
         TableCalendar<ClubEvent>(
           locale: 'it',
-          firstDay: DateTime(now.year - 1, 1, 1),
-          lastDay: DateTime(now.year + 1, 12, 31),
-          focusedDay: focused,
+          // Gli stessi limiti del Calendario e dell'editor degli eventi.
+          firstDay: calendarFirstDay,
+          lastDay: calendarLastDay(today),
+          focusedDay: clampToCalendar(focused, today),
           currentDay: today,
           startingDayOfWeek: StartingDayOfWeek.monday,
           // Solo lo scorrimento tra i mesi: in verticale deve scorrere la pagina.
@@ -343,7 +373,8 @@ class _CalendarTab extends ConsumerWidget {
               event: event,
             ),
           ),
-        _Summary(members: members.length, entries: ofDay.values.toList()),
+        // Solo i membri della squadra mostrata: le risposte degli altri non contano.
+        _Summary(DayCounts(members.map((m) => m.id), ofDay)),
         for (final (title, status) in [
           ('Senza risposta', null),
           ('Presenti', AttendanceStatus.presente),
@@ -357,6 +388,7 @@ class _CalendarTab extends ConsumerWidget {
             entries: ofDay,
             me: me,
             history: entries,
+            today: today,
             canManage: isDirettivo,
             day: day,
             event: event,
@@ -452,32 +484,69 @@ Future<void> answerAttendance(
   required AttendanceStatus status,
   AttendanceEntry? current,
   ClubEvent? event,
-}) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final input = await editAttendance(
-    context,
-    status: status,
-    initialTime: current?.arrivalTime,
-    initialNote: current?.note,
-    eventStart: event?.startsAt,
-  );
-  if (input == null) return;
-  try {
-    await ref
-        .read(attendanceRepositoryProvider)
-        .save(
-          AttendanceEntry(
-            playerId: playerId,
-            date: day,
-            status: status,
-            arrivalTime: input.time,
-            note: input.note,
-          ),
-        );
-  } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Risposta non salvata: $e')));
+}) => AttendanceAnswer(context, ref)(
+  playerId: playerId,
+  day: day,
+  status: status,
+  current: current,
+  event: event,
+);
+
+/// Salva le risposte. Repository, avvisi e navigatore si prendono subito, quando nasce:
+/// mentre i dialoghi sono aperti la riga che li ha aperti può sparire (alle 18:30
+/// l'assenza automatica la sposta in un altro elenco) senza che la risposta si perda.
+class AttendanceAnswer {
+  AttendanceAnswer(BuildContext context, WidgetRef ref)
+    : _repository = ref.read(attendanceRepositoryProvider),
+      _myId = ref.read(currentUserIdProvider),
+      _messenger = ScaffoldMessenger.of(context),
+      _navigator = Navigator.of(context, rootNavigator: true);
+
+  final AttendanceRepository _repository;
+  final String? _myId;
+  final ScaffoldMessengerState _messenger;
+  final NavigatorState _navigator;
+
+  Future<void> call({
+    required String playerId,
+    required DateTime day,
+    required AttendanceStatus status,
+    AttendanceEntry? current,
+    ClubEvent? event,
+  }) async {
+    final input = await editAttendance(
+      _navigator.context,
+      status: status,
+      initialTime: current?.arrivalTime,
+      initialNote: current?.note,
+      eventStart: event?.startsAt,
+    );
+    if (input == null) return;
+    try {
+      await _repository.save(
+        AttendanceEntry(
+          playerId: playerId,
+          date: day,
+          status: status,
+          arrivalTime: input.time,
+          note: input.note,
+        ),
+      );
+    } catch (e) {
+      _messenger.showSnackBar(
+        SnackBar(content: Text(answerErrorText(e, mine: playerId == _myId))),
+      );
+    }
   }
 }
+
+/// Testo per una risposta non salvata. Chi risponde per sé dopo le 18:30 italiane viene
+/// fermato dalle regole del database (42501): glielo si dice in chiaro.
+String answerErrorText(Object e, {required bool mine}) =>
+    mine && e is PostgrestException && e.code == '42501'
+    ? 'Le risposte per stasera si sono chiuse alle $attendanceDeadlineLabel '
+          '(ora italiana).'
+    : friendlyError(e, action: 'Risposta non salvata');
 
 class AttendanceStatusButton extends StatelessWidget {
   const AttendanceStatusButton({
@@ -647,15 +716,13 @@ class _NoteDialogState extends State<_NoteDialog> {
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary({required this.members, required this.entries});
-  final int members;
-  final List<AttendanceEntry> entries;
+  const _Summary(this.counts);
+  final DayCounts counts;
 
   @override
   Widget build(BuildContext context) {
-    int count(AttendanceStatus s) => entries.where((e) => e.status == s).length;
-    final waiting = members - entries.length;
     return Card(
+      key: const ValueKey('presenze-riepilogo'),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
@@ -663,20 +730,12 @@ class _Summary extends StatelessWidget {
             for (final (label, value, color) in [
               (
                 'Presenti',
-                count(AttendanceStatus.presente),
+                counts.present,
                 statusColor(AttendanceStatus.presente),
               ),
-              (
-                'Ritardi',
-                count(AttendanceStatus.ritardo),
-                statusColor(AttendanceStatus.ritardo),
-              ),
-              (
-                'Assenti',
-                count(AttendanceStatus.assente),
-                statusColor(AttendanceStatus.assente),
-              ),
-              ('Senza risposta', waiting < 0 ? 0 : waiting, Colors.white54),
+              ('Ritardi', counts.late, statusColor(AttendanceStatus.ritardo)),
+              ('Assenti', counts.absent, statusColor(AttendanceStatus.assente)),
+              ('Senza risposta', counts.waiting, Colors.white54),
             ])
               Expanded(
                 child: Column(
@@ -717,6 +776,7 @@ class _Group extends ConsumerWidget {
     required this.entries,
     required this.me,
     required this.history,
+    required this.today,
     required this.canManage,
     required this.day,
     required this.event,
@@ -728,6 +788,9 @@ class _Group extends ConsumerWidget {
   final Map<String, AttendanceEntry> entries;
   final Profile? me;
   final List<AttendanceEntry> history;
+
+  /// Oggi in Italia: lo storico (e la percentuale) arriva fino a oggi.
+  final DateTime today;
   final bool canManage;
   final DateTime day;
   final ClubEvent event;
@@ -760,8 +823,8 @@ class _Group extends ConsumerWidget {
             member: m,
             entry: entries[m.id],
             isMe: m.id == me?.id,
-            history: history.where((e) => e.playerId == m.id).toList()
-              ..sort((a, b) => b.date.compareTo(a.date)),
+            // Le risposte già date per i prossimi giorni non gonfiano la percentuale.
+            history: historyOf(m.id, history, today),
             canManage: canManage,
             day: day,
             event: event,
@@ -820,23 +883,26 @@ class _MemberTile extends ConsumerWidget {
           color: MilanacColors.gold,
         ),
       ),
-      onTap: () => showAttendanceHistory(
-        context,
-        member: member,
-        history: history,
-        onSetStatus: canManage && !isMe
-            ? (s) => answerAttendance(
-                context,
-                ref,
-                playerId: member.id,
-                day: day,
-                status: s,
-                current: e,
-                event: event,
-              )
-            : null,
-        dayLabel: DateFormat('d MMMM', 'it').format(day),
-      ),
+      onTap: () {
+        // Si prende subito quello che serve per salvare: la riga può sparire mentre lo
+        // storico è aperto (alle 18:30 l'assenza automatica la sposta in un altro elenco).
+        final answer = AttendanceAnswer(context, ref);
+        showAttendanceHistory(
+          context,
+          member: member,
+          history: history,
+          onSetStatus: canManage && !isMe
+              ? (s) => answer(
+                  playerId: member.id,
+                  day: day,
+                  status: s,
+                  current: e,
+                  event: event,
+                )
+              : null,
+          dayLabel: DateFormat('d MMMM', 'it').format(day),
+        );
+      },
     );
   }
 }
@@ -863,23 +929,14 @@ class _StatsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final today = dayOnly(now);
-    final rows =
-        [
-          for (final m in members)
-            (
-              m,
-              entries
-                  .where((e) => e.playerId == m.id && !e.date.isAfter(today))
-                  .toList()
-                ..sort((a, b) => b.date.compareTo(a.date)),
-            ),
-        ]..sort((a, b) {
-          final pa = AttendanceStats(a.$2);
-          final pb = AttendanceStats(b.$2);
-          final c = pb.percent.compareTo(pa.percent);
-          return c != 0 ? c : pb.total.compareTo(pa.total);
-        });
+    final today = italianDay(now);
+    final rows = [for (final m in members) (m, historyOf(m.id, entries, today))]
+      ..sort((a, b) {
+        final pa = AttendanceStats(a.$2);
+        final pb = AttendanceStats(b.$2);
+        final c = pb.percent.compareTo(pa.percent);
+        return c != 0 ? c : pb.total.compareTo(pa.total);
+      });
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 32),
       children: [
