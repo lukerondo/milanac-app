@@ -4,10 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/auth/providers.dart';
 import 'package:milanac/core/teams.dart';
+import 'package:milanac/core/theme.dart';
 import 'package:milanac/features/formazione/formation_repository.dart';
+import 'package:milanac/features/formazione/formazione_page.dart';
 import 'package:milanac/features/formazione/modules.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
+import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
 import 'home_test.dart' show startAppAt, todayInItalyAt;
@@ -62,7 +65,7 @@ Future<void> openFormationEditor(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 4800);
   await tester.pumpAndSettle();
   await goToSection(tester, 'Sala Direttivo');
-  await tester.tap(find.text('Formazioni'));
+  await tester.tap(find.text('Formazioni da pubblicare'));
   await tester.pumpAndSettle();
 }
 
@@ -74,8 +77,8 @@ FilledButton publishButton(WidgetTester tester, String label) =>
       ),
     );
 
-ChoiceChip moduleChip(WidgetTester tester, String module) =>
-    tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, module));
+FilterPill moduleChip(WidgetTester tester, String module) =>
+    tester.widget<FilterPill>(find.widgetWithText(FilterPill, module));
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
@@ -162,21 +165,26 @@ void main() {
       find.textContaining('non è ancora stata pubblicata'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Prepara e pubblica nella Sala Direttivo'));
+    await tester.tap(find.text('Prepara la formazione'));
     await tester.pumpAndSettle();
     expect(find.text('FORMAZIONI'), findsOneWidget);
 
     // In demo: Neri (POR), Bianchi, Demo, Rossi in campo. Nessuno in panchina.
-    expect(find.text('Neri'), findsOneWidget);
+    expect(find.text('1 Neri'), findsOneWidget);
+    const summary =
+        "4 giocatori in campo, 7 ruoli all'IA. Chi è in panchina resta a "
+        'disposizione per tutta la serata.';
+    await tester.scrollUntilVisible(find.text(summary), 200);
+    expect(find.text(summary), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Tutti i giocatori sono in campo.'),
       200,
     );
     expect(find.text('Tutti i giocatori sono in campo.'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Neri'), -200);
+    await tester.scrollUntilVisible(find.text('1 Neri'), -200);
 
-    // Libera il portiere: Neri finisce in panchina.
-    await tester.tap(find.text('Neri'));
+    // Libera il portiere: Neri finisce in panchina e il suo posto passa all'IA.
+    await tester.tap(find.text('1 Neri'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Libera la posizione'));
     await tester.pumpAndSettle();
@@ -189,7 +197,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('3-5-2'), -200);
     await tester.tap(find.text('3-5-2'));
     await tester.pumpAndSettle();
-    expect(find.text('Rossi'), findsOneWidget);
+    expect(find.text('9 Rossi'), findsOneWidget);
 
     // Pubblicazione: conferma, poi lo stato diventa "Pubblicata oggi".
     await tester.scrollUntilVisible(find.textContaining('Bozza'), -200);
@@ -215,8 +223,9 @@ void main() {
     tester.state<NavigatorState>(find.byType(Navigator).first).pop();
     await tester.pumpAndSettle();
     expect(find.textContaining('non è ancora stata pubblicata'), findsNothing);
-    expect(find.widgetWithText(Chip, '3-5-2'), findsOneWidget);
-    expect(find.text('Rossi'), findsOneWidget);
+    expect(find.text('Pubblicata oggi'), findsOneWidget);
+    expect(find.text('3-5-2'), findsOneWidget);
+    expect(find.text('9 Rossi'), findsOneWidget);
     await tester.scrollUntilVisible(find.textContaining('Andrea Neri'), 200);
     expect(find.textContaining('Andrea Neri'), findsOneWidget);
   });
@@ -237,21 +246,76 @@ void main() {
     await tester.pumpAndSettle();
     await goToSection(tester, 'Sala Direttivo');
     await tester.scrollUntilVisible(
-      find.text('Formazioni'),
+      find.text('Formazioni da pubblicare'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Formazioni'));
+    await tester.tap(find.text('Formazioni da pubblicare'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Rossi'), findsOneWidget);
-    await tester.tap(find.text('FUTURO'));
+    expect(find.text('9 Rossi'), findsOneWidget);
+    await tester.tap(find.text('Futuro'));
     await tester.pumpAndSettle();
-    // Formazione FUTURO: Neri in porta e Verdi; Rossi non c'è.
-    expect(find.text('Verdi'), findsOneWidget);
-    expect(find.text('Neri'), findsOneWidget);
-    expect(find.text('Rossi'), findsNothing);
+    // Formazione del Futuro: Neri in porta e Verdi; Rossi non c'è.
+    expect(find.text('23 Verdi'), findsOneWidget);
+    expect(find.text('1 Neri'), findsOneWidget);
+    expect(find.text('9 Rossi'), findsNothing);
+  });
+
+  testWidgets('Formazione: "Prepara la formazione" apre l\'editor sulla squadra '
+      'che si sta guardando', (tester) async {
+    final container = await startAppAt(tester, todayInItalyAt(17));
+    await goToSection(tester, 'Formazione');
+    await tester.tap(find.text('Futuro'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('La formazione di Milan AC Futuro non è ancora'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Prepara la formazione'));
+    await tester.pumpAndSettle();
+    expect(find.text('FORMAZIONI'), findsOneWidget);
+    // Nell'editor il Futuro (Verdi), non il Milan AC (Rossi).
+    expect(find.text('23 Verdi'), findsOneWidget);
+    expect(find.text('9 Rossi'), findsNothing);
+    expect(container.read(formationTeamProvider), Team.futuro);
+  });
+
+  testWidgets('pulsante del PDF nella barra in alto: acceso solo con la '
+      'formazione pubblicata della squadra mostrata', (tester) async {
+    final container = await startAppAt(tester, todayInItalyAt(17));
+    // Come lo mette il router nella barra della sezione Formazione.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildTheme(),
+          home: Scaffold(
+            appBar: AppBar(actions: const [FormationPdfAction()]),
+            body: const FormazionePage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    IconButton pdf() => tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.download_rounded),
+    );
+    expect(find.byTooltip('Scarica il PDF della formazione'), findsOneWidget);
+    expect(pdf().onPressed, isNull, reason: 'non ancora pubblicata');
+
+    // Il Direttivo la pubblica: il pulsante si accende.
+    final server = container.read(formationRepositoryProvider);
+    await server.publish(await server.loadCurrent(Team.milanac));
+    container.invalidate(formationProvider);
+    await tester.pumpAndSettle();
+    expect(pdf().onPressed, isNotNull);
+
+    // Il Futuro non è pubblicato: di nuovo spento.
+    await tester.tap(find.text('Futuro'));
+    await tester.pumpAndSettle();
+    expect(pdf().onPressed, isNull);
   });
 
   testWidgets('Formazione: salvataggi uno alla volta e "Pubblica" solo a '
@@ -263,8 +327,8 @@ void main() {
       overrides: [formationRepositoryProvider.overrideWithValue(formations)],
     );
     await openFormationEditor(tester);
-    // FUTURO: la formazione non esiste ancora.
-    await tester.tap(find.text('FUTURO'));
+    // Futuro: la formazione non esiste ancora.
+    await tester.tap(find.text('Futuro'));
     await tester.pumpAndSettle();
 
     // Due cambi di modulo di fila: il secondo mentre il primo si sta salvando.
@@ -361,7 +425,7 @@ void main() {
     await goToSection(tester, 'Home');
     await goToSection(tester, 'Formazione');
     expect(find.textContaining('non è ancora stata pubblicata'), findsNothing);
-    expect(find.widgetWithText(Chip, '4-3-3'), findsOneWidget);
+    expect(find.text('4-3-3'), findsOneWidget);
 
     // Tornando in primo piano.
     await publishElsewhere('3-5-2');
@@ -376,22 +440,22 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(state);
     }
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(Chip, '3-5-2'), findsOneWidget);
+    expect(find.text('3-5-2'), findsOneWidget);
 
     // Con la pagina aperta (la notifica arriva in primo piano): entro un minuto.
     await publishElsewhere('4-4-2');
     await tester.pump(const Duration(minutes: 1));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(Chip, '4-4-2'), findsOneWidget);
+    expect(find.text('4-4-2'), findsOneWidget);
 
-    // E trascinando in giù.
+    // E trascinando in giù il campo.
     await publishElsewhere('5-3-2');
     await tester.fling(
-      find.widgetWithText(Chip, '4-4-2'),
+      find.textContaining('giocatori in campo'),
       const Offset(0, 400),
       1000,
     );
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(Chip, '5-3-2'), findsOneWidget);
+    expect(find.text('5-3-2'), findsOneWidget);
   });
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:milanac/core/auth/providers.dart';
 import 'package:milanac/core/italian_time.dart';
 import 'package:milanac/core/router.dart';
@@ -9,6 +10,7 @@ import 'package:milanac/features/calendario/club_event.dart';
 import 'package:milanac/features/calendario/events_repository.dart';
 import 'package:milanac/features/presenze/attendance.dart';
 import 'package:milanac/features/presenze/attendance_repository.dart';
+import 'package:milanac/features/presenze/attendance_ui.dart';
 import 'package:milanac/features/presenze/presenze_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
@@ -55,28 +57,17 @@ Future<ProviderContainer> openPresenze(
   return container;
 }
 
-/// I numeri del riepilogo della serata, per etichetta.
-Map<String, String> summary(WidgetTester tester) {
-  final card = find.byKey(const ValueKey('presenze-riepilogo'));
-  String value(String label) {
-    final column = find
-        .ancestor(
-          of: find.descendant(of: card, matching: find.text(label)),
-          matching: find.byType(Column),
-        )
-        .first;
-    return tester
-        .widget<Text>(
-          find.descendant(of: column, matching: find.byType(Text)).first,
-        )
-        .data!;
-  }
+/// I titoli degli elenchi della serata, in ordine ("PRESENTI · 1", …).
+List<String> groups(WidgetTester tester) => [
+  for (final g in tester.widgetList<AttendanceGroupLabel>(
+    find.byType(AttendanceGroupLabel),
+  ))
+    '${g.title.toUpperCase()} · ${g.count}',
+];
 
-  return {
-    for (final label in ['Presenti', 'Ritardi', 'Assenti', 'Senza risposta'])
-      label: value(label),
-  };
-}
+/// Il giorno della settimana in alto: "Lunedì 12, oggi" (e "partita" o "evento").
+Finder dayTile(String label) =>
+    find.bySemanticsLabel(RegExp('^${RegExp.escape(label)}(,|\$)'));
 
 /// Scorre la lista del giorno fino a [finder] (in su con [delta] negativo).
 Future<void> scrollTo(
@@ -128,13 +119,13 @@ void main() {
     tester,
   ) async {
     await openPresenze(tester, todayInItalyAt(17));
-    expect(find.textContaining('STASERA ·'), findsOneWidget);
-    expect(find.text('Allenamento alle 21:30'), findsOneWidget);
-    expect(find.text('Ci sei? Rispondi entro le 18:30.'), findsOneWidget);
-    await scrollTo(tester, find.text('SENZA RISPOSTA (3)'));
+    expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+    expect(find.text('ALLENAMENTO 21:30'), findsOneWidget);
+    expect(find.text('La tua risposta, entro le 18:30'), findsOneWidget);
+    await scrollTo(tester, find.text('SENZA RISPOSTA · 3'));
     await scrollTo(
       tester,
-      find.text('In ritardo, arrivo alle 21:50 · Esco tardi da lavoro'),
+      find.text('Arrivo alle 21:50 · Esco tardi da lavoro'),
     );
 
     await scrollTo(
@@ -145,8 +136,8 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'Presente').first);
     await tester.pumpAndSettle();
     expect(find.text('La tua risposta: Presente'), findsOneWidget);
-    await scrollTo(tester, find.text('SENZA RISPOSTA (2)'));
-    await scrollTo(tester, find.text('PRESENTI (1)'));
+    await scrollTo(tester, find.text('SENZA RISPOSTA · 2'));
+    await scrollTo(tester, find.text('PRESENTI · 1'));
   });
 
   testWidgets('ritardo con nota obbligatoria; assenza e storico', (
@@ -154,8 +145,8 @@ void main() {
   ) async {
     await openPresenze(tester, todayInItalyAt(17));
 
-    await scrollTo(tester, find.widgetWithText(OutlinedButton, 'In ritardo'));
-    await tester.tap(find.widgetWithText(OutlinedButton, 'In ritardo').first);
+    await scrollTo(tester, find.widgetWithText(OutlinedButton, 'Ritardo'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Ritardo').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('OK')); // orario proposto: 22:00
     await tester.pumpAndSettle();
@@ -306,26 +297,18 @@ void main() {
     await scrollTo(tester, find.widgetWithText(OutlinedButton, 'Presente'));
     await tester.tap(find.widgetWithText(OutlinedButton, 'Presente').first);
     await tester.pumpAndSettle();
-    await scrollTo(tester, find.byKey(const ValueKey('presenze-riepilogo')));
     // Milan AC: io presente, Marco Rossi in ritardo, Neri e Bianchi senza risposta.
-    expect(summary(tester), {
-      'Presenti': '1',
-      'Ritardi': '1',
-      'Assenti': '0',
-      'Senza risposta': '2',
-    });
+    expect(groups(tester), [
+      'PRESENTI · 1',
+      'IN RITARDO · 1',
+      'SENZA RISPOSTA · 2',
+    ]);
 
-    // FUTURO: Andrea Neri e Paolo Verdi non hanno ancora risposto.
-    await scrollTo(tester, find.text('FUTURO'), delta: -150);
-    await tester.tap(find.text('FUTURO'));
+    // Futuro: Andrea Neri e Paolo Verdi non hanno ancora risposto.
+    await scrollTo(tester, find.text('Futuro'), delta: -150);
+    await tester.tap(find.text('Futuro'));
     await tester.pumpAndSettle();
-    await scrollTo(tester, find.byKey(const ValueKey('presenze-riepilogo')));
-    expect(summary(tester), {
-      'Presenti': '0',
-      'Ritardi': '0',
-      'Assenti': '0',
-      'Senza risposta': '2',
-    });
+    expect(groups(tester), ['SENZA RISPOSTA · 2']);
   });
 
   testWidgets('la risposta data in anticipo non cambia la percentuale', (
@@ -337,7 +320,8 @@ void main() {
     final tomorrow = DateTime(today.year, today.month, today.day + 1);
     container.read(routerProvider).go('/presenze?giorno=${dateKey(tomorrow)}');
     await tester.pumpAndSettle();
-    expect(find.textContaining('SERATA ·'), findsOneWidget);
+    final label = DateFormat('EEEE d MMMM', 'it').format(tomorrow);
+    expect(find.text('${label.toUpperCase()} · MILAN AC'), findsOneWidget);
 
     await scrollTo(tester, find.widgetWithText(OutlinedButton, 'Assente'));
     await tester.tap(find.widgetWithText(OutlinedButton, 'Assente').first);
@@ -348,16 +332,10 @@ void main() {
 
     // Lo storico arriva fino a oggi: 5 presenze e un ritardo, sempre il 100%.
     await scrollTo(tester, find.text('Demo Direttivo (tu)'));
-    expect(
-      find.descendant(
-        of: find.ancestor(
-          of: find.text('Demo Direttivo (tu)'),
-          matching: find.byType(ListTile),
-        ),
-        matching: find.text('100%'),
-      ),
-      findsOneWidget,
-    );
+    await tester.tap(find.text('Demo Direttivo (tu)'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Storico presenze'), findsOneWidget);
+    expect(find.text('100%'), findsOneWidget);
   });
 
   testWidgets(
@@ -365,9 +343,10 @@ void main() {
     (tester) async {
       // Tokyo, martedì 13 ottobre all'01:00: in Italia è lunedì 12, le 18:00.
       await openPresenze(tester, DateTime.parse('2026-10-13T01:00:00+09:00'));
-      expect(find.text('STASERA · Lunedì 12 ottobre'), findsOneWidget);
-      expect(find.text('Allenamento alle 21:30'), findsOneWidget);
-      expect(find.text('Ci sei? Rispondi entro le 18:30.'), findsOneWidget);
+      expect(dayTile('Lunedì 12, oggi'), findsOneWidget);
+      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+      expect(find.text('ALLENAMENTO 21:30'), findsOneWidget);
+      expect(find.text('La tua risposta, entro le 18:30'), findsOneWidget);
     },
   );
 
@@ -376,7 +355,8 @@ void main() {
   ) async {
     // New York, lunedì 12 ottobre alle 12:45: in Italia sono le 18:45.
     await openPresenze(tester, DateTime.parse('2026-10-12T12:45:00-04:00'));
-    expect(find.text('STASERA · Lunedì 12 ottobre'), findsOneWidget);
+    expect(dayTile('Lunedì 12, oggi'), findsOneWidget);
+    expect(find.text('OGGI · MILAN AC'), findsOneWidget);
     await scrollTo(tester, find.textContaining('Risposte chiuse alle 18:30'));
     final button = tester.widget<OutlinedButton>(
       find.widgetWithText(OutlinedButton, 'Presente').first,
@@ -389,7 +369,8 @@ void main() {
   ) async {
     // Domenica 29 marzo 2026, ora legale da stanotte: le 18:35 sono le 16:35 UTC.
     await openPresenze(tester, italyAt(2026, 3, 29, 18, 35));
-    expect(find.text('STASERA · Domenica 29 marzo'), findsOneWidget);
+    expect(find.text('MARZO 2026'), findsOneWidget);
+    expect(dayTile('Domenica 29, oggi'), findsOneWidget);
     await scrollTo(tester, find.textContaining('Risposte chiuse alle 18:30'));
   });
 
@@ -418,7 +399,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Risposta non salvata'), findsNothing);
     expect(find.textContaining('Storico presenze'), findsNothing);
-    await scrollTo(tester, find.text('PRESENTI (1)'));
+    await scrollTo(tester, find.text('PRESENTI · 1'));
   });
 
   testWidgets('giorno chiesto fuori dal calendario: si apre il più vicino', (
@@ -427,11 +408,11 @@ void main() {
     final container = await openPresenze(tester, italyAt(2026, 10, 12, 17));
     container.read(routerProvider).go('/presenze?giorno=2040-06-01');
     await tester.pumpAndSettle();
-    expect(find.text('dicembre 2029'), findsOneWidget);
-    expect(find.text('SERATA · Lunedì 31 dicembre'), findsOneWidget);
+    expect(find.text('DICEMBRE 2029'), findsOneWidget);
+    expect(find.text('LUNEDÌ 31 DICEMBRE · MILAN AC'), findsOneWidget);
 
     container.read(routerProvider).go('/presenze?giorno=2019-05-01');
     await tester.pumpAndSettle();
-    expect(find.text('gennaio 2024'), findsOneWidget);
+    expect(find.text('GENNAIO 2024'), findsOneWidget);
   });
 }

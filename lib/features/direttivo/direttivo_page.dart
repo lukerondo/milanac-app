@@ -332,6 +332,13 @@ class _VoiceMinutes extends StatelessWidget {
     final p = context.pal;
     final number = NumberFormat.decimalPattern('it');
     final share = (minutes / voiceMinutesPerMonth).clamp(0.0, 1.0);
+    // Oro pieno nel tema scuro, oro scuro (leggibile) nel chiaro; oltre l'80% del
+    // mese la barra avvisa.
+    final bar = share >= .8
+        ? p.warning
+        : p.isDark
+        ? p.accent
+        : p.accentText;
     return AppCard(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       onTap: () => context.go('/chat'),
@@ -379,7 +386,7 @@ class _VoiceMinutes extends StatelessWidget {
                   FractionallySizedBox(
                     alignment: Alignment.centerLeft,
                     widthFactor: share,
-                    child: ColoredBox(color: p.accent),
+                    child: ColoredBox(color: bar),
                   ),
                 ],
               ),

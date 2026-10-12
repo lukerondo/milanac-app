@@ -109,40 +109,44 @@ Future<void> showEventDetails(
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    TextButton.icon(
-                      style: TextButton.styleFrom(foregroundColor: p.danger),
-                      onPressed: () async {
-                        final repository = ref.read(eventsRepositoryProvider);
-                        final messenger = ScaffoldMessenger.of(context);
-                        final ok = await _confirmDelete(context);
-                        if (ok != true) return;
-                        try {
-                          await repository.delete(e.id);
-                          if (sheet.mounted) Navigator.of(sheet).pop();
-                        } catch (err) {
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                friendlyError(
-                                  err,
-                                  action: 'Eliminazione non riuscita',
+                    Expanded(
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: p.danger),
+                        onPressed: () async {
+                          final repository = ref.read(eventsRepositoryProvider);
+                          final messenger = ScaffoldMessenger.of(context);
+                          final ok = await _confirmDelete(context);
+                          if (ok != true) return;
+                          try {
+                            await repository.delete(e.id);
+                            if (sheet.mounted) Navigator.of(sheet).pop();
+                          } catch (err) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  friendlyError(
+                                    err,
+                                    action: 'Eliminazione non riuscita',
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      label: const Text('Elimina'),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: const Text('Elimina'),
+                      ),
                     ),
-                    const Spacer(),
-                    FilledButton.icon(
-                      onPressed: () {
-                        Navigator.of(sheet).pop();
-                        showEventEditor(context, event: e);
-                      },
-                      icon: const Icon(Icons.edit_rounded),
-                      label: const Text('Modifica'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.of(sheet).pop();
+                          showEventEditor(context, event: e);
+                        },
+                        icon: const Icon(Icons.edit_rounded),
+                        label: const Text('Modifica'),
+                      ),
                     ),
                   ],
                 ),
@@ -360,7 +364,11 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
                   child: _PickerTile(
                     icon: Icons.event_rounded,
                     label: 'Giorno',
-                    value: DateFormat('EEE d MMM yyyy', 'it').format(_date),
+                    // L'anno solo se non è quello in corso: il campo è stretto.
+                    value: DateFormat(
+                      _date.year == _today.year ? 'EEE d MMM' : 'd MMM yyyy',
+                      'it',
+                    ).format(_date),
                     onTap: _pickDate,
                   ),
                 ),

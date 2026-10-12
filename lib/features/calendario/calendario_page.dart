@@ -336,7 +336,7 @@ class EventRow extends StatelessWidget {
                       style: TextStyle(fontSize: 14, color: p.textMuted),
                     ),
                     if (official) ...[
-                      const SizedBox(height: 6),
+                      // Il pulsante ha già 6 punti di margine per il tocco.
                       _GoldPill(
                         label: 'Vedi formazione',
                         onTap: () => context.push('/formazione'),
@@ -353,37 +353,29 @@ class EventRow extends StatelessWidget {
   }
 }
 
-/// Pillola oro piena: l'azione principale della riga.
+/// Pillola oro piena: l'azione principale della riga. Larga quanto il testo, alta 36
+/// punti, ma si tocca su 48.
 class _GoldPill extends StatelessWidget {
   const _GoldPill({required this.label, required this.onTap});
   final String label;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final p = context.pal;
-    return Material(
-      color: p.accent,
+  Widget build(BuildContext context) => FilledButton(
+    onPressed: onTap,
+    style: FilledButton.styleFrom(
+      minimumSize: const Size(0, 36),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      tapTargetSize: MaterialTapTargetSize.padded,
       shape: const StadiumBorder(),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        onTap: onTap,
-        child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: p.onAccent,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
+      textStyle: const TextStyle(
+        fontFamily: bodyFont,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
       ),
-    );
-  }
+    ),
+    child: Text(label),
+  );
 }
 
 /// Un risultato: esito (V, N, P), avversario, competizione e punteggio.

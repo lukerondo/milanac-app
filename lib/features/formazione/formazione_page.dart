@@ -510,10 +510,12 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
                       const Positioned.fill(
                         child: CustomPaint(painter: PitchPainter()),
                       ),
+                      // Foto e nome insieme sono centrati sul posto: così anche
+                      // il portiere resta dentro il campo.
                       for (final (i, slot) in formation.slots.indexed)
                         Positioned(
                           left: inset + slot.x * fieldW - 40,
-                          top: inset + slot.y * fieldH - 22,
+                          top: inset + slot.y * fieldH - 31,
                           width: 80,
                           child: _PlayerToken(
                             slot: slot,

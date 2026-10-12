@@ -53,7 +53,12 @@ class AttendanceStatusButton extends StatelessWidget {
     final p = context.pal;
     final enabled = onPressed != null;
     final color = enabled || selected ? p.status(status) : p.textDisabled;
-    final background = selected ? p.statusBg(status) : p.surfaceHigh;
+    // Come nelle tavole: grigio scuro nel tema scuro, bianco nel chiaro.
+    final background = selected
+        ? p.statusBg(status)
+        : p.isDark
+        ? p.surfaceHigh
+        : p.surface;
     final label = FittedBox(
       fit: BoxFit.scaleDown,
       child: Text(
@@ -247,7 +252,14 @@ class AttendanceMemberRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+              if (trailing != null) ...[
+                const SizedBox(width: 8),
+                // Il nome ha la precedenza: a destra al massimo 150 punti.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: trailing,
+                ),
+              ],
             ],
           ),
         ),
@@ -262,6 +274,11 @@ class RowTrailingText extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) =>
-      Text(text, style: TextStyle(fontSize: 14, color: context.pal.textMuted));
+  Widget build(BuildContext context) => Text(
+    text,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    textAlign: TextAlign.end,
+    style: TextStyle(fontSize: 14, color: context.pal.textMuted),
+  );
 }

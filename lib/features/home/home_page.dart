@@ -293,17 +293,26 @@ class NextMatchCard extends ConsumerWidget {
     final team = event.team ?? mainTeam(myTeams);
     final headline = matchHeadline(event, team);
     final when = DateFormat("EEEE d MMMM, HH:mm", 'it').format(event.startsAt);
-    final kind = event.type == EventType.torneo ? 'Torneo' : 'Amichevole';
+    // "FVPA – 3ª giornata": la competizione va nell'etichetta, la giornata sotto.
+    final parts = headline.detail?.split(RegExp(r'\s+[–-]\s+'));
+    final competition = parts != null && parts.length > 1 ? parts.first : null;
+    final round = parts == null
+        ? null
+        : parts.length > 1
+        ? parts.skip(1).join(' – ')
+        : parts.first == event.type.label
+        ? null
+        : parts.first;
+    final kind =
+        competition ??
+        (event.type == EventType.torneo ? 'Torneo' : 'Amichevole');
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: AppCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SectionLabel(
-              'Prossima partita · $kind'
-              '${myTeams.length > 1 ? ' · ${teamTabLabel(team)}' : ''}',
-            ),
+            SectionLabel('Prossima partita · $kind'),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -315,7 +324,7 @@ class NextMatchCard extends ConsumerWidget {
                     children: [
                       Text(headline.title.toUpperCase(), style: _cardTitle(p)),
                       Text(
-                        [?headline.detail, when].join(' · '),
+                        [?round, when].join(' · '),
                         style: TextStyle(color: p.textSecondary, fontSize: 15),
                       ),
                     ],

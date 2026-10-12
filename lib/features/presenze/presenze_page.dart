@@ -308,14 +308,20 @@ class _DayPicker extends StatelessWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              title,
-                              style: TextStyle(
-                                fontFamily: sportFont,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 17,
-                                letterSpacing: 1,
-                                color: p.text,
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                    fontFamily: sportFont,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 17,
+                                    letterSpacing: 1,
+                                    color: p.text,
+                                  ),
+                                ),
                               ),
                             ),
                             Icon(
