@@ -34,9 +34,14 @@ String teamPillLabel(Team t) => switch (t) {
   Team.futuro => 'Futuro',
 };
 
-/// "FVPA Serie B – 2ª giornata", "Amichevole · Futuro · in trasferta".
+/// Competizione e giornata con il separatore delle tavole ("FVPA Serie B · 2ª
+/// giornata"), o il tipo di partita se non c'è.
+String competitionLabel(ClubMatch m) =>
+    (m.competition ?? m.kind.label).replaceAll(' – ', ' · ');
+
+/// "FVPA Serie B · 2ª giornata", "Amichevole · Futuro · in trasferta".
 String matchSubtitle(ClubMatch m) => [
-  m.competition ?? m.kind.label,
+  competitionLabel(m),
   if (m.team == Team.futuro) 'Futuro',
   if (!m.home) 'in trasferta',
 ].join(' · ');

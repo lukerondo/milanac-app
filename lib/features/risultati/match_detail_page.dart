@@ -208,7 +208,7 @@ class _ScoreHeader extends ConsumerWidget {
     final played = match.outcome != MatchOutcome.daGiocare;
     final (fg, bg) = outcomeColors(dark, match.outcome);
     final label = [
-      match.competition ?? match.kind.label,
+      competitionLabel(match),
       if (!match.home) 'in trasferta',
     ].join(' · ');
     final when = played
