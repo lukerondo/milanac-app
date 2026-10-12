@@ -461,9 +461,12 @@ select pg_temp.expect_error($q$select set_direttivo_password('prova-test', 'nuov
 
 -- Direttivo: serve la password del club; può stare in entrambe le squadre.
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a2');
-select pg_temp.expect_error(
-  $q$select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['milanac', 'futuro'], true, 'sbagliata', array['capitano'], 'CC', 10, 'ps5', '{}')$q$,
-  'Password del Direttivo');
+do $$ begin
+  assert (select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['milanac', 'futuro'], true, 'sbagliata', array['capitano'], 'CC', 10, 'ps5', '{}'))
+         = 'password_errata', 'password del Direttivo sbagliata';
+  assert (select requested_role from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 'giocatore',
+    'con la password sbagliata non si chiede il Direttivo';
+end $$;
 select pg_temp.expect_error(
   $q$select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['milanac', 'futuro'], true, 'prova-test', '{}', 'CC', 10, 'ps5', '{}')$q$,
   'almeno un ruolo');
@@ -753,10 +756,8 @@ do $$ begin
   assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3' and kind = 'nero_oro') = 2,
     'nero/oro per portiere e difensore';
   assert (select body from messages where meta->>'type' = 'special_cards')
-         = 'Carte speciali della ' || match_number('00000000-0000-0000-0000-0000000000b3')
-           || 'ª giornata (Milan AC 4–0 Lupi): POR e2 +5, DIF e1 +4. Blu elettrico: Rossi (tripletta contro Lupi).',
+         like 'Carte speciali della _ª giornata (Milan AC 4–0 Lupi): POR e2 +5, DIF e1 +4. Blu elettrico: Rossi (tripletta contro Lupi).',
     'annuncio in Comunicazioni';
-  assert match_number('00000000-0000-0000-0000-0000000000b3') between 1 and 3, 'numero della giornata';
   -- Nuova assegnazione: chi non è più in elenco perde la carta, i bonus si aggiornano, l'annuncio resta uno.
   assert assign_special_cards('00000000-0000-0000-0000-0000000000b3',
     '[{"player_id": "00000000-0000-0000-0000-0000000000e1", "bonus": 2}]') = 0, 'nessuna carta nuova';
@@ -784,6 +785,11 @@ do $$ begin
 end $$;
 reset role;
 do $$ begin
+  -- match_number non è più chiamabile dall'app: si controlla da amministratore.
+  assert (select body from messages where meta->>'type' = 'special_cards')
+         like 'Carte speciali della ' || match_number('00000000-0000-0000-0000-0000000000b3') || 'ª giornata%',
+    'numero della giornata nell''annuncio';
+  assert match_number('00000000-0000-0000-0000-0000000000b3') between 1 and 3, 'numero della giornata';
   assert (select count(*) from net.calls where body->>'kind' = 'special_card') = 4,
     'un avviso per ogni carta ricevuta (blu Rossi, nero/oro e1 ed e2, blu portiere)';
   assert (select count(*) from net.calls where body->>'kind' = 'special_cards_week') = 2,
@@ -885,7 +891,8 @@ do $$ begin
   assert (select count(*) from voice_sessions where room_id = current_setting('test.stanza')::uuid and left_at is null) = 2,
     'due dentro';
   assert (select muted from voice_sessions where id = current_setting('test.sessione_e2')::uuid), 'muto registrato';
-  assert (select agora_uid from voice_sessions where id = current_setting('test.sessione_e2')::uuid) = 12345, 'uid Agora';
+  assert (select agora_uid from voice_sessions where id = current_setting('test.sessione_e2')::uuid) = 1428969133,
+    'uid Agora calcolato dal server (lo stesso dell''app), non quello passato';
 end $$;
 select leave_voice_room(current_setting('test.sessione_e2')::uuid);
 do $$ begin
@@ -953,3 +960,319 @@ end $$;
 select pg_temp.expect_error($q$select enter_club()$q$, 'regolamento da accettare');
 reset role;
 rollback;
+
+-- ---------------------------------------------------------------- sicurezza (0022)
+reset role;
+select pg_temp.as_user(null);
+select set_config('milanac.now', '', false);
+update app_config set value = crypt('prova-test', gen_salt('bf')) where key = 'direttivo_password_hash';
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000f1', 'f1@example.com'),
+  ('00000000-0000-0000-0000-0000000000f2', 'f2@example.com');
+-- f1 è nel Direttivo, poi viene rimosso (active = false): perde subito i poteri.
+update profiles set club_role = 'direttivo' where id = '00000000-0000-0000-0000-0000000000f1';
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000f1');
+do $$ begin
+  assert is_direttivo(), 'Direttivo attivo';
+end $$;
+reset role;
+update profiles set active = false where id = '00000000-0000-0000-0000-0000000000f1';
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000f1');
+do $$ begin
+  assert not is_direttivo(), 'il Direttivo rimosso non ha più poteri';
+end $$;
+select pg_temp.expect_error(
+  $q$insert into matches (kind, opponent, played_at) values ('amichevole', 'Intrusi', now())$q$,
+  'row-level security');
+select pg_temp.expect_error(
+  $q$update profiles set active = true where id = '00000000-0000-0000-0000-0000000000f1'$q$,
+  'Solo il Direttivo');
+
+-- Password del Direttivo: 5 tentativi sbagliati ogni 15 minuti, poi blocco (anche con quella giusta).
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000f2');
+do $$
+declare i int;
+begin
+  for i in 1..5 loop
+    assert (select complete_registration('Ugo', 'Neri', 1990, 'NERI', null, array['milanac'], true, 'tentativo', array['capitano'], 'CC', 7, 'ps5', '{}'))
+           = 'password_errata', 'tentativo sbagliato';
+  end loop;
+end $$;
+select pg_temp.expect_error(
+  $q$select complete_registration('Ugo', 'Neri', 1990, 'NERI', null, array['milanac'], true, 'prova-test', array['capitano'], 'CC', 7, 'ps5', '{}')$q$,
+  'Troppi tentativi');
+reset role;
+do $$ begin
+  assert (select count(*) from direttivo_password_attempts
+          where user_id = '00000000-0000-0000-0000-0000000000f2') = 5, 'tentativi registrati';
+end $$;
+delete from direttivo_password_attempts;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000f2');
+do $$ begin
+  assert (select complete_registration('Ugo', 'Neri', 1990, 'NERI', null, array['milanac'], true, 'prova-test', array['capitano'], 'CC', 7, 'ps5', '{}'))
+         = 'ok', 'con la password giusta si completa';
+end $$;
+-- Chi è già nel club non ripassa dalla registrazione (squadre e ruolo li cambia il Direttivo).
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
+select pg_temp.expect_error(
+  $q$select complete_registration('Mario', 'Rossi', 1995, 'ROSSI', null, array['futuro'], false, null, null, 'ATT', 9, 'ps5', '{}')$q$,
+  'già nel club');
+-- Il permesso della registrazione vale per un solo aggiornamento del profilo:
+-- il primo passa, il secondo nella stessa transazione no.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000f2');
+select pg_temp.expect_error(
+  $q$do $d$ begin
+       perform set_config('milanac.registration', '1', true);
+       update profiles set overall = 98 where id = '00000000-0000-0000-0000-0000000000f2';
+       update profiles set overall = 99 where id = '00000000-0000-0000-0000-0000000000f2';
+     end $d$$q$,
+  'Solo il Direttivo');
+
+-- Allegati: solo dalla propria cartella; i file della Sala Direttivo li legge solo chi vede il canale.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, image_path) select id, '00000000-0000-0000-0000-0000000000e2/foto.jpg' from channels where slug = 'main'$q$,
+  'Allegato non valido');
+reset role;
+insert into storage.objects (bucket_id, name) values
+  ('chat', '00000000-0000-0000-0000-00000000000d/segreto.jpg'),
+  ('chat', '00000000-0000-0000-0000-0000000000e2/vocale.m4a');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into messages (channel_id, image_path)
+  select id, '00000000-0000-0000-0000-00000000000d/segreto.jpg' from channels where slug = 'direttivo';
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+insert into messages (channel_id, audio_path, duration_s)
+  select id, '00000000-0000-0000-0000-0000000000e2/vocale.m4a', 12 from channels where slug = 'main';
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert (select count(*) from storage.objects
+          where name = '00000000-0000-0000-0000-00000000000d/segreto.jpg') = 0,
+    'il file della Sala Direttivo non si legge';
+  assert (select count(*) from storage.objects
+          where name = '00000000-0000-0000-0000-0000000000e2/vocale.m4a') = 1,
+    'il vocale del canale generale sì';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select count(*) from storage.objects
+          where name = '00000000-0000-0000-0000-00000000000d/segreto.jpg') = 1,
+    'il Direttivo legge i suoi allegati';
+end $$;
+
+-- Marcatori: il nome sulla carta vale più del gamertag copiato; un nome ambiguo non assegna gol.
+reset role;
+update profiles set display_name = 'VERDI', gamertag = null, teams = array['milanac'], active = true
+  where id = '00000000-0000-0000-0000-0000000000e1';
+update profiles set gamertag = 'verdi', teams = array['milanac'], active = true
+  where id = '00000000-0000-0000-0000-0000000000e2';
+do $$ begin
+  assert (select count(*) from scorer_goals('Verdi 3', 'milanac')) = 1, 'un solo marcatore';
+  assert (select player_id from scorer_goals('Verdi 3', 'milanac')) = '00000000-0000-0000-0000-0000000000e1',
+    'conta il nome sulla carta';
+  assert (select goals from scorer_goals('Verdi 3', 'milanac')) = 3, 'tre gol';
+end $$;
+update profiles set display_name = 'VERDI' where id = '00000000-0000-0000-0000-0000000000e2';
+do $$ begin
+  assert (select count(*) from scorer_goals('Verdi 3', 'milanac')) = 0, 'due carte uguali: nessun gol assegnato';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error($q$select * from scorer_goals('Verdi', 'milanac')$q$, 'permission denied');
+
+-- Token del telefono: passa all'account che lo registra.
+select register_device_token('token-condiviso', 'android');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+select register_device_token('token-condiviso', 'android');
+reset role;
+do $$ begin
+  assert (select user_id from device_tokens where token = 'token-condiviso') = '00000000-0000-0000-0000-0000000000e2',
+    'il token segue l''account attuale';
+  assert agora_uid_for('00000000-0000-0000-0000-00000000000d') = 1428967540, 'stesso numero Agora dell''app';
+end $$;
+
+-- Eliminazione dell'account: le foto vanno nella coda di pulizia.
+insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-0000000000f2/foto.jpg');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000f2');
+select delete_my_account();
+reset role;
+do $$ begin
+  assert (select count(*) from profiles where id = '00000000-0000-0000-0000-0000000000f2') = 0, 'account eliminato';
+  assert (select count(*) from storage_cleanup
+          where bucket = 'avatars' and path = '00000000-0000-0000-0000-0000000000f2/foto.jpg') = 1,
+    'foto in coda per la pulizia';
+end $$;
+
+-- ================================================================ affidabilità (0023)
+reset role;
+select pg_temp.as_user(null);
+select set_config('milanac.now', '', false);
+do $$ begin
+  assert (select count(*) from pg_publication_tables where pubname = 'supabase_realtime'
+          and tablename in ('matches', 'match_media', 'tournaments', 'tactics', 'channels')) = 5,
+    'tempo reale per partite, foto e video, tornei, schemi e canali';
+end $$;
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000a9', 'b@example.com');
+update profiles set club_role = 'giocatore', display_name = 'GIALLI', teams = array['milanac'],
+  field_position = 'ATT', active = true
+  where id = '00000000-0000-0000-0000-0000000000a9';
+
+-- Carte nero/oro: due giocatori si scambiano il reparto; un giocatore riceve una sola carta.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select assign_special_cards('00000000-0000-0000-0000-0000000000b3',
+  '[{"player_id": "00000000-0000-0000-0000-0000000000e1", "reparto": "DIF"},
+    {"player_id": "00000000-0000-0000-0000-0000000000e2", "reparto": "CEN"}]');
+select assign_special_cards('00000000-0000-0000-0000-0000000000b3',
+  '[{"player_id": "00000000-0000-0000-0000-0000000000e1", "reparto": "CEN"},
+    {"player_id": "00000000-0000-0000-0000-0000000000e2", "reparto": "DIF"}]');
+do $$ begin
+  assert (select reparto from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
+          and kind = 'nero_oro' and player_id = '00000000-0000-0000-0000-0000000000e1') = 'CEN', 'reparti scambiati (e1)';
+  assert (select reparto from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
+          and kind = 'nero_oro' and player_id = '00000000-0000-0000-0000-0000000000e2') = 'DIF', 'reparti scambiati (e2)';
+end $$;
+select pg_temp.expect_error(
+  $q$select assign_special_cards('00000000-0000-0000-0000-0000000000b3',
+    '[{"player_id": "00000000-0000-0000-0000-0000000000e1", "reparto": "DIF"},
+      {"player_id": "00000000-0000-0000-0000-0000000000e1", "reparto": "CEN"}]')$q$,
+  'una sola carta');
+
+-- Carte blu: una correzione dei marcatori che toglie la tripletta toglie anche la carta.
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against, scorers)
+values ('00000000-0000-0000-0000-0000000000b9', 'amichevole', 'Prova', now() + interval '5 days',
+        'milanac', 4, 1, 'Gialli 3, Verdi');
+do $$ begin
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b9'
+          and kind = 'blu' and player_id = '00000000-0000-0000-0000-0000000000a9') = 1, 'tripletta: carta blu';
+end $$;
+update matches set scorers = 'Gialli 2, Verdi 2' where id = '00000000-0000-0000-0000-0000000000b9';
+do $$ begin
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b9'
+          and kind = 'blu') = 0, 'niente più tripletta: carta blu tolta';
+end $$;
+update matches set scorers = 'Gialli x3' where id = '00000000-0000-0000-0000-0000000000b9';
+update matches set goals_for = null, goals_against = null where id = '00000000-0000-0000-0000-0000000000b9';
+do $$ begin
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b9') = 0,
+    'risultato tolto: carta blu tolta';
+end $$;
+
+-- Giornata: due partite ufficiali alla stessa ora contano nell'ordine di inserimento.
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against)
+values ('00000000-0000-0000-0000-0000000000c1', 'torneo', 'Alfa', date_trunc('day', now()) + interval '6 days 21 hours 30 minutes',
+        'milanac', 2, 1);
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against)
+values ('00000000-0000-0000-0000-0000000000c0', 'torneo', 'Beta', date_trunc('day', now()) + interval '6 days 21 hours 30 minutes',
+        'milanac', 1, 1);
+reset role;
+do $$ begin
+  assert match_number('00000000-0000-0000-0000-0000000000c1') + 1 = match_number('00000000-0000-0000-0000-0000000000c0'),
+    'a parità di orario vale l''ordine di inserimento';
+end $$;
+
+-- Serie del portiere: correggere una partita ricontrolla le due successive.
+update profiles set field_position = 'POR' where id = '00000000-0000-0000-0000-0000000000a9';
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against, goalkeeper_id, created_at) values
+  ('00000000-0000-0000-0000-0000000000d1', 'torneo', 'Uno', now() + interval '20 days', 'milanac', 1, 0, '00000000-0000-0000-0000-0000000000a9', now()),
+  ('00000000-0000-0000-0000-0000000000d2', 'torneo', 'Due', now() + interval '21 days', 'milanac', 1, 0, '00000000-0000-0000-0000-0000000000a9', now()),
+  ('00000000-0000-0000-0000-0000000000d3', 'torneo', 'Tre', now() + interval '22 days', 'milanac', 1, 0, '00000000-0000-0000-0000-0000000000a9', now());
+do $$ begin
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000d3'
+          and kind = 'blu' and player_id = '00000000-0000-0000-0000-0000000000a9') = 1, 'tre porte inviolate: carta blu';
+end $$;
+update matches set goals_against = 2 where id = '00000000-0000-0000-0000-0000000000d1';
+do $$ begin
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000d3'
+          and kind = 'blu') = 0, 'la prima partita ha subito gol: la carta della terza cade';
+end $$;
+
+-- Traguardi: le risposte per i giorni futuri non contano.
+insert into attendance (player_id, date, status) values
+  ('00000000-0000-0000-0000-0000000000a9', (now() at time zone 'Europe/Rome')::date + 1, 'presente'),
+  ('00000000-0000-0000-0000-0000000000a9', (now() at time zone 'Europe/Rome')::date + 2, 'presente');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a9');
+do $$ begin
+  assert (player_stats('00000000-0000-0000-0000-0000000000a9')->>'presences')::int = 0,
+    'le presenze future non contano';
+end $$;
+
+-- Formazione: salvata in un colpo solo, solo dal Direttivo.
+select pg_temp.expect_error(
+  $q$select save_formation(null, 'futuro', '4-4-2', '[]')$q$, 'Solo il Direttivo');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select set_config('test.formazione', save_formation(null, 'futuro', '4-4-2',
+  '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "00000000-0000-0000-0000-0000000000e2"},
+    {"slot_index": 1, "x": 0.2, "y": 0.7, "label": "TS", "player_id": null}]')::text, false);
+do $$ begin
+  assert (select count(*) from formation_slots where formation_id = current_setting('test.formazione')::uuid) = 2,
+    'posti salvati';
+  assert save_formation(current_setting('test.formazione')::uuid, 'futuro', '3-5-2',
+    '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": null}]') = current_setting('test.formazione')::uuid,
+    'stessa formazione aggiornata';
+  assert (select count(*) from formation_slots where formation_id = current_setting('test.formazione')::uuid) = 1,
+    'i posti si sostituiscono';
+  assert (select module from formations where id = current_setting('test.formazione')::uuid) = '3-5-2', 'modulo aggiornato';
+end $$;
+select pg_temp.expect_error(
+  $q$select save_formation(null, 'futuro', '4-4-2', '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "non-un-id"}]')$q$,
+  'uuid');
+
+-- Stanza vocale: una stanza per volta; il segno di vita dice se si è ancora dentro.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select set_config('test.stanza_a', open_voice_room((select id from channels where slug = 'main'))::text, false);
+select set_config('test.sessione_a', (select id from voice_sessions
+  where room_id = current_setting('test.stanza_a')::uuid and left_at is null)::text, false);
+select set_config('test.stanza_b', open_voice_room((select id from channels where slug = 'milanac'))::text, false);
+do $$ begin
+  assert current_setting('test.stanza_a') <> current_setting('test.stanza_b'), 'due stanze diverse';
+  assert (select count(*) from voice_sessions
+          where user_id = '00000000-0000-0000-0000-0000000000e1' and left_at is null) = 1,
+    'entrando in un''altra stanza si esce dalla prima';
+  assert (select closed_at is not null from voice_rooms where id = current_setting('test.stanza_a')::uuid),
+    'la prima stanza, rimasta vuota, si chiude';
+  assert voice_heartbeat(current_setting('test.sessione_a')::uuid) = false, 'sessione chiusa: il segno di vita lo dice';
+end $$;
+select leave_voice_room((select id from voice_sessions
+  where user_id = '00000000-0000-0000-0000-0000000000e1' and left_at is null));
+-- Finiti i 10.000 minuti gratuiti del mese non si entra più.
+reset role;
+insert into voice_sessions (room_id, user_id, joined_at, heartbeat_at, left_at)
+select current_setting('test.stanza_a')::uuid, '00000000-0000-0000-0000-0000000000e2', t, t, t + interval '10000 minutes'
+from (select (date_trunc('month', now() at time zone 'Europe/Rome') at time zone 'Europe/Rome') as t) x;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$select open_voice_room((select id from channels where slug = 'main'))$q$, 'minuti gratuiti');
+reset role;
+delete from voice_sessions where left_at - joined_at = interval '10000 minutes';
+do $$ begin
+  assert (select count(*) from voice_rooms where closed_at is null) = 0, 'nessuna stanza aperta per errore';
+end $$;
+
+-- Chat: "letto fino a" con l'ora del server, mai nel futuro e mai all'indietro.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select mark_channel_read((select id from channels where slug = 'main'), now() + interval '1 day');
+do $$ begin
+  assert (select last_read_at from channel_reads where user_id = '00000000-0000-0000-0000-0000000000e1'
+          and channel_id = (select id from channels where slug = 'main')) <= now(), 'mai oltre adesso';
+end $$;
+select mark_channel_read((select id from channels where slug = 'main'), now() - interval '1 day');
+do $$ begin
+  assert (select last_read_at from channel_reads where user_id = '00000000-0000-0000-0000-0000000000e1'
+          and channel_id = (select id from channels where slug = 'main')) > now() - interval '1 hour',
+    'mai all''indietro';
+end $$;
+select mark_channel_read((select id from channels where slug = 'direttivo'), now());
+do $$ begin
+  assert (select count(*) from channel_reads where user_id = '00000000-0000-0000-0000-0000000000e1'
+          and channel_id = (select id from channels where slug = 'direttivo')) = 0,
+    'niente "letto" sui canali che non si vedono';
+end $$;
+reset role;

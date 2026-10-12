@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../auth/providers.dart';
 import '../config.dart';
@@ -15,12 +16,23 @@ class DeviceTokens {
     final client = _ref.read(supabaseProvider);
     final userId = client.auth.currentUser?.id;
     if (userId == null) return;
-    await client.from('device_tokens').upsert({
-      'token': token,
-      'user_id': userId,
-      'platform': defaultTargetPlatform.name,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    });
+    try {
+      // La funzione passa il token all'account attuale anche se il telefono
+      // era registrato con un altro account (l'upsert diretto lo vieterebbe).
+      await client.rpc(
+        'register_device_token',
+        params: {'p_token': token, 'p_platform': defaultTargetPlatform.name},
+      );
+    } on PostgrestException catch (e) {
+      // Database non ancora aggiornato (funzione mancante): come prima.
+      if (e.code != 'PGRST202') rethrow;
+      await client.from('device_tokens').upsert({
+        'token': token,
+        'user_id': userId,
+        'platform': defaultTargetPlatform.name,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    }
   }
 
   Future<void> remove(String token) async {

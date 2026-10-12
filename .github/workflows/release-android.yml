@@ -21,19 +21,20 @@ jobs:
           channel: stable
           cache: true
       - name: Chiave di firma
+        # Le password passano dall'ambiente, non dal testo dello script: un "$" o un apice
+        # nella password non vengono interpretati dalla shell.
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
             echo "::error::Secret ANDROID_KEYSTORE_BASE64 mancante (vedi docs/PUBBLICAZIONE.md)"; exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
-          cat > android/key.properties <<PROPS
-          storeFile=upload-keystore.jks
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          PROPS
+          printf 'storeFile=upload-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
       - run: flutter pub get
       - run: flutter test
       - name: App Bundle

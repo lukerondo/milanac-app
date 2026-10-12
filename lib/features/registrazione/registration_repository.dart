@@ -78,9 +78,14 @@ class _SupabaseRegistrationRepository implements RegistrationRepository {
 
   @override
   Future<void> complete(RegistrationData data) async {
-    await _ref
+    final result = await _ref
         .read(supabaseProvider)
         .rpc('complete_registration', params: data.toParams());
+    // La password sbagliata non è un errore del database (così il tentativo resta
+    // contato per il limite di 5 ogni 15 minuti): arriva come risposta.
+    if (result == 'password_errata') {
+      throw const RegistrationError('Password del Direttivo non corretta');
+    }
   }
 
   @override
@@ -106,9 +111,19 @@ class DemoRegistrationRepository implements RegistrationRepository {
       newPassword = next;
 }
 
+/// Errore della registrazione con il testo già pronto da mostrare.
+class RegistrationError implements Exception {
+  const RegistrationError(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 /// Testo comprensibile per gli errori della registrazione (le regole del database
-/// parlano già italiano: "Password del Direttivo non corretta", ...).
+/// parlano già italiano: "Troppi tentativi con la password del Direttivo", ...).
 String friendlyRegistrationError(Object e) {
+  if (e is RegistrationError) return e.message;
   if (e is PostgrestException) return e.message;
   final s = e.toString();
   if (s.contains('SocketException') || s.contains('Failed host lookup')) {

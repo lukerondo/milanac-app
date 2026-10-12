@@ -97,8 +97,9 @@ class VoiceException implements Exception {
 }
 
 /// Numero utente Agora ricavato dall'id del profilo: sempre lo stesso per la
-/// stessa persona, così la stanza sa subito chi sta parlando (i biglietti sono
-/// validi per qualsiasi numero).
+/// stessa persona, così la stanza sa subito chi sta parlando. Lo stesso calcolo
+/// sta nella funzione `voice-token` (il biglietto vale solo per questo numero) e
+/// nel database (`agora_uid_for`).
 int agoraUidFor(String userId) {
   var h = 0;
   for (final c in userId.codeUnits) {

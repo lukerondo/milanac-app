@@ -207,6 +207,10 @@ async function videoPublishedPushes(db: SupabaseClient, linkId: string): Promise
   const { data: v } = await db
     .from("shared_links").select("id, title, created_by, published_by").eq("id", linkId).single();
   if (!v || !v.created_by || v.created_by === v.published_by) return [];
+  // Chi nel frattempo è uscito dal club non riceve più avvisi.
+  const { data: author } = await db
+    .from("profiles").select("active, club_role").eq("id", v.created_by).maybeSingle();
+  if (!author?.active || author.club_role === "pending") return [];
   return [{
     userId: v.created_by,
     title: "🎬 Il tuo video è stato pubblicato",
@@ -398,21 +402,34 @@ async function sendAll(db: SupabaseClient, account: ServiceAccount, pushes: Push
             message: {
               token: t.token,
               notification: { title: p.title, body: p.body },
-              data: { route: p.route, ...(p.data ?? {}) },
-              android: { priority: "high", notification: { color: "#C61C23" } },
+              // FCM accetta solo testi nei dati.
+              data: Object.fromEntries(
+                Object.entries({ route: p.route, ...(p.data ?? {}) }).map(([k, v]) => [k, String(v)]),
+              ),
+              android: { priority: "high", notification: { color: "#D6B354" } },
               apns: { payload: { aps: { sound: "default" } } },
             },
           }),
         },
       );
       if (res.ok) sent++;
-      else if (res.status === 404 || res.status === 400) {
-        // Token scaduto o non valido: lo rimuoviamo.
+      else if (await isDeadToken(res)) {
+        // App disinstallata o token non più valido: lo rimuoviamo.
         await db.from("device_tokens").delete().eq("token", t.token);
       }
     }
   }
   return sent;
+}
+
+/// Il token non vale più solo se FCM lo dice (UNREGISTERED o token non valido):
+/// un 400 per un messaggio sbagliato non deve cancellare i token di tutti.
+async function isDeadToken(res: Response): Promise<boolean> {
+  if (res.status !== 404 && res.status !== 400) return false;
+  const err = (await res.json().catch(() => ({})))?.error ?? {};
+  const codes = ((err.details ?? []) as { errorCode?: string }[]).map((d) => d.errorCode);
+  if (codes.includes("UNREGISTERED")) return true;
+  return res.status === 400 && /registration token/i.test(String(err.message ?? ""));
 }
 
 type ServiceAccount = { client_email: string; private_key: string; project_id: string };
