@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/providers.dart';
@@ -18,37 +19,27 @@ const _anyRole = 'Tutti i ruoli';
 
 /// Mondo Proclub: le notizie dal mondo FC e i video dei creator (pubblicati dal
 /// Direttivo, proposti dai giocatori), come la tavola.
-class MondoPage extends ConsumerStatefulWidget {
-  const MondoPage({super.key, this.initialTab});
+///
+/// La scheda scelta sta nella rotta (`/mondo?scheda=notizie`), come in Partite: anche
+/// le schede in alto cambiano la rotta, così una notifica la segue sempre, anche se
+/// arriva una seconda volta con la stessa `?scheda=`.
+class MondoPage extends ConsumerWidget {
+  const MondoPage({super.key, this.tab});
 
   /// "video" (predefinita) oppure "notizie".
-  final String? initialTab;
+  final String? tab;
+
+  /// Le schede nell'ordine della tavola.
+  static const tabs = ['notizie', 'video'];
 
   @override
-  ConsumerState<MondoPage> createState() => _MondoPageState();
-}
-
-class _MondoPageState extends ConsumerState<MondoPage> {
-  /// 0 = Notizie, 1 = Video (l'ordine della tavola); senza scheda, i video.
-  late int _tab = _indexOf(widget.initialTab);
-
-  static int _indexOf(String? tab) => tab == 'notizie' ? 0 : 1;
-
-  @override
-  void didUpdateWidget(covariant MondoPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Stessa pagina, rotta cambiata (es. da una notifica): cambia scheda.
-    if (widget.initialTab != oldWidget.initialTab) {
-      setState(() => _tab = _indexOf(widget.initialTab));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
+    // 0 = Notizie, 1 = Video; senza scheda, i video.
+    final selected = tab == 'notizie' ? 0 : 1;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: _tab == 1
+      floatingActionButton: selected == 1
           ? FloatingActionButton.extended(
               heroTag: 'video',
               onPressed: () => proposeVideo(context, ref),
@@ -62,12 +53,14 @@ class _MondoPageState extends ConsumerState<MondoPage> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: SegmentedTabs(
               labels: const ['Notizie', 'Video'],
-              selected: _tab,
-              onSelected: (i) => setState(() => _tab = i),
+              selected: selected,
+              onSelected: (i) {
+                if (i != selected) context.go('/mondo?scheda=${tabs[i]}');
+              },
             ),
           ),
           // Solo la scheda scelta resta costruita (e collegata al server).
-          Expanded(child: _tab == 0 ? const NewsList() : const _VideoTab()),
+          Expanded(child: selected == 0 ? const NewsList() : const _VideoTab()),
         ],
       ),
     );

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/appearance.dart';
 import 'package:milanac/core/clock.dart';
+import 'package:milanac/core/teams.dart';
 import 'package:milanac/core/theme.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/musica/soundtrack.dart';
@@ -156,5 +157,53 @@ void main() {
     // In muto, così il lettore non resta acceso a fine prova.
     await c.read(soundtrackProvider.notifier).toggleMute();
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('Badge delle squadre leggibili in tutti e due i temi: FUTURO con '
+      'il grigio del tema, MILAN AC in oro pieno', (tester) async {
+    /// Contrasto WCAG tra due colori (da 1 a 21).
+    double contrast(Color a, Color b) {
+      final (light, dark) = a.computeLuminance() > b.computeLuminance()
+          ? (a, b)
+          : (b, a);
+      return (light.computeLuminance() + .05) / (dark.computeLuminance() + .05);
+    }
+
+    for (final (brightness, palette) in [
+      (Brightness.light, AppPalette.light),
+      (Brightness.dark, AppPalette.dark),
+    ]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(brightness),
+          home: const Scaffold(
+            body: Row(
+              children: [
+                TeamBadge(Team.milanac, small: true),
+                TeamBadge(Team.futuro, small: true),
+              ],
+            ),
+          ),
+        ),
+      );
+      // Il cambio di tema è animato.
+      await tester.pumpAndSettle();
+      final futuro = tester.widget<Text>(find.text('FUTURO')).style!.color!;
+      expect(futuro, palette.textMuted, reason: '$brightness');
+      // Testo piccolo (10 punti): almeno 4,5:1 sul fondo delle pagine e delle card.
+      for (final background in [palette.bg, palette.surface]) {
+        expect(
+          contrast(futuro, background),
+          greaterThanOrEqualTo(4.5),
+          reason: '$brightness',
+        );
+      }
+      final milan = tester.widget<Text>(find.text('MILAN AC'));
+      expect(milan.style!.color, MilanacColors.ink);
+      expect(
+        contrast(MilanacColors.ink, MilanacColors.gold),
+        greaterThanOrEqualTo(4.5),
+      );
+    }
   });
 }

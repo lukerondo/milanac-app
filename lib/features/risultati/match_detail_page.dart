@@ -9,6 +9,7 @@ import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/errors.dart';
+import '../../core/italian_time.dart';
 import '../../core/push/push_service.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
@@ -211,8 +212,10 @@ class _ScoreHeader extends ConsumerWidget {
       competitionLabel(match),
       if (!match.home) 'in trasferta',
     ].join(' · ');
+    // L'orario della partita è già in ora italiana; relativeDay vuole l'istante.
     final when = played
-        ? '${outcomeLabel(match.outcome)} · ${relativeDay(match.playedAt, now)}'
+        ? '${outcomeLabel(match.outcome)} · '
+              '${relativeDay(fromItalianClock(match.playedAt), now)}'
         : 'Da giocare · ${DateFormat("EEEE d MMMM, HH:mm", 'it').format(match.playedAt)}';
     return ColoredBox(
       color: context.pal.hero,

@@ -92,13 +92,14 @@ void main() {
       reason: 'con entrambe le squadre vince il primo della serata',
     );
     expect(
-      eveningEvent([domani, riunione, partita, futuro], day, teams: {Team.milanac}).id,
+      eveningEvent(
+        [domani, riunione, partita, futuro],
+        day,
+        teams: {Team.milanac},
+      ).id,
       'p',
     );
-    expect(
-      eveningEvent([futuro, partita], day, teams: {Team.futuro}).id,
-      'f',
-    );
+    expect(eveningEvent([futuro, partita], day, teams: {Team.futuro}).id, 'f');
     expect(
       eveningEvent([futuro], day, teams: {Team.milanac}).type,
       EventType.allenamento,

@@ -97,13 +97,16 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
+            // I limiti sono quelli della tabella `profiles`.
             TextField(
               controller: _name,
+              maxLength: 40,
               decoration: const InputDecoration(labelText: 'Nome'),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _gamertag,
+              maxLength: 40,
               decoration: const InputDecoration(labelText: 'Gamertag'),
             ),
             const SizedBox(height: 12),

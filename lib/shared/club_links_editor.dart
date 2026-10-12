@@ -7,6 +7,13 @@ import 'async_view.dart';
 import 'club_links.dart';
 import 'ui.dart';
 
+/// I contatti letti all'apertura dell'editor: si parte sempre da quelli del server. La
+/// pagina Club può averli in memoria da ore, e salvando quelli si cancellerebbero i
+/// contatti cambiati nel frattempo da un altro telefono.
+final _editingLinksProvider = FutureProvider.autoDispose<List<ClubLink>>(
+  (ref) => ref.watch(clubLinksRepositoryProvider).load(),
+);
+
 /// Editor dei contatti social (solo Direttivo).
 class ClubLinksEditorPage extends ConsumerStatefulWidget {
   const ClubLinksEditorPage({super.key, required this.initial});
@@ -72,7 +79,7 @@ class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final loaded = ref.watch(clubLinksProvider);
+    final loaded = ref.watch(_editingLinksProvider);
     if (_rows == null && loaded.hasValue) {
       _rows = [for (final l in loaded.requireValue) _Row(l.kind, l.url)];
     }
@@ -107,7 +114,7 @@ class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
       body: rows == null
           ? AsyncView(
               value: loaded,
-              onRetry: () => ref.invalidate(clubLinksProvider),
+              onRetry: () => ref.invalidate(_editingLinksProvider),
               data: (_) => const SizedBox.shrink(),
             )
           : ListView(

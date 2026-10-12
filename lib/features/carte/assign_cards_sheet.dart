@@ -21,6 +21,28 @@ Future<void> showAssignCardsSheet(BuildContext context, ClubMatch match) =>
       builder: (_) => _AssignSheet(match: match),
     );
 
+/// Chi può ricevere la nero/oro di [match] (come controlla `assign_special_cards`): i
+/// membri attivi della squadra della partita, tranne chi ne ha già la blu elettrico (la
+/// blu ha la precedenza).
+Set<String> cardCandidates(
+  ClubMatch match,
+  Iterable<Member> rosa,
+  Iterable<SpecialCard> cards,
+) {
+  final blue = {
+    for (final c in cards)
+      if (c.matchId == match.id && c.isBlue) c.playerId,
+  };
+  return {
+    for (final m in rosa)
+      if (m.active &&
+          m.role != ClubRole.pending &&
+          m.inTeam(match.team) &&
+          !blue.contains(m.id))
+        m.id,
+  };
+}
+
 /// Il reparto in cui [playerId] è già premiato, escluso [reparto] (null = nessuno).
 String? repartoTakenBy(
   Map<String, String?> chosen,
@@ -62,9 +84,16 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
 
   Future<void> _save() async {
     final messenger = ScaffoldMessenger.of(context);
+    // Chi non si può più scegliere non si manda (il server lo rifiuterebbe con "non è
+    // della squadra"): la sua carta si toglie, come dice l'avviso sotto il reparto.
+    final candidates = cardCandidates(
+      widget.match,
+      ref.read(rosaProvider).value ?? const [],
+      ref.read(specialCardsProvider).value ?? const [],
+    );
     final awards = [
       for (final r in reparti)
-        if (_chosen[r] case final id?)
+        if (_chosen[r] case final id? when candidates.contains(id))
           CardAward(playerId: id, reparto: r, bonus: _bonus[r] ?? 5),
     ];
     // Un giocatore, una carta (lo rifiuta anche il server).
@@ -131,8 +160,9 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
     final cards = cardsValue.requireValue;
     _loadExisting(cards);
     final team = widget.match.team;
+    final rosa = rosaValue.requireValue;
     final members =
-        rosaValue.requireValue
+        rosa
             .where(
               (m) => m.active && m.role != ClubRole.pending && m.inTeam(team),
             )
@@ -143,6 +173,23 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
         .toList();
     final blueIds = blue.map((c) => c.playerId).toSet();
     final byId = {for (final m in members) m.id: m};
+    final candidates = cardCandidates(widget.match, rosa, cards);
+    final everyone = {for (final m in rosa) m.id: m};
+
+    /// Il premiato di prima che non si può più scegliere, con il motivo (null = nessuno).
+    String? lost(String reparto) {
+      final id = _chosen[reparto];
+      if (id == null || candidates.contains(id)) return null;
+      final m = everyone[id];
+      final why = blueIds.contains(id)
+          ? 'ha la blu elettrico di questa partita'
+          : m == null || !m.active || m.role == ClubRole.pending
+          ? 'non è più nella rosa'
+          : 'non gioca più in ${team.label}';
+      return '${m?.displayName ?? 'Un ex membro'} $why: salvando, la sua carta '
+          'nero/oro si toglie.';
+    }
+
     final p = context.pal;
 
     return Padding(
@@ -184,7 +231,10 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
               _RepartoPicker(
                 reparto: r,
                 members: members.where((m) => !blueIds.contains(m.id)).toList(),
-                value: _chosen[r],
+                // Chi non si può più scegliere non compare come scelto (e non si
+                // manda): lo dice l'avviso sotto.
+                value: lost(r) == null ? _chosen[r] : null,
+                lost: lost(r),
                 takenBy: (id) => repartoTakenBy(_chosen, id, r),
                 bonus: _bonus[r] ?? 5,
                 onChanged: (id) => setState(() => _chosen[r] = id),
@@ -218,10 +268,14 @@ class _RepartoPicker extends StatelessWidget {
     required this.bonus,
     required this.onChanged,
     required this.onBonus,
+    this.lost,
   });
   final String reparto;
   final List<Member> members;
   final String? value;
+
+  /// Avviso sul premiato di prima che non si può più scegliere (null = nessuno).
+  final String? lost;
   final String? Function(String playerId) takenBy;
   final int bonus;
   final ValueChanged<String?> onChanged;
@@ -267,6 +321,27 @@ class _RepartoPicker extends StatelessWidget {
           ],
           onChanged: onChanged,
         ),
+        if (lost case final warning?)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 18,
+                  color: context.pal.warning,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    warning,
+                    style: TextStyle(fontSize: 14, color: context.pal.warning),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (value != null)
           Row(
             children: [

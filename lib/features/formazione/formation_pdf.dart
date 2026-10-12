@@ -209,12 +209,15 @@ Future<Uint8List> buildFormationPdf({
   required Uint8List image,
   DateTime? date,
 }) async {
-  final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/Oswald-500.ttf'));
+  final bold = pw.Font.ttf(
+    await rootBundle.load('assets/fonts/Oswald-500.ttf'),
+  );
   final regular = pw.Font.ttf(
     await rootBundle.load('assets/fonts/Oswald-400.ttf'),
   );
   final crest = pw.MemoryImage(
-    (await rootBundle.load('assets/images/stemma_256.png')).buffer.asUint8List(),
+    (await rootBundle.load('assets/images/stemma_256.png')).buffer
+        .asUint8List(),
   );
   final when = DateFormat(
     "EEEE d MMMM yyyy",
@@ -262,9 +265,7 @@ Future<Uint8List> buildFormationPdf({
           pw.SizedBox(height: 10),
           pw.Container(height: 2, color: gold),
           pw.SizedBox(height: 12),
-          pw.Center(
-            child: pw.Image(pw.MemoryImage(image), height: 560),
-          ),
+          pw.Center(child: pw.Image(pw.MemoryImage(image), height: 560)),
           pw.SizedBox(height: 12),
           pw.Text(
             'TITOLARI',

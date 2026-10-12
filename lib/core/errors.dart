@@ -43,6 +43,11 @@ String friendlyError(Object e, {String action = 'Operazione non riuscita'}) {
       return '$action: non hai il permesso (o il tempo per farlo è scaduto).';
     }
     if (e.code == '23505') return '$action: esiste già.';
+    // I limiti delle tabelle (check sulla lunghezza dei testi, numeri fuori misura):
+    // il messaggio di Postgres è inglese e nomina solo il vincolo.
+    if (e.code == '23514' || e.code == '22001' || e.code == '22003') {
+      return '$action: un campo è troppo lungo o non valido.';
+    }
     if (e.code == 'PGRST301' || e.code == 'PGRST303') {
       return 'Sessione scaduta: esci e rientra nell\'app.';
     }

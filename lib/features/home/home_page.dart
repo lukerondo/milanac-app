@@ -15,6 +15,7 @@ import '../../shared/ui.dart';
 import '../calendario/club_event.dart';
 import '../calendario/events_repository.dart';
 import '../carte/special_cards_repository.dart';
+import '../formazione/formazione_page.dart' show formationPath;
 import '../news/news_item.dart';
 import '../news/news_page.dart';
 import '../news/news_repository.dart';
@@ -345,7 +346,8 @@ class NextMatchCard extends ConsumerWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    onPressed: () => context.go('/formazione'),
+                    // La formazione della squadra che gioca la partita.
+                    onPressed: () => context.go(formationPath(team)),
                     child: const Text('Formazione'),
                   ),
                 ),
@@ -390,7 +392,8 @@ class LastResultCard extends ConsumerWidget {
                   m.outcome != MatchOutcome.daGiocare,
             )
             .toList()
-          ..sort((a, b) => b.playedAt.compareTo(a.playedAt));
+          // Con due partite nella stessa sera vale l'ultima inserita.
+          ..sort(newestMatchFirst);
     final m = played.firstOrNull;
     if (m == null) return const SizedBox.shrink();
     final cards = (ref.watch(specialCardsProvider).value ?? const [])

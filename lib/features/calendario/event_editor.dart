@@ -9,6 +9,7 @@ import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/ui.dart';
+import '../formazione/formazione_page.dart' show formationPath;
 import '../presenze/evening.dart';
 import 'club_event.dart';
 import 'events_repository.dart';
@@ -99,7 +100,8 @@ Future<void> showEventDetails(
                 OutlinedButton.icon(
                   onPressed: () {
                     Navigator.of(sheet).pop();
-                    context.push('/formazione');
+                    // La formazione della squadra della partita.
+                    context.push(formationPath(e.team));
                   },
                   icon: const Icon(Icons.sports_soccer_rounded),
                   label: const Text('Vedi formazione'),

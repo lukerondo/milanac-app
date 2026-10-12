@@ -26,6 +26,19 @@ class _NewsListState extends ConsumerState<NewsList> {
   String _category = 'tutte';
 
   @override
+  void initState() {
+    super.initState();
+    // La Home tiene le notizie in memoria: aprendo l'elenco (anche dalla notifica di un
+    // aggiornamento arrivata con l'app aperta) si rileggono, mostrando intanto quelle di
+    // prima.
+    if (ref.exists(newsProvider)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.invalidate(newsProvider);
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final news = ref.watch(newsProvider);
     final platform = ref.watch(profileProvider).value?.platform;

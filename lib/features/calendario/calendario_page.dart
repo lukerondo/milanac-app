@@ -10,6 +10,7 @@ import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
 import '../../shared/ui.dart';
+import '../formazione/formazione_page.dart' show formationPath;
 import '../presenze/evening.dart';
 import '../risultati/match.dart';
 import '../risultati/match_detail_page.dart';
@@ -125,7 +126,7 @@ class _CalendarioPageState extends ConsumerState<CalendarioPage> {
                               m.outcome != MatchOutcome.daGiocare,
                         )
                         .toList()
-                      ..sort((a, b) => b.playedAt.compareTo(a.playedAt));
+                      ..sort(newestMatchFirst);
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
                   children: [
@@ -336,10 +337,11 @@ class EventRow extends StatelessWidget {
                       style: TextStyle(fontSize: 14, color: p.textMuted),
                     ),
                     if (official) ...[
-                      // Il pulsante ha già 6 punti di margine per il tocco.
+                      // Il pulsante ha già 6 punti di margine per il tocco. Apre la
+                      // formazione della squadra della partita.
                       _GoldPill(
                         label: 'Vedi formazione',
-                        onTap: () => context.push('/formazione'),
+                        onTap: () => context.push(formationPath(event.team)),
                       ),
                     ],
                   ],

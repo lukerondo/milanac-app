@@ -19,7 +19,7 @@ abstract class FormationRepository {
 
 final formationRepositoryProvider = Provider<FormationRepository>((ref) {
   if (AppConfig.isDemo) return DemoFormationRepository();
-  return _SupabaseFormationRepository(ref);
+  return SupabaseFormationRepository(ref);
 });
 
 /// La formazione attuale della squadra. La pubblica il Direttivo da un altro telefono:
@@ -46,8 +46,8 @@ List<Map<String, Object?>> formationSlotsJson(Formation f) => [
     },
 ];
 
-class _SupabaseFormationRepository implements FormationRepository {
-  _SupabaseFormationRepository(this._ref);
+class SupabaseFormationRepository implements FormationRepository {
+  SupabaseFormationRepository(this._ref);
   final Ref _ref;
 
   @override
@@ -145,21 +145,30 @@ class _SupabaseFormationRepository implements FormationRepository {
   Future<Formation> publish(Formation f) async {
     final saved = f.id.isEmpty ? await save(f) : f;
     final client = _ref.read(supabaseProvider);
-    final now = DateTime.now().toUtc();
-    await client
+    final rows = await client
         .from('formations')
         .update({
-          'published_at': now.toIso8601String(),
+          // L'ora vera la fissa il server (migrazione 0025): si usa quella che torna.
+          'published_at': DateTime.now().toUtc().toIso8601String(),
           'published_by': client.auth.currentUser?.id,
           'published_module': saved.module,
           'published_players': {
             for (final e in saved.players.entries) '${e.key}': e.value,
           },
         })
-        .eq('id', saved.id);
+        .eq('id', saved.id)
+        .select('published_at');
+    // Nessuna riga cambiata (formazione eliminata da un altro telefono, permessi
+    // cambiati): prima risultava pubblicata senza esserlo.
+    if (rows.isEmpty) {
+      throw const AppError(
+        'Formazione non trovata: riapri la pagina e pubblica di nuovo.',
+      );
+    }
+    final publishedAt = DateTime.parse(rows.first['published_at'] as String);
     return saved.copyWith(
-      publishedAt: now,
-      updatedAt: now,
+      publishedAt: publishedAt,
+      updatedAt: publishedAt,
       publishedModule: saved.module,
       publishedPlayers: Map.of(saved.players),
     );

@@ -4,10 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/news/news_item.dart';
+import 'package:milanac/features/news/news_page.dart';
+import 'package:milanac/features/news/news_repository.dart';
 import 'package:milanac/main.dart';
 import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
+import 'home_test.dart' show startAppAt, todayInItalyAt;
 
 Future<void> openMondo(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2340);
@@ -93,4 +96,82 @@ void main() {
     expect(find.textContaining('PS5: disponibile'), findsOneWidget);
     expect(find.textContaining('FVPA: aperte'), findsNothing);
   });
+
+  testWidgets('Mondo: la scheda segue la notifica anche quando arriva una '
+      'seconda volta uguale', (tester) async {
+    await openMondo(tester);
+    expect(find.byType(NewsList), findsNothing, reason: 'si parte dai video');
+    for (var i = 0; i < 2; i++) {
+      await goToPath(tester, '/mondo?scheda=notizie');
+      expect(find.byType(NewsList), findsOneWidget, reason: 'notifica $i');
+      // Intanto si guardano i video.
+      await tester.tap(find.text('Video'));
+      await tester.pumpAndSettle();
+      expect(find.byType(NewsList), findsNothing);
+    }
+  });
+
+  testWidgets(
+    'Notizie: un aggiornamento uscito con l\'app in background compare '
+    'al ritorno in primo piano (anche nella Home) e aprendo l\'elenco',
+    (tester) async {
+      final news = DemoNewsRepository()
+        ..items.removeWhere((n) => n.isGameUpdate);
+      await startAppAt(
+        tester,
+        todayInItalyAt(17),
+        overrides: [newsRepositoryProvider.overrideWithValue(news)],
+      );
+      final home = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(
+        find.text('MONDO PROCLUB'),
+        300,
+        scrollable: home,
+      );
+      expect(find.text('Aggiorna FC 27 prima della partita'), findsNothing);
+
+      // Esce il Title Update mentre il telefono è in tasca.
+      news.items.insert(
+        0,
+        NewsItem(
+          title: 'EA SPORTS FC 27: disponibile il Title Update 1.0.4',
+          summary: '',
+          url: 'https://www.ea.com/fc-27/title-update-1-0-4',
+          source: 'EA SPORTS',
+          category: 'aggiornamenti',
+          publishedAt: DateTime.now(),
+        ),
+      );
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Aggiorna FC 27 prima della partita'), findsOneWidget);
+
+      // Con l'app aperta (la notifica arriva in primo piano): aprendo le notizie.
+      news.items.insert(
+        0,
+        NewsItem(
+          title: 'FVPA: calendario della nuova stagione',
+          summary: '',
+          url: 'https://fvpa.net/calendario',
+          source: 'FVPA',
+          category: 'tornei',
+          publishedAt: DateTime.now(),
+        ),
+      );
+      await goToPath(tester, '/mondo?scheda=notizie');
+      expect(
+        find.text('FVPA: calendario della nuova stagione'),
+        findsOneWidget,
+      );
+    },
+  );
 }

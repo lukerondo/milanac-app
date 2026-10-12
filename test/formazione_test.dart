@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/core/auth/providers.dart';
+import 'package:milanac/core/italian_time.dart';
 import 'package:milanac/core/teams.dart';
 import 'package:milanac/core/theme.dart';
+import 'package:milanac/features/calendario/club_event.dart';
+import 'package:milanac/features/calendario/events_repository.dart';
 import 'package:milanac/features/formazione/formation_repository.dart';
 import 'package:milanac/features/formazione/formazione_page.dart';
 import 'package:milanac/features/formazione/modules.dart';
@@ -263,23 +267,104 @@ void main() {
     expect(find.text('9 Rossi'), findsNothing);
   });
 
-  testWidgets('Formazione: "Prepara la formazione" apre l\'editor sulla squadra '
-      'che si sta guardando', (tester) async {
-    final container = await startAppAt(tester, todayInItalyAt(17));
-    await goToSection(tester, 'Formazione');
-    await tester.tap(find.text('Futuro'));
+  testWidgets(
+    'Formazione: "Prepara la formazione" apre l\'editor sulla squadra '
+    'che si sta guardando',
+    (tester) async {
+      final container = await startAppAt(tester, todayInItalyAt(17));
+      await goToSection(tester, 'Formazione');
+      await tester.tap(find.text('Futuro'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('La formazione di Milan AC Futuro non è ancora'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Prepara la formazione'));
+      await tester.pumpAndSettle();
+      expect(find.text('FORMAZIONI'), findsOneWidget);
+      // Nell'editor il Futuro (Verdi), non il Milan AC (Rossi).
+      expect(find.text('23 Verdi'), findsOneWidget);
+      expect(find.text('9 Rossi'), findsNothing);
+      expect(container.read(formationTeamProvider(null)), Team.futuro);
+    },
+  );
+
+  testWidgets(
+    '/formazione?squadra=futuro apre la formazione del Futuro, anche a '
+    'chi gioca nel Milan AC; il PDF in alto è di quella squadra',
+    (tester) async {
+      final container = await startAppAt(tester, todayInItalyAt(17));
+      // Il Milan AC ha la formazione pubblicata, il Futuro no.
+      final server = container.read(formationRepositoryProvider);
+      await server.publish(await server.loadCurrent(Team.milanac));
+      IconButton pdf() => tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.download_rounded),
+      );
+
+      await goToPath(tester, '/formazione?squadra=futuro');
+      expect(
+        find.textContaining('La formazione di Milan AC Futuro non è ancora'),
+        findsOneWidget,
+      );
+      expect(pdf().onPressed, isNull, reason: 'il Futuro non è pubblicato');
+
+      // "Prepara la formazione" apre l'editor sulla stessa squadra.
+      await tester.tap(find.text('Prepara la formazione'));
+      await tester.pumpAndSettle();
+      expect(find.text('23 Verdi'), findsOneWidget);
+      expect(find.text('9 Rossi'), findsNothing);
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+
+      // Senza squadra nella rotta: quella di chi guarda (Milan AC), pubblicata.
+      await goToPath(tester, '/formazione');
+      expect(find.text('Pubblicata oggi'), findsOneWidget);
+      expect(pdf().onPressed, isNotNull);
+    },
+  );
+
+  testWidgets('Home: "Formazione" apre la formazione della squadra della '
+      'prossima partita', (tester) async {
+    final now = todayInItalyAt(17);
+    final today = italianClock(now);
+    final events = DemoEventsRepository(now: now);
+    await events.save(
+      ClubEvent(
+        id: '',
+        type: EventType.torneo,
+        team: Team.futuro,
+        title: 'Coppa Riserve – 1ª giornata',
+        startsAt: DateTime.utc(today.year, today.month, today.day + 1, 21, 30),
+      ),
+    );
+    final container = await startAppAt(
+      tester,
+      now,
+      overrides: [eventsRepositoryProvider.overrideWithValue(events)],
+    );
+    // Chi gioca in tutte e due le squadre: la prossima partita è del Futuro.
+    container
+        .read(demoProfileProvider.notifier)
+        .update(
+          (p) => Profile(
+            id: p.id,
+            displayName: p.displayName,
+            role: p.role,
+            teams: const {Team.milanac, Team.futuro},
+            registrationCompleted: true,
+            rulesAcceptedVersion: p.rulesAcceptedVersion,
+          ),
+        );
     await tester.pumpAndSettle();
+    await scrollAndTap(
+      tester,
+      find.widgetWithText(OutlinedButton, 'Formazione'),
+    );
+    expect(find.text('FORMAZIONE'), findsOneWidget);
     expect(
       find.textContaining('La formazione di Milan AC Futuro non è ancora'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Prepara la formazione'));
-    await tester.pumpAndSettle();
-    expect(find.text('FORMAZIONI'), findsOneWidget);
-    // Nell'editor il Futuro (Verdi), non il Milan AC (Rossi).
-    expect(find.text('23 Verdi'), findsOneWidget);
-    expect(find.text('9 Rossi'), findsNothing);
-    expect(container.read(formationTeamProvider), Team.futuro);
   });
 
   testWidgets('pulsante del PDF nella barra in alto: acceso solo con la '

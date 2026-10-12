@@ -196,13 +196,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               _section(
                 '/partite',
-                (state) => PartitePage(
-                  initialTab: state.uri.queryParameters['scheda'],
-                ),
+                (state) =>
+                    PartitePage(tab: state.uri.queryParameters['scheda']),
               ),
+              // `?squadra=milanac|futuro`: la formazione di quella squadra (senza,
+              // quella del giocatore).
               _section(
                 '/formazione',
-                (_) => const FormazionePage(),
+                (state) => FormazionePage(team: formationTeamOf(state.uri)),
                 actions: const [FormationPdfAction()],
               ),
               // Partita (dalla lista dei risultati e dalla notifica del risultato).
@@ -234,8 +235,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               _section('/tattiche', (_) => const TattichePage()),
               _section(
                 '/mondo',
-                (state) =>
-                    MondoPage(initialTab: state.uri.queryParameters['scheda']),
+                (state) => MondoPage(tab: state.uri.queryParameters['scheda']),
               ),
               _section('/albo-doro', (_) => const AlboDoroPage()),
               _section('/regolamento', (_) => const RegolamentoPage()),

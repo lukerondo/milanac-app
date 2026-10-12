@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
+import '../../core/clock.dart';
 import '../../core/errors.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../rosa/member.dart';
@@ -43,7 +45,10 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
   late String? _tournamentId = widget.match?.tournamentId;
   late String? _goalkeeperId = widget.match?.goalkeeperId;
   late bool _home = widget.match?.home ?? true;
-  late DateTime _date = widget.match?.playedAt ?? DateTime.now();
+
+  /// Il giorno della partita in Italia (di una nuova: oggi in Italia).
+  late DateTime _date =
+      widget.match?.playedAt ?? italianDay(ref.read(clockProvider)());
   late final _opponent = TextEditingController(text: widget.match?.opponent);
   late final _competition = TextEditingController(
     text: widget.match?.competition,
@@ -92,7 +97,8 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
       id: widget.match?.id ?? '',
       kind: _kind,
       opponent: _opponent.text.trim(),
-      playedAt: DateTime(_date.year, _date.month, _date.day, 21, 30),
+      // Le 21:30 italiane del giorno scelto (vedi ClubMatch.playedAt).
+      playedAt: DateTime.utc(_date.year, _date.month, _date.day, 21, 30),
       competition: _kind == MatchKind.torneo ? _text(_competition) : null,
       home: _home,
       goalsFor: goalsFor,
@@ -126,7 +132,10 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
         controller: c,
         textAlign: TextAlign.center,
         keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(2),
+        ],
         style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
         decoration: InputDecoration(labelText: label),
       ),

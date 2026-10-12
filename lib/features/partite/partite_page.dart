@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../shared/ui.dart';
 import '../calendario/calendario_page.dart';
@@ -6,55 +7,49 @@ import '../risultati/risultati_page.dart';
 import '../tornei/tornei_page.dart';
 
 /// Partite: Calendario, Risultati e Tornei nella stessa scheda.
-class PartitePage extends StatefulWidget {
-  const PartitePage({super.key, this.initialTab});
+///
+/// La scheda scelta sta nella rotta (`/partite?scheda=risultati`): anche le schede in
+/// alto cambiano la rotta. Così ogni collegamento e ogni notifica la seguono sempre,
+/// anche quando portano alla stessa `?scheda=` di prima (es. "Tutti" degli ultimi
+/// risultati toccato una seconda volta): una scelta tenuta solo nella pagina restava
+/// indietro, perché il router non ricostruisce la pagina per una rotta uguale.
+class PartitePage extends StatelessWidget {
+  const PartitePage({super.key, this.tab});
 
   /// "calendario" (predefinita), "risultati" oppure "tornei".
-  final String? initialTab;
+  final String? tab;
 
   static const tabs = ['calendario', 'risultati', 'tornei'];
 
-  @override
-  State<PartitePage> createState() => _PartitePageState();
-}
-
-class _PartitePageState extends State<PartitePage> {
-  late int _tab = _indexOf(widget.initialTab);
-
-  static int _indexOf(String? tab) {
-    final i = PartitePage.tabs.indexOf(tab ?? '');
+  static int indexOf(String? tab) {
+    final i = tabs.indexOf(tab ?? '');
     return i < 0 ? 0 : i;
   }
 
   @override
-  void didUpdateWidget(covariant PartitePage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Stessa pagina, rotta cambiata (es. "Tornei" dal Club o da una notifica).
-    if (widget.initialTab != oldWidget.initialTab &&
-        widget.initialTab != null) {
-      setState(() => _tab = _indexOf(widget.initialTab));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        child: SegmentedTabs(
-          labels: const ['Calendario', 'Risultati', 'Tornei'],
-          selected: _tab,
-          onSelected: (i) => setState(() => _tab = i),
+  Widget build(BuildContext context) {
+    final selected = indexOf(tab);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: SegmentedTabs(
+            labels: const ['Calendario', 'Risultati', 'Tornei'],
+            selected: selected,
+            onSelected: (i) {
+              if (i != selected) context.go('/partite?scheda=${tabs[i]}');
+            },
+          ),
         ),
-      ),
-      // Solo la scheda scelta resta costruita (e collegata al server).
-      Expanded(
-        child: switch (_tab) {
-          1 => const RisultatiPage(),
-          2 => const TorneiPage(),
-          _ => const CalendarioPage(),
-        },
-      ),
-    ],
-  );
+        // Solo la scheda scelta resta costruita (e collegata al server).
+        Expanded(
+          child: switch (selected) {
+            1 => const RisultatiPage(),
+            2 => const TorneiPage(),
+            _ => const CalendarioPage(),
+          },
+        ),
+      ],
+    );
+  }
 }

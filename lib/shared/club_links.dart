@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth/providers.dart';
 import '../core/config.dart';
+import '../core/errors.dart';
 
 /// Tipi di contatto supportati (colonna `kind` della tabella `club_links`).
 enum LinkKind {
@@ -35,17 +36,21 @@ abstract class ClubLinksRepository {
 
 final clubLinksRepositoryProvider = Provider<ClubLinksRepository>((ref) {
   if (AppConfig.isDemo) return DemoClubLinksRepository();
-  return _SupabaseClubLinksRepository(ref);
+  return SupabaseClubLinksRepository(ref);
 });
 
-final clubLinksProvider = FutureProvider<List<ClubLink>>((ref) {
+/// I contatti del club. Non arrivano in tempo reale (li cambia il Direttivo da un altro
+/// telefono): si rileggono al ritorno in primo piano (la pagina Club resta aperta).
+final clubLinksProvider = FutureProvider.autoDispose<List<ClubLink>>((ref) {
   // Si leggono con i permessi di chi è collegato: al cambio di account si ricarica.
   ref.watch(currentUserIdProvider);
+  final lifecycle = AppLifecycleListener(onResume: ref.invalidateSelf);
+  ref.onDispose(lifecycle.dispose);
   return ref.watch(clubLinksRepositoryProvider).load();
 });
 
-class _SupabaseClubLinksRepository implements ClubLinksRepository {
-  _SupabaseClubLinksRepository(this._ref);
+class SupabaseClubLinksRepository implements ClubLinksRepository {
+  SupabaseClubLinksRepository(this._ref);
   final Ref _ref;
 
   @override
@@ -64,11 +69,31 @@ class _SupabaseClubLinksRepository implements ClubLinksRepository {
     ];
   }
 
-  /// Sostituisce l'intera lista (sono pochi elementi, gestiti solo dal Direttivo).
-  /// Prima i contatti nuovi, poi via i vecchi: se la rete cade a metà non si
-  /// perdono tutti (al massimo per un attimo compaiono doppi).
+  /// Sostituisce l'intera lista (sono pochi elementi, gestiti solo dal Direttivo), in
+  /// una transazione (`save_club_links`): se la rete cade a metà resta quella di prima.
   @override
   Future<void> saveAll(List<ClubLink> links) async {
+    try {
+      await _ref
+          .read(supabaseProvider)
+          .rpc(
+            'save_club_links',
+            params: {
+              'p_links': [
+                for (final l in links) {'kind': l.kind.name, 'url': l.url},
+              ],
+            },
+          );
+    } catch (e) {
+      if (!isMissingFunction(e)) rethrow;
+      // Database senza save_club_links (migrazione non ancora applicata): come prima.
+      await _saveInSteps(links);
+    }
+  }
+
+  /// La strada di prima: i contatti nuovi, poi via i vecchi (se la rete cade a metà non
+  /// si perdono tutti, al massimo per un attimo compaiono doppi).
+  Future<void> _saveInSteps(List<ClubLink> links) async {
     final table = _ref.read(supabaseProvider).from('club_links');
     final inserted = links.isEmpty
         ? const <Map<String, dynamic>>[]

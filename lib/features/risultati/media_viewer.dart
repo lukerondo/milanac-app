@@ -158,10 +158,10 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
     } else if (video == null) {
       body = const Center(child: CircularProgressIndicator());
     } else {
+      // Il lettore si ridisegna da solo quando parte o si ferma: niente setState
+      // (che non accetta una funzione che restituisce un Future).
       body = GestureDetector(
-        onTap: () => setState(
-          () => video.value.isPlaying ? video.pause() : video.play(),
-        ),
+        onTap: () => video.value.isPlaying ? video.pause() : video.play(),
         child: Center(
           child: AspectRatio(
             aspectRatio: video.value.aspectRatio,

@@ -9,12 +9,15 @@ class _FlakyLinks implements ClubLinksRepository {
   var fail = true;
   List<ClubLink>? saved;
 
+  /// Quelli sul server.
+  var links = const [
+    ClubLink(kind: LinkKind.instagram, url: 'https://instagram.com/milanac'),
+  ];
+
   @override
   Future<List<ClubLink>> load() async {
     if (fail) throw Exception('rete assente');
-    return const [
-      ClubLink(kind: LinkKind.instagram, url: 'https://instagram.com/milanac'),
-    ];
+    return links;
   }
 
   @override
@@ -64,5 +67,34 @@ void main() {
     expect(repo.saved, hasLength(1));
     expect(repo.saved!.single.url, 'https://instagram.com/milanac');
     expect(find.text('Apri'), findsOneWidget);
+  });
+
+  testWidgets('Contatti social: l\'editor parte da quelli del server, non da '
+      'quelli che la pagina Club ha in memoria', (tester) async {
+    final repo = _FlakyLinks()..fail = false;
+    final container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [clubLinksRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    // La pagina Club li ha già letti.
+    container.listen(clubLinksProvider, (_, _) {});
+    await container.read(clubLinksProvider.future);
+    // Un altro telefono del Direttivo aggiunge WhatsApp.
+    repo.links = const [
+      ClubLink(kind: LinkKind.instagram, url: 'https://instagram.com/milanac'),
+      ClubLink(kind: LinkKind.whatsapp, url: 'https://wa.me/39333'),
+    ];
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: ClubLinksEditorPage(initial: [])),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('https://wa.me/39333'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'SALVA'));
+    await tester.pumpAndSettle();
+    expect(repo.saved, hasLength(2));
   });
 }

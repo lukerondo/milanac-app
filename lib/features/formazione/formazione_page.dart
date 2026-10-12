@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
@@ -27,18 +28,35 @@ import 'formation_repository.dart';
 import 'modules.dart';
 import 'pitch_painter.dart';
 
+/// La squadra chiesta dalla rotta della formazione (`/formazione?squadra=futuro`, i valori
+/// sono i nomi di [Team]); null = nessuna, si mostra quella del giocatore.
+Team? formationTeamOf(Uri uri) => Team.parse(uri.queryParameters['squadra']);
+
+/// La rotta della formazione di [team] (senza squadra: quella del giocatore), per
+/// "Vedi formazione", la Home e le notifiche.
+String formationPath([Team? team]) =>
+    team == null ? '/formazione' : '/formazione?squadra=${team.name}';
+
 /// Sezione Formazione: la formazione pubblicata, in sola lettura (anche per il Direttivo,
 /// che la prepara e la pubblica con "Modifica").
 class FormazionePage extends StatelessWidget {
-  const FormazionePage({super.key});
+  const FormazionePage({super.key, this.team});
+
+  /// La squadra chiesta dalla rotta (`?squadra=`), mostrata all'apertura.
+  final Team? team;
 
   @override
-  Widget build(BuildContext context) => const FormationBoard(editable: false);
+  Widget build(BuildContext context) =>
+      FormationBoard(editable: false, team: team);
 }
 
 /// Editor delle formazioni (Sala Direttivo e "Modifica").
 class FormationEditorPage extends StatelessWidget {
-  const FormationEditorPage({super.key});
+  const FormationEditorPage({super.key, this.team});
+
+  /// La squadra chiesta dalla sezione che lo apre: con la stessa, sezione ed editor
+  /// mostrano e cambiano la stessa squadra (vedi [formationTeamProvider]).
+  final Team? team;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -54,15 +72,15 @@ class FormationEditorPage extends StatelessWidget {
         child: GoldRule(),
       ),
     ),
-    body: const ContentWidth(child: FormationBoard(editable: true)),
+    body: ContentWidth(child: FormationBoard(editable: true, team: team)),
   );
 }
 
 /// Apre l'editor delle formazioni a schermo intero.
-void openFormationEditor(BuildContext context) => Navigator.of(
-  context,
-  rootNavigator: true,
-).push(MaterialPageRoute<void>(builder: (_) => const FormationEditorPage()));
+void openFormationEditor(BuildContext context, {Team? team}) =>
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(builder: (_) => FormationEditorPage(team: team)),
+    );
 
 /// La prossima partita della squadra (per "vs Atletico Virtuale · gio 21:30").
 String? _nextMatchLabel(List<ClubEvent> events, Team team, DateTime now) {
@@ -100,16 +118,23 @@ String formationSummary(int onField, int ai) {
       'per tutta la serata.';
 }
 
-/// La squadra mostrata in Formazione, nella sezione e nell'editor: all'apertura quella
-/// del giocatore (Milan AC se è in entrambe). "Modifica" apre l'editor sulla stessa
-/// squadra e il pulsante del PDF nella barra in alto scarica quella.
-final formationTeamProvider = NotifierProvider.autoDispose<FormationTeam, Team>(
-  FormationTeam.new,
-);
+/// La squadra mostrata in Formazione, nella sezione e nell'editor. All'apertura è
+/// quella chiesta dalla rotta (`?squadra=`, la chiave di questa famiglia) o, senza,
+/// quella del giocatore (Milan AC se è in entrambe). "Modifica" apre l'editor con la
+/// stessa chiave, quindi sulla stessa squadra, e il pulsante del PDF nella barra in alto
+/// (che legge la stessa rotta) scarica quella.
+final formationTeamProvider = NotifierProvider.autoDispose
+    .family<FormationTeam, Team, Team?>(FormationTeam.new);
 
 class FormationTeam extends Notifier<Team> {
+  FormationTeam(this.requested);
+
+  /// La squadra chiesta dalla rotta (null = nessuna).
+  final Team? requested;
+
   @override
   Team build() {
+    if (requested case final team?) return team;
     final mine = ref.read(profileProvider).value?.teams ?? const {Team.milanac};
     return mine.contains(Team.milanac) ? Team.milanac : Team.futuro;
   }
@@ -156,7 +181,12 @@ class FormationPdfAction extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final team = ref.watch(formationTeamProvider);
+    // La barra è della sezione: la squadra chiesta sta nella sua rotta (fuori dal
+    // router, come nei test della barra, nessuna).
+    final requested = GoRouter.maybeOf(context) == null
+        ? null
+        : formationTeamOf(GoRouterState.of(context).uri);
+    final team = ref.watch(formationTeamProvider(requested));
     final formation = ref.watch(formationProvider(team)).value;
     final all = ref.watch(rosaProvider).value;
     final ready = formation != null && formation.isPublished && all != null;
@@ -173,10 +203,13 @@ class FormationPdfAction extends ConsumerWidget {
 }
 
 class FormationBoard extends ConsumerStatefulWidget {
-  const FormationBoard({super.key, required this.editable});
+  const FormationBoard({super.key, required this.editable, this.team});
 
   /// true nell'editor: si modifica la bozza e si pubblica.
   final bool editable;
+
+  /// La squadra chiesta dalla rotta (vedi [formationTeamProvider]).
+  final Team? team;
 
   @override
   ConsumerState<FormationBoard> createState() => _FormationBoardState();
@@ -186,8 +219,12 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
   /// Copia locale modificata dal Direttivo (null = usa quella salvata).
   Formation? _draft;
 
-  /// Squadra mostrata (la stessa nella sezione e nell'editor).
-  Team get _team => ref.read(formationTeamProvider);
+  /// La squadra mostrata: la stessa nella sezione e nell'editor aperto da lì.
+  NotifierProvider<FormationTeam, Team> get _teamProvider =>
+      formationTeamProvider(widget.team);
+
+  /// Squadra mostrata.
+  Team get _team => ref.read(_teamProvider);
 
   /// Salvataggi in coda: uno alla volta, nell'ordine delle modifiche.
   Future<void> _saves = Future.value();
@@ -355,7 +392,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
   Widget build(BuildContext context) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final canEdit = widget.editable && isDirettivo;
-    final team = ref.watch(formationTeamProvider);
+    final team = ref.watch(_teamProvider);
     final saved = ref.watch(formationProvider(team));
     final rosa = ref.watch(rosaProvider);
     final now = ref.watch(clockProvider)();
@@ -375,7 +412,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
           team: team,
           onTeam: (t) {
             setState(() => _draft = null);
-            ref.read(formationTeamProvider.notifier).select(t);
+            ref.read(_teamProvider.notifier).select(t);
           },
           status: _StatusRow(
             formation: shown,
@@ -465,7 +502,8 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
                 if (isDirettivo) ...[
                   const SizedBox(height: 16),
                   FilledButton(
-                    onPressed: () => openFormationEditor(context),
+                    onPressed: () =>
+                        openFormationEditor(context, team: widget.team),
                     child: const Text('Prepara la formazione'),
                   ),
                 ],
@@ -601,7 +639,8 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
                   Expanded(
                     child: FilledButton(
                       style: FilledButton.styleFrom(textStyle: buttonText),
-                      onPressed: () => openFormationEditor(context),
+                      onPressed: () =>
+                          openFormationEditor(context, team: widget.team),
                       child: const Text('Modifica'),
                     ),
                   ),

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:milanac/core/italian_time.dart';
 import 'package:milanac/core/router.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/risultati/match.dart';
@@ -15,6 +16,7 @@ import 'package:milanac/features/risultati/risultati_page.dart';
 import 'package:milanac/main.dart';
 
 import 'helpers.dart';
+import 'home_test.dart' show startAppAt, todayInItalyAt;
 
 /// Partite che arrivano quando lo decide il test (come una rete lenta).
 class _SlowMatches extends DemoMatchesRepository {
@@ -64,6 +66,131 @@ Future<ProviderContainer> _startApp(
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
+
+  test('partite in ora italiana, come gli eventi', () {
+    // Le 21:30 italiane del 12 ottobre (ora legale): le 19:30 UTC.
+    final summer = ClubMatch.fromMap({
+      'id': 'a',
+      'kind': 'torneo',
+      'opponent': 'Dinamo Pixel',
+      'played_at': '2026-10-12T19:30:00+00:00',
+      'created_at': '2026-10-12T21:45:10+00:00',
+    });
+    expect(summer.playedAt, DateTime.utc(2026, 10, 12, 21, 30));
+    expect(summer.createdAt, DateTime.utc(2026, 10, 12, 21, 45, 10));
+    expect(summer.toMap()['played_at'], '2026-10-12T19:30:00.000Z');
+    // D'inverno l'Italia è un'ora avanti a UTC.
+    final winter = ClubMatch.fromMap({
+      'id': 'b',
+      'kind': 'amichevole',
+      'opponent': 'Real Brianza',
+      'played_at': '2026-12-01T20:30:00Z',
+    });
+    expect(winter.playedAt, DateTime.utc(2026, 12, 1, 21, 30));
+    expect(winter.createdAt, isNull);
+    expect(winter.toMap()['played_at'], '2026-12-01T20:30:00.000Z');
+  });
+
+  test('due partite nella stessa sera: prima l\'ultima inserita', () {
+    ClubMatch match(String id, DateTime playedAt, [DateTime? createdAt]) =>
+        ClubMatch(
+          id: id,
+          kind: MatchKind.amichevole,
+          opponent: id,
+          playedAt: playedAt,
+          createdAt: createdAt,
+        );
+    final evening = DateTime.utc(2026, 10, 12, 21, 30);
+    final first = match('b', evening, DateTime.utc(2026, 10, 12, 20, 40));
+    final second = match('a', evening, DateTime.utc(2026, 10, 12, 21, 50));
+    // Inserita dopo, ma giocata il giorno prima.
+    final dayBefore = match(
+      'z',
+      evening.subtract(const Duration(days: 1)),
+      DateTime.utc(2026, 10, 13),
+    );
+    expect(
+      [
+        for (final m in [first, dayBefore, second]..sort(newestMatchFirst))
+          m.id,
+      ],
+      ['a', 'b', 'z'],
+    );
+    // Stesso orario e stesso inserimento: decide l'id, come sul server.
+    expect(
+      ([
+        match('a', evening),
+        match('b', evening),
+      ]..sort(newestMatchFirst)).first.id,
+      'b',
+    );
+  });
+
+  testWidgets('Due partite nella stessa sera: l\'ultima inserita è l\'ultimo '
+      'risultato in Home, Calendario e Risultati', (tester) async {
+    final container = await startAppAt(tester, todayInItalyAt(23, 30));
+    await goToSection(tester, 'Risultati');
+    for (final (opponent, goalsFor, goalsAgainst) in [
+      ('Primo', '2', '0'),
+      ('Secondo', '1', '1'),
+    ]) {
+      await tester.tap(find.text('Nuova partita'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Avversario'),
+        opponent,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'MILAN AC'),
+        goalsFor,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Avversari'),
+        goalsAgainst,
+      );
+      await tester.ensureVisible(find.text('Salva partita'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Salva partita'));
+      await tester.pumpAndSettle();
+    }
+
+    // Tutte e due alle 21:30 italiane di oggi.
+    final today = italianClock(todayInItalyAt(23, 30));
+    final evening = DateTime.utc(today.year, today.month, today.day, 21, 30);
+    final saved = container.read(matchesProvider).value!;
+    expect([for (final m in saved.take(2)) m.opponent], ['Secondo', 'Primo']);
+    expect([for (final m in saved.take(2)) m.playedAt], [evening, evening]);
+
+    // Risultati.
+    expect(
+      tester.widgetList<MatchRow>(find.byType(MatchRow)).first.match.opponent,
+      'Secondo',
+    );
+
+    // Calendario: "Ultimi risultati".
+    await tester.tap(find.text('Calendario'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Primo'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester.getTopLeft(find.text('Secondo')).dy,
+      lessThan(tester.getTopLeft(find.text('Primo')).dy),
+    );
+
+    // Home: l'ultimo risultato è il pareggio con il Secondo.
+    await tapTab(tester, 'Home');
+    await tester.scrollUntilVisible(
+      find.textContaining('ULTIMO RISULTATO'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('SECONDO'), findsOneWidget);
+    expect(find.text('PRIMO'), findsNothing);
+    expect(find.text('1 – 1'), findsOneWidget);
+  });
 
   test('risultato: tutti e due i punteggi o nessuno', () {
     expect(resultError(null, null), isNull);

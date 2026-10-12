@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 
 enum MatchKind {
@@ -28,6 +29,7 @@ class ClubMatch {
     this.team = Team.milanac,
     this.tournamentId,
     this.goalkeeperId,
+    this.createdAt,
   });
 
   final String id;
@@ -43,7 +45,15 @@ class ClubMatch {
   /// Torneo di appartenenza (facoltativo).
   final String? tournamentId;
   final String opponent;
+
+  /// Quando si gioca, in ora italiana: anno, mese, giorno, ore e minuti come in Italia
+  /// (vedi [italianClock]), come gli eventi del calendario. Si confronta solo con altre
+  /// ore italiane.
   final DateTime playedAt;
+
+  /// Quando è stata inserita (null = non ancora salvata): due partite della stessa sera
+  /// hanno lo stesso orario e vale l'ordine di inserimento.
+  final DateTime? createdAt;
   final String? competition;
   final bool home;
   final int? goalsFor;
@@ -62,7 +72,7 @@ class ClubMatch {
     id: m['id'] as String,
     kind: MatchKind.values.byName(m['kind'] as String),
     opponent: m['opponent'] as String,
-    playedAt: DateTime.parse(m['played_at'] as String).toLocal(),
+    playedAt: italianClock(DateTime.parse(m['played_at'] as String)),
     competition: m['competition'] as String?,
     home: (m['home'] as bool?) ?? true,
     goalsFor: (m['goals_for'] as num?)?.toInt(),
@@ -72,12 +82,16 @@ class ClubMatch {
     team: Team.parse(m['team']) ?? Team.milanac,
     tournamentId: m['tournament_id'] as String?,
     goalkeeperId: m['goalkeeper_id'] as String?,
+    createdAt: switch (m['created_at']) {
+      final String v => DateTime.parse(v),
+      _ => null,
+    },
   );
 
   Map<String, dynamic> toMap() => {
     'kind': kind.name,
     'opponent': opponent,
-    'played_at': playedAt.toUtc().toIso8601String(),
+    'played_at': fromItalianClock(playedAt).toIso8601String(),
     'competition': competition,
     'home': home,
     'goals_for': goalsFor,
@@ -88,6 +102,20 @@ class ClubMatch {
     'tournament_id': kind == MatchKind.torneo ? tournamentId : null,
     'goalkeeper_id': goalkeeperId,
   };
+}
+
+final _neverCreated = DateTime.utc(1970);
+
+/// Dalla partita più recente: orario, poi ordine di inserimento, poi id (come la giornata
+/// sul server, `(played_at, created_at, id)`). Due partite della stessa sera hanno lo
+/// stesso orario (l'editor le salva alle 21:30): l'ultima inserita è l'ultimo risultato.
+int newestMatchFirst(ClubMatch a, ClubMatch b) {
+  final played = b.playedAt.compareTo(a.playedAt);
+  if (played != 0) return played;
+  final created = (b.createdAt ?? _neverCreated).compareTo(
+    a.createdAt ?? _neverCreated,
+  );
+  return created != 0 ? created : b.id.compareTo(a.id);
 }
 
 final _matchday = RegExp(r'(\d+)\s*[ªa°]?\s*giornata', caseSensitive: false);

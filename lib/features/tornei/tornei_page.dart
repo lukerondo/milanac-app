@@ -54,40 +54,65 @@ class TorneiPage extends ConsumerWidget {
           final done = all
               .where((t) => t.status == TournamentStatus.concluso)
               .toList();
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            children: [
-              if (all.isEmpty)
-                AppCard(
-                  child: Text(
-                    'Nessun torneo registrato.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: context.pal.textMuted,
+          return RefreshIndicator(
+            onRefresh: () => _refreshStandings(ref, current),
+            child: ListView(
+              // Si trascina in giù anche con pochi tornei.
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+              children: [
+                if (all.isEmpty)
+                  AppCard(
+                    child: Text(
+                      'Nessun torneo registrato.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: context.pal.textMuted,
+                      ),
                     ),
                   ),
-                ),
-              for (final t in current)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: _TournamentCard(tournament: t),
-                ),
-              if (done.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                const SectionLabel('Conclusi'),
-                const SizedBox(height: 10),
-                for (final t in done)
+                for (final t in current)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 14),
                     child: _TournamentCard(tournament: t),
                   ),
+                if (done.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  const SectionLabel('Conclusi'),
+                  const SizedBox(height: 10),
+                  for (final t in done)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: _TournamentCard(tournament: t),
+                    ),
+                ],
               ],
-            ],
+            ),
           );
         },
       ),
     );
+  }
+
+  /// Le classifiche non arrivano in tempo reale: trascinando in giù si rileggono (senza
+  /// rete la pagina lo segnala e continua a riprovare da sola).
+  static Future<void> _refreshStandings(
+    WidgetRef ref,
+    List<Tournament> shown,
+  ) async {
+    // Si aspettano le classifiche mostrate (quelle dei tornei in corso).
+    final visible = [
+      for (final t in shown)
+        if (t.status == TournamentStatus.inCorso &&
+            ref.exists(standingsProvider(t.id)))
+          standingsProvider(t.id),
+    ];
+    ref.invalidate(standingsProvider);
+    try {
+      await Future.wait([for (final p in visible) ref.read(p.future)])
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
   }
 }
 
@@ -335,12 +360,31 @@ class _TournamentPhoto extends ConsumerWidget {
 }
 
 /// Dettaglio: info, sito, classifica e partite del torneo.
-class TournamentPage extends ConsumerWidget {
+class TournamentPage extends ConsumerStatefulWidget {
   const TournamentPage({super.key, required this.tournamentId});
   final String tournamentId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TournamentPage> createState() => _TournamentPageState();
+}
+
+class _TournamentPageState extends ConsumerState<TournamentPage> {
+  @override
+  void initState() {
+    super.initState();
+    // La card dei Tornei tiene la classifica in memoria: aprendo il torneo si rilegge
+    // (intanto si vede quella di prima).
+    final standings = standingsProvider(widget.tournamentId);
+    if (ref.exists(standings)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.invalidate(standings);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tournamentId = widget.tournamentId;
     final p = context.pal;
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final tournaments = ref.watch(tournamentsProvider);
@@ -470,9 +514,10 @@ class TournamentPage extends ConsumerWidget {
                   'Classifica',
                   trailing: isDirettivo
                       ? TextButton.icon(
-                          // Solo con la classifica caricata: partire da un elenco
-                          // vuoto e salvare la cancellerebbe.
-                          onPressed: standings.hasValue
+                          // Solo con la classifica appena caricata: partire da un
+                          // elenco vuoto (o vecchio, mentre si rilegge) e salvare la
+                          // cancellerebbe.
+                          onPressed: standings.hasValue && !standings.isLoading
                               ? () => Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (_) => StandingsEditorPage(
@@ -634,8 +679,13 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
   late TournamentStatus _status =
       widget.tournament?.status ?? TournamentStatus.inCorso;
   late DateTime? _startsOn = widget.tournament?.startsOn;
+  late DateTime? _endsOn = widget.tournament?.endsOn;
   Uint8List? _photo;
   bool _saving = false;
+
+  /// Il torneo nuovo creato da un salvataggio rimasto a metà (la foto non è partita):
+  /// "Salva" di nuovo lo aggiorna invece di crearne un doppione.
+  String? _createdId;
 
   Future<void> _pickPhoto() async {
     try {
@@ -669,30 +719,43 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
   Future<void> _save() async {
     var url = _text(_url);
     if (url != null && !url.contains('://')) url = 'https://$url';
-    if (_text(_name) == null ||
-        (url != null && Uri.tryParse(url)?.host.isNotEmpty != true)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Inserisci il nome e un link valido.')),
-      );
+    final startsOn = _startsOn;
+    final endsOn = _endsOn;
+    final error =
+        _text(_name) == null ||
+            (url != null && Uri.tryParse(url)?.host.isNotEmpty != true)
+        ? 'Inserisci il nome e un link valido.'
+        : startsOn != null && endsOn != null && endsOn.isBefore(startsOn)
+        ? 'La data di fine viene prima di quella di inizio.'
+        : null;
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     setState(() => _saving = true);
+    final old = widget.tournament;
     final t = Tournament(
-      id: widget.tournament?.id ?? '',
+      id: _createdId ?? old?.id ?? '',
       name: _text(_name)!,
       organizer: _text(_organizer),
       url: url,
       team: _team,
       status: _status,
-      startsOn: _startsOn,
-      endsOn: widget.tournament?.endsOn,
+      startsOn: startsOn,
+      endsOn: endsOn,
       notes: _text(_notes),
-      imagePath: widget.tournament?.imagePath,
+      imagePath: old?.imagePath,
     );
     try {
       final repo = ref.read(tournamentsRepositoryProvider);
       final id = await repo.save(t);
-      if (_photo != null) await repo.uploadImage(id, _photo!);
+      _createdId = id;
+      final photo = _photo;
+      if (photo != null) {
+        // La foto di prima si toglie solo a foto nuova collegata.
+        await repo.uploadImage(id, photo, replacing: old?.imagePath);
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
@@ -771,8 +834,10 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
               showSelectedIcon: false,
               onSelectionChanged: (s) => setState(() => _team = s.first),
             ),
+            // I limiti sono quelli della tabella `tournaments`.
             TextField(
               controller: _name,
+              maxLength: 80,
               decoration: const InputDecoration(
                 labelText: 'Nome del torneo',
                 hintText: 'es. FVPA Serie B',
@@ -780,6 +845,7 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
             ),
             TextField(
               controller: _organizer,
+              maxLength: 60,
               decoration: const InputDecoration(
                 labelText: 'Organizzatore (facoltativo)',
               ),
@@ -803,27 +869,22 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
                   ),
               ],
             ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_rounded),
-              title: Text(
-                _startsOn == null
-                    ? 'Data di inizio (facoltativa)'
-                    : 'Inizio: ${DateFormat('d MMMM yyyy', 'it').format(_startsOn!)}',
-              ),
-              onTap: () async {
-                final d = await showDatePicker(
-                  context: context,
-                  initialDate: _startsOn ?? DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(DateTime.now().year + 2),
-                );
-                if (d != null) setState(() => _startsOn = d);
-              },
+            _DateTile(
+              label: 'Inizio',
+              empty: 'Data di inizio (facoltativa)',
+              value: _startsOn,
+              onChanged: (d) => setState(() => _startsOn = d),
+            ),
+            _DateTile(
+              label: 'Fine',
+              empty: 'Data di fine (facoltativa)',
+              value: _endsOn,
+              onChanged: (d) => setState(() => _endsOn = d),
             ),
             TextField(
               controller: _notes,
               maxLines: 3,
+              maxLength: 1000,
               decoration: const InputDecoration(
                 labelText: 'Note (facoltative)',
               ),
@@ -876,6 +937,58 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Una data facoltativa del torneo: si sceglie toccandola e si toglie con la crocetta.
+class _DateTile extends StatelessWidget {
+  const _DateTile({
+    required this.label,
+    required this.empty,
+    required this.value,
+    required this.onChanged,
+  });
+  final String label;
+
+  /// Il testo quando la data non c'è.
+  final String empty;
+  final DateTime? value;
+  final ValueChanged<DateTime?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final day = value;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.event_rounded),
+      title: Text(
+        day == null
+            ? empty
+            : '$label: ${DateFormat('d MMMM yyyy', 'it').format(day)}',
+      ),
+      trailing: day == null
+          ? null
+          : IconButton(
+              tooltip: 'Togli la data (${label.toLowerCase()})',
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => onChanged(null),
+            ),
+      onTap: () async {
+        final first = DateTime(2020);
+        final last = DateTime(DateTime.now().year + 2, 12, 31);
+        // Una data salvata fuori dai limiti del calendario non lo blocca.
+        var initial = day ?? DateTime.now();
+        if (initial.isBefore(first)) initial = first;
+        if (initial.isAfter(last)) initial = last;
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: initial,
+          firstDate: first,
+          lastDate: last,
+        );
+        if (picked != null) onChanged(picked);
+      },
     );
   }
 }
@@ -1042,8 +1155,10 @@ class _StandingRowDialogState extends State<_StandingRowDialog> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // I limiti sono quelli della tabella `tournament_standings`.
           TextField(
             controller: _name,
+            maxLength: 60,
             decoration: const InputDecoration(labelText: 'Squadra'),
           ),
           const SizedBox(height: 8),
@@ -1058,7 +1173,10 @@ class _StandingRowDialogState extends State<_StandingRowDialog> {
                     controller: value,
                     textAlign: TextAlign.center,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
                     decoration: InputDecoration(labelText: key),
                   ),
                 ),
