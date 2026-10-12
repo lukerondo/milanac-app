@@ -111,9 +111,10 @@ class SupabaseMatchesRepository implements MatchesRepository {
     ];
     // Prima il database (i media della partita se ne vanno con lei), poi i file: se la
     // rete cade a metà resta al più un file orfano, mai un media che punta a un file
-    // cancellato.
+    // cancellato. I file non si aspettano: la partita è già sparita (in tempo reale
+    // anche dalla pagina aperta) e la pagina si chiude subito.
     await _client.from('matches').delete().eq('id', id);
-    await _removeQuietly(paths);
+    unawaited(_removeQuietly(paths));
   }
 
   /// File in meno nello storage; se non riesce restano file orfani, non un errore.

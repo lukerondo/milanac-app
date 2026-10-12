@@ -74,6 +74,13 @@ class _FakeSupabase {
     await _server.close(force: true);
   }
 
+  /// Aspetta che arrivi la richiesta [key] (le pulizie dello Storage non si aspettano).
+  Future<void> waitFor(String key) async {
+    for (var i = 0; i < 200 && !requests.contains(key); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+
   /// Un repository costruito con il client finto.
   T repository<T>(T Function(Ref ref) create) {
     final container = ProviderContainer(
@@ -269,6 +276,7 @@ void main() {
         )
         ..['DELETE /rest/v1/matches'] = (204, null);
       await server.repository(SupabaseMatchesRepository.new).delete('m1');
+      await server.waitFor('DELETE /storage/v1/object/match-media');
       expect(server.requests, [
         'GET /rest/v1/match_media',
         'DELETE /rest/v1/matches',
@@ -295,6 +303,8 @@ void main() {
         server.repository(SupabaseMatchesRepository.new).delete('m1'),
         throwsA(isA<PostgrestException>()),
       );
+      // Anche aspettando, nessun file tolto.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(server.requests, isNot(contains(startsWith('DELETE /storage'))));
     });
 
@@ -312,6 +322,7 @@ void main() {
           {'statusCode': '500', 'error': 'boom', 'message': 'boom'},
         );
       await server.repository(SupabaseMatchesRepository.new).delete('m1');
+      await server.waitFor('DELETE /storage/v1/object/match-media');
       expect(server.requests.last, 'DELETE /storage/v1/object/match-media');
     });
 
