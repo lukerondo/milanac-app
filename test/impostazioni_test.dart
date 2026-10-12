@@ -33,8 +33,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Impostazioni'));
-    await tester.pumpAndSettle();
+    await goToSection(tester, 'Impostazioni');
     expect(find.text('IMPOSTAZIONI'), findsOneWidget);
     expect(find.text('DATI PERSONALI'), findsOneWidget);
 

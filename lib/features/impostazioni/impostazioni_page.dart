@@ -348,6 +348,7 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String?>(
+          isExpanded: true,
           initialValue: nationalities.containsKey(_nationality)
               ? _nationality
               : null,

@@ -166,9 +166,13 @@ void main() {
 
   testWidgets('Contatti social modificabili dal Direttivo', (tester) async {
     await startApp(tester);
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Instagram'), findsOneWidget);
+    await goToSection(tester, 'Club');
+    await tester.scrollUntilVisible(
+      find.text('Instagram'),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Instagram'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Modifica contatti'));
     await tester.pumpAndSettle();
@@ -180,9 +184,7 @@ void main() {
     await tester.tap(find.text('SALVA'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Instagram'), findsNothing);
-    expect(find.byTooltip('WhatsApp'), findsOneWidget);
+    expect(find.text('Instagram'), findsNothing);
+    expect(find.text('WhatsApp'), findsOneWidget);
   });
 }

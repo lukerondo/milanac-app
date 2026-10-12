@@ -4,7 +4,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/lavagna/board_model.dart';
 import 'package:milanac/features/tattiche/tactics_repository.dart';
 
-import 'carte_speciali_test.dart' show openSection;
+import 'helpers.dart';
+
 import 'home_test.dart';
 
 void main() {
@@ -72,7 +73,7 @@ void main() {
     tester,
   ) async {
     final container = await startAppAt(tester, todayAt(17));
-    await openSection(tester, 'Tattiche & Build');
+    await goToSection(tester, 'Tattiche & Build');
     expect(find.text('Uscita dal basso'), findsOneWidget); // schema demo con lavagna
     await tester.tap(find.text('Lavagna'));
     await tester.pumpAndSettle();
@@ -148,7 +149,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Il replay in chat: riquadro con Play, poi la riproduzione (senza audio in demo).
-    await openSection(tester, 'Chat');
+    await goToSection(tester, 'Chat');
     await tester.tap(find.text('Tattiche & Schemi'));
     await tester.pumpAndSettle();
     expect(find.text('SCHEMA CON AUDIO'), findsOneWidget);

@@ -76,16 +76,14 @@ void main() {
   ) async {
     await startAppAt(tester, todayAt(17));
     await goToSection(tester, 'Sala Direttivo');
-    await tester.scrollUntilVisible(
-      find.text('Rosa e squadre'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('Rosa e squadre'));
-    await tester.pumpAndSettle();
+    await scrollAndTap(tester, find.text('Rosa e squadre'));
     final page = find.byType(Scrollable).first;
-    await tester.scrollUntilVisible(find.text('RIMOSSI'), 300, scrollable: page);
-    expect(find.text('Gigi Ferri'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Gigi Ferri'),
+      300,
+      scrollable: page,
+    );
+    expect(find.text('RIMOSSI'), findsOneWidget);
     await tester.ensureVisible(find.text('Riattiva'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Riattiva'));

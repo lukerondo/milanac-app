@@ -97,10 +97,20 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
-  # Font sportivo (titoli, numeri, carte): Oswald, come nella vecchia app.
+  # Font sportivo (titoli, numeri, carte): Oswald. Testi, pulsanti ed elenchi: Barlow.
   # Pergamena (regolamento e storia): Cormorant Garamond. Firme: Great Vibes.
   # Tutti con licenza OFL (assets/fonts/OFL.txt).
   fonts:
+    - family: Barlow
+      fonts:
+        - asset: assets/fonts/Barlow-400.ttf
+          weight: 400
+        - asset: assets/fonts/Barlow-500.ttf
+          weight: 500
+        - asset: assets/fonts/Barlow-600.ttf
+          weight: 600
+        - asset: assets/fonts/Barlow-700.ttf
+          weight: 700
     - family: Oswald
       fonts:
         - asset: assets/fonts/Oswald-400.ttf

@@ -1,31 +1,176 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../features/impostazioni/impostazioni_page.dart';
-import '../features/musica/musica_page.dart';
+import '../core/auth/profile.dart';
+import '../core/auth/providers.dart';
+import '../core/teams.dart';
 import '../core/theme.dart';
+import '../features/chat/chat_repository.dart';
+import '../features/musica/musica_page.dart';
+import '../features/rosa/rosa_repository.dart';
 import '../features/walkout/celebrations.dart';
-import 'app_drawer.dart';
+import 'member_photo.dart';
 import 'sections.dart';
+import 'ui.dart';
 
-/// Struttura comune a tutte le sezioni: barra in alto + menu laterale.
-class AppShell extends StatelessWidget {
-  const AppShell({super.key, required this.path, required this.child});
+/// Nome del club in alto nella Home e nel Club: dipende dalla squadra del membro
+/// (chi è solo in Milan AC Futuro vede il nome della sua squadra).
+String clubTitleFor(Profile? profile) {
+  final teams = profile?.teams ?? const {Team.milanac};
+  return teams.contains(Team.milanac)
+      ? 'MILAN AC PRO CLUB'
+      : 'MILAN AC FUTURO PRO CLUB';
+}
 
-  final String path;
-  final Widget child;
+/// Struttura comune: la sezione sopra e le cinque schede sempre visibili in basso.
+class MainShell extends ConsumerWidget {
+  const MainShell({super.key, required this.shell});
+  final StatefulNavigationShell shell;
 
   @override
-  Widget build(BuildContext context) {
-    return StadiumBackground(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread = ref.watch(chatUnreadProvider);
+    Widget icon(MainTab t, IconData data) => t == MainTab.chat && unread > 0
+        ? Badge(label: Text(unread > 99 ? '99+' : '$unread'), child: Icon(data))
+        : Icon(data);
+    return PopScope(
+      // Indietro da un'altra scheda riporta alla Home prima di chiudere l'app.
+      canPop: shell.currentIndex == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && shell.currentIndex != 0) shell.goBranch(0);
+      },
       child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          title: Text(sectionFor(path).barTitle.toUpperCase()),
-          actions: const [SoundtrackButton(), SettingsButton()],
+        body: Celebrations(child: shell),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: shell.currentIndex,
+          // Toccare la scheda già aperta riporta alla sua pagina iniziale.
+          onDestinationSelected: (i) =>
+              shell.goBranch(i, initialLocation: i == shell.currentIndex),
+          destinations: [
+            for (final t in MainTab.values)
+              NavigationDestination(
+                icon: icon(t, t.icon),
+                selectedIcon: icon(t, t.selectedIcon),
+                label: t.label,
+                tooltip: t == MainTab.chat && unread > 0
+                    ? 'Chat, $unread messaggi nuovi'
+                    : t.label,
+              ),
+          ],
         ),
-        drawer: AppDrawer(currentPath: path),
-        body: Celebrations(child: ContentWidth(child: child)),
+      ),
+    );
+  }
+}
+
+/// Cornice di una sezione: barra in alto (stemma o freccia indietro, titolo, musica,
+/// la tua foto) e contenuto a larghezza leggibile anche sui tablet.
+class SectionFrame extends ConsumerWidget {
+  const SectionFrame({
+    super.key,
+    required this.path,
+    required this.child,
+    this.actions = const [],
+  });
+
+  /// Sezione di [appSections] (es. "/rosa").
+  final String path;
+  final Widget child;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final section = sectionFor(path);
+    final parent = section.parent;
+    final router = GoRouter.of(context);
+    final canPop = router.canPop();
+    final isTabRoot = parent == null;
+    final title = section.tab == MainTab.home && isTabRoot
+        ? clubTitleFor(ref.watch(profileProvider).value)
+        : section.title.toUpperCase();
+    return PopScope(
+      // Una sottosezione aperta direttamente (es. da una notifica): indietro
+      // porta alla sua sezione, non fuori dall'app.
+      canPop: isTabRoot || canPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && parent != null) context.go(parent);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: isTabRoot
+              ? Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Image.asset('assets/images/stemma_256.png'),
+                )
+              : IconButton(
+                  tooltip: 'Indietro',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => canPop ? context.pop() : context.go(parent),
+                ),
+          leadingWidth: isTabRoot ? 52 : 56,
+          title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          actions: [
+            ...actions,
+            const SoundtrackButton(),
+            const ProfileButton(),
+          ],
+          bottom: const PreferredSize(
+            preferredSize: Size.fromHeight(1),
+            child: ColoredBox(
+              color: Color(0xFF2B2B2F),
+              child: SizedBox(height: 1, width: double.infinity),
+            ),
+          ),
+          flexibleSpace: const Align(
+            alignment: Alignment.topCenter,
+            child: GoldRule(),
+          ),
+        ),
+        body: ContentWidth(child: child),
+      ),
+    );
+  }
+}
+
+/// La tua foto in alto a destra: apre il profilo con la carta e le impostazioni.
+class ProfileButton extends ConsumerWidget {
+  const ProfileButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(profileProvider).value;
+    final member = me == null
+        ? null
+        : ref
+              .watch(rosaProvider)
+              .value
+              ?.where((m) => m.id == me.id)
+              .firstOrNull;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: IconButton(
+        tooltip: 'Il tuo profilo',
+        onPressed: () => context.push('/profilo'),
+        icon: Container(
+          padding: const EdgeInsets.all(1.5),
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: Color(0xFFB8952F),
+          ),
+          child: member == null
+              ? const CircleAvatar(
+                  radius: 15,
+                  backgroundColor: MilanacColors.surfaceHigh,
+                  child: Icon(
+                    Icons.person_rounded,
+                    size: 18,
+                    color: MilanacColors.ivoryMuted,
+                  ),
+                )
+              : MemberAvatar(member: member, radius: 15, showNumber: false),
+        ),
       ),
     );
   }

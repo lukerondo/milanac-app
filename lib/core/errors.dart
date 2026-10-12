@@ -33,7 +33,9 @@ bool isNetworkError(Object e) {
 /// [action] dice cosa non è riuscito ("Salvataggio non riuscito", ...).
 String friendlyError(Object e, {String action = 'Operazione non riuscita'}) {
   if (e is AppError) return e.message;
-  if (isNetworkError(e)) return 'Nessuna connessione: controlla la rete e riprova.';
+  if (isNetworkError(e)) {
+    return 'Nessuna connessione: controlla la rete e riprova.';
+  }
   if (e is PostgrestException) {
     // Le regole del database parlano già italiano (raise exception '...').
     if (e.code == 'P0001') return e.message;

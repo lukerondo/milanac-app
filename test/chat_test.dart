@@ -6,6 +6,8 @@ import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 import 'package:milanac/shared/link_text.dart';
 
+import 'helpers.dart';
+
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
@@ -41,15 +43,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    // Badge dei non letti nel menu (2 in Generale + 1 in Milan AC).
+    // Badge dei non letti sulla scheda Chat (2 in Generale + 1 in Milan AC).
     expect(
-      find.descendant(of: find.byType(Drawer), matching: find.text('3')),
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('3')),
       findsOneWidget,
     );
-    await tester.tap(find.text('Chat'));
-    await tester.pumpAndSettle();
+    await goToSection(tester, 'Chat');
 
     expect(find.text('Generale'), findsOneWidget);
     expect(find.text('Comunicazioni'), findsOneWidget);
