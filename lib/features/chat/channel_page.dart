@@ -13,6 +13,7 @@ import '../../core/audio_focus.dart';
 import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/push/push_service.dart';
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/async_view.dart';
@@ -223,11 +224,16 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     });
   }
 
-  void _markRead(List<ChatMessage> messages) {
-    if (!_readBeforeLoaded) return;
+  void _markRead(ChannelHistory history) {
+    // Dopo una riconnessione mancano dei messaggi: si segna letto quando arrivano,
+    // non prima (si segnerebbero anche quelli mai caricati).
+    if (!_readBeforeLoaded || history.gap) return;
     // L'ora del server del messaggio più recente arrivato (quelli in invio da qui hanno
     // ancora l'ora del telefono, che può essere sbagliata).
-    final newest = messages.where((m) => !m.isLocal).firstOrNull?.createdAt;
+    final newest = history.messages
+        .where((m) => !m.isLocal)
+        .firstOrNull
+        ?.createdAt;
     if (newest == null || (_readUpTo != null && !newest.isAfter(_readUpTo!))) {
       return;
     }
@@ -294,6 +300,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     if (body.isEmpty && image == null && audio == null) return;
     final reply = _replyTo;
     final conversation = _conversation;
+    final channel = _channel;
     if (audio == null) _text.clear();
     setState(() {
       if (audio == null) _image = null;
@@ -309,19 +316,34 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
         durationS: seconds,
         replyTo: reply?.id,
       ),
+      channel,
     );
   }
 
-  Future<void> _retry(ChatMessage m) async =>
-      _report(await _conversation.retry(m.id));
+  Future<void> _retry(ChatMessage m) async {
+    final channel = _channel;
+    _report(await _conversation.retry(m.id), channel);
+  }
 
-  void _report(SendReport report) {
+  /// Com'è andato un invio. L'invio continua anche uscendo dalla conversazione: se
+  /// non parte lo si dice lo stesso, e il messaggio resta nel canale da riprovare.
+  void _report(SendReport report, Channel channel) {
+    final error = report.error;
+    if (!mounted) {
+      if (error != null) {
+        showAppMessage(
+          'Messaggio in ${channel.name} non inviato: riapri la conversazione '
+          'e toccalo per riprovare.',
+          duration: const Duration(seconds: 6),
+        );
+      }
+      return;
+    }
     if (report.quoteDropped) {
       _notice(
         'Il messaggio citato è stato eliminato: inviato senza citazione.',
       );
     }
-    final error = report.error;
     if (error != null) {
       _notice(friendlyError(error, action: 'Messaggio non inviato'));
     }
@@ -564,7 +586,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
             Expanded(
               child: Stack(
                 children: [
-                  _messages(),
+                  _messages(canWrite: canWrite),
                   if (_showJump)
                     Positioned(
                       right: 12,
@@ -589,7 +611,8 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     );
   }
 
-  Widget _messages() {
+  /// [canWrite]: si può rispondere ai messaggi (in Comunicazioni solo il Direttivo).
+  Widget _messages({required bool canWrite}) {
     final c = _channel;
     final me = ref.watch(profileProvider).value;
     final members = {
@@ -607,7 +630,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
         final list = history.messages;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          _markRead(list);
+          _markRead(history);
           _maybeLoadMore();
         });
         if (list.isEmpty && !history.hasMore) {
@@ -696,7 +719,9 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                           canDelete:
                               !m.isLocal &&
                               (mine || (me?.isDirettivo ?? false)),
-                          onReply: () => setState(() => _replyTo = m),
+                          onReply: canWrite
+                              ? () => setState(() => _replyTo = m)
+                              : null,
                           onDelete: () => _confirmDelete(m),
                           onRetry: () => _retry(m),
                           onDiscard: () =>
@@ -753,7 +778,14 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                         padding: const EdgeInsets.fromLTRB(0, 4, 8, 8),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: Image.memory(_image!, height: 90),
+                          // Anteprima alta 90: decodificata a quell'altezza.
+                          child: Image.memory(
+                            _image!,
+                            height: 90,
+                            cacheHeight:
+                                (90 * MediaQuery.devicePixelRatioOf(context))
+                                    .round(),
+                          ),
                         ),
                       ),
                       Positioned(
@@ -1242,10 +1274,18 @@ class _NewMessagesSeparator extends StatelessWidget {
   }
 }
 
-/// Messaggio automatico (formazione pubblicata, carte speciali...): al centro.
+/// Messaggio automatico (formazione pubblicata, carte speciali, nuovo ingresso nel
+/// club...): al centro; un tocco apre la pagina di cui parla.
 class _SystemMessage extends StatelessWidget {
   const _SystemMessage({required this.message});
   final ChatMessage message;
+
+  /// La formazione della squadra del messaggio (`meta.team`; se manca, quella di
+  /// sempre).
+  static String _formation(Object? team) {
+    final squad = Team.parse(team);
+    return squad == null ? '/formazione' : '/formazione?squadra=${squad.name}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1255,11 +1295,15 @@ class _SystemMessage extends StatelessWidget {
     final icon = switch (type) {
       'formation' => Icons.sports_soccer_rounded,
       'special_cards' => Icons.military_tech_rounded,
+      'new_member' => Icons.person_add_alt_1_rounded,
       _ => Icons.info_rounded,
     };
+    // Pagine dentro le schede, mentre la conversazione sta sopra: ci si va con go
+    // (push farebbe una seconda copia delle schede).
     final route = switch (type) {
-      'formation' => '/formazione',
+      'formation' => _formation(message.meta['team']),
       'special_cards' => '/carte-speciali',
+      'new_member' => '/rosa',
       _ => null,
     };
     return Padding(
@@ -1273,7 +1317,7 @@ class _SystemMessage extends StatelessWidget {
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: route == null ? null : () => context.push(route),
+            onTap: route == null ? null : () => context.go(route),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
@@ -1328,7 +1372,10 @@ class _Bubble extends ConsumerWidget {
   final bool mine;
   final bool showAuthor;
   final bool canDelete;
-  final VoidCallback onReply;
+
+  /// null se nel canale non si può scrivere (Comunicazioni per chi non è del
+  /// Direttivo): niente "Rispondi".
+  final VoidCallback? onReply;
   final VoidCallback onDelete;
 
   /// Messaggio non partito: si riprova o si toglie.
@@ -1340,7 +1387,8 @@ class _Bubble extends ConsumerWidget {
 
   Future<void> _actions(BuildContext context) async {
     final failed = message.failed;
-    final canReply = !message.isLocal;
+    final reply = onReply;
+    final canReply = reply != null && !message.isLocal;
     final canCopy = message.hasText;
     final canRemove = failed || canDelete;
     if (!failed && !canReply && !canCopy && !canRemove) return;
@@ -1388,7 +1436,7 @@ class _Bubble extends ConsumerWidget {
       case 'retry':
         onRetry();
       case 'reply':
-        onReply();
+        reply?.call();
       case 'copy':
         await Clipboard.setData(ClipboardData(text: message.body!));
       case 'delete':
@@ -1808,7 +1856,6 @@ class _VoiceBubble extends ConsumerWidget {
 
   Future<void> _toggle(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    final repo = ref.read(chatRepositoryProvider);
     final player = ref.read(voicePlayerProvider.notifier);
     void notice(String text) =>
         messenger.showSnackBar(SnackBar(content: Text(text)));
@@ -1818,12 +1865,18 @@ class _VoiceBubble extends ConsumerWidget {
       return;
     }
     try {
-      final url = path == null ? '' : await repo.audioUrl(path);
-      if (url.isEmpty) {
-        notice('Vocale non disponibile nella demo.');
-        return;
-      }
-      await player.toggle(message.id, url);
+      // Il link firmato serve solo per caricare il vocale, e resta in memoria:
+      // pausa e ripresa di quello già nel lettore non lo chiedono (vanno anche
+      // senza rete).
+      await player.toggle(message.id, () async {
+        final url = path == null
+            ? ''
+            : await ref.read(chatAudioUrlProvider(path).future);
+        if (url.isEmpty) {
+          throw const AppError('Vocale non disponibile nella demo.');
+        }
+        return url;
+      });
     } catch (e) {
       // Il lettore è tornato libero: toccando di nuovo si riprova.
       notice(friendlyError(e, action: 'Vocale non disponibile'));
@@ -1838,6 +1891,7 @@ class _VoiceBubble extends ConsumerWidget {
       voicePlayerProvider.select((s) => s.playingId == message.id ? s : null),
     );
     final playing = state?.playing ?? false;
+    final loading = state?.loading ?? false;
     final total = message.durationS ?? state?.duration?.inSeconds ?? 0;
     final shown = state == null ? total : state.position.inSeconds;
     return SizedBox(
@@ -1845,7 +1899,11 @@ class _VoiceBubble extends ConsumerWidget {
       child: Row(
         children: [
           IconButton.filled(
-            tooltip: playing ? 'Metti in pausa' : 'Ascolta il vocale',
+            tooltip: loading
+                ? 'Annulla il caricamento'
+                : playing
+                ? 'Metti in pausa'
+                : 'Ascolta il vocale',
             style: IconButton.styleFrom(
               backgroundColor: p.accent,
               foregroundColor: p.onAccent,
@@ -1854,10 +1912,19 @@ class _VoiceBubble extends ConsumerWidget {
               padding: EdgeInsets.zero,
             ),
             onPressed: () => _toggle(context, ref),
-            icon: Icon(
-              playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              size: 22,
-            ),
+            icon: loading
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: p.onAccent,
+                    ),
+                  )
+                : Icon(
+                    playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    size: 22,
+                  ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1968,25 +2035,39 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
   Widget build(BuildContext context) {
     final message = widget.message;
     final local = message.localImage;
+    // Nella bolla la foto si decodifica alla larghezza in cui si vede, non a quella
+    // della foto intera: con tante foto la chat resta leggera anche sui telefoni
+    // economici. A schermo intero (con lo zoom) arriva intera.
+    final cacheWidth = math.max(
+      1,
+      (widget.width * MediaQuery.devicePixelRatioOf(context)).round(),
+    );
     final Widget image;
+    final Widget full;
     if (local != null) {
-      image = Image.memory(local, fit: BoxFit.cover);
+      image = Image.memory(local, fit: BoxFit.cover, cacheWidth: cacheWidth);
+      full = Image.memory(local);
     } else {
       final path = message.imagePath!;
       final link = ref.watch(chatImageUrlProvider(path));
       final url = link.value;
-      image = url != null && url.isNotEmpty
-          ? Image.network(
-              url,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => _unavailable(path),
-            )
-          : link.hasError
-          ? _unavailable(path)
-          : const SizedBox(
-              height: 160,
-              child: Center(child: CircularProgressIndicator()),
-            );
+      if (url != null && url.isNotEmpty) {
+        image = Image.network(
+          url,
+          fit: BoxFit.cover,
+          cacheWidth: cacheWidth,
+          errorBuilder: (_, _, _) => _unavailable(path),
+        );
+        // Se quella intera non arriva resta quella della bolla.
+        full = Image.network(url, errorBuilder: (_, _, _) => image);
+      } else {
+        full = image = link.hasError
+            ? _unavailable(path)
+            : const SizedBox(
+                height: 160,
+                child: Center(child: CircularProgressIndicator()),
+              );
+      }
     }
     return GestureDetector(
       onTap: () => Navigator.of(context, rootNavigator: true).push(
@@ -1994,7 +2075,7 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
           builder: (_) => Scaffold(
             backgroundColor: MilanacColors.black,
             appBar: AppBar(backgroundColor: MilanacColors.black),
-            body: Center(child: InteractiveViewer(maxScale: 5, child: image)),
+            body: Center(child: InteractiveViewer(maxScale: 5, child: full)),
           ),
         ),
       ),

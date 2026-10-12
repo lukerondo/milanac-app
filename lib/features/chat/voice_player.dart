@@ -9,13 +9,17 @@ import '../../core/audio_focus.dart';
 class VoiceState {
   const VoiceState({
     this.playingId,
+    this.loading = false,
     this.playing = false,
     this.position = Duration.zero,
     this.duration,
   });
 
-  /// Messaggio caricato nel lettore (in riproduzione o in pausa).
+  /// Messaggio nel lettore (in riproduzione, in pausa o ancora in arrivo).
   final String? playingId;
+
+  /// [playingId] si sta ancora caricando (il link e l'inizio dell'audio).
+  final bool loading;
   final bool playing;
   final Duration position;
   final Duration? duration;
@@ -29,11 +33,13 @@ class VoiceState {
 
   VoiceState copyWith({
     String? playingId,
+    bool? loading,
     bool? playing,
     Duration? position,
     Duration? duration,
   }) => VoiceState(
     playingId: playingId ?? this.playingId,
+    loading: loading ?? this.loading,
     playing: playing ?? this.playing,
     position: position ?? this.position,
     duration: duration ?? this.duration,
@@ -52,6 +58,11 @@ class VoicePlayer extends Notifier<VoiceState> {
   AudioPlayer? _player;
   final _subs = <StreamSubscription<Object?>>[];
   bool _wasPlaying = false;
+
+  /// Numero dell'ultimo caricamento: uno superato (intanto si è toccato un altro
+  /// vocale, o il lettore si è fermato) finisce in silenzio, senza errori e senza
+  /// toccare lo stato del vocale arrivato dopo.
+  var _loads = 0;
 
   @override
   VoiceState build() {
@@ -99,8 +110,11 @@ class VoicePlayer extends Notifier<VoiceState> {
             if (_wasPlaying && !playing) _focus.release(AudioUse.vocale);
             _wasPlaying = playing;
           },
-          // Riproduzione interrotta da un errore: si torna da capo.
-          onError: (Object _) => _reset(),
+          // Riproduzione interrotta da un errore: si torna da capo (non mentre
+          // arriva un altro vocale: l'errore sarebbe del caricamento superato).
+          onError: (Object _) {
+            if (!state.loading) _reset();
+          },
         ),
       );
     return _player = p;
@@ -113,15 +127,29 @@ class VoicePlayer extends Notifier<VoiceState> {
   }
 
   void _play(AudioPlayer p) {
+    final load = _loads;
     _focus.claim(AudioUse.vocale);
-    unawaited(p.play().catchError((Object _) => _reset()));
+    unawaited(
+      p.play().catchError((Object _) {
+        if (load == _loads) _reset();
+      }),
+    );
   }
 
-  /// Ascolta il vocale [id] (indirizzo [url]); se è già caricato, pausa/riprendi.
-  /// Se non si carica lancia l'errore e il lettore torna libero (si può riprovare).
-  Future<void> toggle(String id, String url) async {
+  /// Ascolta il vocale [id]; se è già nel lettore, pausa o riprendi subito (senza
+  /// rete: il link non serve), e mentre arriva un altro tocco lo annulla. [url] dà
+  /// il link per caricarlo e si chiede solo allora; se non si carica lancia
+  /// l'errore e il lettore torna libero (si può riprovare).
+  Future<void> toggle(String id, Future<String> Function() url) async {
     final p = _ensurePlayer();
     if (state.playingId == id) {
+      if (state.loading) {
+        // Rete lenta: il caricamento si ferma qui, senza errori.
+        _loads++;
+        _reset();
+        await p.stop();
+        return;
+      }
       if (p.playing) {
         await p.pause();
       } else {
@@ -129,18 +157,28 @@ class VoicePlayer extends Notifier<VoiceState> {
       }
       return;
     }
-    await p.stop();
-    state = VoiceState(playingId: id);
+    final load = ++_loads;
+    bool superseded() => load != _loads || !ref.mounted;
+    final link = Future.sync(url)..ignore();
+    state = VoiceState(playingId: id, loading: true);
     try {
-      await p.setUrl(url);
+      await p.stop();
+      final address = await link;
+      if (superseded()) return;
+      await p.setUrl(address);
     } catch (_) {
+      // Interrotto perché si è toccato un altro vocale: nessun errore da mostrare.
+      if (superseded()) return;
       _reset();
       rethrow;
     }
+    if (superseded()) return;
+    state = state.copyWith(loading: false);
     _play(p);
   }
 
   Future<void> stop() async {
+    _loads++;
     await _player?.stop();
     _reset();
   }

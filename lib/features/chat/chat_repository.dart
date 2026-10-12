@@ -23,7 +23,7 @@ const maxReplaySeconds = 300;
 const chatRecentLimit = 50;
 const chatPageSize = 50;
 
-/// I link firmati delle foto valgono 6 ore: si rinnovano prima che scadano.
+/// I link firmati di foto e vocali valgono 6 ore: si rinnovano prima che scadano.
 const chatImageUrlLifetime = Duration(hours: 5);
 
 /// Ricerca nei messaggi: dalle 2 lettere in su, gli ultimi 50 risultati.
@@ -445,12 +445,35 @@ final chatImageUrlProvider = FutureProvider.autoDispose.family<String, String>((
   return url;
 });
 
+/// Link firmato di un vocale: si chiede solo per caricarlo nel lettore (pausa e
+/// ripresa non lo chiedono) e, come quello delle foto, resta in memoria finché vale.
+/// Si legge al tocco, senza ascoltarlo: resta in memoria da subito (altrimenti
+/// sparirebbe prima di arrivare); un errore invece non resta, si riprova al tocco.
 final chatAudioUrlProvider = FutureProvider.autoDispose.family<String, String>((
   ref,
   path,
-) {
+) async {
   ref.watch(currentUserIdProvider);
-  return ref.watch(chatRepositoryProvider).audioUrl(path);
+  final repo = ref.watch(chatRepositoryProvider);
+  final link = ref.keepAlive();
+  final String url;
+  try {
+    url = await repo.audioUrl(path);
+  } catch (_) {
+    link.close();
+    rethrow;
+  }
+  if (!ref.mounted) return url;
+  if (url.isEmpty) {
+    link.close(); // demo: niente da tenere
+    return url;
+  }
+  final renew = Timer(chatImageUrlLifetime, () {
+    ref.invalidateSelf();
+    link.close();
+  });
+  ref.onDispose(renew.cancel);
+  return url;
 });
 
 /// Messaggio citato che non è tra quelli caricati (più vecchio): si chiede al server.
@@ -970,15 +993,16 @@ class DemoChatRepository extends ChatRepository {
     if (!_changes.isClosed) _changes.add(null);
   }
 
-  /// Un messaggio nuovo o modificato arriva a chi segue il suo canale.
-  void _saved(ChatMessage m) {
+  /// Un messaggio nuovo o modificato arriva a chi segue il suo canale (con
+  /// [realtime] false no: il telefono è scollegato).
+  void _saved(ChatMessage m, {bool realtime = true}) {
     final i = _messages.indexWhere((x) => x.id == m.id);
     if (i >= 0) {
       _messages[i] = m;
     } else {
       _messages.add(m);
     }
-    if (!_rows.isClosed) _rows.add(m);
+    if (realtime && !_rows.isClosed) _rows.add(m);
     _changed();
   }
 
@@ -994,8 +1018,11 @@ class DemoChatRepository extends ChatRepository {
     _changed();
   }
 
-  /// Solo demo e test: arriva il messaggio [m] scritto da un altro.
-  void receive(ChatMessage m) => _saved(m);
+  /// Solo demo e test: arriva il messaggio [m] scritto da un altro. Con [realtime]
+  /// false arriva solo sul server (connessione caduta): lo stream aperto non lo
+  /// riceve, lo trova solo riconnettendosi.
+  void receive(ChatMessage m, {bool realtime = true}) =>
+      _saved(m, realtime: realtime);
 
   /// Solo demo e test: il messaggio [id] lo elimina un altro (o il server, come
   /// l'annuncio delle carte rifatto). Con [realtime] false l'eliminazione non arriva

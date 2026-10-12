@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/errors.dart';
+import '../core/theme.dart';
 
 /// Mostra un [AsyncValue] senza far sparire i dati:
 /// - appena ci sono dati li mostra, anche mentre si ricarica o se l'ultimo
@@ -97,6 +98,9 @@ class ErrorRetry extends StatelessWidget {
   }
 }
 
+/// Striscia sopra i dati che non si aggiornano. Fondo della card in rilievo e
+/// "Riprova" in oro, leggibile nei due temi (sul fondo invertito l'oro non si
+/// leggeva: avorio nel tema scuro, nero con l'oro scuro nel chiaro).
 class _OfflineStrip extends StatelessWidget {
   const _OfflineStrip({required this.onRetry, required this.retrying});
   final VoidCallback? onRetry;
@@ -104,34 +108,33 @@ class _OfflineStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final p = context.pal;
     return Material(
-      color: scheme.inverseSurface,
-      borderRadius: BorderRadius.circular(12),
+      color: p.isDark ? p.surfaceHigher : p.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: p.borderStrong),
+      ),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
         child: Row(
           children: [
-            Icon(
-              Icons.wifi_off_rounded,
-              size: 18,
-              color: scheme.onInverseSurface,
-            ),
+            Icon(Icons.wifi_off_rounded, size: 18, color: p.warning),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 retrying
                     ? 'Connessione persa: riprovo…'
                     : 'Dati non aggiornati',
-                style: TextStyle(color: scheme.onInverseSurface, fontSize: 13),
+                style: TextStyle(color: p.text, fontSize: 13),
               ),
             ),
             if (onRetry != null)
               TextButton(
                 onPressed: onRetry,
                 style: TextButton.styleFrom(
-                  foregroundColor: scheme.inversePrimary,
+                  foregroundColor: p.accentText,
                   visualDensity: VisualDensity.compact,
                 ),
                 child: const Text('Riprova'),

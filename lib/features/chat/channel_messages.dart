@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../../core/auth/providers.dart';
@@ -16,6 +17,7 @@ class ChannelHistory {
     this.hasMore = false,
     this.loadingMore = false,
     this.loadMoreFailed = false,
+    this.gap = false,
   });
 
   /// Dal più recente al più vecchio, senza doppioni.
@@ -29,6 +31,11 @@ class ChannelHistory {
   final bool hasMore;
   final bool loadingMore;
   final bool loadMoreFailed;
+
+  /// Dopo una riconnessione con molte novità mancano messaggi tra quelli già visti
+  /// e i più recenti: si recuperano a pagine e, finché mancano, il canale non si
+  /// segna letto (si segnerebbero anche quelli mai caricati).
+  final bool gap;
 }
 
 /// Com'è andato un invio: [error] se il messaggio non è partito (resta "non inviato"
@@ -65,9 +72,29 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
   bool _loadingMore = false;
   bool _loadMoreFailed = false;
 
+  /// La pagina precedente in arrivo: chi la chiede di nuovo aspetta quella.
+  Future<void>? _pending;
+
   /// Una pagina intera di messaggi già visti con la stessa ora: si va oltre.
   DateTime? _stuckAt;
+
+  /// Cambia con l'account e quando si riparte dai più recenti (buco dopo una
+  /// riconnessione): le pagine chieste prima si scartano.
   int _generation = 0;
+
+  /// L'ora dell'ultimo messaggio visto prima di un buco (vedi [_checkGap]): quelli
+  /// dopo, fino ai più recenti caricati, si stanno recuperando. Null se non manca
+  /// niente.
+  DateTime? _gapAfter;
+  bool _catchingUp = false;
+
+  /// Pagine recuperate di fila per chiudere un buco: se ne mancano di più, il resto
+  /// arriva scorrendo in cima (o alla prossima novità).
+  static const _catchUpPages = 10;
+
+  /// La conversazione resta in memoria, anche uscendo dalla pagina, finché un
+  /// messaggio scritto qui sta partendo o non è partito: al ritorno lo si ritrova.
+  KeepAliveLink? _hold;
 
   /// Gli invii partono uno alla volta, nell'ordine in cui sono stati scritti.
   Future<void> _queue = Future.value();
@@ -76,6 +103,9 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
   Stream<ChannelHistory> build() {
     final userId = ref.watch(currentUserIdProvider);
     final repo = ref.watch(chatRepositoryProvider);
+    // Ricostruendo (nuovo tentativo del tempo reale) Riverpod lascia cadere i
+    // "tieni in memoria" di prima: si riprende qui sotto, se serve.
+    _hold = null;
     if (userId != _userId) {
       // Un altro account sullo stesso telefono: si riparte da zero.
       _userId = userId;
@@ -85,11 +115,16 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       _hasMore = null;
       _loadingMore = false;
       _loadMoreFailed = false;
+      _pending = null;
       _stuckAt = null;
+      _gapAfter = null;
       _generation++;
     }
+    _holdWhilePending();
     if (userId == null) return Stream.value(const ChannelHistory());
-    final out = _out = StreamController<ChannelHistory>();
+    // Senza nessuno che guarda (pagina chiusa con un messaggio in sospeso) Riverpod
+    // mette lo stream in pausa: niente copie accumulate, l'ultima arriva alla ripresa.
+    final out = _out = StreamController<ChannelHistory>(onResume: _emit);
     var failed = false;
     final subs = <StreamSubscription<Object>>[
       repo.watchDeletions().listen(_onDeleted, onError: (Object _) {}),
@@ -122,8 +157,9 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
   }
 
   void _emit() {
+    _holdWhilePending();
     final out = _out;
-    if (out == null || out.isClosed) return;
+    if (out == null || out.isClosed || out.isPaused) return;
     out.add(
       ChannelHistory(
         messages: _known.values.toList()..sort(compareNewestFirst),
@@ -131,8 +167,19 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
         hasMore: _hasMore ?? false,
         loadingMore: _loadingMore,
         loadMoreFailed: _loadMoreFailed,
+        gap: _gapAfter != null,
       ),
     );
+  }
+
+  void _holdWhilePending() {
+    if (!ref.mounted) return;
+    if (_known.values.any((m) => m.isLocal)) {
+      _hold ??= ref.keepAlive();
+    } else {
+      _hold?.close();
+      _hold = null;
+    }
   }
 
   /// I più recenti dallo stream del canale.
@@ -146,6 +193,7 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       final oldest = fresh
           .map((m) => m.createdAt)
           .reduce((a, b) => a.isBefore(b) ? a : b);
+      if (rows.length >= chatRecentLimit) _checkGap(ids, oldest);
       // Un messaggio che conoscevamo manca tra i più recenti pur essendo più nuovo
       // del più vecchio di loro: è stato eliminato mentre lo stream era scollegato
       // (riconnettendosi ricarica dal server, ma le eliminazioni perse non arrivano).
@@ -162,7 +210,62 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       }
     }
     _hasMore ??= rows.length >= chatRecentLimit;
+    // Un buco ancora aperto (anche se il recupero non era riuscito) si recupera ora:
+    // una novità dal server vuol dire che la rete c'è.
+    final recover = _gapAfter != null && !_catchingUp;
+    if (recover) _loadMoreFailed = false;
     _emit();
+    if (recover) unawaited(_catchUp());
+  }
+
+  /// Una pagina intera di più recenti senza nessuno di quelli già visti: dopo una
+  /// riconnessione ne sono arrivati più di una pagina, e quelli in mezzo non
+  /// arriverebbero né dallo stream né scorrendo in cima (le pagine partono dal più
+  /// vecchio caricato). Si tengono solo i più recenti e si recupera all'indietro.
+  void _checkGap(Set<String> ids, DateTime oldest) {
+    DateTime? lastSeen;
+    for (final m in _known.values) {
+      // I propri appena inviati non dicono che cosa è arrivato prima di loro.
+      if (m.isLocal || _unconfirmed.contains(m.id)) continue;
+      if (ids.contains(m.id)) return; // si sovrappongono: niente buco
+      final at = m.createdAt;
+      if (at.isBefore(oldest) && (lastSeen == null || at.isAfter(lastSeen))) {
+        lastSeen = at;
+      }
+    }
+    if (lastSeen == null) return;
+    _known.removeWhere(
+      (id, m) =>
+          !m.isLocal && !ids.contains(id) && !m.createdAt.isAfter(oldest),
+    );
+    _unconfirmed.removeWhere((id) => !_known.containsKey(id));
+    final gap = _gapAfter;
+    _gapAfter = gap != null && gap.isBefore(lastSeen) ? gap : lastSeen;
+    _hasMore = true;
+    _stuckAt = null;
+    _loadingMore = false;
+    _loadMoreFailed = false;
+    _pending = null;
+    _generation++;
+  }
+
+  /// Recupera all'indietro i messaggi del buco, una pagina dopo l'altra.
+  Future<void> _catchUp() async {
+    if (_catchingUp) return;
+    _catchingUp = true;
+    try {
+      for (var i = 0; i < _catchUpPages; i++) {
+        if (!ref.mounted ||
+            _gapAfter == null ||
+            _hasMore != true ||
+            _loadMoreFailed) {
+          return;
+        }
+        await loadMore();
+      }
+    } finally {
+      _catchingUp = false;
+    }
   }
 
   /// Il messaggio [m] dal server al posto di quello che c'era ([old]).
@@ -186,8 +289,20 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
   }
 
   /// La pagina di messaggi precedenti (scorrendo in cima alla conversazione).
-  Future<void> loadMore() async {
-    if (_loadingMore || _hasMore != true) return;
+  Future<void> loadMore() {
+    if (_hasMore != true) return Future.value();
+    final pending = _pending;
+    if (pending != null) return pending;
+    final load = _pending = _loadPage();
+    unawaited(
+      load.whenComplete(() {
+        if (identical(_pending, load)) _pending = null;
+      }),
+    );
+    return load;
+  }
+
+  Future<void> _loadPage() async {
     final server = _known.values.where((m) => !m.isLocal);
     if (server.isEmpty) return;
     final oldest = server
@@ -216,6 +331,13 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       }
       if (page.length < chatPageSize) _hasMore = false;
       _stuckAt = added == 0 ? oldest : null;
+      // Le pagine sono arrivate fino all'ultimo messaggio visto prima del buco.
+      final gap = _gapAfter;
+      if (gap != null &&
+          (page.length < chatPageSize ||
+              page.any((m) => !m.createdAt.isAfter(gap)))) {
+        _gapAfter = null;
+      }
     } catch (_) {
       if (generation == _generation) _loadMoreFailed = true;
     } finally {
