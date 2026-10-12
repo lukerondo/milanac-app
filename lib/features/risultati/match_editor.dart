@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
+import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../rosa/member.dart';
@@ -11,6 +12,14 @@ import '../rosa/rosa_repository.dart';
 import '../tornei/tournaments_repository.dart';
 import 'match.dart';
 import 'matches_repository.dart';
+
+/// Il risultato si scrive per intero o per niente: con un solo punteggio la partita
+/// resterebbe "da giocare" (niente notifica, niente carte). null = va bene.
+String? resultError(int? goalsFor, int? goalsAgainst) =>
+    (goalsFor == null) == (goalsAgainst == null)
+    ? null
+    : 'Inserisci entrambi i punteggi, oppure lasciali vuoti '
+          'se la partita non è ancora stata giocata.';
 
 Future<void> showMatchEditor(BuildContext context, {ClubMatch? match}) =>
     showModalBottomSheet(
@@ -68,10 +77,15 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
       c.text.trim().isEmpty ? null : c.text.trim();
 
   Future<void> _save() async {
-    if (_opponent.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Inserisci il nome dell'avversario.")),
-      );
+    final goalsFor = int.tryParse(_for.text.trim());
+    final goalsAgainst = int.tryParse(_against.text.trim());
+    final error = _opponent.text.trim().isEmpty
+        ? "Inserisci il nome dell'avversario."
+        : resultError(goalsFor, goalsAgainst);
+    if (error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     setState(() => _saving = true);
@@ -82,8 +96,8 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
       playedAt: DateTime(_date.year, _date.month, _date.day, 21, 30),
       competition: _kind == MatchKind.torneo ? _text(_competition) : null,
       home: _home,
-      goalsFor: int.tryParse(_for.text),
-      goalsAgainst: int.tryParse(_against.text),
+      goalsFor: goalsFor,
+      goalsAgainst: goalsAgainst,
       scorers: _text(_scorers),
       notes: _text(_notes),
       team: _team,
@@ -96,9 +110,11 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+          ),
+        );
       }
     }
   }

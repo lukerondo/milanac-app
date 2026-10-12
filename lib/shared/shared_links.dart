@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/auth/providers.dart';
 import '../core/config.dart';
+import '../core/push/push_service.dart' show messengerKey;
 
 /// Sezioni che usano i link condivisi (tabella `shared_links`):
 /// la colonna sonora e i video dei creator di Mondo Proclub.
@@ -119,25 +120,31 @@ final sharedLinksRepositoryProvider = Provider<SharedLinksRepository>((ref) {
 });
 
 final sharedLinksProvider =
-    StreamProvider.family<List<SharedLink>, LinkCategory>(
-      (ref, category) =>
-          ref.watch(sharedLinksRepositoryProvider).watch(category),
-    );
+    StreamProvider.family<List<SharedLink>, LinkCategory>((ref, category) {
+      // Le proposte si vedono con i permessi di chi è collegato: al cambio di
+      // account si ricarica da zero.
+      ref.watch(currentUserIdProvider);
+      return ref.watch(sharedLinksRepositoryProvider).watch(category);
+    });
 
 class _SupabaseSharedLinksRepository implements SharedLinksRepository {
   _SupabaseSharedLinksRepository(this._ref);
   final Ref _ref;
 
+  // Niente filtro sul server: gli stream filtrati non ricevono le eliminazioni
+  // (un video scartato o ritirato restava in elenco). La categoria si sceglie qui.
   @override
   Stream<List<SharedLink>> watch(LinkCategory category) => _ref
       .read(supabaseProvider)
       .from('shared_links')
       .stream(primaryKey: ['id'])
-      .eq('category', category.name)
       .order('created_at')
       .map(
         (rows) =>
-            rows.map(SharedLink.fromMap).toList()
+            rows
+                .where((r) => r['category'] == category.name)
+                .map(SharedLink.fromMap)
+                .toList()
               ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)),
       );
 
@@ -262,8 +269,31 @@ class DemoSharedLinksRepository implements SharedLinksRepository {
   }
 }
 
-Future<void> openSharedLink(String url) =>
-    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+/// Apre un link fuori dall'app (YouTube, Spotify, il browser…). Se non si apre
+/// (link non valido, nessuna app adatta) lo dice con un messaggio invece di
+/// lasciare un'eccezione non gestita. Restituisce true se si è aperto.
+Future<bool> openExternalLink(
+  String url, {
+  LaunchMode mode = LaunchMode.externalApplication,
+}) async {
+  final uri = Uri.tryParse(url.trim());
+  var ok = false;
+  if (uri != null && uri.hasScheme) {
+    try {
+      ok = await launchUrl(uri, mode: mode);
+    } catch (_) {
+      ok = false;
+    }
+  }
+  if (!ok) {
+    messengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text('Impossibile aprire il link.')),
+    );
+  }
+  return ok;
+}
+
+Future<bool> openSharedLink(String url) => openExternalLink(url);
 
 /// Finestra per aggiungere o modificare un link. [tags], se indicati, diventano una scelta.
 Future<SharedLink?> showSharedLinkEditor(
