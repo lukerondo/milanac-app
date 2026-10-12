@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:milanac/core/auth/providers.dart';
 import 'package:milanac/core/italian_time.dart';
 import 'package:milanac/core/router.dart';
 import 'package:milanac/features/calendario/club_event.dart';
+import 'package:milanac/features/calendario/events_repository.dart';
 import 'package:milanac/features/presenze/attendance.dart';
 import 'package:milanac/features/presenze/attendance_repository.dart';
 import 'package:milanac/features/presenze/presenze_page.dart';
@@ -12,6 +14,37 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import 'helpers.dart';
 import 'home_test.dart' show italyAt, startAppAt, todayInItalyAt;
+
+/// L'account entrato sul telefono (null = nessuno).
+class TestAccount extends Notifier<String?> {
+  @override
+  String? build() => 'a';
+  void enter(String? id) => state = id;
+}
+
+final testAccountProvider = NotifierProvider<TestAccount, String?>(
+  TestAccount.new,
+);
+
+class _CountingAttendance extends DemoAttendanceRepository {
+  var reads = 0;
+
+  @override
+  Stream<List<AttendanceEntry>> watchSince(DateTime from) {
+    reads++;
+    return super.watchSince(from);
+  }
+}
+
+class _CountingEvents extends DemoEventsRepository {
+  var reads = 0;
+
+  @override
+  Stream<List<ClubEvent>> watchAll() {
+    reads++;
+    return super.watchAll();
+  }
+}
 
 Future<ProviderContainer> openPresenze(
   WidgetTester tester,
@@ -201,7 +234,8 @@ void main() {
 
   test('risposta dopo le 18:30: il messaggio lo dice in chiaro', () {
     const rls = PostgrestException(
-      message: 'new row violates row-level security policy for table '
+      message:
+          'new row violates row-level security policy for table '
           '"attendance"',
       code: '42501',
     );
@@ -216,6 +250,40 @@ void main() {
       'Nessuna connessione: controlla la rete e riprova.',
     );
   });
+
+  test(
+    'presenze ed eventi si rileggono quando entra un altro account',
+    () async {
+      final attendance = _CountingAttendance();
+      final events = _CountingEvents();
+      final container = ProviderContainer(
+        overrides: [
+          currentUserIdProvider.overrideWith(
+            (ref) => ref.watch(testAccountProvider),
+          ),
+          attendanceRepositoryProvider.overrideWithValue(attendance),
+          eventsRepositoryProvider.overrideWithValue(events),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(attendanceProvider, (_, _) {});
+      container.listen(eventsProvider, (_, _) {});
+      await container.read(attendanceProvider.future);
+      await container.read(eventsProvider.future);
+      expect((attendance.reads, events.reads), (1, 1));
+
+      container.read(testAccountProvider.notifier).enter('b');
+      expect(await container.read(attendanceProvider.future), isNotEmpty);
+      expect(await container.read(eventsProvider.future), isNotEmpty);
+      expect((attendance.reads, events.reads), (2, 2));
+
+      // Uscito dall'account: niente dati (e niente letture con i permessi di prima).
+      container.read(testAccountProvider.notifier).enter(null);
+      expect(await container.read(attendanceProvider.future), isEmpty);
+      expect(await container.read(eventsProvider.future), isEmpty);
+      expect((attendance.reads, events.reads), (2, 2));
+    },
+  );
 
   test('i giorni fuori dal calendario si riportano dentro', () {
     final today = DateTime(2026, 10, 12);
@@ -292,15 +360,16 @@ void main() {
     );
   });
 
-  testWidgets('telefono su un altro fuso: il giorno e gli orari sono italiani', (
-    tester,
-  ) async {
-    // Tokyo, martedì 13 ottobre all'01:00: in Italia è lunedì 12, le 18:00.
-    await openPresenze(tester, DateTime.parse('2026-10-13T01:00:00+09:00'));
-    expect(find.text('STASERA · Lunedì 12 ottobre'), findsOneWidget);
-    expect(find.text('Allenamento alle 21:30'), findsOneWidget);
-    expect(find.text('Ci sei? Rispondi entro le 18:30.'), findsOneWidget);
-  });
+  testWidgets(
+    'telefono su un altro fuso: il giorno e gli orari sono italiani',
+    (tester) async {
+      // Tokyo, martedì 13 ottobre all'01:00: in Italia è lunedì 12, le 18:00.
+      await openPresenze(tester, DateTime.parse('2026-10-13T01:00:00+09:00'));
+      expect(find.text('STASERA · Lunedì 12 ottobre'), findsOneWidget);
+      expect(find.text('Allenamento alle 21:30'), findsOneWidget);
+      expect(find.text('Ci sei? Rispondi entro le 18:30.'), findsOneWidget);
+    },
+  );
 
   testWidgets('telefono su un altro fuso: alle 18:45 italiane è chiuso', (
     tester,

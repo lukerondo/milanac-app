@@ -105,13 +105,16 @@ void main() {
     );
   });
 
-  test('risposte aperte fino alle 18:30 italiane, anche per i giorni successivi', () {
-    final day = DateTime(2026, 10, 3);
-    expect(answersOpen(day, italyAt(2026, 10, 3, 18, 29)), isTrue);
-    expect(answersOpen(day, italyAt(2026, 10, 3, 18, 30)), isFalse);
-    expect(answersOpen(day, italyAt(2026, 10, 2, 23)), isTrue);
-    expect(answersOpen(day, italyAt(2026, 10, 4, 9)), isFalse);
-  });
+  test(
+    'risposte aperte fino alle 18:30 italiane, anche per i giorni successivi',
+    () {
+      final day = DateTime(2026, 10, 3);
+      expect(answersOpen(day, italyAt(2026, 10, 3, 18, 29)), isTrue);
+      expect(answersOpen(day, italyAt(2026, 10, 3, 18, 30)), isFalse);
+      expect(answersOpen(day, italyAt(2026, 10, 2, 23)), isTrue);
+      expect(answersOpen(day, italyAt(2026, 10, 4, 9)), isFalse);
+    },
+  );
 
   testWidgets('Home: i due riquadri e la risposta per stasera', (tester) async {
     await startAppAt(tester, todayInItalyAt(17));
