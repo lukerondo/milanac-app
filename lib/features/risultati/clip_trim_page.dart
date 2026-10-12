@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../core/errors.dart';
 import '../../core/theme.dart';
 import 'clip_service.dart';
 
@@ -29,18 +30,34 @@ class _ClipTrimPageState extends State<ClipTrimPage> {
   @override
   void initState() {
     super.initState();
-    _video.initialize().then((_) {
-      if (!mounted) return;
-      setState(() {});
-      _video
-        ..setLooping(false)
-        ..play();
-    });
+    _video.initialize().then(
+      (_) {
+        if (!mounted) return;
+        setState(() {});
+        _video
+          ..setLooping(false)
+          ..play();
+      },
+      onError: (Object _) {
+        // Formato che il telefono non sa leggere (codec, file danneggiato...):
+        // si avvisa e si torna indietro invece di girare a vuoto.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Impossibile aprire questo video: prova con un altro file.',
+            ),
+          ),
+        );
+        Navigator.of(context).pop();
+      },
+    );
     _video.addListener(_loopWindow);
   }
 
   /// Riproduce in loop solo la finestra di 15 secondi selezionata.
   void _loopWindow() {
+    if (!_video.value.isInitialized) return;
     final pos = _video.value.position.inMilliseconds / 1000;
     if (pos >= _start + maxClipSeconds || pos >= _total - 0.05) {
       _video.seekTo(Duration(milliseconds: (_start * 1000).round()));
@@ -67,7 +84,13 @@ class _ClipTrimPageState extends State<ClipTrimPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _processing = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            friendlyError(e, action: 'Preparazione della clip non riuscita'),
+          ),
+        ),
+      );
     }
   }
 

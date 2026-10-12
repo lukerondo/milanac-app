@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/profile.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../../shared/member_photo.dart';
 import '../carta/carta_page.dart';
 import '../carta/fut_card.dart';
@@ -75,10 +76,10 @@ class _RosaPageState extends ConsumerState<RosaPage> {
   Widget build(BuildContext context) {
     final rosa = ref.watch(rosaProvider);
 
-    return rosa.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) =>
-          Center(child: Text('Errore nel caricamento della rosa.\n$e')),
+    return AsyncView(
+      value: rosa,
+      onRetry: () => ref.invalidate(rosaProvider),
+      action: 'Caricamento della rosa non riuscito',
       data: (all) {
         final members = all
             .where((m) => m.active && m.role != ClubRole.pending)

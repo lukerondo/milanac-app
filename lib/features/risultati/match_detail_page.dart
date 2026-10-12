@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
+import '../../shared/shared_links.dart';
 import '../carte/assign_cards_sheet.dart';
 import '../carte/carte_speciali_page.dart';
 import '../carte/special_cards_repository.dart';
@@ -18,6 +21,11 @@ import 'matches_repository.dart';
 import 'media_viewer.dart';
 import 'risultati_page.dart';
 
+/// Indietro: alla pagina precedente o, se la partita è stata aperta da una notifica
+/// (ed è l'unica pagina), ai Risultati.
+void _leave(BuildContext context) =>
+    context.canPop() ? context.pop() : context.go('/risultati');
+
 class MatchDetailPage extends ConsumerWidget {
   const MatchDetailPage({super.key, required this.matchId});
   final String matchId;
@@ -25,22 +33,82 @@ class MatchDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    final match = ref
-        .watch(matchesProvider)
-        .value
-        ?.where((m) => m.id == matchId)
-        .firstOrNull;
-    final media = ref.watch(matchMediaProvider(matchId));
+    final matches = ref.watch(matchesProvider);
+    final match = matches.value?.where((m) => m.id == matchId).firstOrNull;
+    final back = BackButton(onPressed: () => _leave(context));
+    // Aperta da una notifica è l'unica pagina: il tasto indietro di Android porta
+    // ai Risultati invece di chiudere l'app.
+    final first = ModalRoute.of(context)?.isFirst ?? false;
 
+    Widget page;
     if (match == null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const Center(child: Text('Partita non trovata.')),
+      page = Scaffold(
+        appBar: AppBar(leading: back),
+        // Lo spinner finché l'elenco non è caricato; "non trovata" solo quando
+        // l'elenco è arrivato e la partita non c'è (eliminata o link vecchio).
+        body: matches.hasError && (!matches.isLoading || matches.retrying)
+            ? ErrorRetry(
+                message: friendlyError(
+                  matches.error!,
+                  action: 'Caricamento non riuscito',
+                ),
+                onRetry: () => ref.invalidate(matchesProvider),
+              )
+            : matches.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ErrorRetry(
+                message: 'Partita non trovata.',
+                onRetry: () => ref.invalidate(matchesProvider),
+              ),
+      );
+    } else {
+      page = _MatchScaffold(match: match, isDirettivo: isDirettivo, back: back);
+    }
+    return PopScope(
+      canPop: !first,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go('/risultati');
+      },
+      child: page,
+    );
+  }
+}
+
+class _MatchScaffold extends ConsumerWidget {
+  const _MatchScaffold({
+    required this.match,
+    required this.isDirettivo,
+    required this.back,
+  });
+  final ClubMatch match;
+  final bool isDirettivo;
+  final Widget back;
+
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final ok = await _confirm(
+      context,
+      'Eliminare la partita e tutti i suoi media?',
+    );
+    if (ok != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(matchesRepositoryProvider).delete(match.id);
+      if (context.mounted) _leave(context);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Eliminazione non riuscita')),
+        ),
       );
     }
+  }
 
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final media = ref.watch(matchMediaProvider(match.id));
     return Scaffold(
       appBar: AppBar(
+        leading: back,
         title: Text(
           match.kind == MatchKind.torneo ? 'PARTITA UFFICIALE' : 'AMICHEVOLE',
         ),
@@ -54,15 +122,7 @@ class MatchDetailPage extends ConsumerWidget {
             IconButton(
               tooltip: 'Elimina partita',
               icon: const Icon(Icons.delete_outline_rounded),
-              onPressed: () async {
-                final ok = await _confirm(
-                  context,
-                  'Eliminare la partita e tutti i suoi media?',
-                );
-                if (ok != true) return;
-                await ref.read(matchesRepositoryProvider).delete(match.id);
-                if (context.mounted) Navigator.of(context).pop();
-              },
+              onPressed: () => _delete(context, ref),
             ),
           ],
         ],
@@ -94,9 +154,9 @@ class MatchDetailPage extends ConsumerWidget {
               style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
             ),
           ),
-          media.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Errore: $e'),
+          AsyncView(
+            value: media,
+            onRetry: () => ref.invalidate(allMatchMediaProvider),
             data: (items) => items.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.all(8),
@@ -272,8 +332,18 @@ class _MediaTile extends ConsumerWidget {
                   context,
                   'Eliminare questo contenuto?',
                 );
-                if (ok == true) {
+                if (ok != true || !context.mounted) return;
+                final messenger = ScaffoldMessenger.of(context);
+                try {
                   await ref.read(matchesRepositoryProvider).deleteMedia(media);
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        friendlyError(e, action: 'Eliminazione non riuscita'),
+                      ),
+                    ),
+                  );
                 }
               }
             : null,
@@ -316,10 +386,7 @@ class _MediaTile extends ConsumerWidget {
 
 Future<void> openMedia(BuildContext context, MatchMedia media) async {
   if (media.type == MediaType.link) {
-    await launchUrl(
-      Uri.parse(media.url!),
-      mode: LaunchMode.externalApplication,
-    );
+    await openExternalLink(media.url ?? '');
     return;
   }
   await Navigator.of(
@@ -390,41 +457,57 @@ Future<void> _addMedia(
           imageQuality: 80,
         );
         if (file == null) return;
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Caricamento foto…')),
-        );
-        await repo.uploadMedia(
-          matchId,
-          type: MediaType.photo,
-          bytes: await file.readAsBytes(),
-          extension: 'jpg',
-        );
+        // La foto scelta è una copia temporanea: si toglie anche se il caricamento fallisce.
+        try {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Caricamento foto…')),
+          );
+          await repo.uploadMedia(
+            matchId,
+            type: MediaType.photo,
+            bytes: await file.readAsBytes(),
+            extension: 'jpg',
+          );
+        } finally {
+          await ClipService.discard(file.path);
+        }
       case 'video' || 'camera':
         final file = await ImagePicker().pickVideo(
           source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
           maxDuration: const Duration(seconds: maxClipSeconds),
         );
-        if (file == null || !context.mounted) return;
-        final clip = await Navigator.of(context, rootNavigator: true)
-            .push<PreparedClip>(
-              MaterialPageRoute(builder: (_) => ClipTrimPage(path: file.path)),
-            );
-        if (clip == null) return;
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Caricamento clip…')),
-        );
-        await repo.uploadMedia(
-          matchId,
-          type: MediaType.video,
-          bytes: clip.bytes,
-          extension: 'mp4',
-          durationS: clip.durationS,
-        );
+        if (file == null) return;
+        // Il video scelto (o registrato) è una copia temporanea che può pesare
+        // centinaia di MB: si toglie sempre, anche se si annulla o il caricamento fallisce.
+        try {
+          if (!context.mounted) return;
+          final clip = await Navigator.of(context, rootNavigator: true)
+              .push<PreparedClip>(
+                MaterialPageRoute(
+                  builder: (_) => ClipTrimPage(path: file.path),
+                ),
+              );
+          if (clip == null) return;
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Caricamento clip…')),
+          );
+          await repo.uploadMedia(
+            matchId,
+            type: MediaType.video,
+            bytes: clip.bytes,
+            extension: 'mp4',
+            durationS: clip.durationS,
+          );
+        } finally {
+          await ClipService.discard(file.path);
+        }
     }
     messenger.showSnackBar(const SnackBar(content: Text('Contenuto aggiunto')));
   } catch (e) {
     messenger.showSnackBar(
-      SnackBar(content: Text('Caricamento non riuscito: $e')),
+      SnackBar(
+        content: Text(friendlyError(e, action: 'Caricamento non riuscito')),
+      ),
     );
   }
 }

@@ -7,6 +7,8 @@ import 'news_item.dart';
 /// Ultime notizie (raccolte ogni 3 ore dal job GitHub Actions nella tabella `news`).
 final newsProvider = FutureProvider<List<NewsItem>>((ref) async {
   if (AppConfig.isDemo) return _demoNews;
+  // Si leggono con i permessi di chi è collegato: al cambio di account si ricarica.
+  ref.watch(currentUserIdProvider);
   final rows = await ref
       .watch(supabaseProvider)
       .from('news')

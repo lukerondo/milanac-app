@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/clock.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../carta/carta_page.dart';
 import '../carta/fut_card.dart';
 import '../risultati/match.dart';
@@ -27,10 +28,12 @@ class CarteSpecialiPage extends ConsumerWidget {
       for (final m in ref.watch(matchesProvider).value ?? const <ClubMatch>[])
         m.id: m,
     };
+    // Si ridisegna anche quando una carta scade (le carte valide si ricalcolano da sé).
+    ref.watch(activeSpecialCardsProvider);
     final now = ref.watch(clockProvider)();
-    return cards.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Errore: $e')),
+    return AsyncView(
+      value: cards,
+      onRetry: () => ref.invalidate(specialCardsProvider),
       data: (all) {
         final active = all.where((c) => c.activeAt(now)).toList()
           ..sort(compareCards);

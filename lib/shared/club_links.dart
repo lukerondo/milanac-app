@@ -38,9 +38,11 @@ final clubLinksRepositoryProvider = Provider<ClubLinksRepository>((ref) {
   return _SupabaseClubLinksRepository(ref);
 });
 
-final clubLinksProvider = FutureProvider<List<ClubLink>>(
-  (ref) => ref.watch(clubLinksRepositoryProvider).load(),
-);
+final clubLinksProvider = FutureProvider<List<ClubLink>>((ref) {
+  // Si leggono con i permessi di chi è collegato: al cambio di account si ricarica.
+  ref.watch(currentUserIdProvider);
+  return ref.watch(clubLinksRepositoryProvider).load();
+});
 
 class _SupabaseClubLinksRepository implements ClubLinksRepository {
   _SupabaseClubLinksRepository(this._ref);
@@ -63,15 +65,23 @@ class _SupabaseClubLinksRepository implements ClubLinksRepository {
   }
 
   /// Sostituisce l'intera lista (sono pochi elementi, gestiti solo dal Direttivo).
+  /// Prima i contatti nuovi, poi via i vecchi: se la rete cade a metà non si
+  /// perdono tutti (al massimo per un attimo compaiono doppi).
   @override
   Future<void> saveAll(List<ClubLink> links) async {
     final table = _ref.read(supabaseProvider).from('club_links');
-    await table.delete().not('id', 'is', null);
-    if (links.isEmpty) return;
-    await table.insert([
-      for (final (i, l) in links.indexed)
-        {'kind': l.kind.name, 'url': l.url, 'sort_order': i},
-    ]);
+    final inserted = links.isEmpty
+        ? const <Map<String, dynamic>>[]
+        : await table
+              .insert([
+                for (final (i, l) in links.indexed)
+                  {'kind': l.kind.name, 'url': l.url, 'sort_order': i},
+              ])
+              .select('id');
+    final keep = [for (final r in inserted) r['id']];
+    await (keep.isEmpty
+        ? table.delete().not('id', 'is', null)
+        : table.delete().not('id', 'in', keep));
   }
 }
 
