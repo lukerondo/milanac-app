@@ -7,12 +7,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:milanac/core/appearance.dart';
 import 'package:milanac/core/audio_focus.dart';
 import 'package:milanac/core/auth/providers.dart';
 import 'package:milanac/core/push/push_service.dart';
 import 'package:milanac/core/router.dart';
 import 'package:milanac/features/chat/channel_messages.dart';
+import 'package:milanac/features/chat/channel_page.dart';
+import 'package:milanac/features/chat/chat_list_page.dart';
 import 'package:milanac/features/chat/chat_repository.dart';
+import 'package:milanac/features/chat/chat_widgets.dart';
 import 'package:milanac/features/chat/voice_player.dart';
 import 'package:milanac/features/chat/voice_recorder.dart';
 import 'package:milanac/features/intro/intro_state.dart';
@@ -233,10 +237,33 @@ Future<void> openChannel(WidgetTester tester, String name) async {
   await tester.pumpAndSettle();
 }
 
+/// Il pulsante del microfono (tavola 13).
+const micLabel = 'Tieni premuto per registrare un vocale';
+
+/// Apre "Cerca nei messaggi" dalla scheda Chat: dal pulsante nella barra in alto se
+/// c'è, altrimenti come fa il pulsante.
+Future<void> openSearch(WidgetTester tester) async {
+  await goToSection(tester, 'Chat');
+  final button = find.byTooltip('Cerca nei messaggi');
+  if (button.evaluate().isNotEmpty) {
+    await tester.tap(button);
+  } else {
+    unawaited(showChatSearch(tester.element(find.byType(ChatListPage))));
+  }
+  await tester.pumpAndSettle();
+}
+
+/// Scrive [text] nella ricerca e aspetta che parta.
+Future<void> searchFor(WidgetTester tester, String text) async {
+  await tester.enterText(find.byType(TextField), text);
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.pumpAndSettle();
+}
+
 /// Tiene premuto il microfono per [hold] e lo rilascia.
 Future<void> recordVoice(WidgetTester tester, Duration hold) async {
   final gesture = await tester.startGesture(
-    tester.getCenter(find.bySemanticsLabel('Registra un vocale')),
+    tester.getCenter(find.bySemanticsLabel(micLabel)),
   );
   await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
   await tester.pump();
@@ -288,7 +315,7 @@ void main() {
     await tester.tap(find.text('Milan AC'));
     await tester.pumpAndSettle();
     expect(find.text('Stasera provo la build nuova da DC'), findsOneWidget);
-    await tester.tap(find.byType(BackButton));
+    await tester.tap(find.byTooltip('Indietro'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Generale'));
@@ -299,9 +326,9 @@ void main() {
     expect(find.text('Oggi'), findsOneWidget);
     expect(find.text('Ieri'), findsOneWidget);
     // La foto di ieri è scaduta; il vocale di 12 secondi si può ascoltare.
-    expect(find.text('Allegato scaduto'), findsOneWidget);
+    expect(find.text('Foto scaduta'), findsOneWidget);
     expect(find.text('0:12'), findsOneWidget);
-    await tester.tap(find.byTooltip('Ascolta'));
+    await tester.tap(find.byTooltip('Ascolta il vocale'));
     await tester.pumpAndSettle();
     expect(find.text('Vocale non disponibile nella demo.'), findsOneWidget);
     // L'avviso in basso sparisce dopo qualche secondo (copre la barra di scrittura).
@@ -319,7 +346,7 @@ void main() {
     // Senza testo c'è il microfono (tieni premuto); con il testo compare "Invia".
     // Il permesso del microfono si chiede al tocco, non durante la pressione lunga.
     expect(find.byTooltip('Invia'), findsNothing);
-    await tester.tap(find.bySemanticsLabel('Registra un vocale'));
+    await tester.tap(find.bySemanticsLabel(micLabel));
     await tester.pumpAndSettle();
     expect(recorder.askedPermission, isTrue);
     expect(find.textContaining('Tieni premuto per registrare'), findsOneWidget);
@@ -349,12 +376,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Forza MILANAC!'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Silenzia canale'));
+    await tester.tap(find.byTooltip('Silenzia il canale'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Riattiva notifiche'), findsOneWidget);
+    expect(find.byTooltip('Riattiva le notifiche'), findsOneWidget);
 
     // Tornando alla lista: tutto letto, canale silenziato.
-    await tester.tap(find.byType(BackButton));
+    await tester.tap(find.byTooltip('Indietro'));
     await tester.pumpAndSettle();
     expect(find.text('Demo Direttivo: Forza MILANAC!'), findsOneWidget);
     expect(find.byIcon(Icons.notifications_off_rounded), findsOneWidget);
@@ -375,7 +402,7 @@ void main() {
     final container = await startChat(tester, recorder: recorder);
     await openChannel(tester, 'Generale');
     final before = history(container, 'c-main').messages.length;
-    final mic = find.bySemanticsLabel('Registra un vocale');
+    final mic = find.bySemanticsLabel(micLabel);
 
     // Pressione lunga: il registratore è lento a partire e il dito si alza subito.
     final gesture = await tester.startGesture(tester.getCenter(mic));
@@ -734,7 +761,17 @@ void main() {
     await tester.pumpAndSettle();
 
     // Lo stesso con un testo (citazione di un messaggio eliminato, senza saperlo).
-    await tester.longPress(find.widgetWithText(LinkText, 'Il gol di ieri 🔥'));
+    final yesterday = find.widgetWithText(LinkText, 'Il gol di ieri 🔥');
+    await tester.scrollUntilVisible(
+      yesterday,
+      200,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('chat-messaggi')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.longPress(yesterday);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rispondi'));
     await tester.pumpAndSettle();
@@ -780,7 +817,7 @@ void main() {
     // Stessa pagina riusata dal router per un altro canale: si riparte da zero.
     router.go('/chat/tattiche');
     await tester.pumpAndSettle();
-    expect(find.text('TATTICHE & SCHEMI'), findsOneWidget);
+    expect(find.text('Tattiche & Schemi'), findsOneWidget);
     expect(shows('tattiche'), isFalse);
     expect(shows('milanac'), isTrue);
 
@@ -884,5 +921,208 @@ void main() {
       (await container.read(messagesProvider('c-main').future)).messages,
       isNotEmpty,
     );
+  });
+
+  testWidgets('Elenco dei canali (tavola 12): stanza aperta in cima, cuffie, '
+      'non letti, descrizioni dei canali senza messaggi', (tester) async {
+    await startChat(tester);
+    await goToSection(tester, 'Chat');
+    // La card della stanza vocale di Milan AC in cima, le cuffie accanto al nome.
+    expect(find.textContaining('Stanza vocale aperta'), findsOneWidget);
+    expect(find.text('Marco e Luca sono dentro'), findsOneWidget);
+    // Le righe si leggono intere: nome, cuffie, ultimo messaggio, ora, non letti.
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Milan AC\nstanza vocale aperta\n')),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel(RegExp(r'\n2 non letti$')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'\n1 non letto$')), findsOneWidget);
+    expect(find.text('Luca Bianchi: Ci sono 💪'), findsOneWidget);
+    expect(find.text('La chat del Futuro'), findsOneWidget);
+    expect(find.text('Avvisi ufficiali del Direttivo'), findsOneWidget);
+    expect(find.text('Solo per il Direttivo'), findsOneWidget);
+    // La Sala Direttivo con il lucchetto nel riquadro.
+    expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
+
+    // La conversazione: nome del canale e chi lo legge nella barra in alto.
+    await tester.tap(find.text('Milan AC'));
+    await tester.pumpAndSettle();
+    expect(find.text('La squadra Milan AC'), findsOneWidget);
+    await tester.tap(find.byTooltip('Indietro'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Generale'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tutto il club'), findsOneWidget);
+    expect(find.text('Foto scaduta'), findsOneWidget);
+    expect(find.byTooltip('Stanza vocale'), findsOneWidget);
+    expect(find.byTooltip('Silenzia il canale'), findsOneWidget);
+  });
+
+  testWidgets('Conversazione aperta da una notifica: indietro porta all\'elenco '
+      'dei canali invece di chiudere l\'app', (tester) async {
+    await startChat(tester);
+    await goToPath(tester, '/chat/main');
+    expect(find.byType(ChannelPage), findsOneWidget);
+    expect(find.text('Tutto il club'), findsOneWidget);
+    final handled = await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(handled, isTrue, reason: 'l\'app non si chiude');
+    expect(find.byType(ChannelPage), findsNothing);
+    expect(find.byType(ChatListPage), findsOneWidget);
+    expect(find.text('CHAT'), findsOneWidget);
+
+    // Aperta dall'elenco invece torna indietro normalmente.
+    await tester.tap(find.text('Generale'));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(ChannelPage), findsNothing);
+    expect(find.byType(ChatListPage), findsOneWidget);
+  });
+
+  test('ricerca: like letterale, pezzo di testo e parola evidenziata', () {
+    expect(escapeLikePattern(r'50%_a\b'), r'50\%\_a\\b');
+    expect(escapeLikePattern('lobby'), 'lobby');
+    expect(searchSnippet('Ci  sono\nanche io', 'sono'), 'Ci sono anche io');
+    final long = '${'parola ' * 12}e poi il gol di ieri';
+    final snippet = searchSnippet(long, 'GOL');
+    expect(snippet, startsWith('…'));
+    expect(snippet, endsWith('il gol di ieri'));
+    expect(snippet.length, lessThan(long.length));
+    final spans = highlightMatches(
+      'Stasera in LOBBY, poi lobby!',
+      'lobby',
+      hit: const TextStyle(fontWeight: FontWeight.w700),
+    );
+    expect(spans.map((s) => s.text).toList(), [
+      'Stasera in ',
+      'LOBBY',
+      ', poi ',
+      'lobby',
+      '!',
+    ]);
+    expect(spans.where((s) => s.style != null), hasLength(2));
+  });
+
+  testWidgets('Cerca nei messaggi: canale, autore e parola evidenziata; un tocco '
+      'apre il canale', (tester) async {
+    await startChat(tester);
+    await openSearch(tester);
+    expect(find.byType(ChatSearchPage), findsOneWidget);
+    expect(find.textContaining('Scrivi almeno 2 lettere'), findsOneWidget);
+    await searchFor(tester, 'l');
+    expect(find.textContaining('Scrivi almeno 2 lettere'), findsOneWidget);
+
+    // Maiuscole e minuscole non contano.
+    await searchFor(tester, 'LOBBY');
+    expect(find.text('1 MESSAGGIO'), findsOneWidget);
+    expect(find.text('Generale'), findsOneWidget);
+    expect(find.text('Marco Rossi'), findsOneWidget);
+    final hit = find.textContaining(
+      'Stasera tutti in lobby',
+      findRichText: true,
+    );
+    expect(hit, findsOneWidget);
+    final bold = <String>[];
+    tester.widget<RichText>(hit).text.visitChildren((s) {
+      if (s is TextSpan && s.style?.fontWeight == FontWeight.w700) {
+        bold.add(s.text ?? '');
+      }
+      return true;
+    });
+    expect(bold, ['lobby']);
+
+    // % e _ si cercano come lettere, non come caratteri jolly.
+    await searchFor(tester, '%_');
+    expect(find.text('Nessun messaggio con «%_».'), findsOneWidget);
+    await searchFor(tester, 'zzz');
+    expect(find.text('Nessun messaggio con «zzz».'), findsOneWidget);
+
+    // Un tocco apre il canale; indietro si torna ai risultati.
+    await searchFor(tester, 'build');
+    expect(find.text('Milan AC'), findsOneWidget);
+    expect(find.text('Andrea Neri'), findsOneWidget);
+    await tester.tap(find.textContaining('build nuova', findRichText: true));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChannelPage), findsOneWidget);
+    expect(find.text('La squadra Milan AC'), findsOneWidget);
+    expect(find.text('Stasera provo la build nuova da DC'), findsOneWidget);
+    await tester.tap(find.byTooltip('Indietro'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChatSearchPage), findsOneWidget);
+    expect(find.text('Andrea Neri'), findsOneWidget);
+  });
+
+  testWidgets('Pulsante "Cerca nei messaggi" per la barra in alto', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(appBar: AppBar(actions: const [ChatSearchButton()])),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('Cerca nei messaggi'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChatSearchPage), findsOneWidget);
+    expect(find.text('CERCA NEI MESSAGGI'), findsOneWidget);
+  });
+
+  testWidgets('Tema chiaro: elenco, conversazione e ricerca senza errori', (
+    tester,
+  ) async {
+    final container = await startChat(tester);
+    await container.read(appearanceProvider.notifier).set(Appearance.chiaro);
+    await tester.pumpAndSettle();
+    await goToSection(tester, 'Chat');
+    expect(
+      Theme.of(tester.element(find.text('Generale'))).brightness,
+      Brightness.light,
+    );
+    expect(find.text('Luca Bianchi: Ci sono 💪'), findsOneWidget);
+    expect(find.textContaining('Stanza vocale aperta'), findsOneWidget);
+
+    // Conversazione: foto scaduta, vocale, risposta, nuovi messaggi, invio.
+    await tester.tap(find.text('Generale'));
+    await tester.pumpAndSettle();
+    expect(find.text('Foto scaduta'), findsOneWidget);
+    expect(find.text('Nuovi messaggi'), findsOneWidget);
+    expect(find.text('0:12'), findsOneWidget);
+    await tester.longPress(find.widgetWithText(LinkText, 'Ci sono 💪'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rispondi'));
+    await tester.pumpAndSettle();
+    expect(find.text('Rispondi a Luca Bianchi'), findsOneWidget);
+    final hold = await tester.startGesture(
+      tester.getCenter(find.bySemanticsLabel(micLabel)),
+    );
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    await tester.pump();
+    expect(find.text('◀ Scorri per annullare'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await hold.up();
+    await tester.pumpAndSettle();
+    expect(find.text('0:03'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Ciao a tutti');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Invia'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ciao a tutti'), findsOneWidget);
+    await tester.tap(find.byTooltip('Indietro'));
+    await tester.pumpAndSettle();
+
+    // Il replay della lavagna e Comunicazioni (sola lettura).
+    await tester.tap(find.text('Tattiche & Schemi'));
+    await tester.pumpAndSettle();
+    expect(find.text('SCHEMA CON AUDIO'), findsOneWidget);
+    await tester.tap(find.byTooltip('Indietro'));
+    await tester.pumpAndSettle();
+
+    // La ricerca.
+    await openSearch(tester);
+    await searchFor(tester, 'lobby');
+    expect(find.text('1 MESSAGGIO'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

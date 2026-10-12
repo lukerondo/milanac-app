@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -13,9 +14,11 @@ import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/push/push_service.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/async_view.dart';
 import '../../shared/link_text.dart';
 import '../../shared/member_photo.dart';
+import '../../shared/ui.dart';
 import '../carte/special_cards_repository.dart';
 import '../lavagna/board_model.dart';
 import '../lavagna/board_painter.dart';
@@ -24,6 +27,7 @@ import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'channel_messages.dart';
 import 'chat_repository.dart';
+import 'chat_widgets.dart';
 import 'voice_player.dart';
 import '../voce/voice_room_sheet.dart';
 import 'voice_recorder.dart';
@@ -43,28 +47,59 @@ class ChannelPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final channels = ref.watch(channelsProvider);
     final channel = channels.value?.where((c) => c.slug == slug).firstOrNull;
-    if (channel != null) {
-      // Una conversazione per canale: aprendo un altro canale (anche con router.go,
-      // che riusa la pagina) si riparte da zero.
-      return _ChannelView(
-        key: ValueKey(channel.id),
-        channel: channel,
-        openVoice: openVoice,
-      );
-    }
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => _exit(context)),
-        title: const Text('CHAT'),
-      ),
-      body: AsyncView<List<Channel>>(
-        value: channels,
-        onRetry: () => ref.invalidate(channelsProvider),
-        action: 'Canali non caricati',
-        data: (_) => _ChannelUnavailable(onExit: () => _exit(context)),
-      ),
+    // Aperta da una notifica come unica pagina: indietro porta all'elenco dei canali
+    // invece di chiudere l'app.
+    return PopScope(
+      canPop: !(ModalRoute.of(context)?.isFirst ?? false),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go('/chat');
+      },
+      child: channel != null
+          // Una conversazione per canale: aprendo un altro canale (anche con
+          // router.go, che riusa la pagina) si riparte da zero.
+          ? _ChannelView(
+              key: ValueKey(channel.id),
+              channel: channel,
+              openVoice: openVoice,
+            )
+          : Scaffold(
+              appBar: AppBar(
+                automaticallyImplyLeading: false,
+                leading: IconButton(
+                  tooltip: 'Indietro',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => _exit(context),
+                ),
+                title: const Text('CHAT'),
+                bottom: const _BarBorder(),
+                flexibleSpace: const Align(
+                  alignment: Alignment.topCenter,
+                  child: GoldRule(),
+                ),
+              ),
+              body: AsyncView<List<Channel>>(
+                value: channels,
+                onRetry: () => ref.invalidate(channelsProvider),
+                action: 'Canali non caricati',
+                data: (_) => _ChannelUnavailable(onExit: () => _exit(context)),
+              ),
+            ),
     );
   }
+}
+
+/// Il filo scuro sotto la barra in alto (sempre scura, come nelle sezioni).
+class _BarBorder extends StatelessWidget implements PreferredSizeWidget {
+  const _BarBorder();
+
+  @override
+  Size get preferredSize => const Size.fromHeight(1);
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: AppPalette.dark.border,
+    child: const SizedBox(height: 1, width: double.infinity),
+  );
 }
 
 class _ChannelView extends ConsumerStatefulWidget {
@@ -443,48 +478,113 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
         !channel.direttivoWrites ||
         (ref.watch(profileProvider).value?.isDirettivo ?? false);
 
+    final p = context.pal;
+    // La barra in alto è sempre scura: colori fissi della tavola 13.
+    const bar = AppPalette.dark;
     return Scaffold(
       appBar: AppBar(
-        leading: BackButton(onPressed: () => ChannelPage._exit(context)),
-        title: Text(channel.name.toUpperCase()),
+        automaticallyImplyLeading: false,
+        toolbarHeight: 60,
+        titleSpacing: 0,
+        leadingWidth: 52,
+        leading: IconButton(
+          tooltip: 'Indietro',
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => ChannelPage._exit(context),
+        ),
+        title: Row(
+          children: [
+            ChannelTile(
+              channel: channel,
+              size: 38,
+              radius: 12,
+              highlighted: true,
+              palette: bar,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    channel.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: bodyFont,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0,
+                      color: MilanacColors.ivory,
+                    ),
+                  ),
+                  Text(
+                    channel.audience,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: bodyFont,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0,
+                      color: bar.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
           VoiceRoomButton(channel: channel),
           IconButton(
-            tooltip: muted ? 'Riattiva notifiche' : 'Silenzia canale',
+            tooltip: muted ? 'Riattiva le notifiche' : 'Silenzia il canale',
             icon: Icon(
               muted
                   ? Icons.notifications_off_rounded
-                  : Icons.notifications_active_rounded,
-              color: muted ? Colors.white54 : MilanacColors.gold,
+                  : Icons.notifications_none_rounded,
+              size: 22,
+              color: MilanacColors.ivoryMuted,
             ),
             onPressed: () => _toggleMute(muted),
           ),
+          const SizedBox(width: 4),
         ],
+        bottom: const _BarBorder(),
+        flexibleSpace: const Align(
+          alignment: Alignment.topCenter,
+          child: GoldRule(),
+        ),
       ),
-      body: Column(
-        children: [
-          VoiceRoomBanner(channel: channel),
-          Expanded(
-            child: Stack(
-              children: [
-                StadiumBackground(child: _messages()),
-                if (_showJump)
-                  Positioned(
-                    right: 12,
-                    bottom: 12,
-                    child: FloatingActionButton.small(
-                      tooltip: 'Torna in fondo',
-                      backgroundColor: MilanacColors.surfaceHigh,
-                      foregroundColor: Colors.white,
-                      onPressed: _jumpToBottom,
-                      child: const Icon(Icons.keyboard_arrow_down_rounded),
+      body: ContentWidth(
+        child: Column(
+          children: [
+            VoiceRoomBanner(channel: channel),
+            Expanded(
+              child: Stack(
+                children: [
+                  _messages(),
+                  if (_showJump)
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: FloatingActionButton.small(
+                        tooltip: 'Torna in fondo',
+                        backgroundColor: p.surfaceHigh,
+                        foregroundColor: p.text,
+                        elevation: 1,
+                        shape: CircleBorder(side: BorderSide(color: p.border)),
+                        onPressed: _jumpToBottom,
+                        child: const Icon(Icons.keyboard_arrow_down_rounded),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (canWrite) _composer() else const _ReadOnlyNote(),
-        ],
+            if (canWrite) _composer() else const _ReadOnlyNote(),
+          ],
+        ),
       ),
     );
   }
@@ -517,7 +617,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
               child: Text(
                 c.description ?? 'Scrivi il primo messaggio!',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white54),
+                style: TextStyle(fontSize: 15, color: context.pal.textMuted),
               ),
             ),
           );
@@ -540,6 +640,9 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
         }
         String nameOf(String? id) =>
             members[id]?.displayName ?? (id == null ? 'MILANAC' : 'Ex membro');
+        // Nelle citazioni i propri messaggi sono "Tu".
+        String quotedName(String? id) =>
+            id != null && id == me?.id ? 'Tu' : nameOf(id);
         final showTop =
             history.hasMore || history.loadingMore || history.loadMoreFailed;
         // Lista al contrario: il più recente in basso.
@@ -549,7 +652,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
             key: _listKey,
             controller: _scroll,
             reverse: true,
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
             itemCount: list.length + (showTop ? 1 : 0),
             itemBuilder: (context, i) {
               if (i == list.length) {
@@ -588,8 +691,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                                   messageId: replyTo,
                                   loaded: byId[replyTo],
                                   deleted: history.deleted.contains(replyTo),
-                                  nameOf: nameOf,
-                                  mine: mine,
+                                  nameOf: quotedName,
                                 ),
                           canDelete:
                               !m.isLocal &&
@@ -615,107 +717,141 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
         m.id: m.displayName,
     };
     final canSend = _hasText || _image != null;
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-        decoration: const BoxDecoration(
-          color: MilanacColors.surface,
-          border: Border(top: BorderSide(color: Colors.white10)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_replyTo != null)
-              _ReplyStrip(
-                message: _replyTo!,
-                author: members[_replyTo!.authorId] ?? 'Ex membro',
-                onClose: () => setState(() => _replyTo = null),
-              ),
-            if (_image != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Stack(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.memory(_image!, height: 90),
-                      ),
-                    ),
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: IconButton.filledTonal(
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Togli la foto',
-                        onPressed: () => setState(() => _image = null),
-                        icon: const Icon(Icons.close_rounded, size: 16),
-                      ),
-                    ),
-                  ],
+    final p = context.pal;
+    OutlineInputBorder pill(Color color) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(22),
+      borderSide: BorderSide(color: color, width: 1.5),
+    );
+    // Barra di scrittura della tavola 13: foto, "Scrivi un messaggio", microfono
+    // (tieni premuto) o invio.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: p.surface,
+        border: Border(top: BorderSide(color: p.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_replyTo != null)
+                _ReplyStrip(
+                  message: _replyTo!,
+                  title: _replyTo!.authorId == ref.watch(currentUserIdProvider)
+                      ? 'Rispondi al tuo messaggio'
+                      : 'Rispondi a ${members[_replyTo!.authorId] ?? 'Ex membro'}',
+                  onClose: () => setState(() => _replyTo = null),
                 ),
-              ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (!_recording)
-                  IconButton(
-                    tooltip: 'Foto',
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.add_photo_alternate_rounded),
-                  ),
-                Expanded(
-                  child: _recording
-                      ? _RecordingIndicator(
-                          seconds: _recSeconds,
-                          cancelling: _recCancel,
-                        )
-                      : TextField(
-                          controller: _text,
-                          minLines: 1,
-                          maxLines: 5,
-                          maxLength: 2000,
-                          textCapitalization: TextCapitalization.sentences,
-                          decoration: const InputDecoration(
-                            hintText: 'Scrivi un messaggio',
-                            counterText: '',
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _send(),
+              if (_image != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Stack(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 4, 8, 8),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.memory(_image!, height: 90),
                         ),
-                ),
-                const SizedBox(width: 4),
-                if (canSend && !_recording)
-                  IconButton.filled(
-                    tooltip: 'Invia',
-                    onPressed: () => _send(),
-                    icon: const Icon(Icons.send_rounded),
-                  )
-                else
-                  _MicButton(
-                    recording: _recording,
-                    onTap: _micTapped,
-                    onStart: _startRecording,
-                    onMove: (dx) {
-                      final cancel = dx < -80;
-                      if (cancel != _recCancel) {
-                        setState(() => _recCancel = cancel);
-                      }
-                    },
-                    onEnd: () {
-                      _pressing = false;
-                      _finishRecording(send: true);
-                    },
-                    onCancel: () {
-                      _pressing = false;
-                      _finishRecording(send: false);
-                    },
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: IconButton.filled(
+                          tooltip: 'Togli la foto',
+                          style: IconButton.styleFrom(
+                            backgroundColor: p.surfaceHigher,
+                            foregroundColor: p.text,
+                            minimumSize: const Size(32, 32),
+                            fixedSize: const Size(32, 32),
+                            padding: EdgeInsets.zero,
+                          ),
+                          onPressed: () => setState(() => _image = null),
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                        ),
+                      ),
+                    ],
                   ),
-              ],
-            ),
-          ],
+                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (!_recording)
+                    IconButton(
+                      tooltip: 'Aggiungi una foto',
+                      onPressed: _pickImage,
+                      icon: Icon(
+                        Icons.image_rounded,
+                        size: 22,
+                        color: p.textSecondary,
+                      ),
+                    ),
+                  Expanded(
+                    child: _recording
+                        ? _RecordingIndicator(
+                            seconds: _recSeconds,
+                            cancelling: _recCancel,
+                          )
+                        : Semantics(
+                            label: 'Messaggio',
+                            child: TextField(
+                              controller: _text,
+                              minLines: 1,
+                              maxLines: 5,
+                              maxLength: 2000,
+                              textCapitalization: TextCapitalization.sentences,
+                              style: TextStyle(fontSize: 16, color: p.text),
+                              decoration: InputDecoration(
+                                hintText: 'Scrivi un messaggio',
+                                counterText: '',
+                                isDense: true,
+                                filled: true,
+                                fillColor: p.surfaceHigh,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 11,
+                                ),
+                                border: pill(p.borderStrong),
+                                enabledBorder: pill(p.borderStrong),
+                                focusedBorder: pill(p.chipBorder),
+                              ),
+                              onSubmitted: (_) => _send(),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 6),
+                  if (canSend && !_recording)
+                    _RoundAction(
+                      tooltip: 'Invia',
+                      icon: Icons.send_rounded,
+                      onPressed: () => _send(),
+                    )
+                  else
+                    _MicButton(
+                      recording: _recording,
+                      onTap: _micTapped,
+                      onStart: _startRecording,
+                      onMove: (dx) {
+                        final cancel = dx < -80;
+                        if (cancel != _recCancel) {
+                          setState(() => _recCancel = cancel);
+                        }
+                      },
+                      onEnd: () {
+                        _pressing = false;
+                        _finishRecording(send: true);
+                      },
+                      onCancel: () {
+                        _pressing = false;
+                        _finishRecording(send: false);
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -731,34 +867,46 @@ class _ChannelUnavailable extends StatelessWidget {
   final VoidCallback onExit;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.forum_outlined, size: 40, color: Colors.white38),
-          const SizedBox(height: 12),
-          const Text(
-            'Canale non disponibile',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Non esiste più oppure non è tra quelli che puoi vedere.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white60),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: onExit,
-            icon: const Icon(Icons.arrow_back_rounded),
-            label: const Text('Torna alla chat'),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 40,
+              color: p.textMuted,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Canale non disponibile',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: p.text,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Non esiste più oppure non è tra quelli che puoi vedere.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15, color: p.textSecondary),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: onExit,
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('Torna alla chat'),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// In cima alla conversazione: i messaggi precedenti in arrivo, oppure "Riprova".
@@ -793,6 +941,34 @@ class _LoadMoreRow extends StatelessWidget {
   );
 }
 
+/// Pulsante tondo oro della barra di scrittura (invia).
+class _RoundAction extends StatelessWidget {
+  const _RoundAction({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return IconButton.filled(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        backgroundColor: p.accent,
+        foregroundColor: p.onAccent,
+        minimumSize: const Size(48, 48),
+        fixedSize: const Size(48, 48),
+      ),
+      icon: Icon(icon, size: 22),
+    );
+  }
+}
+
 /// Pulsante del microfono: tieni premuto per registrare, scorri a sinistra per annullare.
 class _MicButton extends StatelessWidget {
   const _MicButton({
@@ -811,39 +987,42 @@ class _MicButton extends StatelessWidget {
   final VoidCallback onCancel;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: 'Registra un vocale',
-    child: GestureDetector(
-      onTap: onTap,
-      onLongPressStart: (_) => onStart(),
-      onLongPressMoveUpdate: (d) => onMove(d.offsetFromOrigin.dx),
-      onLongPressEnd: (_) => onEnd(),
-      onLongPressCancel: onCancel,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: recording ? 54 : 44,
-        height: recording ? 54 : 44,
-        decoration: BoxDecoration(
-          color: MilanacColors.red,
-          shape: BoxShape.circle,
-          boxShadow: recording
-              ? [
-                  BoxShadow(
-                    color: MilanacColors.red.withValues(alpha: .5),
-                    blurRadius: 16,
-                  ),
-                ]
-              : null,
-        ),
-        child: Icon(
-          Icons.mic_rounded,
-          color: Colors.white,
-          size: recording ? 28 : 22,
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Semantics(
+      button: true,
+      label: 'Tieni premuto per registrare un vocale',
+      child: GestureDetector(
+        onTap: onTap,
+        onLongPressStart: (_) => onStart(),
+        onLongPressMoveUpdate: (d) => onMove(d.offsetFromOrigin.dx),
+        onLongPressEnd: (_) => onEnd(),
+        onLongPressCancel: onCancel,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: recording ? 56 : 48,
+          height: recording ? 56 : 48,
+          decoration: BoxDecoration(
+            color: p.accent,
+            shape: BoxShape.circle,
+            boxShadow: recording
+                ? [
+                    BoxShadow(
+                      color: p.accent.withValues(alpha: .45),
+                      blurRadius: 16,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Icon(
+            Icons.mic_rounded,
+            color: p.onAccent,
+            size: recording ? 26 : 22,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Al posto del campo di testo mentre si registra: punto rosso, durata e istruzioni.
@@ -853,97 +1032,106 @@ class _RecordingIndicator extends StatelessWidget {
   final bool cancelling;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 44,
-    child: Row(
-      children: [
-        const SizedBox(width: 10),
-        const Icon(Icons.circle, size: 12, color: MilanacColors.red),
-        const SizedBox(width: 8),
-        Text(
-          formatSeconds(seconds),
-          style: const TextStyle(
-            fontFamily: sportFont,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 12),
-        // Su schermi stretti (o con il testo grande) le istruzioni si accorciano.
-        Expanded(
-          child: Text(
-            cancelling ? 'Rilascia per annullare' : '◀ Scorri per annullare',
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return SizedBox(
+      height: 48,
+      child: Row(
+        children: [
+          const SizedBox(width: 10),
+          Icon(Icons.circle, size: 12, color: p.danger),
+          const SizedBox(width: 8),
+          Text(
+            formatSeconds(seconds),
             style: TextStyle(
-              color: cancelling ? MilanacColors.redText : Colors.white54,
-              fontSize: 13,
+              fontFamily: sportFont,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: p.text,
             ),
           ),
-        ),
-        const SizedBox(width: 10),
-      ],
-    ),
-  );
+          const SizedBox(width: 12),
+          // Su schermi stretti (o con il testo grande) le istruzioni si accorciano.
+          Expanded(
+            child: Text(
+              cancelling ? 'Rilascia per annullare' : '◀ Scorri per annullare',
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: cancelling ? p.danger : p.textMuted,
+                fontSize: 14,
+                fontWeight: cancelling ? FontWeight.w700 : FontWeight.w400,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+      ),
+    );
+  }
 }
 
 /// Sopra il campo di testo: il messaggio a cui si sta rispondendo.
 class _ReplyStrip extends StatelessWidget {
   const _ReplyStrip({
     required this.message,
-    required this.author,
+    required this.title,
     required this.onClose,
   });
   final ChatMessage message;
-  final String author;
+
+  /// "Rispondi a Marco Rossi" (o "al tuo messaggio").
+  final String title;
   final VoidCallback onClose;
 
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.fromLTRB(6, 2, 6, 6),
-    padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
-    decoration: BoxDecoration(
-      color: MilanacColors.surfaceHigh,
-      borderRadius: BorderRadius.circular(10),
-      border: const Border(
-        left: BorderSide(color: MilanacColors.gold, width: 3),
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: p.surfaceHigh,
+        borderRadius: BorderRadius.circular(12),
+        border: Border(left: BorderSide(color: p.accentText, width: 3)),
       ),
-    ),
-    child: Row(
-      children: [
-        const Icon(Icons.reply_rounded, size: 18, color: MilanacColors.gold),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Rispondi a $author',
-                style: const TextStyle(
-                  color: MilanacColors.gold,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
+      child: Row(
+        children: [
+          Icon(Icons.reply_rounded, size: 18, color: p.accentText),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: p.accentText,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
                 ),
-              ),
-              Text(
-                message.summary,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-            ],
+                Text(
+                  message.summary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: p.textSecondary, fontSize: 14),
+                ),
+              ],
+            ),
           ),
-        ),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          tooltip: 'Annulla risposta',
-          onPressed: onClose,
-          icon: const Icon(Icons.close_rounded, size: 18),
-        ),
-      ],
-    ),
-  );
+          IconButton(
+            tooltip: 'Annulla risposta',
+            onPressed: onClose,
+            icon: Icon(Icons.close_rounded, size: 18, color: p.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Canale in sola lettura (Comunicazioni): vi scrive solo il Direttivo.
@@ -951,54 +1139,71 @@ class _ReadOnlyNote extends StatelessWidget {
   const _ReadOnlyNote();
 
   @override
-  Widget build(BuildContext context) => const SafeArea(
-    top: false,
-    child: Padding(
-      padding: EdgeInsets.fromLTRB(16, 10, 16, 12),
-      child: Row(
-        children: [
-          Icon(Icons.campaign_rounded, color: MilanacColors.gold, size: 18),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Qui scrive solo il Direttivo: avvisi ufficiali, formazioni ed eventi.',
-              style: TextStyle(color: Colors.white60, fontSize: 13),
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: p.surface,
+        border: Border(top: BorderSide(color: p.border)),
       ),
-    ),
-  );
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+          child: Row(
+            children: [
+              Icon(Icons.campaign_rounded, color: p.accentText, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Qui scrive solo il Direttivo: avvisi ufficiali, formazioni ed eventi.',
+                  style: TextStyle(color: p.textSecondary, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
+/// Separatore per giorno: pillola al centro ("Oggi", "Ieri", "Lunedì 12 ottobre").
 class _DaySeparator extends StatelessWidget {
   const _DaySeparator(this.day);
   final DateTime day;
 
   @override
   Widget build(BuildContext context) {
+    final p = context.pal;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final d = DateTime(day.year, day.month, day.day);
+    final long = DateFormat(
+      d.year == today.year ? 'EEEE d MMMM' : 'EEEE d MMMM y',
+      'it',
+    ).format(day);
     final label = d == today
         ? 'Oggi'
         : d == today.subtract(const Duration(days: 1))
         ? 'Ieri'
-        : DateFormat('EEEE d MMMM', 'it').format(day);
+        : '${long[0].toUpperCase()}${long.substring(1)}';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: .45),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: p.surfaceHigh,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: p.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
@@ -1011,27 +1216,30 @@ class _NewMessagesSeparator extends StatelessWidget {
   const _NewMessagesSeparator();
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Row(
-      children: [
-        const Expanded(child: Divider(color: MilanacColors.gold)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Text(
-            'Nuovi messaggi',
-            style: TextStyle(
-              color: MilanacColors.gold,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: .5,
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    Widget line() => Expanded(child: Container(height: 1, color: p.chipBorder));
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          line(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              'Nuovi messaggi',
+              style: TextStyle(
+                color: p.accentText,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ),
-        const Expanded(child: Divider(color: MilanacColors.gold)),
-      ],
-    ),
-  );
+          line(),
+        ],
+      ),
+    );
+  }
 }
 
 /// Messaggio automatico (formazione pubblicata, carte speciali...): al centro.
@@ -1041,39 +1249,56 @@ class _SystemMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color) = switch (message.systemType) {
-      'formation' => (Icons.sports_soccer_rounded, MilanacColors.gold),
-      'special_cards' => (Icons.military_tech_rounded, MilanacColors.gold),
-      _ => (Icons.info_rounded, Colors.white54),
+    final p = context.pal;
+    final type = message.systemType;
+    final gold = type == 'formation' || type == 'special_cards';
+    final icon = switch (type) {
+      'formation' => Icons.sports_soccer_rounded,
+      'special_cards' => Icons.military_tech_rounded,
+      _ => Icons.info_rounded,
     };
-    final route = switch (message.systemType) {
+    final route = switch (type) {
       'formation' => '/formazione',
       'special_cards' => '/carte-speciali',
       _ => null,
     };
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-      child: GestureDetector(
-        onTap: route == null ? null : () => context.push(route),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: .12),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+      child: Center(
+        child: Material(
+          color: gold ? p.accentTint : p.surfaceHigh,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withValues(alpha: .4)),
+            side: BorderSide(color: gold ? p.accentTintBorder : p.border),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(width: 8),
-              Flexible(child: Text(message.body ?? '')),
-              const SizedBox(width: 8),
-              Text(
-                DateFormat('HH:mm').format(message.createdAt),
-                style: const TextStyle(fontSize: 11, color: Colors.white38),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: route == null ? null : () => context.push(route),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: gold ? p.accentText : p.textMuted,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      message.body ?? '',
+                      style: TextStyle(fontSize: 14, color: p.text),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    DateFormat('HH:mm').format(message.createdAt),
+                    style: TextStyle(fontSize: 12, color: p.textMuted),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1081,6 +1306,8 @@ class _SystemMessage extends StatelessWidget {
   }
 }
 
+/// Bolla di un messaggio (tavola 13): le mie a destra in oro tenue, quelle degli
+/// altri a sinistra con volto e nome; dentro citazione, foto, vocale, testo e ora.
 class _Bubble extends ConsumerWidget {
   const _Bubble({
     required this.message,
@@ -1143,11 +1370,14 @@ class _Bubble extends ConsumerWidget {
               ),
             if (canRemove)
               ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.delete_outline_rounded,
-                  color: Colors.redAccent,
+                  color: c.pal.danger,
                 ),
-                title: const Text('Elimina messaggio'),
+                title: Text(
+                  'Elimina messaggio',
+                  style: TextStyle(color: c.pal.danger),
+                ),
                 onTap: () => Navigator.pop(c, 'delete'),
               ),
           ],
@@ -1167,22 +1397,74 @@ class _Bubble extends ConsumerWidget {
     }
   }
 
+  /// Ora (con l'orologio finché è in invio) oppure "Non inviato".
+  Widget _status(AppPalette p) {
+    if (message.failed) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline_rounded, size: 14, color: p.danger),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              'Non inviato · tocca per riprovare',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: p.danger,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    final color = mine ? p.textSecondary : p.textMuted;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          DateFormat('HH:mm').format(message.createdAt),
+          style: TextStyle(fontSize: 12, color: color),
+        ),
+        if (message.sending)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Icon(
+              Icons.schedule_rounded,
+              size: 12,
+              color: color,
+              semanticLabel: 'in invio',
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
     // Chi ha la carta speciale della settimana ha l'anello colorato sul volto.
     final special = author == null
         ? null
         : ref.watch(activeSpecialCardProvider(author!.id));
+    final screen = math.min(
+      MediaQuery.sizeOf(context).width,
+      ContentWidth.maxWidth,
+    );
+    final maxWidth = screen * (mine ? .70 : .67);
     final bubble = Container(
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width * .78,
-      ),
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      padding: EdgeInsets.fromLTRB(12, mine ? 9 : 8, 12, mine ? 7 : 6),
       decoration: BoxDecoration(
-        color: mine ? MilanacColors.redDark : MilanacColors.surfaceHigh,
-        border: message.isAnnouncement
-            ? Border.all(color: MilanacColors.gold, width: 1.5)
-            : null,
+        color: mine ? p.accentTint : p.surfaceHigh,
+        border: Border.all(
+          color: message.isAnnouncement
+              ? p.importantBorder
+              : mine
+              ? p.accentTintBorder
+              : p.border,
+          width: message.isAnnouncement ? 1.5 : 1,
+        ),
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(16),
           topRight: const Radius.circular(16),
@@ -1190,159 +1472,120 @@ class _Bubble extends ConsumerWidget {
           bottomRight: Radius.circular(mine ? 4 : 16),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (message.isAnnouncement)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.campaign_rounded,
-                    size: 16,
-                    color: MilanacColors.gold,
-                  ),
-                  SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      'AVVISO DEL DIRETTIVO',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: MilanacColors.gold,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1,
+      // La bolla si stringe sul contenuto più largo; citazione e avvisi la riempiono
+      // e l'ora resta in fondo a destra.
+      child: IntrinsicWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (message.isAnnouncement)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.campaign_rounded, size: 16, color: p.accentText),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'AVVISO DEL DIRETTIVO',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: p.accentText,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          if (showAuthor && !mine)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                authorName,
-                style: const TextStyle(
-                  color: MilanacColors.gold,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
+                  ],
                 ),
               ),
+            if (showAuthor && !mine)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  authorName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: p.accentText,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ?quote,
+            if (message.isReplay)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _ReplayBubble(message: message),
+              ),
+            if (message.hasImage)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _ChatImage(message: message, width: maxWidth - 24),
+              ),
+            if (message.hasAudio && !message.isReplay)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: _VoiceBubble(message: message),
+              ),
+            if (message.isExpired)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _ExpiredChip(message: message),
+              ),
+            if (message.hasText)
+              LinkText(
+                message.body!,
+                style: TextStyle(fontSize: 16, color: p.text, height: 1.3),
+                linkColor: p.accentText,
+              ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: _status(p),
+              ),
             ),
-          ?quote,
-          if (message.isReplay)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 4),
-              child: _ReplayBubble(message: message),
-            ),
-          if (message.hasImage)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 4),
-              child: _ChatImage(message: message),
-            ),
-          if (message.hasAudio && !message.isReplay)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 2),
-              child: _VoiceBubble(message: message, mine: mine),
-            ),
-          if (message.isExpired) const _ExpiredNote(),
-          if (message.hasText)
-            LinkText(
-              message.body!,
-              style: const TextStyle(fontSize: 15, color: Colors.white),
-              linkColor: mine ? const Color(0xFFFFD98A) : MilanacColors.gold,
-            ),
-          Align(
-            alignment: Alignment.bottomRight,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: message.failed
-                  ? const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.error_outline_rounded,
-                          size: 13,
-                          color: MilanacColors.gold,
-                        ),
-                        SizedBox(width: 3),
-                        Text(
-                          'Non inviato · tocca per riprovare',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          DateFormat('HH:mm').format(message.createdAt),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.white54,
-                          ),
-                        ),
-                        // In invio: l'orologio finché il server non lo salva.
-                        if (message.sending)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 3),
-                            child: Icon(
-                              Icons.schedule_rounded,
-                              size: 11,
-                              color: Colors.white54,
-                            ),
-                          ),
-                      ],
-                    ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+    final who = author;
+    final Widget? face = mine || !showAuthor
+        ? null
+        : who == null
+        ? CircleAvatar(
+            radius: 16,
+            backgroundColor: p.surfaceHigher,
+            child: Icon(Icons.person_rounded, size: 18, color: p.textMuted),
+          )
+        : special == null
+        ? MemberAvatar(member: who, radius: 16, showNumber: false)
+        : Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: special.kind.color, width: 2),
+            ),
+            child: MemberAvatar(member: who, radius: 12, showNumber: false),
+          );
     return Padding(
-      padding: EdgeInsets.only(top: showAuthor ? 8 : 2),
+      padding: EdgeInsets.only(top: showAuthor ? 10 : 4),
       child: Row(
         mainAxisAlignment: mine
             ? MainAxisAlignment.end
             : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!mine)
-            SizedBox(
-              width: 36,
-              child: showAuthor
-                  ? (author == null
-                        ? const CircleAvatar(
-                            radius: 15,
-                            child: Icon(Icons.person_rounded, size: 16),
-                          )
-                        : Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: special == null
-                                ? null
-                                : BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: special.kind.color,
-                                      width: 2,
-                                    ),
-                                  ),
-                            child: MemberAvatar(
-                              member: author!,
-                              radius: special == null ? 15 : 13,
-                              showNumber: false,
-                            ),
-                          ))
-                  : null,
-            ),
+          if (!mine) ...[
+            SizedBox(width: 32, child: face),
+            const SizedBox(width: 8),
+          ],
           Flexible(
             child: GestureDetector(
               onTap: message.failed ? onRetry : null,
@@ -1364,16 +1607,15 @@ class _Quote extends ConsumerWidget {
     required this.loaded,
     required this.deleted,
     required this.nameOf,
-    required this.mine,
   });
   final String messageId;
   final ChatMessage? loaded;
   final bool deleted;
   final String Function(String? authorId) nameOf;
-  final bool mine;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
     var quoted = loaded;
     var text = 'Messaggio non più disponibile';
     if (quoted == null && !deleted) {
@@ -1384,31 +1626,31 @@ class _Quote extends ConsumerWidget {
       }
     }
     return Container(
-      margin: const EdgeInsets.only(bottom: 6, top: 2),
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: mine ? .25 : .3),
+        color: p.surfaceHigher,
         borderRadius: BorderRadius.circular(8),
-        border: const Border(
-          left: BorderSide(color: MilanacColors.gold, width: 3),
-        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             quoted == null ? 'Messaggio precedente' : nameOf(quoted.authorId),
-            style: const TextStyle(
-              color: MilanacColors.gold,
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: p.text,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
             ),
           ),
           Text(
             quoted?.summary ?? text,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            style: TextStyle(color: p.textSecondary, fontSize: 14),
           ),
         ],
       ),
@@ -1451,6 +1693,7 @@ class _ReplayBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.pal;
     final board = _previewBoard(message.meta['board']);
     final title = message.replayTitle ?? 'Schema';
     return SizedBox(
@@ -1458,22 +1701,26 @@ class _ReplayBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.draw_rounded, size: 15, color: MilanacColors.gold),
-              SizedBox(width: 4),
-              Text(
-                'SCHEMA CON AUDIO',
-                style: TextStyle(
-                  color: MilanacColors.gold,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
+              Icon(Icons.draw_rounded, size: 16, color: p.accentText),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  'SCHEMA CON AUDIO',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: p.accentText,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Stack(
             alignment: Alignment.center,
             children: [
@@ -1482,9 +1729,9 @@ class _ReplayBubble extends StatelessWidget {
                 IconButton.filled(
                   tooltip: 'Riproduci il replay',
                   style: IconButton.styleFrom(
-                    backgroundColor: MilanacColors.red,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.all(14),
+                    backgroundColor: p.accent,
+                    foregroundColor: p.onAccent,
+                    padding: const EdgeInsets.all(12),
                   ),
                   onPressed: () =>
                       Navigator.of(context, rootNavigator: true).push(
@@ -1496,12 +1743,19 @@ class _ReplayBubble extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: p.text,
+            ),
+          ),
           if (message.durationS != null && !message.isExpired)
             Text(
               '${formatSeconds(message.durationS!)} · scade dopo 3 giorni',
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
+              style: TextStyle(color: p.textMuted, fontSize: 12),
             ),
         ],
       ),
@@ -1509,36 +1763,48 @@ class _ReplayBubble extends StatelessWidget {
   }
 }
 
-/// L'allegato (foto o vocale) è scaduto dopo 60 giorni.
-class _ExpiredNote extends StatelessWidget {
-  const _ExpiredNote();
+/// L'allegato è scaduto (foto e vocali dopo 60 giorni, schemi dopo 3).
+class _ExpiredChip extends StatelessWidget {
+  const _ExpiredChip({required this.message});
+  final ChatMessage message;
 
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.only(top: 2, bottom: 2),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.hourglass_disabled_rounded, size: 16, color: Colors.white54),
-        SizedBox(width: 6),
-        Text(
-          'Allegato scaduto',
-          style: TextStyle(
-            color: Colors.white54,
-            fontSize: 13,
-            fontStyle: FontStyle.italic,
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    // Il file non c'è più: la durata, che resta, dice se era un vocale.
+    final (icon, text) = message.isReplay
+        ? (Icons.draw_rounded, 'Schema scaduto')
+        : message.durationS != null
+        ? (Icons.mic_off_rounded, 'Vocale scaduto')
+        : (Icons.image_rounded, 'Foto scaduta');
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: p.surfaceHigher,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: p.textMuted),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 14, color: p.textMuted),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
-/// Messaggio vocale: ascolta/pausa, barra di avanzamento e durata.
+/// Messaggio vocale: ascolta/pausa, forma d'onda (oro fin dove si è ascoltato) e
+/// durata.
 class _VoiceBubble extends ConsumerWidget {
-  const _VoiceBubble({required this.message, required this.mine});
+  const _VoiceBubble({required this.message});
   final ChatMessage message;
-  final bool mine;
 
   Future<void> _toggle(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -1566,6 +1832,7 @@ class _VoiceBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
     // Solo la bolla del vocale caricato si ridisegna a ogni scatto della posizione.
     final state = ref.watch(
       voicePlayerProvider.select((s) => s.playingId == message.id ? s : null),
@@ -1573,46 +1840,51 @@ class _VoiceBubble extends ConsumerWidget {
     final playing = state?.playing ?? false;
     final total = message.durationS ?? state?.duration?.inSeconds ?? 0;
     final shown = state == null ? total : state.position.inSeconds;
-    final color = mine ? Colors.white : MilanacColors.gold;
     return SizedBox(
-      width: 190,
+      width: 206,
       child: Row(
         children: [
           IconButton.filled(
-            tooltip: playing ? 'Pausa' : 'Ascolta',
+            tooltip: playing ? 'Metti in pausa' : 'Ascolta il vocale',
             style: IconButton.styleFrom(
-              backgroundColor: color,
-              foregroundColor: mine ? MilanacColors.redDark : Colors.black,
+              backgroundColor: p.accent,
+              foregroundColor: p.onAccent,
+              minimumSize: const Size(40, 40),
+              fixedSize: const Size(40, 40),
+              padding: EdgeInsets.zero,
             ),
             onPressed: () => _toggle(context, ref),
             icon: Icon(
               playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              size: 22,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: state?.progress ?? 0,
-                    minHeight: 5,
-                    color: color,
-                    backgroundColor: color.withValues(alpha: .3),
+            child: ExcludeSemantics(
+              child: SizedBox(
+                height: 28,
+                child: CustomPaint(
+                  painter: _Waveform(
+                    seed: message.id.codeUnits.fold(
+                      7,
+                      (h, c) => (h * 31 + c) % 2147483647,
+                    ),
+                    progress: state?.progress ?? 0,
+                    played: p.accentText,
+                    idle: p.isDark ? p.outline : p.textDisabled,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  formatSeconds(shown),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withValues(alpha: .8),
-                  ),
-                ),
-              ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 34,
+            child: Text(
+              formatSeconds(shown),
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 13, color: p.textMuted),
             ),
           ),
         ],
@@ -1621,9 +1893,55 @@ class _VoiceBubble extends ConsumerWidget {
   }
 }
 
+/// Forma d'onda del vocale: barre di altezza fissa per messaggio (non c'è l'onda
+/// vera), in oro fin dove si è ascoltato.
+class _Waveform extends CustomPainter {
+  const _Waveform({
+    required this.seed,
+    required this.progress,
+    required this.played,
+    required this.idle,
+  });
+  final int seed;
+  final double progress;
+  final Color played;
+  final Color idle;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const bar = 3.0, gap = 3.0;
+    final count = ((size.width + gap) / (bar + gap)).floor();
+    final paint = Paint();
+    var x = seed % 2147483647;
+    if (x <= 0) x += 2147483646;
+    for (var i = 0; i < count; i++) {
+      x = (x * 48271) % 2147483647;
+      final h = 8.0 + x % 19;
+      paint.color = i < progress * count ? played : idle;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(i * (bar + gap), (size.height - h) / 2, bar, h),
+          const Radius.circular(2),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Waveform old) =>
+      old.progress != progress ||
+      old.seed != seed ||
+      old.played != played ||
+      old.idle != idle;
+}
+
 class _ChatImage extends ConsumerStatefulWidget {
-  const _ChatImage({required this.message});
+  const _ChatImage({required this.message, required this.width});
   final ChatMessage message;
+
+  /// Larghezza della foto nella bolla.
+  final double width;
 
   @override
   ConsumerState<_ChatImage> createState() => _ChatImageState();
@@ -1674,17 +1992,20 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
       onTap: () => Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(
           builder: (_) => Scaffold(
-            backgroundColor: Colors.black,
-            appBar: AppBar(backgroundColor: Colors.black),
+            backgroundColor: MilanacColors.black,
+            appBar: AppBar(backgroundColor: MilanacColors.black),
             body: Center(child: InteractiveViewer(maxScale: 5, child: image)),
           ),
         ),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 260),
-          child: image,
+      child: SizedBox(
+        width: widget.width,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 260),
+            child: image,
+          ),
         ),
       ),
     );
@@ -1697,24 +2018,27 @@ class _ImageUnavailable extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onRetry,
-    child: Container(
-      height: 120,
-      width: 200,
-      color: Colors.black26,
-      child: const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.broken_image_outlined, color: Colors.white54),
-          SizedBox(height: 6),
-          Text(
-            'Foto non disponibile · tocca per riprovare',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return GestureDetector(
+      onTap: onRetry,
+      child: Container(
+        height: 120,
+        color: p.surfaceHigher,
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.broken_image_rounded, color: p.textMuted),
+            const SizedBox(height: 6),
+            Text(
+              'Foto non disponibile · tocca per riprovare',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: p.textMuted, fontSize: 13),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
