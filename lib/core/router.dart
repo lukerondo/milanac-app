@@ -33,6 +33,7 @@ import '../features/tattiche/tattiche_page.dart';
 import '../shared/app_shell.dart';
 import '../shared/offline_page.dart';
 import '../shared/sections.dart';
+import 'auth/profile.dart';
 import 'auth/providers.dart';
 import 'config.dart';
 
@@ -100,8 +101,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         return loc == '/intro' ? null : '/intro';
       }
 
-      String? goTo(String target) => loc == target ? null : target;
-
       /// Dopo l'intro (o le porte) si torna alla Home, o alla sezione in sospeso.
       String? home() {
         final pending = ref.read(pendingRouteProvider);
@@ -112,67 +111,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/';
       }
 
-      // La Sala Direttivo (e le altre sezioni riservate) solo per il Direttivo.
-      final reserved =
-          appSections.any((s) => s.direttivoOnly && s.path == loc) ||
-          loc.startsWith('/direttivo/');
-
       // In demo non c'è login: intro e pagina di blocco rimandano alla Home;
       // accesso e registrazione restano visitabili per provarli.
       if (AppConfig.isDemo) {
         return loc == '/intro' || loc == '/attesa' ? home() : null;
       }
 
-      final session = ref.read(sessionProvider);
-      if (session.isLoading && !session.hasError) return null;
-      if (session.value == null) return goTo('/login');
-
-      // Link "password dimenticata" appena aperto: prima la nuova password.
-      if (ref.read(passwordRecoveryProvider)) return goTo('/nuova-password');
-
-      // Profilo che non arriva (rete assente, server irraggiungibile): si aspetta
-      // sulla pagina "Nessuna connessione", che riprova da sola. Non è un profilo
-      // mancante: chi è già registrato non deve finire sulla registrazione.
-      final profile = ref.read(profileProvider);
-      if (profile.hasError && !profile.hasValue) return goTo('/offline');
-      if (profile.isLoading && !profile.hasError) return null;
-      final p = profile.value;
-
-      // 1) I tre passi della registrazione.
-      if (p == null || !p.registrationCompleted) return goTo('/registrazione');
-      // 2) Account rimosso o sospeso dal Direttivo.
-      if (!p.active) return goTo('/attesa');
-      // 3) Il regolamento, nella sua ultima versione. Chi non è ancora entrato nel club
-      //    (ruolo "in attesa") deve accettarlo: la pagina del regolamento gestisce da sola
-      //    caricamento ed errori, così un problema di rete non lo manda alla pagina sbagliata.
-      final rules = ref.read(latestRulesProvider);
-      // Se il regolamento non si carica (rete), si va avanti con quello che si sa:
-      // la pagina del regolamento gestisce da sola errori e nuovi tentativi.
-      if (rules.isLoading && !rules.hasError) return null;
-      final latest = rules.value?.number;
-      if ((latest != null && p.rulesAcceptedVersion != latest) ||
-          !p.isApproved) {
-        return goTo('/regolamento/accetta');
-      }
-      // 4) Nessuna versione pubblicata: il primo del Direttivo che entra la scrive
-      //    (con "Più tardi" il promemoria resta solo nella Sala Direttivo).
-      if (p.isDirettivo &&
-          rules.hasValue &&
-          latest == null &&
-          !ref.read(rulesWriteLaterProvider)) {
-        return goTo('/regolamento/scrivi');
-      }
-
-      if (reserved && !p.isDirettivo) return '/';
-      // Il promemoria della Sala Direttivo (dopo "Più tardi") apre l'editor del
-      // primo regolamento: finché non ce n'è uno, il Direttivo ci può stare.
-      if (loc == '/regolamento/scrivi' &&
-          p.isDirettivo &&
-          rules.hasValue &&
-          latest == null) {
-        return null;
-      }
-      return gatePaths.contains(loc) ? home() : null;
+      final target = gateRedirect(
+        loc: loc,
+        session: ref.read(sessionProvider).whenData((s) => s != null),
+        passwordRecovery: ref.read(passwordRecoveryProvider),
+        profile: ref.read(profileProvider),
+        rules: ref.read(latestRulesProvider).whenData((r) => r?.number),
+        rulesWriteLater: ref.read(rulesWriteLaterProvider),
+      );
+      return target == goHome ? home() : target;
     },
     routes: [
       GoRoute(path: '/intro', builder: (_, _) => const IntroPage()),
@@ -298,3 +251,61 @@ GoRoute _section(String path, Widget Function(GoRouterState state) page) =>
         child: SectionFrame(path: path, child: page(state)),
       ),
     );
+
+/// Risposta di [gateRedirect]: "torna alla Home (o alla sezione in sospeso)".
+const goHome = '@home';
+
+/// Le porte dell'app, in ordine: accesso, nuova password, profilo (o nessuna
+/// connessione), registrazione, account attivo, regolamento, primo regolamento del
+/// Direttivo, sezioni riservate. Restituisce dove andare, [goHome] o null (resta).
+/// È una funzione pura: i test provano così anche la logica di produzione.
+String? gateRedirect({
+  required String loc,
+  required AsyncValue<bool> session,
+  required bool passwordRecovery,
+  required AsyncValue<Profile?> profile,
+  required AsyncValue<int?> rules,
+  required bool rulesWriteLater,
+}) {
+  String? goTo(String target) => loc == target ? null : target;
+
+  if (session.isLoading && !session.hasError) return null;
+  if (!(session.value ?? false)) return goTo('/login');
+
+  // Link "password dimenticata" appena aperto: prima la nuova password.
+  if (passwordRecovery) return goTo('/nuova-password');
+
+  // Profilo che non arriva (rete assente, server irraggiungibile): si aspetta sulla
+  // pagina "Nessuna connessione", che riprova da sola. Non è un profilo mancante:
+  // chi è già registrato non deve finire sulla registrazione.
+  if (profile.hasError && !profile.hasValue) return goTo('/offline');
+  if (profile.isLoading && !profile.hasError) return null;
+  final p = profile.value;
+
+  // 1) I tre passi della registrazione.
+  if (p == null || !p.registrationCompleted) return goTo('/registrazione');
+  // 2) Account rimosso o sospeso dal Direttivo.
+  if (!p.active) return goTo('/attesa');
+  // 3) Il regolamento, nella sua ultima versione. Chi non è ancora entrato nel club
+  //    (ruolo "in attesa") deve accettarlo. Se il regolamento non si carica (rete) si
+  //    va avanti con quello che si sa: la sua pagina gestisce errori e nuovi tentativi.
+  if (rules.isLoading && !rules.hasError) return null;
+  final latest = rules.value;
+  if ((latest != null && p.rulesAcceptedVersion != latest) || !p.isApproved) {
+    return goTo('/regolamento/accetta');
+  }
+  // 4) Nessuna versione pubblicata: il primo del Direttivo che entra la scrive (con
+  //    "Più tardi" il promemoria resta nella Sala Direttivo, che riapre l'editor).
+  final noRulesYet = rules.hasValue && latest == null;
+  if (p.isDirettivo && noRulesYet && !rulesWriteLater) {
+    return goTo('/regolamento/scrivi');
+  }
+  if (loc == '/regolamento/scrivi' && p.isDirettivo && noRulesYet) return null;
+
+  // La Sala Direttivo (e le altre sezioni riservate) solo per il Direttivo.
+  final reserved =
+      appSections.any((s) => s.direttivoOnly && s.path == loc) ||
+      loc.startsWith('/direttivo/');
+  if (reserved && !p.isDirettivo) return '/';
+  return gatePaths.contains(loc) ? goHome : null;
+}
