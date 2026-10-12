@@ -87,6 +87,20 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
     }
   }
 
+  /// La scheda Partite resta viva quando si passa a un'altra scheda: tornando a vederla
+  /// (anche aprendo la notifica della formazione) si rilegge.
+  bool _visible = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = TickerMode.valuesOf(context).enabled;
+    if (visible && !_visible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
+    }
+    _visible = visible;
+  }
+
   @override
   void dispose() {
     _lifecycle.dispose();
