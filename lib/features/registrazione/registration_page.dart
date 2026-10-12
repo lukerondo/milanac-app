@@ -6,9 +6,11 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import '../../core/push/device_tokens.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../rosa/member.dart';
 import '../volto/face.dart';
 import '../volto/face_editor.dart';
@@ -45,6 +47,9 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   bool _direttivo = false;
   final _password = TextEditingController();
   bool _hidden = true;
+
+  /// Password rifiutata dal server (sbagliata o troppi tentativi): evidenziata sul campo.
+  String? _passwordError;
   final _roles = <DirettivoRole>{};
   String? _position;
   final _number = TextEditingController();
@@ -61,6 +66,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
       _lastName,
       _cardName,
       _motto,
+      _birthYear,
       _password,
       _number,
     ]) {
@@ -179,64 +185,107 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     setState(() => _saving = true);
     try {
       await ref.read(registrationRepositoryProvider).complete(_data);
-      HapticFeedback.mediumImpact();
-      // Con Supabase il profilo si aggiorna da solo e il router porta al regolamento;
-      // in demo andiamo noi.
-      if (AppConfig.isDemo && mounted) context.go('/regolamento/accetta');
     } catch (e) {
-      if (mounted) _toast(friendlyRegistrationError(e));
+      if (!mounted) return;
+      if (isDirettivoPasswordError(e)) {
+        // Si torna al passo 2, sul campo della password.
+        setState(() {
+          _step = 1;
+          _passwordError = friendlyRegistrationError(e);
+        });
+        _pages.jumpToPage(1);
+      }
+      _toast(friendlyRegistrationError(e));
+      return;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+    HapticFeedback.mediumImpact();
+    if (!mounted) return;
+    // Il router porta al regolamento appena il profilo riletto risulta completo, senza
+    // aspettare il tempo reale; in demo andiamo noi.
+    ref.invalidate(profileProvider);
+    if (AppConfig.isDemo) context.go('/regolamento/accetta');
+  }
+
+  void _retryProfile() => ref.invalidate(profileProvider);
+
+  /// Profilo non ancora caricato: spinner, oppure l'errore con Riprova (anche mentre si
+  /// riprova da soli) invece di uno spinner senza fine.
+  Widget _profileState(AsyncValue<Profile?> state) {
+    if (state.hasError) {
+      return ErrorRetry(
+        message: friendlyError(
+          state.error!,
+          action: 'Caricamento del profilo non riuscito',
+        ),
+        onRetry: _retryProfile,
+      );
+    }
+    if (state.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ErrorRetry(
+      message: 'Profilo non trovato: riprova, oppure esci e rientra.',
+      onRetry: _retryProfile,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final profile = ref.watch(profileProvider).value;
+    final profileState = ref.watch(profileProvider);
+    final profile = profileState.value;
     if (profile != null) _prefill(profile);
 
-    return StadiumBackground(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
+    // Indietro di Android: al passo precedente (dal primo esce come sempre).
+    return PopScope(
+      canPop: _step == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: StadiumBackground(
+        child: Scaffold(
           backgroundColor: Colors.transparent,
-          title: const Text('REGISTRAZIONE'),
-          leading: _step > 0
-              ? IconButton(
-                  tooltip: 'Indietro',
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  onPressed: _back,
-                )
-              : null,
-          actions: [
-            if (!AppConfig.isDemo)
-              IconButton(
-                tooltip: 'Esci',
-                icon: const Icon(Icons.logout_rounded),
-                onPressed: () => logout(ref),
-              ),
-          ],
-        ),
-        body: profile == null && !AppConfig.isDemo
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
-                  _StepHeader(step: _step),
-                  Expanded(
-                    child: PageView(
-                      controller: _pages,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [_stepWho(), _stepTeam(), _stepFace()],
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            title: const Text('REGISTRAZIONE'),
+            leading: _step > 0
+                ? IconButton(
+                    tooltip: 'Indietro',
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    onPressed: _back,
+                  )
+                : null,
+            actions: [
+              if (!AppConfig.isDemo)
+                IconButton(
+                  tooltip: 'Esci',
+                  icon: const Icon(Icons.logout_rounded),
+                  onPressed: () => logout(ref),
+                ),
+            ],
+          ),
+          body: profile == null && (!AppConfig.isDemo || profileState.hasError)
+              ? _profileState(profileState)
+              : Column(
+                  children: [
+                    _StepHeader(step: _step),
+                    Expanded(
+                      child: PageView(
+                        controller: _pages,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [_stepWho(), _stepTeam(), _stepFace()],
+                      ),
                     ),
-                  ),
-                  _BottomBar(
-                    step: _step,
-                    saving: _saving,
-                    onNext: _next,
-                    onComplete: _complete,
-                  ),
-                ],
-              ),
+                    _BottomBar(
+                      step: _step,
+                      saving: _saving,
+                      onNext: _next,
+                      onComplete: _complete,
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -361,8 +410,13 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
       TextField(
         controller: _password,
         obscureText: _hidden,
+        onChanged: (_) {
+          if (_passwordError != null) setState(() => _passwordError = null);
+        },
         decoration: InputDecoration(
           labelText: 'Password del Direttivo',
+          errorText: _passwordError,
+          errorMaxLines: 3,
           prefixIcon: const Icon(Icons.key_rounded),
           suffixIcon: IconButton(
             tooltip: _hidden ? 'Mostra' : 'Nascondi',
