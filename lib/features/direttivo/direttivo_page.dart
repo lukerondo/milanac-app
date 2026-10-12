@@ -9,11 +9,13 @@ import '../../core/errors.dart';
 import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/async_view.dart';
 import '../../shared/club_links.dart';
 import '../../shared/club_links_editor.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/shared_links.dart';
+import '../../shared/ui.dart';
 import '../calendario/club_event.dart';
 import '../calendario/event_editor.dart';
 import '../calendario/events_repository.dart';
@@ -22,13 +24,10 @@ import '../formazione/formation_repository.dart';
 import '../formazione/formazione_page.dart';
 import '../presenze/attendance.dart';
 import '../presenze/attendance_repository.dart';
+import '../presenze/attendance_ui.dart';
 import '../presenze/evening.dart';
 import '../presenze/presenze_page.dart'
-    show
-        AttendanceStatusButton,
-        answerAttendance,
-        describeAttendance,
-        statusColor;
+    show answerAttendance, describeAttendance;
 import '../risultati/match_editor.dart';
 import '../rosa/member.dart';
 import '../rosa/member_editor.dart';
@@ -36,7 +35,8 @@ import '../rosa/rosa_repository.dart';
 import '../regolamento/rules_repository.dart';
 import '../voce/voice_repository.dart';
 
-/// Sala Direttivo: la stanza riservata dove si gestisce il club.
+/// Sala Direttivo: la stanza riservata dove si gestisce il club. In alto le cose da
+/// fare oggi, poi i minuti voce del mese e la gestione.
 /// Visibile solo al Direttivo (menu filtrato e redirect nel router).
 class DirettivoPage extends ConsumerWidget {
   const DirettivoPage({super.key});
@@ -82,171 +82,97 @@ class DirettivoPage extends ConsumerWidget {
     ).push(MaterialPageRoute(builder: (_) => page));
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: const LinearGradient(
-              colors: [MilanacColors.redDark, MilanacColors.black],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: Border.all(color: MilanacColors.gold.withValues(alpha: .5)),
+        if (noRules) ...[
+          AppCard(
+            important: true,
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            onTap: () => context.go('/regolamento/scrivi'),
+            child: const _RulesReminder(),
           ),
-          child: const Row(
+          const SizedBox(height: 16),
+        ],
+        const SectionLabel('Da fare oggi'),
+        const SizedBox(height: 8),
+        AppCard(
+          important: true,
+          padding: EdgeInsets.zero,
+          child: Column(
             children: [
-              Icon(
-                Icons.admin_panel_settings_rounded,
-                size: 40,
-                color: MilanacColors.gold,
+              _TodoRow(
+                value: missing,
+                title: 'Senza risposta stasera',
+                subtitle: 'Correggi anche dopo le $attendanceDeadlineLabel',
+                onTap: () => push(const TonightAttendancePage()),
               ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'SALA DIRETTIVO',
-                      style: TextStyle(
-                        fontFamily: sportFont,
-                        fontSize: 20,
-                        letterSpacing: 2,
-                        color: MilanacColors.gold,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Riservata al Direttivo: presenze, formazioni, eventi, avvisi.',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                  ],
-                ),
+              const Divider(indent: 74),
+              _TodoRow(
+                value: toPublish,
+                title: 'Formazioni da pubblicare',
+                subtitle: 'Milan AC e Futuro',
+                onTap: () => push(const FormationEditorPage()),
+              ),
+              const Divider(indent: 74),
+              _TodoRow(
+                value: proposals,
+                title: proposals == 1 ? 'Video proposto' : 'Video proposti',
+                subtitle: 'Pubblica o scarta',
+                onTap: () => context.go('/mondo'),
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        _VoiceMinutes(minutes: voiceMinutes),
+        const SizedBox(height: 24),
+        const SectionLabel('Gestione'),
+        const SizedBox(height: 8),
+        AppCard(
+          padding: EdgeInsets.zero,
+          child: Column(
             children: [
-              _Stat(
-                value: missing,
-                label: 'senza risposta stasera',
-                highlight: (missing ?? 0) > 0,
-                onTap: () => push(const TonightAttendancePage()),
+              _ManageRow(
+                icon: Icons.edit_calendar_rounded,
+                title: 'Nuovo evento',
+                onTap: () => showEventEditor(context),
               ),
-              _Stat(
-                value: toPublish,
-                label: 'formazioni da pubblicare',
-                highlight: (toPublish ?? 0) > 0,
-                onTap: () => push(const FormationEditorPage()),
+              const Divider(indent: 52),
+              _ManageRow(
+                icon: Icons.campaign_rounded,
+                title: 'Avviso a tutti',
+                onTap: () => _sendAnnouncement(context, ref),
               ),
-              _Stat(
-                value: proposals,
-                label: proposals == 1 ? 'video proposto' : 'video proposti',
-                highlight: proposals > 0,
-                onTap: () => context.go('/mondo'),
+              const Divider(indent: 52),
+              _ManageRow(
+                icon: Icons.scoreboard_rounded,
+                title: 'Nuovo risultato',
+                onTap: () => showMatchEditor(context),
               ),
-              _Stat(
-                value: voiceMinutes,
-                label: 'minuti voce su 10.000',
-                highlight: voiceMinutes > voiceMinutesPerMonth * .8,
-                onTap: () => context.go('/chat'),
+              const Divider(indent: 52),
+              _ManageRow(
+                icon: Icons.groups_rounded,
+                title: 'Rosa e squadre',
+                onTap: () => push(const RosaManagementPage()),
+              ),
+              const Divider(indent: 52),
+              _ManageRow(
+                icon: Icons.menu_book_rounded,
+                title: 'Regolamento e storia',
+                onTap: () => context.push('/regolamento'),
+              ),
+              const Divider(indent: 52),
+              _ManageRow(
+                icon: Icons.link_rounded,
+                title: 'Contatti social',
+                onTap: () => push(
+                  ClubLinksEditorPage(
+                    initial: ref.read(clubLinksProvider).value ?? const [],
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-        if (noRules)
-          Card(
-            color: MilanacColors.gold.withValues(alpha: .12),
-            child: ListTile(
-              leading: const Icon(
-                Icons.menu_book_rounded,
-                color: MilanacColors.gold,
-              ),
-              title: const Text(
-                'Regolamento d\'ingresso da scrivere',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-              subtitle: const Text(
-                'Nessuna versione pubblicata: i nuovi membri entrano senza '
-                'accettarlo. Scrivilo e pubblicalo.',
-              ),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => context.go('/regolamento/scrivi'),
-            ),
-          ),
-        const _Header('Gestione'),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.55,
-          children: [
-            _Action(
-              icon: Icons.how_to_reg_rounded,
-              title: 'Presenze di stasera',
-              subtitle: 'Correggi anche dopo le 18:30',
-              onTap: () => push(const TonightAttendancePage()),
-            ),
-            _Action(
-              icon: Icons.sports_soccer_rounded,
-              title: 'Formazioni',
-              subtitle: 'Schiera, pubblica, PDF',
-              onTap: () => push(const FormationEditorPage()),
-            ),
-            _Action(
-              icon: Icons.event_available_rounded,
-              title: 'Nuovo evento',
-              subtitle: 'Partita, amichevole, riunione',
-              onTap: () => showEventEditor(context),
-            ),
-            _Action(
-              icon: Icons.campaign_rounded,
-              title: 'Avviso a tutti',
-              subtitle: 'In Comunicazioni, con notifica',
-              onTap: () => _sendAnnouncement(context, ref),
-            ),
-            _Action(
-              icon: Icons.scoreboard_rounded,
-              title: 'Nuovo risultato',
-              subtitle: 'Punteggio e marcatori',
-              onTap: () => showMatchEditor(context),
-            ),
-            _Action(
-              icon: Icons.groups_rounded,
-              title: 'Rosa e squadre',
-              subtitle: 'Milan AC / Futuro, ruoli',
-              onTap: () => push(const RosaManagementPage()),
-            ),
-            _Action(
-              icon: Icons.public_rounded,
-              title: 'Mondo Proclub',
-              subtitle: 'Video proposti da pubblicare',
-              onTap: () => context.go('/mondo'),
-            ),
-            _Action(
-              icon: Icons.lock_rounded,
-              title: 'Chat del Direttivo',
-              subtitle: 'Solo per voi',
-              onTap: () => context.push('/chat/direttivo'),
-            ),
-            _Action(
-              icon: Icons.share_rounded,
-              title: 'Contatti social',
-              subtitle: 'Link nel menu',
-              onTap: () => push(
-                ClubLinksEditorPage(
-                  initial: ref.read(clubLinksProvider).value ?? const [],
-                ),
-              ),
-            ),
-          ],
         ),
       ],
     );
@@ -285,6 +211,222 @@ class DirettivoPage extends ConsumerWidget {
         SnackBar(content: Text(friendlyError(e, action: 'Avviso non inviato'))),
       );
     }
+  }
+}
+
+/// Promemoria del regolamento d'ingresso ancora da scrivere.
+class _RulesReminder extends StatelessWidget {
+  const _RulesReminder();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Row(
+      children: [
+        const IconTile(Icons.menu_book_rounded),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Regolamento d\'ingresso da scrivere',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: p.text,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Nessuna versione pubblicata: i nuovi membri entrano senza '
+                'accettarlo. Scrivilo e pubblicalo.',
+                style: TextStyle(fontSize: 14, color: p.textMuted),
+              ),
+            ],
+          ),
+        ),
+        Icon(Icons.chevron_right_rounded, color: p.textMuted),
+      ],
+    );
+  }
+}
+
+/// Una cosa da fare oggi: il numero in oro (grigio se non c'è niente da fare),
+/// cosa e dove.
+class _TodoRow extends StatelessWidget {
+  const _TodoRow({
+    required this.value,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  /// null = dati non ancora arrivati.
+  final int? value;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return MergeSemantics(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 44,
+                child: Text(
+                  '${value ?? '–'}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: sportFont,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                    height: 1.1,
+                    color: (value ?? 0) > 0 ? p.accentText : p.textMuted,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: p.text,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 14, color: p.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, size: 22, color: p.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Minuti della stanza vocale usati nel mese, con la barra su 10.000.
+/// Toccando si va alla chat, dove sta la stanza vocale.
+class _VoiceMinutes extends StatelessWidget {
+  const _VoiceMinutes({required this.minutes});
+  final int minutes;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final number = NumberFormat.decimalPattern('it');
+    final share = (minutes / voiceMinutesPerMonth).clamp(0.0, 1.0);
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      onTap: () => context.go('/chat'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(
+                child: Text(
+                  'Minuti voce del mese',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: p.text,
+                  ),
+                ),
+              ),
+              Text(
+                number.format(minutes),
+                style: TextStyle(
+                  fontFamily: sportFont,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: p.accentText,
+                ),
+              ),
+              Text(
+                ' su ${number.format(voiceMinutesPerMonth)}',
+                style: TextStyle(fontSize: 15, color: p.textMuted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 8,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ColoredBox(color: p.divider),
+                  FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: share,
+                    child: ColoredBox(color: p.accent),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Una voce della gestione: icona oro e nome.
+class _ManageRow extends StatelessWidget {
+  const _ManageRow({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 52),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: p.accentText),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(fontSize: 16, color: p.text),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, size: 22, color: p.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -332,117 +474,20 @@ class _AnnouncementDialogState extends State<_AnnouncementDialog> {
   );
 }
 
-class _Stat extends StatelessWidget {
-  const _Stat({
-    required this.value,
-    required this.label,
-    this.highlight = false,
-    this.onTap,
-  });
+/// Barra in alto delle pagine a schermo intero della Sala Direttivo: indietro,
+/// titolo e il filo d'oro.
+AppBar _fullScreenBar(String title) => AppBar(
+  title: Text(title),
+  flexibleSpace: const Align(alignment: Alignment.topCenter, child: GoldRule()),
+);
 
-  /// null = dati non ancora arrivati.
-  final int? value;
-  final String label;
-  final bool highlight;
-  final VoidCallback? onTap;
+/// Le squadre di un giocatore ("Milan AC · Futuro").
+String _teamsLabel(Set<Team> teams) => [
+  for (final t in Team.values)
+    if (teams.contains(t)) teamTabLabel(t),
+].join(' · ');
 
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '${value ?? '–'}',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  color: highlight ? MilanacColors.gold : Colors.white54,
-                ),
-              ),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                style: const TextStyle(color: Colors.white60, fontSize: 11),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _Header extends StatelessWidget {
-  const _Header(this.title);
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
-    child: Text(
-      title.toUpperCase(),
-      style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
-    ),
-  );
-}
-
-class _Action extends StatelessWidget {
-  const _Action({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    margin: EdgeInsets.zero,
-    child: InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Icon(icon, color: MilanacColors.red, size: 28),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-/// Rosa e squadre: il Direttivo sposta i giocatori tra MILANAC e FUTURO e modifica i dati.
+/// Rosa e squadre: il Direttivo sposta i giocatori tra Milan AC e Futuro e modifica i dati.
 class RosaManagementPage extends ConsumerStatefulWidget {
   const RosaManagementPage({super.key});
 
@@ -486,114 +531,152 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('ROSA E SQUADRE')),
-      body: AsyncView(
-        value: ref.watch(rosaProvider),
-        onRetry: () => ref.invalidate(rosaProvider),
-        data: _list,
+      appBar: _fullScreenBar('ROSA E SQUADRE'),
+      body: ContentWidth(
+        child: AsyncView(
+          value: ref.watch(rosaProvider),
+          onRetry: () => ref.invalidate(rosaProvider),
+          data: _page,
+        ),
       ),
     );
   }
 
-  Widget _list(List<Member> all) {
+  Widget _page(List<Member> all) {
+    final p = context.pal;
     final members =
         all.where((m) => m.active && m.role != ClubRole.pending).toList()
           ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final removed = all.where((m) => !m.active).toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final shown = members.where((m) => m.inTeam(_team)).toList();
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+    return Column(
       children: [
-        const Text(
-          'Tocca le squadre per spostare un giocatore (anche in entrambe). '
-          'Tocca il nome per ruolo, numero e altri dati.',
-          style: TextStyle(color: Colors.white60),
+        // I filtri restano in alto, nella fascia sotto la barra.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          decoration: BoxDecoration(
+            color: p.surface,
+            border: Border(bottom: BorderSide(color: p.border)),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilterPill(
+                label: 'Tutte · ${members.length}',
+                selected: _team == null,
+                onTap: () => setState(() => _team = null),
+              ),
+              for (final t in Team.values)
+                FilterPill(
+                  label:
+                      '${teamTabLabel(t)} · '
+                      '${members.where((m) => m.teams.contains(t)).length}',
+                  selected: _team == t,
+                  onTap: () => setState(() => _team = t),
+                ),
+            ],
+          ),
         ),
-        const SizedBox(height: 8),
-        TeamFilter(
-          value: _team,
-          onChanged: (t) => setState(() => _team = t),
-          counts: {
-            null: members.length,
-            for (final t in Team.values)
-              t: members.where((m) => m.teams.contains(t)).length,
-          },
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            children: [
+              Text(
+                'Tocca le squadre per spostare un giocatore (anche in entrambe). '
+                'Tocca il nome per ruolo, numero e altri dati.',
+                style: TextStyle(fontSize: 14, color: p.textMuted),
+              ),
+              const SizedBox(height: 12),
+              for (final m in shown) ...[
+                _MemberCard(
+                  member: m,
+                  onEdit: () => showMemberEditor(context, m),
+                  onTeams: (t) => _setTeams(m, t),
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (removed.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const SectionLabel('Rimossi'),
+                const SizedBox(height: 4),
+                Text(
+                  'Non possono entrare nell\'app finché non vengono riattivati.',
+                  style: TextStyle(fontSize: 14, color: p.textMuted),
+                ),
+                const SizedBox(height: 8),
+                AppCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      for (final (i, m) in removed.indexed) ...[
+                        if (i > 0) const Divider(),
+                        AttendanceMemberRow(
+                          member: m,
+                          detail: m.fullName == m.displayName
+                              ? m.roleLabel
+                              : m.fullName,
+                          trailing: OutlinedButton(
+                            onPressed: () => _reactivate(m),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 44),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
+                            ),
+                            child: const Text('Riattiva'),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
-        const SizedBox(height: 8),
-        for (final m in shown)
-          Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 12, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ListTile(
-                    contentPadding: const EdgeInsets.only(left: 8),
-                    leading: MemberAvatar(member: m),
-                    title: Text(
-                      m.displayName,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    subtitle: Text(
-                      [
-                        m.roleLabel,
-                        if (m.fieldPosition != null) m.fieldPosition!,
-                        if (m.shirtNumber != null) '#${m.shirtNumber}',
-                      ].join(' · '),
-                    ),
-                    trailing: const Icon(Icons.edit_rounded, size: 18),
-                    onTap: () => showMemberEditor(context, m),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 12),
-                    child: TeamsPicker(
-                      value: m.teams,
-                      onChanged: (t) => _setTeams(m, t),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        if (removed.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 16, 4, 4),
-            child: Text(
-              'RIMOSSI',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: Colors.white70,
-              ),
-            ),
-          ),
-          const Text(
-            'Non possono entrare nell\'app finché non vengono riattivati.',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          for (final m in removed)
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: MemberAvatar(member: m),
-                title: Text(
-                  m.displayName,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text(
-                  m.fullName == m.displayName ? m.roleLabel : m.fullName,
-                ),
-                trailing: FilledButton.tonal(
-                  onPressed: () => _reactivate(m),
-                  child: const Text('Riattiva'),
-                ),
-              ),
-            ),
-        ],
       ],
+    );
+  }
+}
+
+/// Un giocatore in Rosa e squadre: dati (tocca per modificarli) e le sue squadre.
+class _MemberCard extends StatelessWidget {
+  const _MemberCard({
+    required this.member,
+    required this.onEdit,
+    required this.onTeams,
+  });
+  final Member member;
+  final VoidCallback onEdit;
+  final ValueChanged<Set<Team>> onTeams;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final m = member;
+    return AppCard(
+      radius: 16,
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AttendanceMemberRow(
+            member: m,
+            detail: [
+              m.roleLabel,
+              if (m.fieldPosition != null) m.fieldPosition!,
+              if (m.shirtNumber != null) '#${m.shirtNumber}',
+            ].join(' · '),
+            trailing: Icon(Icons.edit_rounded, size: 20, color: p.textMuted),
+            onTap: onEdit,
+          ),
+          const SizedBox(height: 6),
+          TeamsPicker(value: m.teams, onChanged: onTeams),
+        ],
+      ),
     );
   }
 }
@@ -618,21 +701,23 @@ class TonightAttendancePage extends ConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('PRESENZE DI STASERA')),
-      body: AsyncView(
-        value: rosa,
-        onRetry: retry,
-        data: (all) => AsyncView(
-          value: attendance,
+      appBar: _fullScreenBar('PRESENZE DI STASERA'),
+      body: ContentWidth(
+        child: AsyncView(
+          value: rosa,
           onRetry: retry,
-          data: (entries) => _list(
-            context,
-            ref,
-            all: all,
-            entries: entries,
-            events: events,
-            today: today,
-            now: now,
+          data: (all) => AsyncView(
+            value: attendance,
+            onRetry: retry,
+            data: (entries) => _list(
+              context,
+              ref,
+              all: all,
+              entries: entries,
+              events: events,
+              today: today,
+              now: now,
+            ),
           ),
         ),
       ),
@@ -648,6 +733,7 @@ class TonightAttendancePage extends ConsumerWidget {
     required DateTime today,
     required DateTime now,
   }) {
+    final p = context.pal;
     final members =
         all.where((m) => m.active && m.role != ClubRole.pending).toList()
           ..sort((a, b) => a.displayName.compareTo(b.displayName));
@@ -682,76 +768,81 @@ class TonightAttendancePage extends ConsumerWidget {
       );
     }
 
-    Widget group(String title, Color color, List<Member> list) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 16, 4, 6),
-          child: Text(
-            '${title.toUpperCase()} (${list.length})',
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
-            ),
+    String detail(Member m) {
+      final entry = tonight[m.id];
+      if (entry == null) return 'Non ha ancora risposto';
+      return describeAttendance(entry) +
+          (entry.setBy != null ? ' · segnata dal Direttivo' : '');
+    }
+
+    List<Widget> group(
+      String title,
+      AttendanceStatus? status,
+      List<Member> list, {
+      Color? color,
+    }) => [
+      const SizedBox(height: 20),
+      AttendanceGroupLabel(
+        title: title,
+        count: list.length,
+        status: status,
+        color: color,
+      ),
+      const SizedBox(height: 8),
+      if (list.isEmpty)
+        Text('Nessuno.', style: TextStyle(fontSize: 14, color: p.textMuted))
+      else
+        AppCard(
+          radius: 16,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          child: Column(
+            children: [
+              for (final (i, m) in list.indexed) ...[
+                if (i > 0) const Divider(),
+                AttendanceMemberRow(
+                  member: m,
+                  detail: detail(m),
+                  detailColor: tonight[m.id] == null
+                      ? null
+                      : p.status(
+                          tonight[m.id]!.status,
+                          auto: tonight[m.id]!.auto,
+                        ),
+                  trailing: RowTrailingText(_teamsLabel(m.teams)),
+                  onTap: () => edit(m),
+                ),
+              ],
+            ],
           ),
         ),
-        if (list.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(left: 4),
-            child: Text('Nessuno.', style: TextStyle(color: Colors.white38)),
-          ),
-        for (final m in list)
-          ListTile(
-            dense: true,
-            leading: MemberAvatar(member: m, radius: 16),
-            title: Text(m.displayName),
-            subtitle: Text(
-              tonight[m.id] == null
-                  ? 'Non ha ancora risposto'
-                  : describeAttendance(tonight[m.id]!) +
-                        (tonight[m.id]!.setBy != null
-                            ? ' · segnata dal Direttivo'
-                            : ''),
-              style: TextStyle(
-                color: tonight[m.id]?.auto ?? false
-                    ? Colors.white38
-                    : statusColor(tonight[m.id]?.status),
-              ),
-            ),
-            trailing: Wrap(
-              spacing: 4,
-              children: [for (final t in m.teams) TeamBadge(t, small: true)],
-            ),
-            onTap: () => edit(m),
-          ),
-      ],
-    );
+    ];
 
     final closed = !answersOpen(today, now);
+    final day = DateFormat('EEEE d MMMM', 'it').format(today);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
         Text(
-          '${DateFormat('EEEE d MMMM', 'it').format(today)} · '
+          '${day[0].toUpperCase()}${day.substring(1)} · '
           '${closed ? 'risposte chiuse alle $attendanceDeadlineLabel' : 'risposte aperte fino alle $attendanceDeadlineLabel'}. '
           'Tocca un giocatore per correggere la sua risposta: resta registrato chi l\'ha fatto.',
-          style: const TextStyle(color: Colors.white60, fontSize: 13),
+          style: TextStyle(fontSize: 15, color: p.textSecondary),
         ),
-        group('Senza risposta', MilanacColors.gold, withStatus(null)),
-        group(
+        // Prima chi manca: è quello che il Direttivo deve sistemare.
+        ...group('Senza risposta', null, withStatus(null), color: p.accentText),
+        ...group(
           'In ritardo',
-          statusColor(AttendanceStatus.ritardo),
+          AttendanceStatus.ritardo,
           withStatus(AttendanceStatus.ritardo),
         ),
-        group(
+        ...group(
           'Assenti',
-          statusColor(AttendanceStatus.assente),
+          AttendanceStatus.assente,
           withStatus(AttendanceStatus.assente),
         ),
-        group(
+        ...group(
           'Presenti',
-          statusColor(AttendanceStatus.presente),
+          AttendanceStatus.presente,
           withStatus(AttendanceStatus.presente),
         ),
       ],
@@ -759,44 +850,71 @@ class TonightAttendancePage extends ConsumerWidget {
   }
 }
 
+/// Foglio per correggere la risposta di un giocatore: restituisce lo stato scelto.
 class _EditSheet extends StatelessWidget {
   const _EditSheet({required this.member, required this.entry});
   final Member member;
   final AttendanceEntry? entry;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(member.displayName, style: Theme.of(context).textTheme.titleLarge),
-        Text(
-          entry == null
-              ? 'Non ha ancora risposto per stasera.'
-              : 'Ora: ${describeAttendance(entry!)}',
-          style: const TextStyle(color: Colors.white60),
-        ),
-        const SizedBox(height: 14),
-        const Text('Segna per lui (Direttivo):'),
-        const SizedBox(height: 8),
-        Row(
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final s in AttendanceStatus.values)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: AttendanceStatusButton(
-                    status: s,
-                    selected: entry?.status == s,
-                    onPressed: () => Navigator.pop(context, s),
+            Row(
+              children: [
+                MemberAvatar(member: member, radius: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        member.displayName.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: sportFont,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: .5,
+                          color: p.text,
+                        ),
+                      ),
+                      Text(
+                        entry == null
+                            ? 'Non ha ancora risposto per stasera.'
+                            : 'Ora: ${describeAttendance(entry!)}',
+                        style: TextStyle(fontSize: 15, color: p.textSecondary),
+                      ),
+                    ],
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Segna per lui (Direttivo):',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: p.textMuted,
               ),
+            ),
+            const SizedBox(height: 8),
+            AttendanceButtons(
+              selected: entry?.status,
+              inline: true,
+              onAnswer: (s) => Navigator.pop(context, s),
+            ),
           ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
