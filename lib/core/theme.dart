@@ -45,10 +45,6 @@ const sportFont = 'Oswald';
 /// Font dei testi, dei pulsanti e degli elenchi.
 const bodyFont = 'Barlow';
 
-/// Caratteri della vecchia pergamena del regolamento (spariscono con la nuova lettura).
-const serifFont = 'CormorantGaramond';
-const scriptFont = 'GreatVibes';
-
 /// I colori che cambiano tra tema scuro (predefinito) e tema chiaro.
 @immutable
 class AppPalette extends ThemeExtension<AppPalette> {
