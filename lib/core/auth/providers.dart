@@ -23,6 +23,14 @@ final sessionProvider = StreamProvider<Session?>((ref) {
       .startWith(auth.currentSession);
 });
 
+/// Id dell'utente loggato (null = nessuno). Cambia solo al cambio di account, non a ogni
+/// rinnovo del token: i dati dell'utente (chat, proposte, ...) lo guardano così si
+/// ricaricano da zero quando entra un altro account sullo stesso telefono.
+final currentUserIdProvider = Provider<String?>((ref) {
+  if (AppConfig.isDemo) return 'demo';
+  return ref.watch(sessionProvider.select((s) => s.value?.user.id));
+});
+
 /// true dopo aver aperto il link "password dimenticata": l'app chiede la nuova password.
 final passwordRecoveryProvider = NotifierProvider<PasswordRecovery, bool>(
   PasswordRecovery.new,
@@ -50,13 +58,13 @@ class PasswordRecovery extends Notifier<bool> {
 /// (registrazione completata, regolamento accettato, ruolo assegnato).
 final profileProvider = StreamProvider<Profile?>((ref) {
   if (AppConfig.isDemo) return Stream.value(Profile.demo);
-  final session = ref.watch(sessionProvider).value;
-  if (session == null) return Stream.value(null);
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return Stream.value(null);
   return ref
       .watch(supabaseProvider)
       .from('profiles')
       .stream(primaryKey: ['id'])
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .map((rows) => rows.isEmpty ? null : Profile.fromMap(rows.first));
 });
 

@@ -122,12 +122,18 @@ declare
   uid uuid := auth.uid();
   v_teams text[];
   v_role club_role;
+  v_done timestamptz;
 begin
   if uid is null then
     raise exception 'Non autenticato';
   end if;
-  select club_role into v_role from profiles where id = uid;
-  if v_role is distinct from 'pending' then
+  -- Chi è già entrato nel club non ripassa di qui (squadre e ruolo li cambia il Direttivo).
+  -- Il primo Direttivo, nominato dall'editor SQL prima di registrarsi, invece completa.
+  select club_role, registration_completed_at into v_role, v_done from profiles where id = uid;
+  if v_role is null then
+    raise exception 'Profilo non trovato';
+  end if;
+  if v_role <> 'pending' and v_done is not null then
     raise exception 'Sei già nel club: i tuoi dati si cambiano dalle Impostazioni';
   end if;
   if coalesce(btrim(p_first_name), '') = '' or char_length(btrim(p_first_name)) > 40 then

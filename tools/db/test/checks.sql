@@ -1020,6 +1020,23 @@ select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 select pg_temp.expect_error(
   $q$select complete_registration('Mario', 'Rossi', 1995, 'ROSSI', null, array['futuro'], false, null, null, 'ATT', 9, 'ps5', '{}')$q$,
   'già nel club');
+-- Il primo Direttivo nominato dall'editor SQL prima di registrarsi completa la registrazione
+-- (una volta sola) e resta Direttivo.
+reset role;
+select pg_temp.as_user(null);
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000a8', 'primo@example.com');
+update profiles set club_role = 'direttivo' where id = '00000000-0000-0000-0000-0000000000a8';
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a8');
+do $$ begin
+  assert (select complete_registration('Primo', 'Capo', 1985, 'CAPO', null, array['milanac'], false, null, null, 'CC', 8, 'ps5', '{}'))
+         = 'ok', 'il primo Direttivo completa la registrazione';
+  assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a8') = 'direttivo',
+    'e resta Direttivo';
+end $$;
+select pg_temp.expect_error(
+  $q$select complete_registration('Primo', 'Capo', 1985, 'CAPO', null, array['futuro'], false, null, null, 'CC', 8, 'ps5', '{}')$q$,
+  'già nel club');
 -- Il permesso della registrazione vale per un solo aggiornamento del profilo:
 -- il primo passa, il secondo nella stessa transazione no.
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000f2');
