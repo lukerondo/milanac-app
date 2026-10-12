@@ -6,6 +6,7 @@ import '../../core/config.dart';
 import '../../core/local_flags.dart';
 import '../carta/carta_page.dart';
 import '../carte/special_cards_repository.dart';
+import '../risultati/matches_repository.dart';
 import '../rosa/rosa_repository.dart';
 import '../traguardi/achievements.dart';
 import '../traguardi/achievements_view.dart';
@@ -78,6 +79,11 @@ class _CelebrationsState extends ConsumerState<Celebrations> {
         final specialKey = 'special.seen.${me.id}';
         if (await flags.getString(specialKey) != special.id) {
           await flags.setString(specialKey, special.id);
+          final match = ref
+              .read(matchesProvider)
+              .value
+              ?.where((m) => m.id == special.matchId)
+              .firstOrNull;
           if (mounted) {
             await showWalkout(
               context,
@@ -85,6 +91,7 @@ class _CelebrationsState extends ConsumerState<Celebrations> {
               stats: stats,
               special: special.kind,
               bonus: special.bonus,
+              caption: specialCardCaption(special, match: match),
             );
           }
         }

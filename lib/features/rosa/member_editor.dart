@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/profile.dart';
 import '../../core/errors.dart';
 import '../../core/teams.dart';
+import '../../core/theme.dart';
 import 'member.dart';
 import 'rosa_repository.dart';
 
@@ -188,9 +189,9 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
             ),
             TextButton(
               onPressed: _saving ? null : () => _confirmRemove(context),
-              child: const Text(
+              child: Text(
                 'Rimuovi dalla rosa',
-                style: TextStyle(color: Colors.redAccent),
+                style: TextStyle(color: context.pal.danger),
               ),
             ),
           ],

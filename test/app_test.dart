@@ -31,12 +31,12 @@ void main() {
     expect(find.text('MONDO PROCLUB'), findsOneWidget);
     expect(find.text('PRESENZE'), findsOneWidget);
 
-    // Le notizie stanno in Mondo Proclub, seconda scheda.
+    // Le notizie stanno in Mondo Proclub, nella scheda Notizie (si apre sui video).
     await goToSection(tester, 'Mondo Proclub');
     expect(find.text('Video dei creator'.toUpperCase()), findsOneWidget);
     await tester.tap(find.text('Notizie'));
     await tester.pumpAndSettle();
-    expect(find.text('Leggi la notizia'), findsWidgets);
+    expect(find.text('NOTIZIE'), findsOneWidget);
 
     // Cinque schede in basso; nel Club c'è la Sala Direttivo perché la demo è Direttivo.
     expect(find.byType(NavigationBar), findsOneWidget);

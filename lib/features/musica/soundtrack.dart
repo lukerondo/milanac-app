@@ -66,6 +66,9 @@ abstract class SoundtrackEngine {
   Future<void> seek(Duration position);
   Future<void> setVolume(double volume);
   Duration get position;
+
+  /// Durata del brano caricato (null se non si sa, come nella demo e nei test).
+  Duration? get duration;
   Future<void> dispose();
 }
 
@@ -92,6 +95,8 @@ class JustAudioEngine implements SoundtrackEngine {
   @override
   Duration get position => _player.position;
   @override
+  Duration? get duration => _player.duration;
+  @override
   Future<void> dispose() => _player.dispose();
 }
 
@@ -110,6 +115,8 @@ class SilentEngine implements SoundtrackEngine {
   Future<void> setVolume(double volume) async {}
   @override
   Duration get position => Duration.zero;
+  @override
+  Duration? get duration => null;
   @override
   Future<void> dispose() async {}
 }

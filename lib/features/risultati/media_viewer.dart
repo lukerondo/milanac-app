@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../core/theme.dart';
 import '../../shared/async_view.dart';
 import 'match.dart';
 import 'matches_repository.dart';
+
+/// Tema scuro delle pagine che mostrano foto e video (sempre su fondo nero).
+final mediaTheme = buildTheme(Brightness.dark);
 
 /// URL firmato per un file privato dello storage. Vale un'ora: si riusa per 50 minuti,
 /// poi (quando nessuno lo mostra più) se ne chiede uno nuovo.
@@ -167,16 +171,20 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text(
-          widget.media.caption ??
-              (widget.media.type == MediaType.video ? 'CLIP' : 'FOTO'),
+    // Foto e clip si guardano su fondo nero, anche con il tema chiaro.
+    return Theme(
+      data: mediaTheme,
+      child: Scaffold(
+        backgroundColor: MilanacColors.black,
+        appBar: AppBar(
+          backgroundColor: MilanacColors.black,
+          title: Text(
+            widget.media.caption ??
+                (widget.media.type == MediaType.video ? 'CLIP' : 'FOTO'),
+          ),
         ),
+        body: body,
       ),
-      body: body,
     );
   }
 }

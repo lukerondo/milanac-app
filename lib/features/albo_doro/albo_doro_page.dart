@@ -1,23 +1,20 @@
-import 'dart:async';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
-import 'scene_painters.dart';
+import '../../shared/ui.dart';
+import '../carta/card_colors.dart';
+import '../risultati/result_ui.dart' show ClubCrest;
 import 'trophies_repository.dart';
 import 'trophy.dart';
 import 'trophy_editor.dart';
+import 'trophy_shape_painter.dart';
 
-const _perShelf = 4;
-const _minShelves = 3;
-
+/// Albo d'oro: le stagioni in alto, il numero di trofei e l'elenco dei trofei della
+/// stagione scelta, come la tavola.
 class AlboDoroPage extends ConsumerStatefulWidget {
   const AlboDoroPage({super.key});
 
@@ -28,74 +25,20 @@ class AlboDoroPage extends ConsumerStatefulWidget {
 class _AlboDoroPageState extends ConsumerState<AlboDoroPage> {
   String? _seasonId;
 
-  /// Inclinazione del telefono (-1..1) per l'effetto profondità.
-  Offset _tilt = Offset.zero;
-  StreamSubscription<AccelerometerEvent>? _sensor;
-
-  @override
-  void initState() {
-    super.initState();
-    try {
-      _sensor =
-          accelerometerEventStream(
-            samplingPeriod: SensorInterval.uiInterval,
-          ).listen(
-            (e) {
-              final target = Offset(
-                (-e.x / 6).clamp(-1, 1),
-                ((e.y - 6) / 6).clamp(-1, 1),
-              );
-              // Media mobile per un movimento morbido.
-              final next = Offset.lerp(_tilt, target, .12)!;
-              if (mounted && (next - _tilt).distance > .005) {
-                setState(() => _tilt = next);
-              }
-            },
-            onError: (_) {}, // sensore non disponibile (web, emulatori, test)
-            cancelOnError: true,
-          );
-    } catch (_) {
-      // Piattaforma senza sensori.
+  Future<void> _add(Season? current) async {
+    final savedSeason = await showTrophyEditor(
+      context,
+      seasonLabel: current?.label,
+    );
+    if (savedSeason != null && mounted) {
+      setState(() => _seasonId = savedSeason);
     }
-  }
-
-  @override
-  void dispose() {
-    _sensor?.cancel();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final seasons = ref.watch(seasonsProvider);
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      floatingActionButton: isDirettivo
-          ? FloatingActionButton.extended(
-              backgroundColor: MilanacColors.red,
-              onPressed: () async {
-                final current = seasons.value
-                    ?.where((s) => s.id == _seasonId)
-                    .firstOrNull;
-                final savedSeason = await showTrophyEditor(
-                  context,
-                  seasonLabel: current?.label,
-                );
-                if (savedSeason != null) {
-                  setState(() => _seasonId = savedSeason);
-                }
-              },
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Aggiungi trofeo'),
-            )
-          : null,
-      body: _body(seasons, isDirettivo),
-    );
-  }
-
-  Widget _body(AsyncValue<List<Season>> seasons, bool isDirettivo) {
     final list = seasons.value;
     if (list == null) {
       return AsyncView(
@@ -104,267 +47,275 @@ class _AlboDoroPageState extends ConsumerState<AlboDoroPage> {
         data: (_) => const SizedBox.shrink(),
       );
     }
-    if (list.isEmpty) {
-      return _Scene(
-        trophies: const [],
-        tilt: _tilt,
-        header: const _Header(seasons: [], selected: null),
-      );
-    }
+    // Le stagioni dalla più vecchia alla più recente; si parte da quella in corso.
+    final ordered = List.of(list)..sort((a, b) => a.label.compareTo(b.label));
     final current = currentSeasonLabel();
-    final selected =
-        list.where((s) => s.id == _seasonId).firstOrNull ??
-        list.where((s) => s.label == current).firstOrNull ??
-        list.first;
-    final trophies = ref.watch(trophiesProvider(selected.id));
-    final header = _Header(
-      seasons: list,
-      selected: selected,
-      onChanged: (s) => setState(() => _seasonId = s.id),
-    );
-    // Trofei non arrivati: l'errore con "Riprova", non la bacheca vuota.
-    if (!trophies.hasValue &&
-        trophies.hasError &&
-        (!trophies.isLoading || trophies.retrying)) {
-      return Column(
-        children: [
-          header,
-          Expanded(
-            child: ErrorRetry(
-              message: friendlyError(
-                trophies.error!,
-                action: 'Caricamento non riuscito',
-              ),
-              onRetry: () => ref.invalidate(trophiesProvider(selected.id)),
-            ),
-          ),
-        ],
-      );
-    }
-    return _Scene(
-      tilt: _tilt,
-      trophies: trophies.value ?? const [],
-      loading: trophies.isLoading,
-      canEdit: isDirettivo,
-      header: header,
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.seasons,
-    required this.selected,
-    this.onChanged,
-  });
-  final List<Season> seasons;
-  final Season? selected;
-  final ValueChanged<Season>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-      child: Row(
-        children: [
-          const Icon(Icons.emoji_events_rounded, color: MilanacColors.gold),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'LA NOSTRA BACHECA',
-              style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.4),
-            ),
-          ),
-          if (selected != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                border: Border.all(color: MilanacColors.gold),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<Season>(
-                  value: selected,
-                  icon: const Icon(
-                    Icons.expand_more_rounded,
-                    color: MilanacColors.gold,
-                  ),
-                  style: const TextStyle(
-                    color: MilanacColors.gold,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  dropdownColor: MilanacColors.surfaceHigh,
-                  items: [
-                    for (final s in seasons)
-                      DropdownMenuItem(
-                        value: s,
-                        child: Text('Stagione ${s.label}'),
-                      ),
-                  ],
-                  onChanged: (s) => s == null ? null : onChanged?.call(s),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Scene extends StatelessWidget {
-  const _Scene({
-    required this.trophies,
-    required this.tilt,
-    required this.header,
-    this.loading = false,
-    this.canEdit = false,
-  });
-
-  final List<Trophy> trophies;
-  final Offset tilt;
-  final Widget header;
-  final bool loading;
-  final bool canEdit;
-
-  @override
-  Widget build(BuildContext context) {
-    final shelves = max(_minShelves, (trophies.length / _perShelf).ceil());
+    final selected = ordered.isEmpty
+        ? null
+        : ordered.where((s) => s.id == _seasonId).firstOrNull ??
+              ordered.where((s) => s.label == current).firstOrNull ??
+              ordered.last;
+    final p = context.pal;
     return ListView(
-      padding: const EdgeInsets.only(bottom: 96),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: [
-        header,
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: AspectRatio(
-              aspectRatio: sceneAspect,
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  final size = box.biggest;
-                  final inner = cabinetInner(size);
-                  final shelfH = inner.height / shelves;
-                  final slotW = inner.width / _perShelf;
-                  return ClipRect(
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // Livello 1: sala e bacheca (si muove poco).
-                        Positioned.fill(
-                          child: Transform.translate(
-                            offset: tilt * -4,
-                            child: CustomPaint(
-                              painter: TrophyRoomPainter(shelves: shelves),
-                            ),
-                          ),
-                        ),
-                        // Livello 2: i trofei sulle mensole.
-                        for (final (i, t) in trophies.indexed)
-                          Positioned(
-                            left:
-                                inner.left +
-                                (i % _perShelf) * slotW +
-                                slotW * .1 +
-                                tilt.dx * -4,
-                            top:
-                                inner.top +
-                                (i ~/ _perShelf) * shelfH +
-                                shelfH * .2 +
-                                tilt.dy * -4,
-                            width: slotW * .8,
-                            height: shelfH * .74,
-                            child: _TrophyOnShelf(trophy: t, canEdit: canEdit),
-                          ),
-                        if (!loading && trophies.isEmpty)
-                          Positioned(
-                            left: inner.left + 12,
-                            right: size.width - inner.right + 12,
-                            top: inner.top + shelfH * .35,
-                            child: const Text(
-                              'Bacheca ancora vuota per questa stagione.\nForza MILANAC, riempiamola!',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        // Livello 3: il giocatore in primo piano (si muove di più).
-                        Positioned(
-                          left: size.width * -.02 + tilt.dx * 10,
-                          top: size.height * .52 + tilt.dy * 6,
-                          width: size.width * .36,
-                          height: size.height * .5,
-                          child: const IgnorePointer(
-                            child: CustomPaint(
-                              painter: AdmiringPlayerPainter(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
+        if (ordered.length > 1) ...[
+          _SeasonPicker(
+            seasons: ordered,
+            selected: selected!,
+            onChanged: (s) => setState(() => _seasonId = s.id),
           ),
-        ),
-        if (trophies.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-            child: Text(
-              'TROFEI DELLA STAGIONE',
-              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
-            ),
+          const SizedBox(height: 16),
+        ],
+        if (selected == null)
+          _Empty(text: 'Ancora nessuna stagione in bacheca.', p: p)
+        else
+          _SeasonTrophies(season: selected, canEdit: isDirettivo),
+        if (isDirettivo) ...[
+          const SizedBox(height: 14),
+          OutlinedButton(
+            onPressed: () => _add(selected),
+            child: const Text('Aggiungi un trofeo'),
           ),
-          for (final t in trophies)
-            ListTile(
-              leading: SizedBox(
-                width: 36,
-                height: 36,
-                child: TrophyVisual(trophy: t),
-              ),
-              title: Text(
-                t.name,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text(
-                [
-                  if (t.competition != null) t.competition!,
-                  if (t.wonOn != null)
-                    DateFormat('d MMMM yyyy', 'it').format(t.wonOn!),
-                ].join(' · '),
-              ),
-              onTap: () => showTrophyDetails(context, t, canEdit: canEdit),
-            ),
         ],
       ],
     );
   }
 }
 
-class _TrophyOnShelf extends StatelessWidget {
-  const _TrophyOnShelf({required this.trophy, required this.canEdit});
+/// Le stagioni: a schede come la tavola, a pillole se sono tante.
+class _SeasonPicker extends StatelessWidget {
+  const _SeasonPicker({
+    required this.seasons,
+    required this.selected,
+    required this.onChanged,
+  });
+  final List<Season> seasons;
+  final Season selected;
+  final ValueChanged<Season> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (seasons.length <= 3) {
+      return SegmentedTabs(
+        labels: [for (final s in seasons) s.label],
+        selected: seasons.indexOf(selected),
+        onSelected: (i) => onChanged(seasons[i]),
+      );
+    }
+    return SizedBox(
+      height: 36,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        reverse: true,
+        children: [
+          for (final s in seasons.reversed) ...[
+            FilterPill(
+              label: s.label,
+              selected: s.id == selected.id,
+              onTap: () => onChanged(s),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Empty extends StatelessWidget {
+  const _Empty({required this.text, required this.p});
+  final String text;
+  final AppPalette p;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      style: TextStyle(fontSize: 15, height: 1.4, color: p.textSecondary),
+    ),
+  );
+}
+
+/// Il numero di trofei della stagione e il loro elenco.
+class _SeasonTrophies extends ConsumerWidget {
+  const _SeasonTrophies({required this.season, required this.canEdit});
+  final Season season;
+  final bool canEdit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
+    final trophies = ref.watch(trophiesProvider(season.id));
+    // Trofei non arrivati: l'errore con "Riprova", non la bacheca vuota.
+    if (!trophies.hasValue &&
+        trophies.hasError &&
+        (!trophies.isLoading || trophies.retrying)) {
+      return ErrorRetry(
+        message: friendlyError(
+          trophies.error!,
+          action: 'Caricamento non riuscito',
+        ),
+        onRetry: () => ref.invalidate(trophiesProvider(season.id)),
+      );
+    }
+    final list = trophies.value;
+    if (list == null) return const LinearProgressIndicator();
+    if (list.isEmpty) {
+      return _Empty(
+        text:
+            'Bacheca ancora vuota per questa stagione.\n'
+            'Forza MILANAC, riempiamola!',
+        p: p,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CountCard(count: list.length, season: season.label),
+        const SizedBox(height: 14),
+        AppCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              for (final (i, t) in list.indexed) ...[
+                if (i > 0) const Divider(indent: 70),
+                _TrophyRow(trophy: t, canEdit: canEdit),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "5 TROFEI nella stagione 2025/26", nero e oro con lo stemma (come una targa,
+/// uguale nei due temi).
+class _CountCard extends StatelessWidget {
+  const _CountCard({required this.count, required this.season});
+  final int count;
+  final String season;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: CardColors.neroOro,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: CardColors.gold),
+    ),
+    child: Row(
+      children: [
+        Text(
+          '$count',
+          style: const TextStyle(
+            fontFamily: sportFont,
+            fontSize: 64,
+            fontWeight: FontWeight.w700,
+            height: 1,
+            color: CardColors.goldText,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                count == 1 ? 'TROFEO' : 'TROFEI',
+                style: const TextStyle(
+                  fontFamily: sportFont,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                  color: CardColors.goldText,
+                ),
+              ),
+              Text(
+                'nella stagione $season',
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: CardColors.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const ClubCrest(),
+      ],
+    ),
+  );
+}
+
+/// Riga di un trofeo: riquadro con la foto o l'icona della forma, e il nome.
+class _TrophyRow extends StatelessWidget {
+  const _TrophyRow({required this.trophy, required this.canEdit});
   final Trophy trophy;
   final bool canEdit;
 
   @override
   Widget build(BuildContext context) {
+    final p = context.pal;
+    // Coppe, scudetti e targhe in oro; medaglie e premi individuali in grigio.
+    final prize = switch (trophy.shape) {
+      TrophyShape.coppa || TrophyShape.scudetto || TrophyShape.targa => true,
+      TrophyShape.medaglia || TrophyShape.stella => false,
+    };
+    final icon = switch (trophy.shape) {
+      TrophyShape.coppa => Icons.emoji_events_rounded,
+      TrophyShape.scudetto => Icons.shield_rounded,
+      TrophyShape.targa => Icons.workspace_premium_rounded,
+      TrophyShape.medaglia => Icons.military_tech_rounded,
+      TrophyShape.stella => Icons.star_rounded,
+    };
+    void open() => showTrophyDetails(context, trophy, canEdit: canEdit);
     return Semantics(
       button: true,
       label: trophy.name,
-      child: GestureDetector(
-        onTap: () => showTrophyDetails(context, trophy, canEdit: canEdit),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFFE6A8).withValues(alpha: .18),
-                blurRadius: 18,
-                spreadRadius: 2,
-              ),
-            ],
+      onTap: open,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: open,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  clipBehavior: Clip.antiAlias,
+                  padding: trophy.hasImage
+                      ? const EdgeInsets.all(4)
+                      : EdgeInsets.zero,
+                  decoration: BoxDecoration(
+                    color: prize ? p.accentTint : p.surfaceHigh,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: trophy.hasImage
+                      ? TrophyVisual(trophy: trophy)
+                      : Icon(
+                          icon,
+                          size: 22,
+                          color: prize ? p.accentText : p.textSecondary,
+                        ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    trophy.name,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: TrophyVisual(trophy: trophy),
         ),
       ),
     );

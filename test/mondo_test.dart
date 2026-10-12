@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/news/news_item.dart';
 import 'package:milanac/main.dart';
+import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
 
@@ -49,14 +50,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('PROPOSTE DA APPROVARE (1)'), findsNothing);
     // Ora è tra i video, filtrabile per ruolo.
-    await tester.tap(find.widgetWithText(ChoiceChip, 'DC'));
+    await tester.tap(find.widgetWithText(FilterPill, 'DC'));
     await tester.pumpAndSettle();
     expect(
       find.text('Difendere in 11 contro 11: i movimenti del DC'),
       findsOneWidget,
     );
     expect(find.text('La build da attaccante più forte'), findsNothing);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Tutti'));
+    await tester.tap(find.widgetWithText(FilterPill, 'Tutti'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Aggiungi video'));
@@ -81,14 +82,13 @@ void main() {
     await openMondo(tester);
     await tester.tap(find.text('Notizie'));
     await tester.pumpAndSettle();
-    expect(find.text('Leggi la notizia'), findsWidgets);
-    // I filtri scorrono in orizzontale: porta in vista "Console".
-    await tester.drag(
-      find.widgetWithText(ChoiceChip, 'Tutte'),
-      const Offset(-400, 0),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Console'));
+    // Prima le cose da fare prima della partita (gioco e console del profilo).
+    expect(find.text('DA FARE PRIMA DELLA PARTITA'), findsOneWidget);
+    expect(find.text('FC 27: Title Update 1.0.3'), findsOneWidget);
+    expect(find.text('PS5: aggiornamento di sistema'), findsOneWidget);
+    expect(find.text('Versione 26.02-12.00 disponibile'), findsOneWidget);
+    expect(find.text('NOTIZIE'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterPill, 'Console'));
     await tester.pumpAndSettle();
     expect(find.textContaining('PS5: disponibile'), findsOneWidget);
     expect(find.textContaining('FVPA: aperte'), findsNothing);

@@ -1,57 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
 import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
 import '../volto/face_view.dart';
+import 'card_colors.dart';
 import 'card_stats.dart';
 
-/// Colori (sopra, sotto, testo) di una mini carta: carta speciale o livello dell'overall,
-/// come la carta grande.
+/// Colori (sopra, sotto, scritte) di una mini carta disegnata nel PDF della
+/// formazione: carta speciale o livello dell'overall.
 (Color, Color, Color) miniCardColors(int? overall, SpecialCard? special) =>
     switch (special?.kind) {
-      CardSpecial.neroOro => (
-        const Color(0xFF2B2B2E),
-        const Color(0xFF050505),
-        const Color(0xFFF3D27A),
-      ),
-      CardSpecial.blu => (
-        const Color(0xFF2F7BFF),
-        const Color(0xFF061A5C),
-        const Color(0xFFEAF2FF),
-      ),
+      CardSpecial.neroOro => CardColors.pdfNeroOro,
+      CardSpecial.blu => CardColors.pdfBlu,
       null => switch (tierOf(overall)) {
-        CardTier.vuota => (
-          const Color(0xFF34343C),
-          const Color(0xFF17171B),
-          Colors.white,
-        ),
-        CardTier.bronzo => (
-          const Color(0xFFD9A273),
-          const Color(0xFF8A5530),
-          const Color(0xFF3B2414),
-        ),
-        CardTier.argento => (
-          const Color(0xFFF1F3F6),
-          const Color(0xFF9AA1AB),
-          const Color(0xFF23272E),
-        ),
-        CardTier.oro => (
-          const Color(0xFFFBE3A0),
-          const Color(0xFFC99A2E),
-          const Color(0xFF3A2A08),
-        ),
-        CardTier.rossonera => (
-          const Color(0xFFC8102E),
-          const Color(0xFF0B0B0D),
-          const Color(0xFFF6D77F),
-        ),
+        CardTier.vuota => CardColors.pdfVuota,
+        CardTier.bronzo => CardColors.pdfBronzo,
+        CardTier.argento => CardColors.pdfArgento,
+        CardTier.oro => CardColors.pdfOro,
+        CardTier.rossonera => CardColors.pdfRossonera,
       },
     };
 
-/// Mini carta del giocatore (Rosa): volto, overall con il bonus, ruolo e nome.
+/// Squadre scritte sotto il nome delle mini carte ("MILAN AC", "FUTURO").
+String _teamsShort(Set<Team> teams) => [
+  for (final t in Team.values)
+    if (teams.contains(t)) t.short,
+].join(' · ');
+
+/// Altezza di una mini carta (cresce con il testo grande del telefono).
+double miniCardHeight(BuildContext context) =>
+    99 + 69 * MediaQuery.textScalerOf(context).scale(1);
+
+/// Mini carta del giocatore (Rosa), come la tavola: nero/oro, blu elettrico o
+/// normale (scura, con il colore del livello in alto). Overall con il bonus, ruolo,
+/// volto, nome e tipo di carta. Colori fissi: è un oggetto di gioco.
 class MiniCard extends ConsumerWidget {
   const MiniCard({super.key, required this.member, this.onTap});
   final Member member;
@@ -60,114 +46,157 @@ class MiniCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final special = ref.watch(activeSpecialCardProvider(member.id));
-    final (top, bottom, text) = miniCardColors(member.overall, special);
     final overall = overallWith(member.overall, special);
-    final face = member.face;
-    return GestureDetector(
+    final kind = special?.kind;
+    final (bg, fg, roleColor, labelColor) = switch (kind) {
+      CardSpecial.neroOro => (
+        CardColors.neroOro,
+        CardColors.goldText,
+        CardColors.goldText,
+        CardColors.goldText,
+      ),
+      CardSpecial.blu => (
+        CardColors.blue,
+        CardColors.onBlue,
+        CardColors.onBlue,
+        CardColors.onBlue,
+      ),
+      null => (
+        CardColors.surface,
+        CardColors.text,
+        CardColors.textMuted,
+        CardColors.caption,
+      ),
+    };
+    final label = switch (kind) {
+      CardSpecial.neroOro => 'NERO/ORO',
+      CardSpecial.blu => 'BLU ELETTRICO',
+      null => _teamsShort(member.teams),
+    };
+    final description = [
+      member.displayName,
+      ?overall?.toString(),
+      if (kind == CardSpecial.neroOro) 'carta nero e oro',
+      if (kind == CardSpecial.blu) 'carta blu elettrico',
+    ].join(', ');
+    return Semantics(
+      button: onTap != null,
+      label: description,
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [top, bottom],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: text.withValues(alpha: .45)),
-          boxShadow: const [
-            BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(0, 3)),
-          ],
+      excludeSemantics: true,
+      child: Material(
+        color: bg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: switch (kind) {
+            CardSpecial.neroOro => const BorderSide(color: CardColors.gold),
+            CardSpecial.blu => BorderSide.none,
+            null => const BorderSide(color: CardColors.border),
+          },
         ),
-        padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
-        child: DefaultTextStyle(
-          style: TextStyle(color: text, fontFamily: sportFont),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Overall (con il bonus) a sinistra, ruolo a destra: si rimpiccioliscono
-              // se lo spazio non basta.
-              Row(
-                children: [
-                  Expanded(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            overall?.toString() ?? '–',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              height: 1,
-                              fontWeight: FontWeight.w700,
+              if (kind == null)
+                Container(
+                  height: 5,
+                  color: CardColors.tier(tierOf(member.overall)),
+                ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(8, kind == null ? 6 : 8, 8, 8),
+                child: Column(
+                  children: [
+                    // Overall (con il bonus) a sinistra, ruolo a destra: si
+                    // rimpiccioliscono se lo spazio non basta.
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.topLeft,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  overall?.toString() ?? '–',
+                                  style: TextStyle(
+                                    fontFamily: sportFont,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1,
+                                    color: fg,
+                                  ),
+                                ),
+                                if (special != null)
+                                  Text(
+                                    '+${special.bonus}',
+                                    style: TextStyle(
+                                      fontFamily: sportFont,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1,
+                                      color: fg,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                          if (special != null)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 1),
-                              child: Text(
-                                '+${special.bonus}',
-                                style: const TextStyle(
-                                  fontSize: 9,
-                                  height: 1.2,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                        ),
+                        const SizedBox(width: 4),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 38),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.topRight,
+                            child: Text(
+                              member.fieldPosition ?? '–',
+                              style: TextStyle(
+                                fontFamily: sportFont,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: roleColor,
                               ),
                             ),
-                        ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    CardPortrait(member: member, size: 58, special: kind),
+                    const SizedBox(height: 4),
+                    Text(
+                      member.displayName.toUpperCase(),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: sportFont,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.15,
+                        color: fg,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: FittedBox(
+                    const SizedBox(height: 2),
+                    FittedBox(
                       fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
                       child: Text(
-                        member.fieldPosition ?? '–',
-                        style: const TextStyle(
-                          fontSize: 13,
+                        label,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
+                          letterSpacing: .7,
+                          color: labelColor,
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              Expanded(
-                child: Center(
-                  child: ClipOval(
-                    child: Container(
-                      width: 56,
-                      height: 56,
-                      color: Colors.white.withValues(alpha: .15),
-                      child: face != null
-                          ? FaceView(face: face, size: 56, crop: FaceCrop.head)
-                          : _Initial(member: member, color: text),
-                    ),
-                  ),
-                ),
-              ),
-              Text(
-                member.displayName.toUpperCase(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .3,
-                ),
-              ),
-              Text(
-                special?.kind.cardLabel ?? teamsLabel(member.teams),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 7,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: .6,
-                  color: text.withValues(alpha: .8),
+                  ],
                 ),
               ),
             ],
@@ -178,55 +207,78 @@ class MiniCard extends ConsumerWidget {
   }
 }
 
-class _Initial extends ConsumerWidget {
-  const _Initial({required this.member, required this.color});
+/// Volto della carta in tondo: il volto disegnato, la foto o il numero di maglia.
+class CardPortrait extends ConsumerWidget {
+  const CardPortrait({
+    super.key,
+    required this.member,
+    required this.size,
+    this.special,
+  });
   final Member member;
-  final Color color;
+  final double size;
+  final CardSpecial? special;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final photo = memberPhoto(ref, member);
-    final initial = Center(
+    final (bg, fg) = switch (special) {
+      CardSpecial.neroOro => (CardColors.neroOroLine, CardColors.goldText),
+      CardSpecial.blu => (CardColors.blueDeep, CardColors.onBlue),
+      null => (CardColors.portrait, CardColors.text),
+    };
+    final face = member.face;
+    final photo = face == null ? memberPhoto(ref, member) : null;
+    final fallback = Center(
       child: Text(
-        member.displayName.isEmpty
-            ? '?'
-            : member.displayName.characters.first.toUpperCase(),
+        member.shirtNumber?.toString() ??
+            (member.displayName.isEmpty
+                ? '?'
+                : member.displayName.characters.first.toUpperCase()),
         style: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.w800,
-          color: color,
+          fontFamily: sportFont,
+          fontSize: size * .34,
+          fontWeight: FontWeight.w600,
+          color: fg,
         ),
       ),
     );
-    if (photo == null) return initial;
-    return Image(
-      image: photo,
-      fit: BoxFit.cover,
-      errorBuilder: (_, _, _) => initial,
+    return ClipOval(
+      child: Container(
+        width: size,
+        height: size,
+        color: bg,
+        child: face != null
+            ? FaceView(face: face, size: size, crop: FaceCrop.head)
+            : photo == null
+            ? fallback
+            : Image(
+                image: photo,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => fallback,
+              ),
+      ),
     );
   }
 }
 
 /// Griglia di mini carte, tre per riga.
 class MiniCardGrid extends StatelessWidget {
-  const MiniCardGrid({
-    super.key,
-    required this.members,
-    required this.onTap,
-  });
+  const MiniCardGrid({super.key, required this.members, required this.onTap});
   final List<Member> members;
   final void Function(Member) onTap;
 
   @override
-  Widget build(BuildContext context) => GridView.count(
-    crossAxisCount: 3,
+  Widget build(BuildContext context) => GridView.builder(
     shrinkWrap: true,
     physics: const NeverScrollableScrollPhysics(),
-    mainAxisSpacing: 10,
-    crossAxisSpacing: 10,
-    childAspectRatio: .74,
-    children: [
-      for (final m in members) MiniCard(member: m, onTap: () => onTap(m)),
-    ],
+    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 3,
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      mainAxisExtent: miniCardHeight(context),
+    ),
+    itemCount: members.length,
+    itemBuilder: (_, i) =>
+        MiniCard(member: members[i], onTap: () => onTap(members[i])),
   );
 }

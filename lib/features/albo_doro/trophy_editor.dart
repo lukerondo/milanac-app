@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import '../../core/errors.dart';
 import '../../core/theme.dart';
 import 'albo_doro_page.dart';
-import 'scene_painters.dart';
+import 'trophy_shape_painter.dart';
 import 'trophies_repository.dart';
 import 'trophy.dart';
 
@@ -30,10 +30,8 @@ Future<void> showTrophyDetails(
           Text(
             t.name,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: MilanacColors.gold,
-              fontWeight: FontWeight.w900,
-            ),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(color: context.pal.accentText),
           ),
           Text(
             [
@@ -41,11 +39,16 @@ Future<void> showTrophyDetails(
               if (t.wonOn != null)
                 DateFormat('d MMMM yyyy', 'it').format(t.wonOn!),
             ].join(' · '),
-            style: const TextStyle(color: Colors.white70),
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, color: context.pal.textSecondary),
           ),
           if (t.description != null && t.description!.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text(t.description!, textAlign: TextAlign.center),
+            Text(
+              t.description!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, height: 1.4),
+            ),
           ],
           if (canEdit) ...[
             const SizedBox(height: 20),
@@ -81,7 +84,10 @@ Future<void> showTrophyDetails(
                       messenger.showSnackBar(
                         SnackBar(
                           content: Text(
-                            friendlyError(e, action: 'Eliminazione non riuscita'),
+                            friendlyError(
+                              e,
+                              action: 'Eliminazione non riuscita',
+                            ),
                           ),
                         ),
                       );
@@ -356,7 +362,6 @@ class _TrophyEditorState extends ConsumerState<_TrophyEditor> {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _saving ? null : _save,
-              style: FilledButton.styleFrom(backgroundColor: MilanacColors.red),
               child: const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Text('Metti in bacheca'),

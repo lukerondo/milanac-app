@@ -100,7 +100,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Inter Digitale'), findsOneWidget);
-    expect(find.text('4 : 0'), findsOneWidget);
+    expect(find.text('4 – 0'), findsOneWidget);
 
     // Apre la partita e aggiunge un link.
     await tester.tap(find.text('Inter Digitale'));
@@ -109,7 +109,9 @@ void main() {
       find.text('Nessun video o foto per questa partita.'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Aggiungi media'));
+    await tester.ensureVisible(find.text('Aggiungi video o foto'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aggiungi video o foto'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Link a un video'));
     await tester.pumpAndSettle();

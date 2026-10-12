@@ -44,11 +44,28 @@ class NewsItem {
 /// Categorie mostrate come filtri nelle notizie.
 const newsCategories = <String, String>{
   'tutte': 'Tutte',
-  'aggiornamenti': 'Aggiornamenti FC 27',
+  'aggiornamenti': 'FC 27',
   'console': 'Console',
   'tornei': 'Tornei',
   'pro_clubs': 'Pro Clubs',
   'ultimate_team': 'Ultimate Team',
+};
+
+/// Etichetta della categoria sopra il titolo di una notizia.
+String newsCategoryTag(String category) => switch (category) {
+  'aggiornamenti' => 'Aggiornamenti FC 27',
+  'console' => 'Console',
+  'tornei' => 'Tornei',
+  'ultimate_team' => 'Ultimate Team',
+  _ => 'Pro Clubs',
+};
+
+/// Sigla breve della piattaforma ("PS5", "Xbox").
+String platformShort(String? platform) => switch (platform) {
+  'ps5' => 'PS5',
+  'xbox' => 'Xbox',
+  'pc' => 'PC',
+  _ => 'Console',
 };
 
 /// Nome della piattaforma come la chiamano i giocatori.

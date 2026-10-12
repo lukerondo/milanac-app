@@ -110,8 +110,9 @@ void main() {
       ),
     ]);
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'AMICHEVOLE'), findsOneWidget);
-    expect(find.text('Atletico Joystick'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'PARTITA'), findsOneWidget);
+    expect(find.text('ATLETICO JOYSTICK'), findsOneWidget);
+    expect(find.text('2 – 1'), findsOneWidget);
   });
 
   testWidgets('Risultati: un solo stream dei media per tutte le schede, '
@@ -122,10 +123,10 @@ void main() {
       overrides: [matchesRepositoryProvider.overrideWithValue(repo)],
     );
     await goToSection(tester, 'Risultati');
-    expect(find.byType(MatchCard), findsNWidgets(3));
+    expect(find.byType(MatchRow), findsNWidgets(3));
     expect(repo.mediaStreams, 1);
     // Solo la 2ª giornata ha un contenuto (il link agli highlights).
-    expect(find.byIcon(Icons.perm_media_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.play_circle_rounded), findsOneWidget);
 
     await tester.tap(find.text('Dinamo Pixel'));
     await tester.pumpAndSettle();
@@ -139,11 +140,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Conferma'));
     await tester.pumpAndSettle();
-    expect(find.text('Nessun video o foto per questa partita.'), findsOneWidget);
+    expect(
+      find.text('Nessun video o foto per questa partita.'),
+      findsOneWidget,
+    );
 
     await tester.tap(_back);
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.perm_media_rounded), findsNothing);
+    expect(find.byIcon(Icons.play_circle_rounded), findsNothing);
     expect(repo.mediaStreams, 1);
   });
 
@@ -194,7 +198,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Salva partita'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Inserisci entrambi i punteggi'), findsOneWidget);
+    expect(
+      find.textContaining('Inserisci entrambi i punteggi'),
+      findsOneWidget,
+    );
     expect(
       container.read(matchesProvider).value!.map((m) => m.opponent),
       isNot(contains('Atletico Joystick')),

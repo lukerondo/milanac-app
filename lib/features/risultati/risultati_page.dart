@@ -6,18 +6,15 @@ import '../../core/auth/providers.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
+import '../../shared/ui.dart';
 import 'match.dart';
 import 'match_detail_page.dart';
 import 'match_editor.dart';
 import 'matches_repository.dart';
+import 'result_ui.dart';
 
-Color outcomeColor(MatchOutcome o) => switch (o) {
-  MatchOutcome.vittoria => const Color(0xFF2E9E5B),
-  MatchOutcome.pareggio => const Color(0xFFE0A526),
-  MatchOutcome.sconfitta => MilanacColors.red,
-  MatchOutcome.daGiocare => Colors.white38,
-};
-
+/// Risultati (scheda di Partite): filtri per squadra e tipo, bilancio e l'elenco
+/// delle partite con l'esito V / N / P, come la tavola delle Partite.
 class RisultatiPage extends ConsumerStatefulWidget {
   const RisultatiPage({super.key});
 
@@ -26,8 +23,9 @@ class RisultatiPage extends ConsumerStatefulWidget {
 }
 
 class _RisultatiPageState extends ConsumerState<RisultatiPage> {
-  MatchKind? _filter;
+  /// Squadra (null = tutte) e tipo di partita (null = ufficiali e amichevoli).
   Team? _team;
+  MatchKind? _kind;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +36,6 @@ class _RisultatiPageState extends ConsumerState<RisultatiPage> {
       backgroundColor: Colors.transparent,
       floatingActionButton: isDirettivo
           ? FloatingActionButton.extended(
-              backgroundColor: MilanacColors.red,
               onPressed: () => showMatchEditor(context),
               icon: const Icon(Icons.add_rounded),
               label: const Text('Nuova partita'),
@@ -51,50 +48,70 @@ class _RisultatiPageState extends ConsumerState<RisultatiPage> {
           final list = all
               .where(
                 (m) =>
-                    (_filter == null || m.kind == _filter) &&
+                    (_kind == null || m.kind == _kind) &&
                     (_team == null || m.team == _team),
               )
               .toList();
           final record = MatchRecord(list);
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
             children: [
               Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final t in Team.values)
+                    FilterPill(
+                      label: teamPillLabel(t),
+                      selected: _team == t,
+                      onTap: () => setState(() => _team = t),
+                    ),
+                  FilterPill(
+                    label: 'Tutte',
+                    selected: _team == null,
+                    onTap: () => setState(() => _team = null),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Tipo: si tocca di nuovo per tornare a tutte le partite.
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
                 children: [
                   for (final (label, kind) in [
-                    ('Tutte', null),
-                    ('Tornei', MatchKind.torneo),
+                    ('Ufficiali', MatchKind.torneo),
                     ('Amichevoli', MatchKind.amichevole),
                   ])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(label),
-                        selected: _filter == kind,
-                        onSelected: (_) => setState(() => _filter = kind),
-                      ),
+                    FilterPill(
+                      label: label,
+                      square: true,
+                      selected: _kind == kind,
+                      onTap: () =>
+                          setState(() => _kind = _kind == kind ? null : kind),
                     ),
                 ],
               ),
-              const SizedBox(height: 6),
-              TeamFilter(
-                value: _team,
-                onChanged: (t) => setState(() => _team = t),
-              ),
-              const SizedBox(height: 8),
-              _RecordCard(record: record),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
+              if (record.played > 0) ...[
+                _RecordCard(record: record),
+                const SizedBox(height: 20),
+              ],
+              const SectionLabel('Ultimi risultati'),
+              const SizedBox(height: 10),
               if (list.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 40),
-                  child: Center(
-                    child: Text(
-                      'Nessuna partita registrata.',
-                      style: TextStyle(color: Colors.white54),
+                AppCard(
+                  child: Text(
+                    'Nessuna partita registrata.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: context.pal.textMuted,
                     ),
                   ),
-                ),
-              for (final m in list) MatchCard(match: m),
+                )
+              else
+                MatchList(matches: list),
             ],
           );
         },
@@ -103,214 +120,158 @@ class _RisultatiPageState extends ConsumerState<RisultatiPage> {
   }
 }
 
+/// Bilancio delle partite mostrate: giocate, vinte, pari, perse e gol.
 class _RecordCard extends StatelessWidget {
   const _RecordCard({required this.record});
   final MatchRecord record;
 
   @override
   Widget build(BuildContext context) {
+    final p = context.pal;
     final cells = [
-      ('${record.played}', 'Giocate', Colors.white),
-      ('${record.wins}', 'Vinte', outcomeColor(MatchOutcome.vittoria)),
-      ('${record.draws}', 'Pari', outcomeColor(MatchOutcome.pareggio)),
-      ('${record.losses}', 'Perse', outcomeColor(MatchOutcome.sconfitta)),
-      ('${record.goalsFor}:${record.goalsAgainst}', 'Gol', MilanacColors.gold),
+      ('${record.played}', 'Giocate', p.text),
+      ('${record.wins}', 'Vinte', p.success),
+      ('${record.draws}', 'Pari', p.textSecondary),
+      ('${record.losses}', 'Perse', p.danger),
+      ('${record.goalsFor}:${record.goalsAgainst}', 'Gol', p.accentText),
     ];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Row(
-          children: [
-            for (final (value, label, color) in cells)
-              Expanded(
-                child: Column(
-                  children: [
-                    FittedBox(
-                      child: Text(
-                        value,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: color,
-                        ),
+    return AppCard(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+      child: Row(
+        children: [
+          for (final (value, label, color) in cells)
+            Expanded(
+              child: Column(
+                children: [
+                  FittedBox(
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontFamily: sportFont,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                        color: color,
                       ),
                     ),
-                    FittedBox(
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 12,
-                        ),
-                      ),
+                  ),
+                  FittedBox(
+                    child: Text(
+                      label,
+                      style: TextStyle(fontSize: 13, color: p.textMuted),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
 }
 
-class MatchCard extends ConsumerWidget {
-  const MatchCard({super.key, required this.match});
+/// Apre il dettaglio di una partita sopra le schede.
+void openMatch(BuildContext context, String matchId) => Navigator.of(
+  context,
+  rootNavigator: true,
+).push(MaterialPageRoute(builder: (_) => MatchDetailPage(matchId: matchId)));
+
+/// Le partite in una card, una riga ciascuna, separate da un filetto.
+class MatchList extends StatelessWidget {
+  const MatchList({super.key, required this.matches});
+  final List<ClubMatch> matches;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+    padding: EdgeInsets.zero,
+    child: Column(
+      children: [
+        for (final (i, m) in matches.indexed) ...[
+          if (i > 0) const Divider(indent: 16, endIndent: 16),
+          MatchRow(match: m),
+        ],
+      ],
+    ),
+  );
+}
+
+/// Riga di una partita: esito, avversario, competizione, punteggio e data.
+class MatchRow extends ConsumerWidget {
+  const MatchRow({super.key, required this.match});
   final ClubMatch match;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Solo il numero: la scheda non si ridisegna per i media delle altre partite.
+    final p = context.pal;
+    // Solo il numero: la riga non si ridisegna per i media delle altre partite.
     final mediaCount = ref.watch(
       matchMediaProvider(match.id).select((m) => m.value?.length ?? 0),
     );
-    final color = outcomeColor(match.outcome);
-    final score = match.outcome == MatchOutcome.daGiocare
-        ? '– : –'
-        : match.home
-        ? '${match.goalsFor} : ${match.goalsAgainst}'
-        : '${match.goalsAgainst} : ${match.goalsFor}';
-    final us = match.team.label;
-    final home = match.home ? us : match.opponent;
-    final away = match.home ? match.opponent : us;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => Navigator.of(context, rootNavigator: true).push(
-          MaterialPageRoute(builder: (_) => MatchDetailPage(matchId: match.id)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            children: [
-              Row(
+    return InkWell(
+      onTap: () => openMatch(context, match.id),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            OutcomeBadge(match.outcome),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: match.kind == MatchKind.torneo
-                          ? MilanacColors.red
-                          : Colors.white12,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      match.kind.label.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
+                  Text(
+                    match.opponent,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      [
-                        if (match.competition != null) match.competition!,
-                        DateFormat('d MMM yyyy', 'it').format(match.playedAt),
-                      ].join(' · '),
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  if (mediaCount > 0) ...[
-                    const Icon(
-                      Icons.perm_media_rounded,
-                      size: 16,
-                      color: MilanacColors.gold,
-                    ),
-                    const SizedBox(width: 2),
-                    Text(
-                      '$mediaCount',
-                      style: const TextStyle(
-                        color: MilanacColors.gold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      home,
-                      textAlign: TextAlign.right,
-                      overflow: TextOverflow.ellipsis,
-                      style: _teamStyle(match.home),
-                    ),
-                  ),
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 12),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.18),
-                      border: Border.all(color: color),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      score,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: color,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      away,
-                      overflow: TextOverflow.ellipsis,
-                      style: _teamStyle(!match.home),
-                    ),
+                  Text(
+                    matchSubtitle(match),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, color: p.textMuted),
                   ),
                 ],
               ),
-              if (match.scorers != null && match.scorers!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.sports_soccer_rounded,
-                      size: 14,
-                      color: Colors.white70,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        match.scorers!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
+            ),
+            if (mediaCount > 0) ...[
+              const SizedBox(width: 8),
+              Tooltip(
+                message: mediaCount == 1
+                    ? 'Un video o una foto'
+                    : '$mediaCount video e foto',
+                child: Icon(
+                  Icons.play_circle_rounded,
+                  size: 20,
+                  color: p.accentText,
+                ),
+              ),
+            ],
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  scoreText(match),
+                  style: const TextStyle(
+                    fontFamily: sportFont,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: .6,
+                    height: 1.15,
+                  ),
+                ),
+                Text(
+                  DateFormat('d MMM', 'it').format(match.playedAt),
+                  style: TextStyle(fontSize: 12, color: p.textMuted),
                 ),
               ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
-
-  static TextStyle _teamStyle(bool us) => TextStyle(
-    fontWeight: FontWeight.w800,
-    color: us ? MilanacColors.gold : Colors.white,
-  );
 }
