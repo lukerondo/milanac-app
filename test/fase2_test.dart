@@ -73,7 +73,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rosa e squadre'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ChoiceChip, 'FUTURO (2)'), findsOneWidget);
+    expect(find.widgetWithText(FilterPill, 'Futuro · 2'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Marco Rossi'),
       200,
@@ -81,7 +81,7 @@ void main() {
     );
     final rossiCard = find.ancestor(
       of: find.text('Marco Rossi'),
-      matching: find.byType(Card),
+      matching: find.byType(AppCard),
     );
     await tester.ensureVisible(rossiCard);
     await tester.pumpAndSettle();
@@ -92,11 +92,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.widgetWithText(ChoiceChip, 'FUTURO (3)'),
-      -300,
-    );
-    expect(find.widgetWithText(ChoiceChip, 'FUTURO (3)'), findsOneWidget);
+    // I filtri restano in alto.
+    expect(find.widgetWithText(FilterPill, 'Futuro · 3'), findsOneWidget);
     tester.state<NavigatorState>(find.byType(Navigator).first).pop();
     await tester.pumpAndSettle();
 

@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import '../../core/teams.dart';
 import '../lavagna/board_model.dart';
 
 const chatBucket = 'chat';
@@ -24,6 +25,15 @@ const chatPageSize = 50;
 
 /// I link firmati delle foto valgono 6 ore: si rinnovano prima che scadano.
 const chatImageUrlLifetime = Duration(hours: 5);
+
+/// Ricerca nei messaggi: dalle 2 lettere in su, gli ultimi 50 risultati.
+const chatSearchMinLength = 2;
+const chatSearchLimit = 50;
+
+/// [text] da cercare letteralmente con like/ilike: `%`, `_` e la barra rovesciata
+/// non fanno da caratteri jolly.
+String escapeLikePattern(String text) =>
+    text.replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');
 
 /// Canale della chat (tabella `channels`).
 class Channel {
@@ -53,14 +63,30 @@ class Channel {
   /// Vi scrive solo il Direttivo (Comunicazioni).
   final bool direttivoWrites;
 
-  IconData get iconData => switch (icon) {
-    'forum' => Icons.forum_rounded,
-    'team' => Icons.groups_rounded,
-    'campaign' => Icons.campaign_rounded,
-    'tattiche' => Icons.draw_rounded,
-    'direttivo' => Icons.admin_panel_settings_rounded,
-    _ => Icons.chat_rounded,
-  };
+  IconData get iconData => direttivoOnly
+      ? Icons.lock_rounded
+      : switch (icon) {
+          'forum' => Icons.chat_bubble_rounded,
+          'team' => Icons.groups_rounded,
+          'campaign' => Icons.campaign_rounded,
+          'tattiche' => Icons.draw_rounded,
+          'direttivo' => Icons.lock_rounded,
+          _ => Icons.chat_bubble_rounded,
+        };
+
+  /// La descrizione in breve, per una riga: la parte prima dei due punti
+  /// ("Solo per il Direttivo: decisioni, mercato…" → "Solo per il Direttivo").
+  String get shortDescription => (description ?? '').split(':').first.trim();
+
+  /// Chi legge il canale (sottotitolo della conversazione).
+  String get audience {
+    if (direttivoOnly) return 'Solo il Direttivo';
+    final squad = Team.parse(team);
+    if (squad != null) return 'La squadra ${squad.label}';
+    return direttivoWrites
+        ? 'Tutto il club · scrive il Direttivo'
+        : 'Tutto il club';
+  }
 
   factory Channel.fromMap(Map<String, dynamic> m) => Channel(
     id: m['id'] as String,
@@ -321,6 +347,10 @@ abstract class ChatRepository {
   /// Un messaggio (null se non c'è più): per le citazioni di messaggi non caricati.
   Future<ChatMessage?> message(String id);
 
+  /// Gli ultimi [chatSearchLimit] messaggi che contengono [query] (maiuscole e
+  /// minuscole non contano), dal più recente: solo nei canali che si vedono.
+  Future<List<ChatMessage>> searchMessages(String query);
+
   /// Id dei messaggi eliminati da chiunque, in tempo reale (quelli eliminati da qui
   /// subito): una sola sottoscrizione per tutta l'app.
   Stream<String> watchDeletions();
@@ -430,6 +460,13 @@ final quotedMessageProvider = FutureProvider.autoDispose
       return ref.watch(chatRepositoryProvider).message(id);
     });
 
+/// Ricerca "Cerca nei messaggi" (la parola già ripulita dagli spazi ai lati).
+final chatSearchProvider = FutureProvider.autoDispose
+    .family<List<ChatMessage>, String>((ref, query) {
+      ref.watch(currentUserIdProvider);
+      return ref.watch(chatRepositoryProvider).searchMessages(query);
+    });
+
 class _SupabaseChatRepository extends ChatRepository {
   _SupabaseChatRepository(this._ref);
   final Ref _ref;
@@ -494,6 +531,20 @@ class _SupabaseChatRepository extends ChatRepository {
         .eq('id', id)
         .maybeSingle();
     return row == null ? null : ChatMessage.tryFromMap(row);
+  }
+
+  /// Le regole del database restituiscono solo i messaggi dei canali visibili.
+  @override
+  Future<List<ChatMessage>> searchMessages(String query) async {
+    final q = query.trim();
+    if (q.length < chatSearchMinLength) return const [];
+    final rows = await _client
+        .from('messages')
+        .select()
+        .ilike('body', '%${escapeLikePattern(q)}%')
+        .order('created_at', ascending: false)
+        .limit(chatSearchLimit);
+    return _parse(rows);
   }
 
   /// Gli stream filtrati per canale non ricevono le eliminazioni (il tempo reale non
@@ -825,8 +876,7 @@ class DemoChatRepository extends ChatRepository {
         id: 'm6',
         channelId: 'c-tattiche',
         authorId: 'demo',
-        body:
-            'Guardate come si difende in 11 contro 11: https://youtu.be/dQw4w9WgXcQ',
+        body: 'Guardate come si difende in 11 contro 11: https://youtu.be/dQw4w9WgXcQ',
         createdAt: now.subtract(const Duration(hours: 6)),
       ),
       ChatMessage(
@@ -1034,6 +1084,23 @@ class DemoChatRepository extends ChatRepository {
   @override
   Future<ChatMessage?> message(String id) async =>
       _messages.where((m) => m.id == id).firstOrNull;
+
+  @override
+  Future<List<ChatMessage>> searchMessages(String query) async {
+    final q = query.trim().toLowerCase();
+    if (q.length < chatSearchMinLength) return const [];
+    final visible = {for (final c in _channels) c.id};
+    return (_messages
+            .where(
+              (m) =>
+                  visible.contains(m.channelId) &&
+                  (m.body ?? '').toLowerCase().contains(q),
+            )
+            .toList()
+          ..sort(compareNewestFirst))
+        .take(chatSearchLimit)
+        .toList();
+  }
 
   @override
   Stream<String> watchDeletions() => _deletions.stream;

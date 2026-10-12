@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/direttivo/direttivo_page.dart';
+import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
 import 'home_test.dart' show startAppAt, todayInItalyAt;
@@ -14,8 +15,10 @@ void main() {
   ) async {
     await startAppAt(tester, todayInItalyAt(17));
     await goToSection(tester, 'Sala Direttivo');
-    expect(find.text('senza risposta stasera'), findsOneWidget);
-    expect(find.text('video proposto'), findsOneWidget);
+    expect(find.text('DA FARE OGGI'), findsOneWidget);
+    expect(find.text('Senza risposta stasera'), findsOneWidget);
+    expect(find.text('Video proposto'), findsOneWidget);
+    expect(find.text('Minuti voce del mese'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('Avviso a tutti'),
@@ -48,18 +51,18 @@ void main() {
   ) async {
     await startAppAt(tester, todayInItalyAt(18, 31));
     await goToSection(tester, 'Sala Direttivo');
-    await tester.tap(find.text('Presenze di stasera'));
+    await tester.tap(find.text('Senza risposta stasera'));
     await tester.pumpAndSettle();
     expect(find.text('PRESENZE DI STASERA'), findsOneWidget);
     expect(find.textContaining('risposte chiuse alle 18:30'), findsOneWidget);
-    expect(find.text('SENZA RISPOSTA (4)'), findsOneWidget);
+    expect(find.text('SENZA RISPOSTA · 4'), findsOneWidget);
 
     await tester.tap(find.text('Luca Bianchi'));
     await tester.pumpAndSettle();
     expect(find.text('Segna per lui (Direttivo):'), findsOneWidget);
     await tester.tap(find.widgetWithText(OutlinedButton, 'Presente'));
     await tester.pumpAndSettle();
-    expect(find.text('SENZA RISPOSTA (3)'), findsOneWidget);
+    expect(find.text('SENZA RISPOSTA · 3'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Presente · segnata dal Direttivo'),
       100,
@@ -90,11 +93,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('RIMOSSI'), findsNothing);
     expect(find.text('Gigi Ferri è di nuovo nella rosa.'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.widgetWithText(ChoiceChip, 'Tutte (6)'),
-      -300,
-      scrollable: page,
-    );
-    expect(find.widgetWithText(ChoiceChip, 'Tutte (6)'), findsOneWidget);
+    // I filtri restano in alto: ora contano anche lui.
+    expect(find.widgetWithText(FilterPill, 'Tutte · 6'), findsOneWidget);
   });
 }

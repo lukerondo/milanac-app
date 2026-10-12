@@ -63,7 +63,7 @@ void main() {
 
   testWidgets('Calendario: il Direttivo crea un evento', (tester) async {
     await open(tester, 'Calendario');
-    expect(find.text('PROSSIMI APPUNTAMENTI'), findsOneWidget);
+    expect(find.text('QUESTA SETTIMANA'), findsOneWidget);
 
     await tester.tap(find.text('Nuovo evento'));
     await tester.pumpAndSettle();

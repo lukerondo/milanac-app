@@ -4,6 +4,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/calendario/calendario_page.dart';
 import 'package:milanac/features/calendario/club_event.dart';
 import 'package:milanac/features/calendario/events_repository.dart';
+import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
 import 'home_test.dart' show italyAt, startAppAt;
@@ -48,38 +49,68 @@ void main() {
     );
   });
 
-  testWidgets('Calendario: i prossimi appuntamenti dal più vicino, anche se '
-      'arrivano dal più lontano', (tester) async {
+  testWidgets('Calendario: questa settimana e più avanti dal più vicino, anche '
+      'se gli eventi arrivano dal più lontano', (tester) async {
     final now = italyAt(2026, 10, 12, 17);
     final events = _FarthestFirst(now: now);
-    // Altri due eventi: i prossimi diventano più di cinque.
-    await events.save(
-      _event('Amichevole lontana', DateTime.utc(2026, 11, 20, 21)),
-    );
-    await events.save(_event('Finale', DateTime.utc(2026, 12, 20, 21)));
+    // Più avanti gli appuntamenti sono più di cinque: si vedono i cinque più vicini.
+    for (final (title, startsAt) in [
+      ('Amichevole lontana', DateTime.utc(2026, 11, 20, 21)),
+      ('Finale', DateTime.utc(2026, 12, 20, 21)),
+      ('Coppa di gennaio', DateTime.utc(2027, 1, 10, 21)),
+      ('Coppa di febbraio', DateTime.utc(2027, 2, 10, 21)),
+      ('Coppa di marzo', DateTime.utc(2027, 3, 10, 21)),
+    ]) {
+      await events.save(_event(title, startsAt));
+    }
     await startAppAt(
       tester,
       now,
       overrides: [eventsRepositoryProvider.overrideWithValue(events)],
     );
-    // Schermo alto: tutte le schede restano costruite.
+    // Schermo alto: tutta la lista resta costruita.
     tester.view.physicalSize = const Size(1080, 7200);
     await tester.pumpAndSettle();
     await goToSection(tester, 'Calendario');
-    expect(find.text('PROSSIMI APPUNTAMENTI'), findsOneWidget);
-
+    final page = find.byType(CalendarioPage);
+    Finder inPage(Finder f) => find.descendant(of: page, matching: f);
     expect(
-      [
-        for (final card in tester.widgetList<EventCard>(find.byType(EventCard)))
-          if (card.showDate) card.event.title,
-      ],
-      [
-        'FVPA – 3ª giornata vs Atletico Virtuale',
-        'Allenamento schemi calci piazzati',
-        'Amichevole vs Real Brianza',
-        'Riunione direttivo – mercato',
-        'Amichevole lontana',
-      ],
+      inPage(
+        find.text(
+          "Ogni sera c'è l'allenamento alle 21:30. Qui trovi solo ciò che "
+          'cambia.',
+        ),
+      ),
+      findsOneWidget,
     );
+    List<String> titles() => [
+      for (final row in tester.widgetList<EventRow>(
+        inPage(find.byType(EventRow)),
+      ))
+        row.event.title,
+    ];
+
+    await tester.tap(inPage(find.widgetWithText(FilterPill, 'Tutte')));
+    await tester.pumpAndSettle();
+    expect(titles(), [
+      // Questa settimana.
+      'FVPA – 3ª giornata vs Atletico Virtuale',
+      'Allenamento schemi calci piazzati',
+      'Amichevole vs Real Brianza',
+      // Più avanti.
+      'Riunione direttivo – mercato',
+      'Amichevole lontana',
+      'Finale',
+      'Coppa di gennaio',
+      'Coppa di febbraio',
+    ]);
+    // La partita ufficiale porta alla formazione.
+    expect(inPage(find.text('Vedi formazione')), findsOneWidget);
+
+    // Solo il Milan AC: l'amichevole del Futuro non c'è.
+    await tester.tap(inPage(find.widgetWithText(FilterPill, 'Milan AC')));
+    await tester.pumpAndSettle();
+    expect(titles(), isNot(contains('Amichevole vs Real Brianza')));
+    expect(titles(), contains('Allenamento schemi calci piazzati'));
   });
 }

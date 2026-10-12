@@ -24,17 +24,21 @@ final appearanceProvider = NotifierProvider<AppearanceNotifier, Appearance>(
 class AppearanceNotifier extends Notifier<Appearance> {
   static const _key = 'aspetto';
 
+  /// Scelta fatta in questa sessione: la lettura iniziale, se arriva dopo, non la copre.
+  var _chosen = false;
+
   @override
   Appearance build() {
     // Il tema salvato arriva un attimo dopo l'avvio: fino ad allora vale lo scuro.
     ref.read(localFlagsProvider).getString(_key).then((v) {
       final saved = Appearance.parse(v);
-      if (ref.mounted && saved != state) state = saved;
+      if (ref.mounted && !_chosen && saved != state) state = saved;
     }).ignore();
     return Appearance.scuro;
   }
 
   Future<void> set(Appearance a) async {
+    _chosen = true;
     state = a;
     await ref.read(localFlagsProvider).setString(_key, a.name);
   }

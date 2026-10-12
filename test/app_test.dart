@@ -28,8 +28,14 @@ void main() {
     await tester.tap(find.byType(GestureDetector).first);
     await tester.pumpAndSettle();
     expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+    expect(find.text('STASERA · MILAN AC'), findsOneWidget);
+    // Più in basso, Mondo Proclub in breve.
+    await tester.scrollUntilVisible(
+      find.text('MONDO PROCLUB'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('MONDO PROCLUB'), findsOneWidget);
-    expect(find.text('PRESENZE'), findsOneWidget);
 
     // Le notizie stanno in Mondo Proclub, nella scheda Notizie (si apre sui video).
     await goToSection(tester, 'Mondo Proclub');

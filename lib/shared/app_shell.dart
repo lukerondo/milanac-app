@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -90,6 +91,8 @@ class SectionFrame extends ConsumerWidget {
     final title = section.tab == MainTab.home && isTabRoot
         ? clubTitleFor(ref.watch(profileProvider).value)
         : section.title.toUpperCase();
+    // La Sala Direttivo ha la barra d'oro pieno (tavola 26).
+    final gold = path == '/direttivo';
     return PopScope(
       // Una sottosezione aperta direttamente (es. da una notifica): indietro
       // porta alla sua sezione, non fuori dall'app.
@@ -99,6 +102,13 @@ class SectionFrame extends ConsumerWidget {
       },
       child: Scaffold(
         appBar: AppBar(
+          backgroundColor: gold ? MilanacColors.gold : null,
+          foregroundColor: gold ? MilanacColors.ink : null,
+          titleTextStyle: gold
+              ? Theme.of(context).appBarTheme.titleTextStyle
+                    ?.copyWith(color: MilanacColors.ink)
+              : null,
+          systemOverlayStyle: gold ? SystemUiOverlayStyle.dark : null,
           automaticallyImplyLeading: false,
           leading: isTabRoot
               ? Padding(
@@ -126,17 +136,18 @@ class SectionFrame extends ConsumerWidget {
               ),
             if (isTabRoot) const ProfileButton(),
           ],
-          bottom: const PreferredSize(
-            preferredSize: Size.fromHeight(1),
-            child: ColoredBox(
-              color: Color(0xFF2B2B2F),
-              child: SizedBox(height: 1, width: double.infinity),
-            ),
-          ),
-          flexibleSpace: const Align(
-            alignment: Alignment.topCenter,
-            child: GoldRule(),
-          ),
+          bottom: gold
+              ? null
+              : const PreferredSize(
+                  preferredSize: Size.fromHeight(1),
+                  child: ColoredBox(
+                    color: Color(0xFF2B2B2F),
+                    child: SizedBox(height: 1, width: double.infinity),
+                  ),
+                ),
+          flexibleSpace: gold
+              ? null
+              : const Align(alignment: Alignment.topCenter, child: GoldRule()),
         ),
         body: ContentWidth(child: child),
       ),
