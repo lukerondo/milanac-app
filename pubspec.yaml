@@ -97,7 +97,6 @@ flutter:
   # list giving the asset and other descriptors for the font. For
   # example:
   # Font sportivo (titoli, numeri, carte): Oswald. Testi, pulsanti ed elenchi: Barlow.
-  # Pergamena (regolamento e storia): Cormorant Garamond. Firme: Great Vibes.
   # Tutti con licenza OFL (assets/fonts/OFL.txt).
   fonts:
     - family: Barlow
@@ -120,18 +119,6 @@ flutter:
           weight: 600
         - asset: assets/fonts/Oswald-700.ttf
           weight: 700
-    - family: CormorantGaramond
-      fonts:
-        - asset: assets/fonts/CormorantGaramond-400.ttf
-          weight: 400
-        - asset: assets/fonts/CormorantGaramond-400-Italic.ttf
-          weight: 400
-          style: italic
-        - asset: assets/fonts/CormorantGaramond-600.ttf
-          weight: 600
-    - family: GreatVibes
-      fonts:
-        - asset: assets/fonts/GreatVibes-400.ttf
 
   # fonts:
   #   - family: Schyler
