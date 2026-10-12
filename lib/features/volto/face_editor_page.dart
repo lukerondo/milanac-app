@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
+import '../auth/gate_ui.dart';
 import 'face.dart';
 import 'face_editor.dart';
 
@@ -17,34 +18,45 @@ class _FaceEditorPageState extends State<FaceEditorPage> {
   late Face _face = widget.initial;
 
   @override
-  Widget build(BuildContext context) => StadiumBackground(
-    child: Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        title: const Text('IL TUO VOLTO'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(_face),
-            child: const Text(
-              'SALVA',
-              style: TextStyle(color: MilanacColors.gold),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: gateAppBar(
+      title: 'IL TUO VOLTO',
+      divider: true,
+      actions: [
+        // La barra in alto è sempre scura: l'azione resta in oro chiaro.
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_face),
+          style: TextButton.styleFrom(
+            foregroundColor: MilanacColors.goldLight,
+            minimumSize: const Size(44, 44),
+            textStyle: const TextStyle(
+              fontFamily: sportFont,
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+              letterSpacing: 1,
             ),
           ),
-        ],
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: [
-              FaceEditor(
-                face: _face,
-                onChanged: (f) => setState(() => _face = f),
-              ),
-            ],
-          ),
+          child: const Text('SALVA'),
+        ),
+      ],
+    ),
+    body: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+          children: [
+            Text(
+              'Compare sulla carta, nella rosa e in chat.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: context.pal.textMuted),
+            ),
+            const SizedBox(height: 16),
+            FaceEditor(
+              face: _face,
+              onChanged: (f) => setState(() => _face = f),
+            ),
+          ],
         ),
       ),
     ),

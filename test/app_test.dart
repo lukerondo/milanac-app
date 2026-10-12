@@ -20,7 +20,9 @@ void main() {
 
     await tester.pumpWidget(const ProviderScope(child: MilanacApp()));
     await tester.pump();
-    expect(find.textContaining('Caricamento'), findsOneWidget);
+    // Intro: stemma, barra di caricamento in oro e il motto.
+    expect(find.text('MILANO SIAMO NOI'), findsOneWidget);
+    expect(find.text('Salta'), findsOneWidget);
 
     // Salta l'intro con un tocco.
     await tester.tap(find.byType(GestureDetector).first);

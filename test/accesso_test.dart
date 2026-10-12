@@ -12,6 +12,8 @@ import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'labeled_field.dart';
+
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
@@ -36,10 +38,12 @@ void main() {
 
   testWidgets('Accesso: social, email e password dimenticata', (tester) async {
     await pumpLogin(tester);
-    expect(find.text('MILANO SIAMO NOI!'), findsOneWidget);
-    expect(find.text('Google'), findsOneWidget);
+    expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
+    expect(find.text('ACCEDI'), findsOneWidget);
+    expect(find.text('Continua con Google'), findsOneWidget);
     expect(find.text('Accedi'), findsOneWidget);
     expect(find.text('Password dimenticata?'), findsOneWidget);
+    expect(find.text('Nuovo nel club?'), findsOneWidget);
 
     // Email mancante: avviso, nessun invio.
     await tester.tap(find.text('Password dimenticata?'));
@@ -50,11 +54,12 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Email'),
-      'mario@example.com',
-    );
-    await tester.enterText(find.widgetWithText(TextField, 'Password'), 'corta');
+    await tester.enterText(labeledField('Email'), 'mario@example.com');
+    await tester.enterText(labeledField('Password'), 'corta');
+    // "Mostra" fa vedere la password scritta.
+    await tester.tap(find.text('Mostra'));
+    await tester.pump();
+    expect(find.text('Nascondi'), findsOneWidget);
     await tester.tap(find.text('Accedi'));
     await tester.pump();
     expect(
@@ -65,17 +70,16 @@ void main() {
 
   testWidgets('Registrazione con email: attesa della conferma', (tester) async {
     await pumpLogin(tester);
-    await tester.tap(find.text('Non hai un account? Registrati'));
+    await tester.ensureVisible(find.text('Registrati'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Registrati'));
     await tester.pumpAndSettle();
     expect(find.text('Crea il mio account'), findsOneWidget);
     expect(find.text('Password dimenticata?'), findsNothing);
 
+    await tester.enterText(labeledField('Email'), 'nuovo@example.com');
     await tester.enterText(
-      find.widgetWithText(TextField, 'Email'),
-      'nuovo@example.com',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Password (almeno 8 caratteri)'),
+      labeledField('Password (almeno 8 caratteri)'),
       'milanac-2026',
     );
     await tester.tap(find.text('Crea il mio account'));

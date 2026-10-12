@@ -12,7 +12,8 @@ import '../../core/errors.dart';
 import '../../core/push/device_tokens.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
-import 'parchment.dart';
+import '../../shared/ui.dart';
+import '../auth/gate_ui.dart';
 import 'rules_reader.dart';
 import 'rules_repository.dart';
 
@@ -119,19 +120,22 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
     final messenger = ScaffoldMessenger.of(context);
     if (!_timeOk) {
       HapticFeedback.heavyImpact();
+      final p = context.pal;
       messenger.hideCurrentMaterialBanner();
       messenger.showMaterialBanner(
         MaterialBanner(
-          backgroundColor: MilanacColors.redDark,
-          leading: const Icon(Icons.hourglass_top_rounded, color: Colors.white),
-          content: const Text(
+          backgroundColor: p.warningBg,
+          dividerColor: p.border,
+          leading: Icon(Icons.hourglass_top_rounded, color: p.warning),
+          content: Text(
             'Servono 2 minuti di lettura: continua a leggere il regolamento e riprova.',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: p.text, fontSize: 15),
           ),
           actions: [
             TextButton(
               onPressed: messenger.hideCurrentMaterialBanner,
-              child: const Text('OK', style: TextStyle(color: Colors.white)),
+              style: TextButton.styleFrom(foregroundColor: p.accentText),
+              child: const Text('OK'),
             ),
           ],
         ),
@@ -179,103 +183,129 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
   @override
   Widget build(BuildContext context) {
     final rules = ref.watch(latestRulesProvider);
-    return StadiumBackground(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          title: const Text('REGOLAMENTO'),
-          automaticallyImplyLeading: false,
-          actions: [
-            if (!AppConfig.isDemo)
-              IconButton(
-                tooltip: 'Esci dall\'account',
-                icon: const Icon(Icons.logout_rounded),
-                onPressed: () => logout(ref),
-              ),
-          ],
+    final approved = ref.watch(
+      profileProvider.select((p) => p.value?.isApproved ?? false),
+    );
+    return Scaffold(
+      appBar: gateAppBar(
+        title: 'REGOLAMENTO',
+        automaticallyImplyLeading: false,
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Image.asset('assets/images/stemma_256.png', width: 30),
         ),
-        body: !rules.hasValue && rules.hasError
-            // Senza testo da mostrare l'errore si vede anche mentre si riprova da soli.
-            ? ErrorRetry(
-                message: friendlyError(
-                  rules.error!,
-                  action: 'Impossibile caricare il regolamento',
-                ),
-                onRetry: () => ref.invalidate(latestRulesProvider),
-              )
-            : AsyncView<RulesVersion?>(
-                value: rules,
-                onRetry: () => ref.invalidate(latestRulesProvider),
-                data: (version) =>
-                    version == null ? const _NoRulesYet() : _reader(version),
-              ),
+        actions: [
+          if (!AppConfig.isDemo)
+            IconButton(
+              tooltip: 'Esci dall\'account',
+              icon: const Icon(Icons.logout_rounded),
+              color: AppPalette.dark.textSecondary,
+              onPressed: () => logout(ref),
+            ),
+        ],
       ),
+      body: !rules.hasValue && rules.hasError
+          // Senza testo da mostrare l'errore si vede anche mentre si riprova da soli.
+          ? ErrorRetry(
+              message: friendlyError(
+                rules.error!,
+                action: 'Impossibile caricare il regolamento',
+              ),
+              onRetry: () => ref.invalidate(latestRulesProvider),
+            )
+          : AsyncView<RulesVersion?>(
+              value: rules,
+              onRetry: () => ref.invalidate(latestRulesProvider),
+              data: (version) => version == null
+                  ? const _NoRulesYet()
+                  : _reader(version, approved: approved),
+            ),
     );
   }
 
-  Widget _reader(RulesVersion version) => Column(
-    children: [
-      const Padding(
-        padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
-        child: ParchmentRod(),
-      ),
-      Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: ParchmentSheet(
-            child: NotificationListener<ScrollMetricsNotification>(
-              onNotification: (n) {
-                _checkEnd(n.metrics);
-                return false;
-              },
-              child: RulesReader(
-                version: version,
-                controller: _scroll,
-                closing:
-                    'Letto e compreso, entro a far parte del club e '
-                    'mi impegno a rispettarne le regole.',
-              ),
-            ),
-          ),
-        ),
-      ),
-      const Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
-        child: ParchmentRod(),
-      ),
-      SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+  /// Quanto è stato letto (0-1): la barra sottile nella fascia in alto.
+  double get _readFraction {
+    if (_reachedEnd || !_scroll.hasClients) return _reachedEnd ? 1 : 0;
+    final pos = _scroll.position;
+    if (!pos.hasContentDimensions || pos.maxScrollExtent <= 0) return 1;
+    return (pos.pixels / pos.maxScrollExtent).clamp(0, 1);
+  }
+
+  Widget _reader(RulesVersion version, {required bool approved}) {
+    final p = context.pal;
+    return Column(
+      children: [
+        SubHeader(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!_reachedEnd)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Scorri fino in fondo per poter accettare.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70),
+              ListenableBuilder(
+                listenable: _scroll,
+                builder: (context, _) => ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: _readFraction,
+                    minHeight: 3,
+                    backgroundColor: p.border,
+                    color: p.accentText,
+                    semanticsLabel: 'Regolamento letto',
                   ),
                 ),
-              FilledButton.icon(
-                onPressed: _reachedEnd && !_saving
-                    ? () => _accept(version)
-                    : null,
-                icon: const Icon(Icons.verified_rounded),
-                label: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Ho letto e accetto'),
-                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                rulesVersionLabel(version),
+                style: TextStyle(color: p.textMuted, fontSize: 14),
               ),
             ],
           ),
         ),
-      ),
-    ],
-  );
+        Expanded(
+          child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: (n) {
+              _checkEnd(n.metrics);
+              return false;
+            },
+            child: RulesReader(
+              version: version,
+              controller: _scroll,
+              showVersion: false,
+              intro: approved
+                  ? 'È uscita una nuova versione: leggila fino in fondo e '
+                        'accettala per continuare.'
+                  : 'Leggilo fino in fondo: per entrare nel club devi accettarlo.',
+              closing:
+                  'Letto e compreso, entro a far parte del club e mi impegno a '
+                  'rispettarne le regole.',
+            ),
+          ),
+        ),
+        BottomActionBar(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!_reachedEnd) ...[
+                Text(
+                  'Scorri fino in fondo per poter accettare',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: p.textMuted, fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+              ],
+              PrimaryButton(
+                label: 'Ho letto e accetto',
+                fontSize: 16,
+                busy: _saving,
+                onPressed: _reachedEnd ? () => _accept(version) : null,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Nessuna versione pubblicata: si entra lo stesso. Il Direttivo (o chi ha chiesto di
@@ -316,55 +346,53 @@ class _NoRulesYetState extends ConsumerState<_NoRulesYet> {
   @override
   Widget build(BuildContext context) {
     final p = ref.watch(profileProvider).value;
+    final pal = context.pal;
     final direttivo =
         p != null && (p.isDirettivo || p.requestedRole == ClubRole.direttivo);
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.menu_book_rounded,
-              size: 52,
-              color: MilanacColors.gold,
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'REGOLAMENTO NON ANCORA PUBBLICATO',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: sportFont,
-                fontSize: 20,
-                letterSpacing: 1.5,
-                color: MilanacColors.gold,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Center(child: IconTile(Icons.menu_book_rounded, size: 64)),
+              const SizedBox(height: 16),
+              const Center(
+                child: GateTitle(
+                  'Regolamento non ancora pubblicato',
+                  size: 22,
+                  gold: true,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              direttivo
-                  ? 'Sei del Direttivo e sei tra i primi a entrare: il regolamento '
-                        'd\'ingresso lo scrivi tu. Entra, aggiungi gli articoli e '
-                        'pubblicalo: da quel momento ogni membro dovrà leggerlo per '
-                        'almeno 2 minuti e accettarlo.'
-                  : 'Il Direttivo non ha ancora scritto il regolamento d\'ingresso. '
-                        'Entra pure: appena sarà pubblicato ti verrà chiesto di '
-                        'leggerlo e accettarlo.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, height: 1.4),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _busy ? null : () => _enter(direttivo),
-              icon: Icon(
-                direttivo ? Icons.edit_note_rounded : Icons.login_rounded,
+              const SizedBox(height: 12),
+              Text(
+                direttivo
+                    ? 'Sei del Direttivo e sei tra i primi a entrare: il regolamento '
+                          'd\'ingresso lo scrivi tu. Entra, aggiungi gli articoli e '
+                          'pubblicalo: da quel momento ogni membro dovrà leggerlo per '
+                          'almeno 2 minuti e accettarlo.'
+                    : 'Il Direttivo non ha ancora scritto il regolamento d\'ingresso. '
+                          'Entra pure: appena sarà pubblicato ti verrà chiesto di '
+                          'leggerlo e accettarlo.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: pal.textSecondary,
+                  fontSize: 16,
+                  height: 1.45,
+                ),
               ),
-              label: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(direttivo ? 'Entra e scrivilo' : 'Entra nel club'),
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: direttivo ? 'Entra e scrivilo' : 'Entra nel club',
+                fontSize: 16,
+                busy: _busy,
+                onPressed: () => _enter(direttivo),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
