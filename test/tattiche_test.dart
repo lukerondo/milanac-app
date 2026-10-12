@@ -48,6 +48,18 @@ class _SpyTactics extends DemoTacticsRepository {
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
+  testWidgets('Tattiche: le build dei creator portano a Mondo Proclub', (
+    tester,
+  ) async {
+    await openTattiche(tester);
+    await scrollAndTap(tester, find.text('Build per ruolo'));
+    expect(find.text('MONDO PROCLUB'), findsOneWidget);
+    // Indietro si torna alle Tattiche.
+    await tester.tap(find.byTooltip('Indietro'));
+    await tester.pumpAndSettle();
+    expect(find.text('TATTICHE'), findsOneWidget);
+  });
+
   testWidgets('Tattiche: il Direttivo pubblica uno schema', (tester) async {
     await openTattiche(tester);
     expect(find.text('Pressing alto dopo palla persa'), findsOneWidget);
@@ -81,13 +93,8 @@ void main() {
       tester,
       overrides: [tacticsRepositoryProvider.overrideWithValue(spy)],
     );
-    // Lo schema con la lavagna: si tocca la miniatura (il titolo è sotto i pulsanti).
-    final card = find.ancestor(
-      of: find.text('Uscita dal basso'),
-      matching: find.byType(Card),
-    );
-    await tester.tapAt(tester.getTopLeft(card) + const Offset(40, 40));
-    await tester.pumpAndSettle();
+    // Lo schema con la lavagna, più in basso nell'elenco.
+    await scrollAndTap(tester, find.text('Uscita dal basso'));
     expect(find.text('Apri la lavagna'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Modifica'));
