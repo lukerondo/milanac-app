@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -123,6 +124,24 @@ class BoardState {
   final List<HeatPoint> heat;
 
   bool get isEmpty => tokens.isEmpty && arrows.isEmpty && heat.isEmpty;
+
+  /// Massimo dei punti della heatmap: oltre, lo schema supererebbe il limite di
+  /// 300 KB del database (e la lavagna rallenterebbe).
+  static const maxHeat = 2000;
+
+  bool get heatFull => heat.length >= maxHeat;
+
+  /// In (x, y) il colore della heatmap è già pieno: un altro punto non si vedrebbe
+  /// (diradamento: dove si insiste a lungo non si accumulano punti inutili).
+  bool heatSaturatedAt(double x, double y) {
+    var near = 0;
+    for (final h in heat) {
+      if ((h.x - x).abs() < .02 && (h.y - y).abs() < .02 && ++near >= 12) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   BoardState copyWith({
     String? module,
@@ -292,7 +311,8 @@ class Reset extends BoardCommand {
 
 /// La lavagna che si disegna: applica le azioni, tiene la cronologia per "Annulla"
 /// e, se c'è un ascoltatore, gli passa ogni azione (la registrazione del replay).
-class BoardEditor extends ChangeNotifier {
+class BoardEditor extends ChangeNotifier
+    implements ValueListenable<BoardState> {
   BoardEditor([BoardState initial = const BoardState()]) : _state = initial;
 
   BoardState _state;
@@ -302,6 +322,10 @@ class BoardEditor extends ChangeNotifier {
   void Function(BoardCommand command)? onCommand;
 
   BoardState get state => _state;
+
+  @override
+  BoardState get value => _state;
+
   bool get canUndo => _history.isNotEmpty;
 
   /// Carica una lavagna (apertura di uno schema, modulo di partenza): niente cronologia,
@@ -310,6 +334,17 @@ class BoardEditor extends ChangeNotifier {
     _state = s;
     _history.clear();
     notifyListeners();
+  }
+
+  /// Inizia a registrare il replay dalla lavagna attuale. La cronologia di "Annulla"
+  /// riparte da qui: il replay comincia da questa lavagna e non conosce le mosse di
+  /// prima, quindi un annullamento nel vivo deve togliere solo mosse registrate.
+  ReplayRecorder startRecording({int Function()? clock}) {
+    _history.clear();
+    final recorder = ReplayRecorder(_state, clock: clock);
+    onCommand = recorder.record;
+    notifyListeners();
+    return recorder;
   }
 
   /// Numero massimo di passi annullabili.
@@ -397,21 +432,32 @@ class ReplayData {
 
   Uint8List toBytes() => Uint8List.fromList(utf8.encode(jsonEncode(toJson())));
 
-  factory ReplayData.fromJson(Map<String, dynamic> m) => ReplayData(
-    initial: BoardState.fromJson((m['board'] as Map?)?.cast<String, dynamic>()),
-    durationMs: (m['ms'] as num?)?.toInt() ?? 0,
-    events: [
+  factory ReplayData.fromJson(Map<String, dynamic> m) {
+    final events = [
       for (final e in (m['events'] as List?) ?? const [])
         ReplayEvent(
           ((e as Map)['t'] as num).toInt(),
           BoardCommand.fromJson(e.cast<String, dynamic>()),
         ),
-    ],
-  );
+    ];
+    return ReplayData(
+      initial: BoardState.fromJson(
+        (m['board'] as Map?)?.cast<String, dynamic>(),
+      ),
+      // I replay registrati prima avevano la durata arrotondata al secondo, a volte
+      // prima dell'ultima mossa: si allunga fino a lei, così si vede.
+      durationMs: max((m['ms'] as num?)?.toInt() ?? 0, lastEventMs(events)),
+      events: events,
+    );
+  }
 
   factory ReplayData.fromBytes(Uint8List bytes) => ReplayData.fromJson(
     (jsonDecode(utf8.decode(bytes)) as Map).cast<String, dynamic>(),
   );
+
+  /// Istante dell'ultima azione (0 se non ce ne sono).
+  static int lastEventMs(List<ReplayEvent> events) =>
+      events.fold(0, (m, e) => max(m, e.t));
 
   /// La lavagna a un certo istante: rifà le azioni fino a [ms].
   BoardState stateAt(int ms) {
@@ -420,28 +466,41 @@ class ReplayData {
       if (e.t > ms) break;
       editor.apply(e.command);
     }
-    return editor.state;
+    final state = editor.state;
+    editor.dispose();
+    return state;
   }
 
   /// Lo stato finale (dopo tutte le azioni).
-  BoardState get finalState => stateAt(durationMs + 1);
+  BoardState get finalState => stateAt(max(durationMs, lastEventMs(events)));
 }
 
 /// Registra le azioni della lavagna con i tempi mentre si parla.
 class ReplayRecorder {
-  ReplayRecorder(this.initial) : _start = DateTime.now();
+  /// [clock] dà i millisecondi trascorsi (nei test); di norma un cronometro, che non
+  /// risente dei cambi dell'ora del telefono.
+  ReplayRecorder(this.initial, {int Function()? clock})
+    : _clock = clock ?? _stopwatch();
   final BoardState initial;
-  final DateTime _start;
+  final int Function() _clock;
   final _events = <ReplayEvent>[];
 
-  int get elapsedMs => DateTime.now().difference(_start).inMilliseconds;
+  static int Function() _stopwatch() {
+    final s = Stopwatch()..start();
+    return () => s.elapsedMilliseconds;
+  }
+
+  int get elapsedMs => _clock();
 
   void record(BoardCommand c) => _events.add(ReplayEvent(elapsedMs, c));
 
+  /// Il replay registrato. La durata è in millisecondi (quella della voce, se data)
+  /// e non finisce mai prima dell'ultima azione: altrimenti l'ultima mossa non si
+  /// vedrebbe.
   ReplayData finish([int? durationMs]) => ReplayData(
     initial: initial,
     events: List.unmodifiable(_events),
-    durationMs: durationMs ?? elapsedMs,
+    durationMs: max(durationMs ?? elapsedMs, ReplayData.lastEventMs(_events)),
   );
 }
 

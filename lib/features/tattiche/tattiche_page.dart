@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../formazione/modules.dart';
 import '../lavagna/board_model.dart';
 import '../lavagna/board_page.dart';
@@ -58,10 +60,9 @@ class _TacticsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tactics = ref.watch(tacticsProvider);
-    return tactics.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Errore: $e')),
+    return AsyncView(
+      value: ref.watch(tacticsProvider),
+      onRetry: () => ref.invalidate(tacticsProvider),
       data: (list) => list.isEmpty
           ? const Center(
               child: Text(
@@ -210,11 +211,8 @@ class TacticPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    final t = ref
-        .watch(tacticsProvider)
-        .value
-        ?.where((x) => x.id == tacticId)
-        .firstOrNull;
+    final tactics = ref.watch(tacticsProvider);
+    final t = tactics.value?.where((x) => x.id == tacticId).firstOrNull;
     return Scaffold(
       appBar: AppBar(
         title: const Text('TATTICA'),
@@ -245,67 +243,87 @@ class TacticPage extends ConsumerWidget {
                     ],
                   ),
                 );
-                if (ok != true) return;
-                await ref.read(tacticsRepositoryProvider).delete(t);
-                if (context.mounted) Navigator.of(context).pop();
+                if (ok != true || !context.mounted) return;
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  await ref.read(tacticsRepositoryProvider).delete(t);
+                  if (context.mounted) Navigator.of(context).pop();
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        friendlyError(e, action: 'Eliminazione non riuscita'),
+                      ),
+                    ),
+                  );
+                }
               },
             ),
           ],
         ],
       ),
-      body: t == null
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.only(bottom: 32),
-              children: [
-                if (t.hasBoard)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: Column(
-                      children: [
-                        BoardPreview(state: t.board!, showNames: true),
-                        const SizedBox(height: 8),
-                        FilledButton.icon(
-                          onPressed: () =>
-                              openBoard(context, tactic: t, readOnly: !isDirettivo),
-                          icon: const Icon(Icons.draw_rounded),
-                          label: Text(
-                            isDirettivo ? 'Apri la lavagna' : 'Guarda sulla lavagna',
+      body: AsyncView(
+        value: tactics,
+        onRetry: () => ref.invalidate(tacticsProvider),
+        data: (_) => t == null
+            ? const TacticNotFound()
+            : ListView(
+                padding: const EdgeInsets.only(bottom: 32),
+                children: [
+                  if (t.hasBoard)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Column(
+                        children: [
+                          BoardPreview(state: t.board!, showNames: true),
+                          const SizedBox(height: 8),
+                          FilledButton.icon(
+                            onPressed: () => openBoard(
+                              context,
+                              tactic: t,
+                              readOnly: !isDirettivo,
+                            ),
+                            icon: const Icon(Icons.draw_rounded),
+                            label: Text(
+                              isDirettivo
+                                  ? 'Apri la lavagna'
+                                  : 'Guarda sulla lavagna',
+                            ),
                           ),
+                        ],
+                      ),
+                    )
+                  else if (t.hasImage)
+                    AspectRatio(
+                      aspectRatio: 4 / 3,
+                      child: InteractiveViewer(
+                        maxScale: 5,
+                        child: _TacticImage(t, fit: BoxFit.contain),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (t.module != null) _ModuleChip(t.module!),
+                        const SizedBox(height: 8),
+                        Text(
+                          t.title,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 12),
+                        SelectableText(
+                          t.description,
+                          style: const TextStyle(fontSize: 16, height: 1.45),
                         ),
                       ],
                     ),
-                  )
-                else if (t.hasImage)
-                  AspectRatio(
-                    aspectRatio: 4 / 3,
-                    child: InteractiveViewer(
-                      maxScale: 5,
-                      child: _TacticImage(t, fit: BoxFit.contain),
-                    ),
                   ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (t.module != null) _ModuleChip(t.module!),
-                      const SizedBox(height: 8),
-                      Text(
-                        t.title,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 12),
-                      SelectableText(
-                        t.description,
-                        style: const TextStyle(fontSize: 16, height: 1.45),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 }
@@ -344,14 +362,24 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
   }
 
   Future<void> _pickImage() async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1800,
-      imageQuality: 85,
-    );
-    if (file == null) return;
-    final bytes = await file.readAsBytes();
-    setState(() => _image = bytes);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1800,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (mounted) setState(() => _image = bytes);
+    } catch (e) {
+      // Permesso delle foto negato, file illeggibile...
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Immagine non caricata')),
+        ),
+      );
+    }
   }
 
   Future<void> _save() async {
@@ -368,16 +396,24 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
       description: _description.text.trim(),
       imagePath: widget.tactic?.imagePath,
       localImage: widget.tactic?.localImage,
+      // Si cambia il testo, non il disegno della lavagna.
+      board: widget.tactic?.board,
+      team: widget.tactic?.team,
     );
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await ref.read(tacticsRepositoryProvider).save(t, image: _image);
+      await container.read(tacticsRepositoryProvider).save(t, image: _image);
+      // L'elenco si aggiorna anche in tempo reale; per sicurezza si ricarica.
+      container.invalidate(tacticsProvider);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 
