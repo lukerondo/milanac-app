@@ -199,125 +199,142 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
     final prefs = _pendingPrefs ?? me?.notifyPrefs ?? const NotifyPrefs();
     final appearance = ref.watch(appearanceProvider);
 
-    return Scaffold(
-      appBar: gateAppBar(
-        title: 'IMPOSTAZIONI',
-        divider: true,
-        leading: BackArrow(
-          onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+    // Aperte come unica pagina (con un link): indietro porta al profilo, da cui si
+    // arriva qui, invece di chiudere l'app.
+    return PopScope(
+      canPop: !(ModalRoute.of(context)?.isFirst ?? false),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go('/profilo');
+      },
+      child: Scaffold(
+        appBar: gateAppBar(
+          title: 'IMPOSTAZIONI',
+          divider: true,
+          leading: BackArrow(
+            onPressed: () =>
+                context.canPop() ? context.pop() : context.go('/profilo'),
+          ),
         ),
-      ),
-      body: ContentWidth(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const _GroupLabel('Profilo', first: true),
-              _Group(
-                children: [
-                  if (member == null)
-                    _ProfileLoading(
-                      failed: rosa.hasError,
-                      onRetry: () => ref.invalidate(rosaProvider),
-                    )
-                  else ...[
+        body: ContentWidth(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _GroupLabel('Profilo', first: true),
+                _Group(
+                  children: [
+                    if (member == null)
+                      _ProfileLoading(
+                        failed: rosa.hasError,
+                        onRetry: () => ref.invalidate(rosaProvider),
+                      )
+                    else ...[
+                      _Row(
+                        title: 'Dati personali',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => _PersonalDataPage(member: member),
+                          ),
+                        ),
+                      ),
+                      _Row(
+                        title: 'Il tuo volto',
+                        trailing: _FaceThumb(member.face ?? Face.defaults),
+                        onTap: () => _changeFace(member),
+                      ),
+                      _Row(
+                        title: 'La tua carta',
+                        detail: cardSummary(member),
+                        onTap: () => showCardEditor(context, member),
+                      ),
+                    ],
+                  ],
+                ),
+                _GroupLabel('Notifiche', key: _notifiche),
+                _Group(
+                  children: [
+                    for (final c in NotifyCategory.values)
+                      SwitchListTile(
+                        value: prefs.isOn(c),
+                        onChanged: me == null
+                            ? null
+                            : (on) => _setNotify(prefs, c, on),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                        ),
+                        title: Text(
+                          c.label,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    'Formazione, risultati, carte speciali, regolamento e avvisi '
+                    'del Direttivo arrivano sempre.',
+                    style: TextStyle(color: p.textMuted, fontSize: 14),
+                  ),
+                ),
+                _GroupLabel('Aspetto', key: _aspetto),
+                SegmentedTabs(
+                  labels: [for (final a in Appearance.values) a.label],
+                  selected: appearance.index,
+                  onSelected: (i) => ref
+                      .read(appearanceProvider.notifier)
+                      .set(Appearance.values[i]),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    'Automatico segue il tema chiaro o scuro del telefono.',
+                    style: TextStyle(color: p.textMuted, fontSize: 14),
+                  ),
+                ),
+                const _GroupLabel('Account'),
+                _Group(
+                  children: [
+                    _Row(title: 'Cambia password', onTap: _changePassword),
+                    if (me?.isDirettivo ?? false)
+                      _Row(
+                        title: 'Password del Direttivo',
+                        onTap: _changeDirettivoPassword,
+                      ),
                     _Row(
-                      title: 'Dati personali',
+                      title: 'Privacy',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => _PersonalDataPage(member: member),
+                          builder: (_) => const PrivacyPage(),
                         ),
                       ),
                     ),
-                    _Row(
-                      title: 'Il tuo volto',
-                      trailing: _FaceThumb(member.face ?? Face.defaults),
-                      onTap: () => _changeFace(member),
-                    ),
-                    _Row(
-                      title: 'La tua carta',
-                      detail: cardSummary(member),
-                      onTap: () => showCardEditor(context, member),
-                    ),
                   ],
-                ],
-              ),
-              _GroupLabel('Notifiche', key: _notifiche),
-              _Group(
-                children: [
-                  for (final c in NotifyCategory.values)
-                    SwitchListTile(
-                      value: prefs.isOn(c),
-                      onChanged: me == null
-                          ? null
-                          : (on) => _setNotify(prefs, c, on),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                      ),
-                      title: Text(
-                        c.label,
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  'Formazione, risultati, carte speciali e regolamento arrivano '
-                  'sempre.',
-                  style: TextStyle(color: p.textMuted, fontSize: 14),
                 ),
-              ),
-              _GroupLabel('Aspetto', key: _aspetto),
-              SegmentedTabs(
-                labels: [for (final a in Appearance.values) a.label],
-                selected: appearance.index,
-                onSelected: (i) => ref
-                    .read(appearanceProvider.notifier)
-                    .set(Appearance.values[i]),
-              ),
-              const _GroupLabel('Account'),
-              _Group(
-                children: [
-                  _Row(title: 'Cambia password', onTap: _changePassword),
-                  if (me?.isDirettivo ?? false)
-                    _Row(
-                      title: 'Password del Direttivo',
-                      onTap: _changeDirettivoPassword,
-                    ),
-                  _Row(
-                    title: 'Privacy',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const PrivacyPage(),
-                      ),
+                // In demo non c'è un account da cui uscire.
+                if (!AppConfig.isDemo) ...[
+                  const SizedBox(height: 16),
+                  const LogoutTile(),
+                  const SizedBox(height: 6),
+                  Center(
+                    child: TextButton(
+                      onPressed: _deleting ? null : _deleteAccount,
+                      style: TextButton.styleFrom(foregroundColor: p.danger),
+                      child: _deleting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Elimina il mio account'),
                     ),
                   ),
                 ],
-              ),
-              // In demo non c'è un account da cui uscire.
-              if (!AppConfig.isDemo) ...[
-                const SizedBox(height: 16),
-                const LogoutTile(),
-                const SizedBox(height: 6),
-                Center(
-                  child: TextButton(
-                    onPressed: _deleting ? null : _deleteAccount,
-                    style: TextButton.styleFrom(foregroundColor: p.danger),
-                    child: _deleting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Elimina il mio account'),
-                  ),
-                ),
               ],
-            ],
+            ),
           ),
         ),
       ),

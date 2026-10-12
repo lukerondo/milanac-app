@@ -538,7 +538,11 @@ ThemeData buildTheme([Brightness brightness = Brightness.dark]) {
         color: p.isDark ? p.surfaceHigher : MilanacColors.ink,
         borderRadius: BorderRadius.circular(8),
       ),
-      textStyle: const TextStyle(color: MilanacColors.ivory, fontSize: 13),
+      textStyle: const TextStyle(
+        fontFamily: bodyFont,
+        color: MilanacColors.ivory,
+        fontSize: 13,
+      ),
     ),
     expansionTileTheme: ExpansionTileThemeData(
       iconColor: p.accentText,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -281,6 +283,68 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
   });
+
+  testWidgets(
+    'L\'avviso dei 2 minuti se ne va con la pagina (es. dopo "Esci")',
+    (tester) async {
+      final container = await startAt(
+        tester,
+        '/regolamento/accetta',
+        rules: await shortRules(),
+        screen: tablet,
+      );
+      await tester.tap(find.text('Ho letto e accetto'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Servono 2 minuti di lettura'),
+        findsOneWidget,
+      );
+
+      // Uscita dall'account: il router porta alla pagina di accesso.
+      container.read(routerProvider).go('/login');
+      await tester.pumpAndSettle();
+      expect(find.text('Password dimenticata?'), findsOneWidget);
+      expect(find.textContaining('Servono 2 minuti di lettura'), findsNothing);
+      expect(find.byType(MaterialBanner), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Regolamento nuovo pubblicato da un altro: si rilegge subito, con '
+    'l\'app aperta',
+    (tester) async {
+      final repo = _LiveRules();
+      final container = ProviderContainer(
+        overrides: [rulesRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+      container.listen(latestRulesProvider, (_, _) {});
+      expect(await container.read(latestRulesProvider.future), isNull);
+
+      await repo.saveArticle(
+        const RulesArticle(sortOrder: 0, title: 'Art. 1', body: 'Rispetto.'),
+      );
+      await repo.publish();
+      // Senza l'avviso del tempo reale resta la versione letta prima.
+      await tester.pump();
+      expect(await container.read(latestRulesProvider.future), isNull);
+      repo.live.add(null);
+      await tester.pump();
+      expect((await container.read(latestRulesProvider.future))?.number, 1);
+      // Via i lavori in sospeso del contenitore prima del controllo dei timer.
+      container.dispose();
+    },
+  );
+}
+
+/// Un altro del Direttivo pubblica: l'avviso arriva quando lo decide il test.
+class _LiveRules extends DemoRulesRepository {
+  _LiveRules() : super.unpublished();
+
+  final live = StreamController<void>.broadcast();
+
+  @override
+  Stream<void> published() => live.stream;
 }
 
 /// Il regolamento arriva con qualche secondo di ritardo (rete lenta).

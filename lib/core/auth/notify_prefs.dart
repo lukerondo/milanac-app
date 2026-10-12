@@ -7,7 +7,9 @@ import '../errors.dart';
 import 'providers.dart';
 
 /// Notifiche che ognuno può spegnere (Impostazioni → Notifiche). Formazione, risultati,
-/// carte speciali e regolamento arrivano sempre: il club deve poterle dire a tutti.
+/// carte speciali, regolamento e avvisi del Direttivo (anche con "Chat e stanze vocali"
+/// spento; vale solo il silenzio del singolo canale) arrivano sempre: il club deve
+/// poterle dire a tutti.
 enum NotifyCategory {
   presenze('Presenze e promemoria'),
   chat('Chat e stanze vocali'),

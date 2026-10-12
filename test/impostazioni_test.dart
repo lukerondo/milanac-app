@@ -92,7 +92,8 @@ void main() {
   );
 
   testWidgets(
-    'Aspetto: chiaro, scuro o come il telefono, salvato sul telefono',
+    'Aspetto: chiaro, scuro o automatico (come il telefono), salvato sul '
+    'telefono',
     (tester) async {
       final container = await startApp(tester);
       await goToSection(tester, 'Impostazioni');
@@ -110,7 +111,11 @@ void main() {
         'chiaro',
       );
 
-      await tester.tap(find.text('Come il telefono'));
+      expect(
+        find.text('Automatico segue il tema chiaro o scuro del telefono.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Automatico'));
       await tester.pumpAndSettle();
       expect(container.read(appearanceProvider), Appearance.sistema);
       await tester.tap(find.text('Scuro'));
@@ -127,7 +132,13 @@ void main() {
     SwitchListTile toggle(String label) =>
         tester.widget(find.widgetWithText(SwitchListTile, label));
     expect(toggle('Notizie e aggiornamenti').value, isTrue);
-    expect(find.textContaining('arrivano sempre'), findsOneWidget);
+    expect(
+      find.text(
+        'Formazione, risultati, carte speciali, regolamento e avvisi del '
+        'Direttivo arrivano sempre.',
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Notizie e aggiornamenti'));
     await tester.pumpAndSettle();

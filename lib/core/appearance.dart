@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'local_flags.dart';
 
-/// Aspetto scelto in Impostazioni: scuro (predefinito), chiaro o come il telefono.
+/// Aspetto scelto in Impostazioni: scuro (predefinito), chiaro o automatico (come il
+/// telefono). Etichette corte: le tre stanno affiancate anche su un telefono stretto.
 enum Appearance {
   scuro('Scuro', ThemeMode.dark),
   chiaro('Chiaro', ThemeMode.light),
-  sistema('Come il telefono', ThemeMode.system);
+  sistema('Automatico', ThemeMode.system);
 
   const Appearance(this.label, this.mode);
   final String label;

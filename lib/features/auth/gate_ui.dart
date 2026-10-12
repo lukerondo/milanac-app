@@ -107,7 +107,11 @@ class ShowPasswordButton extends StatelessWidget {
       foregroundColor: context.pal.textMuted,
       minimumSize: const Size(44, 44),
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      textStyle: const TextStyle(
+        fontFamily: bodyFont,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
     ),
     child: Text(hidden ? 'Mostra' : 'Nascondi'),
   );

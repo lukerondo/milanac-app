@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -82,6 +84,11 @@ abstract class RulesRepository {
   /// Entra nel club quando non c'è ancora nessuna versione pubblicata: il profilo
   /// prende il ruolo richiesto; alla prima versione pubblicata tutti la accettano.
   Future<void> enter();
+
+  /// Avvisa quando un altro pubblica una nuova versione, con l'app aperta (tempo reale
+  /// su `rules_versions`, dalla migrazione 0025). Senza non arriva niente e il
+  /// regolamento si rilegge come prima: al ritorno in primo piano e all'apertura.
+  Stream<void> published();
 }
 
 /// "Più tardi" del primo Direttivo: per questa sessione l'app non riporta
@@ -107,11 +114,15 @@ final latestRulesProvider = FutureProvider<RulesVersion?>((ref) {
   // nessuna versione: si ricarica a ogni cambio di utente, così dopo l'accesso non resta
   // in memoria un "nessun regolamento" che non c'è.
   ref.watch(currentUserIdProvider);
-  // Le versioni non arrivano in tempo reale: una pubblicata mentre l'app era in
-  // background si scopre al ritorno in primo piano (e all'apertura del Regolamento).
+  // Una versione pubblicata con l'app aperta arriva in tempo reale (se il database lo
+  // permette); una pubblicata mentre l'app era in background si scopre al ritorno in
+  // primo piano (e all'apertura del Regolamento).
   final lifecycle = AppLifecycleListener(onResume: ref.invalidateSelf);
   ref.onDispose(lifecycle.dispose);
-  return ref.watch(rulesRepositoryProvider).latest();
+  final repo = ref.watch(rulesRepositoryProvider);
+  final published = repo.published().listen((_) => ref.invalidateSelf());
+  ref.onDispose(published.cancel);
+  return repo.latest();
 });
 
 /// Risposta di `accept_rules` quando nel frattempo è uscita un'altra versione.
@@ -142,6 +153,41 @@ class _SupabaseRulesRepository implements RulesRepository {
   @override
   Future<void> enter() async {
     await _ref.read(supabaseProvider).rpc('enter_club');
+  }
+
+  /// Nomi diversi per i canali del tempo reale (uno per ogni nuovo ascolto).
+  static var _channels = 0;
+
+  @override
+  Stream<void> published() {
+    final client = _ref.read(supabaseProvider);
+    final me = client.auth.currentUser?.id;
+    RealtimeChannel? channel;
+    late final StreamController<void> out;
+    out = StreamController<void>(
+      onListen: () {
+        channel = client
+            .channel('regolamento-${_channels++}')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.insert,
+              schema: 'public',
+              table: 'rules_versions',
+              // Chi pubblica rilegge da sé profilo e versione (editor del regolamento),
+              // insieme: così non viene mandato ad accettare quello che ha scritto.
+              callback: (change) {
+                if (change.newRecord['published_by'] != me) out.add(null);
+              },
+            )
+            // Senza la tabella nel tempo reale (prima della 0025) il canale resta muto.
+            .subscribe();
+      },
+      onCancel: () async {
+        final c = channel;
+        channel = null;
+        if (c != null) await client.removeChannel(c);
+      },
+    );
+    return out.stream;
   }
 
   @override
@@ -268,6 +314,10 @@ class DemoRulesRepository implements RulesRepository {
           articles: List.of(_published),
           publishedAt: DateTime(2026, 9, 1),
         );
+
+  /// In demo un solo utente: nessuna versione pubblicata da altri in tempo reale.
+  @override
+  Stream<void> published() => const Stream.empty();
 
   /// Come `enter_club`: solo finché non c'è una versione pubblicata.
   @override

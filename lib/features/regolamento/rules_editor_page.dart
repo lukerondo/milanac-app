@@ -185,47 +185,61 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
     );
   }
 
+  /// "Più tardi" (anche con l'indietro di Android): si torna alla Home, o alla Sala
+  /// Direttivo se si arriva dal suo promemoria (cioè se era già stato rimandato).
+  void _later() {
+    final fromReminder = ref.read(rulesWriteLaterProvider);
+    ref.read(rulesWriteLaterProvider.notifier).postpone();
+    context.go(fromReminder ? '/direttivo' : '/');
+  }
+
   @override
   Widget build(BuildContext context) {
     final draft = ref.watch(rulesDraftProvider);
-    return Scaffold(
-      appBar: gateAppBar(
-        title: widget.firstTime
-            ? 'REGOLAMENTO D\'INGRESSO'
-            : 'BOZZA DEL REGOLAMENTO',
-        automaticallyImplyLeading: !widget.firstTime,
-        actions: [
-          if (widget.firstTime)
-            TextButton(
-              onPressed: () {
-                ref.read(rulesWriteLaterProvider.notifier).postpone();
-                context.go('/');
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: AppPalette.dark.textSecondary,
+    // L'editor iniziale si apre come unica pagina (dalla porta d'ingresso o con go dal
+    // promemoria della Sala Direttivo): indietro vale "Più tardi" invece di chiudere
+    // l'app.
+    return PopScope(
+      canPop: !widget.firstTime || !(ModalRoute.of(context)?.isFirst ?? false),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _later();
+      },
+      child: Scaffold(
+        appBar: gateAppBar(
+          title: widget.firstTime
+              ? 'REGOLAMENTO D\'INGRESSO'
+              : 'BOZZA DEL REGOLAMENTO',
+          automaticallyImplyLeading: !widget.firstTime,
+          actions: [
+            if (widget.firstTime)
+              TextButton(
+                onPressed: _later,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppPalette.dark.textSecondary,
+                ),
+                child: const Text('Più tardi'),
               ),
-              child: const Text('Più tardi'),
+            TextButton.icon(
+              onPressed: _publishing ? null : _publish,
+              style: TextButton.styleFrom(
+                foregroundColor: MilanacColors.goldLight,
+              ),
+              icon: const Icon(Icons.publish_rounded),
+              label: const Text('PUBBLICA'),
             ),
-          TextButton.icon(
-            onPressed: _publishing ? null : _publish,
-            style: TextButton.styleFrom(
-              foregroundColor: MilanacColors.goldLight,
-            ),
-            icon: const Icon(Icons.publish_rounded),
-            label: const Text('PUBBLICA'),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _edit(null, draft.value?.length ?? 0),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Nuovo articolo'),
-      ),
-      body: AsyncView<List<RulesArticle>>(
-        value: draft,
-        action: 'Impossibile caricare la bozza',
-        onRetry: () => ref.invalidate(rulesDraftProvider),
-        data: _body,
+          ],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _edit(null, draft.value?.length ?? 0),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Nuovo articolo'),
+        ),
+        body: AsyncView<List<RulesArticle>>(
+          value: draft,
+          action: 'Impossibile caricare la bozza',
+          onRetry: () => ref.invalidate(rulesDraftProvider),
+          data: _body,
+        ),
       ),
     );
   }

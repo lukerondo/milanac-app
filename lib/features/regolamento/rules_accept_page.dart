@@ -64,11 +64,27 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
     );
   }
 
+  /// Il messenger su cui è stato mostrato l'avviso "Servono 2 minuti" (null = mai).
+  ScaffoldMessengerState? _bannerMessenger;
+
   @override
   void dispose() {
     _ticker?.cancel();
     _lifecycle.dispose();
     _scroll.dispose();
+    // L'avviso sta nel messenger dell'app, sopra tutte le pagine: se questa se ne va
+    // (uscita dall'account, regolamento accettato) non deve restare su quella dopo.
+    // Si toglie dopo il disegno: mentre si smonta la pagina il messenger non si
+    // aggiorna. Gli avvisi di questo tipo li mostra solo questa pagina.
+    final messenger = _bannerMessenger;
+    if (messenger != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!messenger.mounted) return;
+        messenger
+          ..clearMaterialBanners()
+          ..removeCurrentMaterialBanner();
+      });
+    }
     super.dispose();
   }
 
@@ -122,6 +138,7 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
       HapticFeedback.heavyImpact();
       final p = context.pal;
       messenger.hideCurrentMaterialBanner();
+      _bannerMessenger = messenger;
       messenger.showMaterialBanner(
         MaterialBanner(
           backgroundColor: p.warningBg,

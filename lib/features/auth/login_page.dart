@@ -215,6 +215,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                             horizontal: 4,
                                           ),
                                           textStyle: const TextStyle(
+                                            fontFamily: bodyFont,
                                             fontSize: 14,
                                             fontWeight: FontWeight.w600,
                                           ),
