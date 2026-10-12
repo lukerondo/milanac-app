@@ -5,12 +5,17 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/core/auth/providers.dart';
 import 'package:milanac/core/router.dart';
+import 'package:milanac/core/teams.dart';
+import 'package:milanac/features/auth/gate_ui.dart';
 import 'package:milanac/features/intro/intro_state.dart';
-import 'package:milanac/features/regolamento/parchment.dart';
+import 'package:milanac/features/regolamento/rules_reader.dart';
+import 'package:milanac/features/registrazione/registration_page.dart';
 import 'package:milanac/features/registrazione/registration_repository.dart';
 import 'package:milanac/features/volto/face.dart';
 import 'package:milanac/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'labeled_field.dart';
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
@@ -53,7 +58,7 @@ void main() {
     await reveal(tester, 2, find.byType(DropdownButtonFormField<String>));
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(value).last);
+    await tester.tap(find.text(positionLabel(value)).last);
     await tester.pumpAndSettle();
   }
 
@@ -61,7 +66,7 @@ void main() {
     tester,
   ) async {
     final container = await startAt(tester, '/registrazione');
-    expect(find.text('PASSO 1 DI 3 · CHI SEI'), findsOneWidget);
+    expect(find.text('Passo 1 di 3'), findsOneWidget);
 
     // Nome e cognome arrivano dall'account; senza l'anno non si va avanti.
     await tester.tap(find.text('Avanti'));
@@ -71,29 +76,26 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Mario');
-    await tester.enterText(find.widgetWithText(TextField, 'Cognome'), 'Rossi');
+    await tester.enterText(labeledField('Nome'), 'Mario');
+    await tester.enterText(labeledField('Cognome'), 'Rossi');
+    await tester.enterText(labeledField('Anno di nascita'), '1995');
     await tester.enterText(
-      find.widgetWithText(TextField, 'Anno di nascita'),
-      '1995',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Nome sulla maglia e sulla carta'),
+      labeledField('Nome sulla maglia e sulla carta'),
       'Il Diavolo',
     );
     await tester.pump();
     expect(find.text('IL DIAVOLO'), findsOneWidget);
     await tester.tap(find.text('Avanti'));
     await tester.pumpAndSettle();
-    expect(find.text('PASSO 2 DI 3 · SQUADRA E RUOLO'), findsOneWidget);
+    expect(find.text('Passo 2 di 3'), findsOneWidget);
 
     // Direttivo con password e ruoli; ruolo in campo obbligatorio.
     await tester.tap(find.text('Milan AC Futuro'));
-    await tester.tap(find.text('Faccio parte del Direttivo'));
+    await tester.tap(find.text('Direttivo'));
     await tester.pumpAndSettle();
     expect(find.text('Password del Direttivo'), findsOneWidget);
     await tester.enterText(
-      find.widgetWithText(TextField, 'Password del Direttivo'),
+      labeledField('Password del Direttivo'),
       'milanac2026!',
     );
     await reveal(tester, 2, find.text('Capitano'));
@@ -112,15 +114,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Avanti'));
     await tester.pumpAndSettle();
-    expect(find.text('PASSO 3 DI 3 · IL TUO VOLTO'), findsOneWidget);
+    expect(find.text('Passo 3 di 3'), findsOneWidget);
 
     // Volto: a caso, poi una scelta precisa.
     await tester.tap(find.text('A caso'));
     await tester.pumpAndSettle();
     // Il nome dello stile compare anche nel riepilogo quando "A caso" lo sceglie:
     // si punta alla sola opzione.
-    await reveal(tester, 3, find.widgetWithText(ChoiceChip, 'Ciuffo'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Ciuffo'));
+    await reveal(tester, 3, find.widgetWithText(ChoicePill, 'Ciuffo'));
+    await tester.tap(find.widgetWithText(ChoicePill, 'Ciuffo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Completa la registrazione'));
     await tester.pumpAndSettle();
@@ -140,21 +142,18 @@ void main() {
     // Regolamento: si accetta solo in fondo e dopo 2 minuti.
     expect(find.text('Ho letto e accetto'), findsOneWidget);
     expect(
-      find.text('Scorri fino in fondo per poter accettare.'),
+      find.text('Scorri fino in fondo per poter accettare'),
       findsOneWidget,
     );
     await tester.drag(
       find.descendant(
-        of: find.byType(ParchmentSheet),
+        of: find.byType(RulesReader),
         matching: find.byType(Scrollable),
       ),
       const Offset(0, -20000),
     );
     await tester.pumpAndSettle();
-    expect(
-      find.text('Scorri fino in fondo per poter accettare.'),
-      findsNothing,
-    );
+    expect(find.text('Scorri fino in fondo per poter accettare'), findsNothing);
 
     await tester.tap(find.text('Ho letto e accetto'));
     await tester.pumpAndSettle();
@@ -169,36 +168,39 @@ void main() {
   });
 
   testWidgets('Giocatore: una sola squadra, niente password', (tester) async {
-    await startAt(tester, '/registrazione');
-    await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Luca');
+    final container = await startAt(tester, '/registrazione');
+    await tester.enterText(labeledField('Nome'), 'Luca');
+    await tester.enterText(labeledField('Cognome'), 'Bianchi');
+    await tester.enterText(labeledField('Anno di nascita'), '2000');
     await tester.enterText(
-      find.widgetWithText(TextField, 'Cognome'),
-      'Bianchi',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Anno di nascita'),
-      '2000',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Nome sulla maglia e sulla carta'),
+      labeledField('Nome sulla maglia e sulla carta'),
       'BIANCHI',
     );
     await tester.tap(find.text('Avanti'));
     await tester.pumpAndSettle();
     expect(find.text('Password del Direttivo'), findsNothing);
-    expect(find.byType(ChoiceChip), findsWidgets);
-    expect(find.byType(FilterChip), findsNothing);
+
+    // Da giocatore le squadre si escludono: scegliere Futuro toglie Milan AC.
+    await tester.tap(find.text('Milan AC Futuro'));
+    await pickPosition(tester, 'DC');
+    await tester.tap(find.text('Avanti'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Completa la registrazione'));
+    await tester.pumpAndSettle();
+    final sent = (container.read(
+      registrationRepositoryProvider,
+    ) as DemoRegistrationRepository).last!;
+    expect(sent.direttivo, isFalse);
+    expect(sent.teams, {Team.futuro});
+    expect(sent.fieldPosition, 'DC');
   });
 
   Future<void> fillWho(WidgetTester tester) async {
-    await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Mario');
-    await tester.enterText(find.widgetWithText(TextField, 'Cognome'), 'Rossi');
+    await tester.enterText(labeledField('Nome'), 'Mario');
+    await tester.enterText(labeledField('Cognome'), 'Rossi');
+    await tester.enterText(labeledField('Anno di nascita'), '1995');
     await tester.enterText(
-      find.widgetWithText(TextField, 'Anno di nascita'),
-      '1995',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Nome sulla maglia e sulla carta'),
+      labeledField('Nome sulla maglia e sulla carta'),
       'ROSSI',
     );
     await tester.tap(find.text('Avanti'));
@@ -210,11 +212,11 @@ void main() {
   ) async {
     await startAt(tester, '/registrazione');
     await fillWho(tester);
-    expect(find.text('PASSO 2 DI 3 · SQUADRA E RUOLO'), findsOneWidget);
+    expect(find.text('Passo 2 di 3'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.text('PASSO 1 DI 3 · CHI SEI'), findsOneWidget);
+    expect(find.text('Passo 1 di 3'), findsOneWidget);
     expect(find.text('ROSSI'), findsWidgets);
   });
 
@@ -223,10 +225,10 @@ void main() {
     (tester) async {
       final container = await startAt(tester, '/registrazione');
       await fillWho(tester);
-      await tester.tap(find.text('Faccio parte del Direttivo'));
+      await tester.tap(find.text('Direttivo'));
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.widgetWithText(TextField, 'Password del Direttivo'),
+        labeledField('Password del Direttivo'),
         'sbagliata',
       );
       await reveal(tester, 2, find.text('Capitano'));
@@ -237,8 +239,8 @@ void main() {
       await tester.tap(find.text('Completa la registrazione'));
       await tester.pumpAndSettle();
 
-      expect(find.text('PASSO 2 DI 3 · SQUADRA E RUOLO'), findsOneWidget);
-      final field = find.widgetWithText(TextField, 'Password del Direttivo');
+      expect(find.text('Passo 2 di 3'), findsOneWidget);
+      final field = labeledField('Password del Direttivo');
       expect(
         find.descendant(
           of: field,
@@ -332,12 +334,12 @@ void main() {
         find.text('Nessuna connessione: controlla la rete e riprova.'),
         findsOneWidget,
       );
-      expect(find.text('PASSO 1 DI 3 · CHI SEI'), findsNothing);
+      expect(find.text('Passo 1 di 3'), findsNothing);
 
       offline = false;
       await tester.tap(find.text('Riprova'));
       await tester.pumpAndSettle();
-      expect(find.text('PASSO 1 DI 3 · CHI SEI'), findsOneWidget);
+      expect(find.text('Passo 1 di 3'), findsOneWidget);
     },
   );
 }

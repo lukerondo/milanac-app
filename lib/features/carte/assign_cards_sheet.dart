@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/profile.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../risultati/match.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
@@ -19,6 +21,18 @@ Future<void> showAssignCardsSheet(BuildContext context, ClubMatch match) =>
       builder: (_) => _AssignSheet(match: match),
     );
 
+/// Il reparto in cui [playerId] è già premiato, escluso [reparto] (null = nessuno).
+String? repartoTakenBy(
+  Map<String, String?> chosen,
+  String playerId,
+  String reparto,
+) {
+  for (final r in reparti) {
+    if (r != reparto && chosen[r] == playerId) return r;
+  }
+  return null;
+}
+
 class _AssignSheet extends ConsumerStatefulWidget {
   const _AssignSheet({required this.match});
   final ClubMatch match;
@@ -33,6 +47,8 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
   bool _loaded = false;
   bool _saving = false;
 
+  /// Le scelte già fatte si leggono una volta, solo con le carte arrivate davvero:
+  /// partire da un elenco vuoto e salvare cancellerebbe le carte assegnate.
   void _loadExisting(List<SpecialCard> cards) {
     if (_loaded) return;
     _loaded = true;
@@ -45,13 +61,24 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
   }
 
   Future<void> _save() async {
-    setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
     final awards = [
       for (final r in reparti)
         if (_chosen[r] case final id?)
           CardAward(playerId: id, reparto: r, bonus: _bonus[r] ?? 5),
     ];
+    // Un giocatore, una carta (lo rifiuta anche il server).
+    if (awards.map((a) => a.playerId).toSet().length != awards.length) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Un giocatore riceve una sola carta nero/oro: scegli giocatori diversi.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _saving = true);
     try {
       final n = await ref
           .read(specialCardsRepositoryProvider)
@@ -73,18 +100,39 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
       if (!mounted) return;
       setState(() => _saving = false);
       messenger.showSnackBar(
-        SnackBar(content: Text('Assegnazione non riuscita: $e')),
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Assegnazione non riuscita')),
+        ),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final cards = ref.watch(specialCardsProvider).value ?? const [];
+    final cardsValue = ref.watch(specialCardsProvider);
+    final rosaValue = ref.watch(rosaProvider);
+    if (!cardsValue.hasValue || !rosaValue.hasValue) {
+      final failed = !cardsValue.hasValue ? cardsValue : rosaValue;
+      return SizedBox(
+        height: 220,
+        child: failed.hasError && (!failed.isLoading || failed.retrying)
+            ? ErrorRetry(
+                message: friendlyError(
+                  failed.error!,
+                  action: 'Caricamento non riuscito',
+                ),
+                onRetry: () => ref
+                  ..invalidate(specialCardsProvider)
+                  ..invalidate(rosaProvider),
+              )
+            : const Center(child: CircularProgressIndicator()),
+      );
+    }
+    final cards = cardsValue.requireValue;
     _loadExisting(cards);
     final team = widget.match.team;
     final members =
-        (ref.watch(rosaProvider).value ?? const <Member>[])
+        rosaValue.requireValue
             .where(
               (m) => m.active && m.role != ClubRole.pending && m.inTeam(team),
             )
@@ -117,7 +165,8 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Un premiato per reparto, con il bonus sull\'overall. La carta vale 7 giorni.',
+              'Un premiato per reparto (una sola carta a testa), con il bonus '
+              'sull\'overall. La carta vale 7 giorni.',
               style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
             if (blue.isNotEmpty) ...[
@@ -135,6 +184,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                 reparto: r,
                 members: members.where((m) => !blueIds.contains(m.id)).toList(),
                 value: _chosen[r],
+                takenBy: (id) => repartoTakenBy(_chosen, id, r),
                 bonus: _bonus[r] ?? 5,
                 onChanged: (id) => setState(() => _chosen[r] = id),
                 onBonus: (b) => setState(() => _bonus[r] = b),
@@ -157,11 +207,13 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
 }
 
 /// Scelta del premiato di un reparto (prima chi gioca in quel reparto) e del bonus.
+/// Chi è già premiato in un altro reparto compare ma non si può scegliere.
 class _RepartoPicker extends StatelessWidget {
   const _RepartoPicker({
     required this.reparto,
     required this.members,
     required this.value,
+    required this.takenBy,
     required this.bonus,
     required this.onChanged,
     required this.onBonus,
@@ -169,9 +221,23 @@ class _RepartoPicker extends StatelessWidget {
   final String reparto;
   final List<Member> members;
   final String? value;
+  final String? Function(String playerId) takenBy;
   final int bonus;
   final ValueChanged<String?> onChanged;
   final ValueChanged<int> onBonus;
+
+  /// [other]: il reparto in cui il giocatore ha già la carta (null = libero).
+  static DropdownMenuItem<String?> _item(Member m, String? other) =>
+      DropdownMenuItem(
+        value: m.id,
+        enabled: other == null,
+        child: Text(
+          '${m.displayName}${m.fieldPosition == null ? '' : ' (${m.fieldPosition})'}'
+          '${other == null ? '' : ' · ha già la carta $other'}',
+          overflow: TextOverflow.ellipsis,
+          style: other == null ? null : const TextStyle(color: Colors.white38),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -192,14 +258,7 @@ class _RepartoPicker extends StatelessWidget {
           ),
           items: [
             const DropdownMenuItem(value: null, child: Text('Nessuno')),
-            for (final m in sorted)
-              DropdownMenuItem(
-                value: m.id,
-                child: Text(
-                  '${m.displayName}${m.fieldPosition == null ? '' : ' (${m.fieldPosition})'}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+            for (final m in sorted) _item(m, takenBy(m.id)),
           ],
           onChanged: onChanged,
         ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,16 +29,34 @@ final trophiesRepositoryProvider = Provider<TrophiesRepository>((ref) {
   return _SupabaseTrophiesRepository(ref);
 });
 
-final seasonsProvider = FutureProvider<List<Season>>(
-  (ref) => ref.watch(trophiesRepositoryProvider).seasons(),
-);
+final seasonsProvider = FutureProvider<List<Season>>((ref) {
+  // Al cambio di account si ricarica con i permessi del nuovo utente.
+  ref.watch(currentUserIdProvider);
+  return ref.watch(trophiesRepositoryProvider).seasons();
+});
 
-final trophiesProvider = FutureProvider.family<List<Trophy>, String>(
-  (ref, seasonId) => ref.watch(trophiesRepositoryProvider).trophies(seasonId),
-);
+final trophiesProvider = FutureProvider.family<List<Trophy>, String>((
+  ref,
+  seasonId,
+) {
+  ref.watch(currentUserIdProvider);
+  return ref.watch(trophiesRepositoryProvider).trophies(seasonId);
+});
 
-final trophyImageUrlProvider = FutureProvider.family<String, Trophy>(
-  (ref, t) => ref.watch(trophiesRepositoryProvider).imageUrl(t),
+/// URL firmato della foto del trofeo. Vale 6 ore: si riusa per 5, poi (quando nessuno
+/// lo mostra più) se ne chiede uno nuovo.
+final trophyImageUrlProvider = FutureProvider.autoDispose.family<String, Trophy>(
+  (ref, t) async {
+    final keep = ref.keepAlive();
+    final timer = Timer(const Duration(hours: 5), keep.close);
+    ref.onDispose(timer.cancel);
+    try {
+      return await ref.watch(trophiesRepositoryProvider).imageUrl(t);
+    } catch (_) {
+      keep.close(); // un errore non resta in memoria
+      rethrow;
+    }
+  },
 );
 
 class _SupabaseTrophiesRepository implements TrophiesRepository {

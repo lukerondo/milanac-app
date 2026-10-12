@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -14,17 +15,26 @@ const avatarsBucket = 'avatars';
 /// Solo demo: foto caricate tenute in memoria (percorso → contenuto).
 final demoPhotos = <String, Uint8List>{};
 
-/// URL firmato (7 giorni) della foto caricata dal membro nel bucket privato "avatars".
-final photoUrlProvider = FutureProvider.family<String?, String>((
+/// URL firmato della foto caricata dal membro nel bucket privato "avatars". Vale
+/// 7 giorni: si riusa per 6, poi (quando nessuno lo mostra più) se ne chiede uno nuovo.
+final photoUrlProvider = FutureProvider.autoDispose.family<String?, String>((
   ref,
   path,
 ) async {
   if (AppConfig.isDemo) return null;
-  return ref
-      .read(supabaseProvider)
-      .storage
-      .from(avatarsBucket)
-      .createSignedUrl(path, 7 * 24 * 3600);
+  final keep = ref.keepAlive();
+  final timer = Timer(const Duration(days: 6), keep.close);
+  ref.onDispose(timer.cancel);
+  try {
+    return await ref
+        .read(supabaseProvider)
+        .storage
+        .from(avatarsBucket)
+        .createSignedUrl(path, 7 * 24 * 3600);
+  } catch (_) {
+    keep.close(); // un errore non resta in memoria
+    rethrow;
+  }
 });
 
 /// Foto del membro: quella caricata dalle Impostazioni, altrimenti quella dell'account social.

@@ -155,7 +155,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/profilo', builder: (_, _) => const ProfiloPage()),
       GoRoute(
         path: '/impostazioni',
-        builder: (_, _) => const ImpostazioniPage(),
+        builder: (_, state) => ImpostazioniPage(
+          initialSection: state.uri.queryParameters['sezione'],
+        ),
       ),
       // Conversazione a schermo intero (anche dalle notifiche).
       GoRoute(
@@ -238,19 +240,22 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-/// Una sezione dentro una scheda: barra in alto comune e passaggio in dissolvenza
-/// tra le pagine iniziali delle schede.
-GoRoute _section(String path, Widget Function(GoRouterState state) page) =>
-    GoRoute(
-      path: path,
-      pageBuilder: (_, state) => CustomTransitionPage(
-        key: state.pageKey,
-        transitionDuration: const Duration(milliseconds: 220),
-        transitionsBuilder: (_, animation, _, child) =>
-            FadeTransition(opacity: animation, child: child),
-        child: SectionFrame(path: path, child: page(state)),
-      ),
-    );
+/// Una sezione dentro una scheda: barra in alto comune (con le azioni della pagina,
+/// come nelle tavole) e passaggio in dissolvenza tra le pagine iniziali delle schede.
+GoRoute _section(
+  String path,
+  Widget Function(GoRouterState state) page, {
+  List<Widget> actions = const [],
+}) => GoRoute(
+  path: path,
+  pageBuilder: (_, state) => CustomTransitionPage(
+    key: state.pageKey,
+    transitionDuration: const Duration(milliseconds: 220),
+    transitionsBuilder: (_, animation, _, child) =>
+        FadeTransition(opacity: animation, child: child),
+    child: SectionFrame(path: path, actions: actions, child: page(state)),
+  ),
+);
 
 /// Risposta di [gateRedirect]: "torna alla Home (o alla sezione in sospeso)".
 const goHome = '@home';

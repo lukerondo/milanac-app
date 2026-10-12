@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../../shared/shared_links.dart';
 import '../news/news_page.dart';
 import '../risultati/match.dart' show youtubeId;
@@ -141,7 +143,26 @@ Future<void> proposeVideo(
       );
     }
   } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Non salvato: $e')));
+    messenger.showSnackBar(
+      SnackBar(content: Text(friendlyError(e, action: 'Non salvato'))),
+    );
+  }
+}
+
+/// Esegue un'azione su un video (pubblica, scarta, elimina…) e, se non riesce,
+/// lo dice con un messaggio invece di lasciare un'eccezione non gestita.
+Future<void> _act(
+  BuildContext context,
+  Future<void> Function() action, {
+  required String failure,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await action();
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text(friendlyError(e, action: failure))),
+    );
   }
 }
 
@@ -164,9 +185,9 @@ class _VideoTabState extends ConsumerState<_VideoTab> {
       for (final m in ref.watch(rosaProvider).value ?? const <Member>[])
         m.id: m.displayName,
     };
-    return links.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Errore: $e')),
+    return AsyncView(
+      value: links,
+      onRetry: () => ref.invalidate(sharedLinksProvider(LinkCategory.video)),
       data: (all) {
         final published = all.where((l) => l.isPublished).toList()
           ..sort(
@@ -368,9 +389,13 @@ class VideoCard extends ConsumerWidget {
                 PopupMenuButton<String>(
                   onSelected: (v) async {
                     if (v == 'delete') {
-                      await ref
-                          .read(sharedLinksRepositoryProvider)
-                          .delete(link.id);
+                      await _act(
+                        context,
+                        () => ref
+                            .read(sharedLinksRepositoryProvider)
+                            .delete(link.id),
+                        failure: 'Eliminazione non riuscita',
+                      );
                     } else if (context.mounted) {
                       await proposeVideo(context, ref, link: link);
                     }
@@ -453,13 +478,21 @@ class _ProposalCard extends ConsumerWidget {
               children: canDecide
                   ? [
                       TextButton.icon(
-                        onPressed: () => repo.delete(link.id),
+                        onPressed: () => _act(
+                          context,
+                          () => repo.delete(link.id),
+                          failure: 'Non scartato',
+                        ),
                         icon: const Icon(Icons.close_rounded),
                         label: const Text('Scarta'),
                       ),
                       FilledButton.icon(
-                        onPressed: () => repo.save(
-                          link.copyWith(status: LinkStatus.pubblicato),
+                        onPressed: () => _act(
+                          context,
+                          () => repo.save(
+                            link.copyWith(status: LinkStatus.pubblicato),
+                          ),
+                          failure: 'Pubblicazione non riuscita',
                         ),
                         icon: const Icon(Icons.publish_rounded),
                         label: const Text('Pubblica'),
@@ -471,7 +504,11 @@ class _ProposalCard extends ConsumerWidget {
                         label: Text('In attesa del Direttivo'),
                       ),
                       TextButton(
-                        onPressed: () => repo.delete(link.id),
+                        onPressed: () => _act(
+                          context,
+                          () => repo.delete(link.id),
+                          failure: 'Proposta non ritirata',
+                        ),
                         child: const Text('Ritira'),
                       ),
                     ],

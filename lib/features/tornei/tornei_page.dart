@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
+import '../../shared/shared_links.dart';
 import '../risultati/matches_repository.dart';
 import '../risultati/risultati_page.dart' show MatchCard;
 import 'tournaments_repository.dart';
@@ -37,9 +39,9 @@ class _TorneiPageState extends ConsumerState<TorneiPage> {
               label: const Text('Nuovo torneo'),
             )
           : null,
-      body: tournaments.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
+      body: AsyncView(
+        value: tournaments,
+        onRetry: () => ref.invalidate(tournamentsProvider),
         data: (all) {
           final shown = all.where((t) => _team == null || t.team == _team);
           return ListView(
@@ -133,8 +135,7 @@ class _TournamentCard extends ConsumerWidget {
   }
 }
 
-void _open(String url) =>
-    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+void _open(String url) => openExternalLink(url);
 
 /// Foto o logo del torneo in tondo (icona della coppa se manca).
 class TournamentLogo extends ConsumerWidget {
@@ -176,7 +177,12 @@ class _TournamentPhoto extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Image(image: image, height: 180, fit: BoxFit.cover),
+        child: Image(
+          image: image,
+          height: 180,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
       ),
     );
   }
@@ -190,9 +196,8 @@ class TournamentPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    final t = ref
-        .watch(tournamentsProvider)
-        .value
+    final tournaments = ref.watch(tournamentsProvider);
+    final t = tournaments.value
         ?.where((x) => x.id == tournamentId)
         .firstOrNull;
     final standings = ref.watch(standingsProvider(tournamentId));
@@ -214,7 +219,23 @@ class TournamentPage extends ConsumerWidget {
         ],
       ),
       body: t == null
-          ? const Center(child: CircularProgressIndicator())
+          // Lo spinner finché l'elenco non è caricato; poi, se il torneo non c'è
+          // più (eliminato da un altro telefono), lo si dice.
+          ? tournaments.hasError &&
+                    (!tournaments.isLoading || tournaments.retrying)
+                ? ErrorRetry(
+                    message: friendlyError(
+                      tournaments.error!,
+                      action: 'Caricamento non riuscito',
+                    ),
+                    onRetry: () => ref.invalidate(tournamentsProvider),
+                  )
+                : tournaments.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ErrorRetry(
+                    message: 'Torneo non trovato.',
+                    onRetry: () => ref.invalidate(tournamentsProvider),
+                  )
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
@@ -274,32 +295,37 @@ class TournamentPage extends ConsumerWidget {
                     ),
                     if (isDirettivo)
                       TextButton.icon(
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => StandingsEditorPage(
-                              tournamentId: t.id,
-                              initial: standings.value ?? const [],
-                            ),
-                          ),
-                        ),
+                        // Solo con la classifica caricata: partire da un elenco
+                        // vuoto e salvare la cancellerebbe.
+                        onPressed: standings.hasValue
+                            ? () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => StandingsEditorPage(
+                                    tournamentId: t.id,
+                                    initial: standings.requireValue,
+                                  ),
+                                ),
+                              )
+                            : null,
                         icon: const Icon(Icons.edit_note_rounded),
                         label: const Text('Aggiorna'),
                       ),
                   ],
                 ),
-                switch (standings) {
-                  AsyncData(:final value) when value.isNotEmpty =>
-                    StandingsTable(rows: value),
-                  AsyncData() => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Classifica non inserita: si trova sul sito del torneo.',
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                  ),
-                  AsyncError(:final error) => Text('Errore: $error'),
-                  _ => const LinearProgressIndicator(),
-                },
+                AsyncView(
+                  value: standings,
+                  onRetry: () => ref.invalidate(standingsProvider(t.id)),
+                  loading: const LinearProgressIndicator(),
+                  data: (rows) => rows.isNotEmpty
+                      ? StandingsTable(rows: rows)
+                      : const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Classifica non inserita: si trova sul sito del torneo.',
+                            style: TextStyle(color: Colors.white54),
+                          ),
+                        ),
+                ),
                 if (matches.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   const Text(
@@ -425,14 +451,23 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
   bool _saving = false;
 
   Future<void> _pickPhoto() async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1200,
-      imageQuality: 85,
-    );
-    if (file == null) return;
-    final bytes = await file.readAsBytes();
-    setState(() => _photo = bytes);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (mounted) setState(() => _photo = bytes);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Foto non caricata')),
+        ),
+      );
+    }
   }
 
   @override
@@ -477,9 +512,11 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 
@@ -503,10 +540,23 @@ class _TournamentEditorState extends ConsumerState<_TournamentEditor> {
     );
     if (ok != true || !mounted) return;
     final nav = Navigator.of(context);
-    await ref.read(tournamentsRepositoryProvider).delete(widget.tournament!.id);
-    nav
-      ..pop()
-      ..pop();
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(tournamentsRepositoryProvider)
+          .delete(widget.tournament!.id);
+      nav
+        ..pop()
+        ..pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Eliminazione non riuscita')),
+        ),
+      );
+    }
   }
 
   @override
@@ -702,9 +752,11 @@ class _StandingsEditorPageState extends ConsumerState<StandingsEditorPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 

@@ -167,31 +167,46 @@ abstract class TournamentsRepository {
   Future<String?> imageUrl(String path);
 }
 
-/// Immagine del torneo: dalla memoria (demo) o dal bucket privato.
-final tournamentImageProvider = FutureProvider.family<ImageProvider?, String>((
-  ref,
-  path,
-) async {
-  final local = demoTournamentPhotos[path];
-  if (local != null) return MemoryImage(local);
-  final url = await ref.watch(tournamentsRepositoryProvider).imageUrl(path);
-  return url == null || url.isEmpty ? null : NetworkImage(url);
-});
+/// Immagine del torneo: dalla memoria (demo) o dal bucket privato. L'URL firmato vale
+/// 7 giorni: si riusa per 6, poi (quando nessuno lo mostra più) se ne chiede uno nuovo.
+final tournamentImageProvider = FutureProvider.autoDispose
+    .family<ImageProvider?, String>((ref, path) async {
+      final local = demoTournamentPhotos[path];
+      if (local != null) return MemoryImage(local);
+      final keep = ref.keepAlive();
+      final timer = Timer(const Duration(days: 6), keep.close);
+      ref.onDispose(timer.cancel);
+      try {
+        final url = await ref
+            .watch(tournamentsRepositoryProvider)
+            .imageUrl(path);
+        return url == null || url.isEmpty ? null : NetworkImage(url);
+      } catch (_) {
+        keep.close(); // un errore non resta in memoria
+        rethrow;
+      }
+    });
 
 final tournamentsRepositoryProvider = Provider<TournamentsRepository>((ref) {
   if (AppConfig.isDemo) return DemoTournamentsRepository();
   return _SupabaseTournamentsRepository(ref);
 });
 
-final tournamentsProvider = StreamProvider<List<Tournament>>(
-  (ref) => ref.watch(tournamentsRepositoryProvider).watchAll(),
-);
+final tournamentsProvider = StreamProvider<List<Tournament>>((ref) {
+  // Al cambio di account si ricarica con i permessi del nuovo utente.
+  ref.watch(currentUserIdProvider);
+  return ref.watch(tournamentsRepositoryProvider).watchAll();
+});
 
-final standingsProvider = FutureProvider.family<List<StandingRow>, String>(
-  (ref, id) async => sortStandings(
+final standingsProvider = FutureProvider.family<List<StandingRow>, String>((
+  ref,
+  id,
+) async {
+  ref.watch(currentUserIdProvider);
+  return sortStandings(
     await ref.watch(tournamentsRepositoryProvider).standings(id),
-  ),
-);
+  );
+});
 
 class _SupabaseTournamentsRepository implements TournamentsRepository {
   _SupabaseTournamentsRepository(this._ref);
@@ -234,19 +249,23 @@ class _SupabaseTournamentsRepository implements TournamentsRepository {
     return rows.map(StandingRow.fromMap).toList();
   }
 
+  /// Prima le righe nuove, poi via le vecchie: se la rete cade a metà la
+  /// classifica non resta vuota (al massimo per un attimo doppia).
   @override
   Future<void> saveStandings(
     String tournamentId,
     List<StandingRow> rows,
   ) async {
-    await _client
-        .from('tournament_standings')
-        .delete()
-        .eq('tournament_id', tournamentId);
-    if (rows.isEmpty) return;
-    await _client.from('tournament_standings').insert([
-      for (final r in rows) r.toMap(tournamentId),
-    ]);
+    final table = _client.from('tournament_standings');
+    final inserted = rows.isEmpty
+        ? const <Map<String, dynamic>>[]
+        : await table
+              .insert([for (final r in rows) r.toMap(tournamentId)])
+              .select('id');
+    final keep = [for (final r in inserted) r['id']];
+    var old = table.delete().eq('tournament_id', tournamentId);
+    if (keep.isNotEmpty) old = old.not('id', 'in', keep);
+    await old;
   }
 
   @override

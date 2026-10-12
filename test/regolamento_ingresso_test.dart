@@ -99,7 +99,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
 
-      // Da ora la pagina di accettazione mostra la pergamena con l'articolo.
+      // Da ora la pagina di accettazione mostra il regolamento con l'articolo.
       container.read(routerProvider).go('/regolamento/accetta');
       await tester.pumpAndSettle();
       expect(find.text('ART. 1 – INGRESSO'), findsOneWidget);
@@ -165,10 +165,7 @@ void main() {
       screen: tablet,
     );
     expect(find.text('ART. 1 – INGRESSO'), findsOneWidget);
-    expect(
-      find.text('Scorri fino in fondo per poter accettare.'),
-      findsNothing,
-    );
+    expect(find.text('Scorri fino in fondo per poter accettare'), findsNothing);
     expect(acceptButton(tester).onPressed, isNotNull);
   });
 

@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
+import '../../shared/shared_links.dart';
 import 'news_cover.dart';
 import 'news_item.dart';
 import 'news_repository.dart';
@@ -25,22 +27,13 @@ class _NewsListState extends ConsumerState<NewsList> {
     final news = ref.watch(newsProvider);
 
     return RefreshIndicator(
-      onRefresh: () => ref.refresh(newsProvider.future),
-      child: news.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ListView(
-          children: [
-            const SizedBox(height: 80),
-            const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.white38),
-            const SizedBox(height: 12),
-            Center(
-              child: Text(
-                'Impossibile caricare le notizie.\n$e',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
+      // Un aggiornamento fallito lo mostra la pagina (striscia o "Riprova").
+      onRefresh: () =>
+          ref.refresh(newsProvider.future).then((_) {}, onError: (_) {}),
+      child: AsyncView(
+        value: news,
+        onRetry: () => ref.invalidate(newsProvider),
+        action: 'Impossibile caricare le notizie',
         data: (items) {
           final filtered = _category == 'tutte'
               ? items
@@ -224,4 +217,4 @@ class NewsCard extends StatelessWidget {
 }
 
 Future<void> openNews(String url) =>
-    launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView);
+    openExternalLink(url, mode: LaunchMode.inAppBrowserView);

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../../shared/shared_links.dart';
 import 'soundtrack.dart';
 
@@ -40,6 +42,11 @@ class MusicaPage extends ConsumerWidget {
     final me = ref.watch(profileProvider).value;
     final links = ref.watch(sharedLinksProvider(LinkCategory.musica));
 
+    final messenger = ScaffoldMessenger.of(context);
+    void failed(Object e, String action) => messenger.showSnackBar(
+      SnackBar(content: Text(friendlyError(e, action: action))),
+    );
+
     Future<void> edit([SharedLink? link]) async {
       final result = await showSharedLinkEditor(
         context,
@@ -47,8 +54,11 @@ class MusicaPage extends ConsumerWidget {
         link: link,
         titleHint: 'es. FIFA 07 – colonna sonora',
       );
-      if (result != null) {
+      if (result == null) return;
+      try {
         await ref.read(sharedLinksRepositoryProvider).save(result);
+      } catch (e) {
+        failed(e, 'Non salvato');
       }
     }
 
@@ -82,50 +92,57 @@ class MusicaPage extends ConsumerWidget {
           style: TextStyle(color: Colors.white54, fontSize: 12),
         ),
         const SizedBox(height: 8),
-        ...switch (links) {
-          AsyncData(:final value) => [
-            for (final l in value)
-              Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: Icon(
-                    l.url.contains('spotify')
-                        ? Icons.graphic_eq_rounded
-                        : Icons.play_circle_fill_rounded,
-                    color: l.url.contains('spotify')
-                        ? const Color(0xFF1DB954)
-                        : MilanacColors.red,
+        AsyncView(
+          value: links,
+          onRetry: () =>
+              ref.invalidate(sharedLinksProvider(LinkCategory.musica)),
+          data: (value) => Column(
+            children: [
+              for (final l in value)
+                Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Icon(
+                      l.url.contains('spotify')
+                          ? Icons.graphic_eq_rounded
+                          : Icons.play_circle_fill_rounded,
+                      color: l.url.contains('spotify')
+                          ? const Color(0xFF1DB954)
+                          : MilanacColors.red,
+                    ),
+                    title: Text(l.title),
+                    subtitle: l.note == null ? null : Text(l.note!),
+                    trailing:
+                        (me != null && (me.isDirettivo || l.createdBy == me.id))
+                        ? PopupMenuButton<String>(
+                            onSelected: (v) async {
+                              if (v == 'edit') return edit(l);
+                              try {
+                                await ref
+                                    .read(sharedLinksRepositoryProvider)
+                                    .delete(l.id);
+                              } catch (e) {
+                                failed(e, 'Eliminazione non riuscita');
+                              }
+                            },
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(
+                                value: 'edit',
+                                child: Text('Modifica'),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Elimina'),
+                              ),
+                            ],
+                          )
+                        : const Icon(Icons.open_in_new_rounded, size: 18),
+                    onTap: () => openSharedLink(l.url),
                   ),
-                  title: Text(l.title),
-                  subtitle: l.note == null ? null : Text(l.note!),
-                  trailing:
-                      (me != null && (me.isDirettivo || l.createdBy == me.id))
-                      ? PopupMenuButton<String>(
-                          onSelected: (v) async {
-                            if (v == 'edit') return edit(l);
-                            await ref
-                                .read(sharedLinksRepositoryProvider)
-                                .delete(l.id);
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'edit',
-                              child: Text('Modifica'),
-                            ),
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Elimina'),
-                            ),
-                          ],
-                        )
-                      : const Icon(Icons.open_in_new_rounded, size: 18),
-                  onTap: () => openSharedLink(l.url),
                 ),
-              ),
-          ],
-          AsyncError(:final error) => [Text('Errore: $error')],
-          _ => [const Center(child: CircularProgressIndicator())],
-        },
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -145,7 +162,14 @@ class _PlayerCard extends ConsumerWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Impossibile usare questo file: $e')),
+            SnackBar(
+              content: Text(
+                friendlyError(
+                  e,
+                  action: 'Impossibile usare questo file (prova con un mp3 o un m4a)',
+                ),
+              ),
+            ),
           );
         }
       }

@@ -4,7 +4,7 @@ import 'theme.dart';
 
 /// Le due squadre del club: un giocatore può stare in una o in entrambe.
 enum Team {
-  milanac('Milan AC', 'MILAN AC', MilanacColors.red),
+  milanac('Milan AC', 'MILAN AC', MilanacColors.gold),
   futuro('Milan AC Futuro', 'FUTURO', Color(0xFF9CA3AF));
 
   const Team(this.label, this.short, this.color);
@@ -52,10 +52,10 @@ class TeamBadge extends StatelessWidget {
       child: Text(
         team.short,
         style: TextStyle(
-          fontSize: small ? 9 : 10,
-          fontWeight: FontWeight.w900,
+          fontSize: small ? 10 : 11,
+          fontWeight: FontWeight.w700,
           letterSpacing: .8,
-          color: filled ? Colors.white : team.color,
+          color: filled ? MilanacColors.ink : team.color,
         ),
       ),
     );

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
-import 'package:milanac/features/regolamento/parchment.dart';
+import 'package:milanac/features/regolamento/rules_reader.dart';
 import 'package:milanac/main.dart';
 
 import 'helpers.dart';
@@ -119,13 +119,13 @@ void main() {
     await startApp(tester);
     await openSection(tester, 'Regolamento & Storia');
 
-    // Pergamena con gli articoli dell'ultima versione pubblicata.
-    expect(find.text('REGOLAMENTO'), findsWidgets);
+    // Lettura su fondo scuro con gli articoli dell'ultima versione pubblicata.
+    expect(find.text('Regolamento'), findsWidgets);
     expect(find.text('ORGANIGRAMMA'), findsOneWidget);
     expect(find.textContaining('Versione 1'), findsOneWidget);
 
     // Il Direttivo apre la bozza, aggiunge un articolo e pubblica la versione 2.
-    await tester.tap(find.text('Modifica'));
+    await tester.tap(find.byTooltip('Modifica il regolamento'));
     await tester.pumpAndSettle();
     expect(find.text('BOZZA DEL REGOLAMENTO'), findsOneWidget);
     await tester.tap(find.text('Nuovo articolo'));
@@ -151,17 +151,30 @@ void main() {
       200,
       scrollable: find
           .descendant(
-            of: find.byType(ParchmentSheet),
+            of: find.byType(RulesReader),
             matching: find.byType(Scrollable),
           )
           .first,
     );
     expect(find.text('ART. 4 – CHAT'), findsOneWidget);
 
-    await tester.tap(find.text('Cenni storici'));
+    // Storia: il racconto e, sotto, l'organigramma (dal regolamento).
+    await tester.tap(find.text('Storia'));
     await tester.pumpAndSettle();
     expect(find.text('LA NOSTRA STORIA'), findsOneWidget);
     expect(find.textContaining('settembre 2025'), findsOneWidget);
+    expect(find.byTooltip('Modifica la storia'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('ORGANIGRAMMA'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(StoryReader),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('ORGANIGRAMMA'), findsOneWidget);
   });
 
   testWidgets('Contatti social modificabili dal Direttivo', (tester) async {

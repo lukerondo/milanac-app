@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
+import '../../core/errors.dart';
 import '../../core/teams.dart';
 import 'member.dart';
 import 'rosa_repository.dart';
@@ -46,14 +48,16 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
 
   Future<void> _save({bool active = true}) async {
     setState(() => _saving = true);
+    final gamertag = _gamertag.text.trim();
+    // Gamertag e numero lasciati vuoti si cancellano davvero.
     final updated = widget.member.copyWith(
       displayName: _name.text.trim().isEmpty
           ? widget.member.displayName
           : _name.text.trim(),
-      gamertag: _gamertag.text.trim(),
+      gamertag: gamertag.isEmpty ? null : gamertag,
       role: _role,
       fieldPosition: _position,
-      shirtNumber: int.tryParse(_number.text),
+      shirtNumber: int.tryParse(_number.text.trim()),
       joinedAt: _joinedAt,
       active: active,
       teams: _teams,
@@ -64,9 +68,11 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+          ),
+        );
       }
     }
   }
@@ -121,6 +127,10 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
                   child: TextField(
                     controller: _number,
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
                     decoration: const InputDecoration(labelText: 'Numero'),
                   ),
                 ),

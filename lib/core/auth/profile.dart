@@ -1,5 +1,6 @@
 import '../../features/volto/face.dart';
 import '../teams.dart';
+import 'notify_prefs.dart';
 
 enum ClubRole { direttivo, giocatore, pending }
 
@@ -41,6 +42,7 @@ class Profile {
     this.overall,
     this.registrationCompleted = false,
     this.rulesAcceptedVersion,
+    this.notifyPrefs = const NotifyPrefs(),
   });
 
   final String id;
@@ -77,6 +79,9 @@ class Profile {
 
   /// Ultima versione del regolamento accettata (null = mai).
   final int? rulesAcceptedVersion;
+
+  /// Notifiche spente dal membro (Impostazioni → Notifiche).
+  final NotifyPrefs notifyPrefs;
 
   bool get isDirettivo => role == ClubRole.direttivo && active;
   bool get isApproved => role != ClubRole.pending && active;
@@ -120,6 +125,33 @@ class Profile {
     overall: (m['overall'] as num?)?.toInt(),
     registrationCompleted: m['registration_completed_at'] != null,
     rulesAcceptedVersion: (m['rules_accepted_version'] as num?)?.toInt(),
+    // Colonna nuova (migrazione 0024): se manca valgono tutte attive.
+    notifyPrefs: NotifyPrefs.fromJson(m['notify_prefs']),
+  );
+
+  /// Lo stesso profilo con altre preferenze delle notifiche.
+  Profile withNotifyPrefs(NotifyPrefs prefs) => Profile(
+    id: id,
+    displayName: displayName,
+    role: role,
+    requestedRole: requestedRole,
+    active: active,
+    gamertag: gamertag,
+    avatarUrl: avatarUrl,
+    teams: teams,
+    firstName: firstName,
+    lastName: lastName,
+    birthYear: birthYear,
+    motto: motto,
+    direttivoRoles: direttivoRoles,
+    face: face,
+    platform: platform,
+    fieldPosition: fieldPosition,
+    shirtNumber: shirtNumber,
+    overall: overall,
+    registrationCompleted: registrationCompleted,
+    rulesAcceptedVersion: rulesAcceptedVersion,
+    notifyPrefs: prefs,
   );
 
   static const demo = Profile(

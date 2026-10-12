@@ -32,9 +32,11 @@ final rosaRepositoryProvider = Provider<RosaRepository>((ref) {
   return _SupabaseRosaRepository(ref);
 });
 
-final rosaProvider = StreamProvider<List<Member>>(
-  (ref) => ref.watch(rosaRepositoryProvider).watchAll(),
-);
+final rosaProvider = StreamProvider<List<Member>>((ref) {
+  // Al cambio di account si ricarica con i permessi del nuovo utente.
+  ref.watch(currentUserIdProvider);
+  return ref.watch(rosaRepositoryProvider).watchAll();
+});
 
 class _SupabaseRosaRepository implements RosaRepository {
   _SupabaseRosaRepository(this._ref);

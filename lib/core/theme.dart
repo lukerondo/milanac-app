@@ -45,10 +45,6 @@ const sportFont = 'Oswald';
 /// Font dei testi, dei pulsanti e degli elenchi.
 const bodyFont = 'Barlow';
 
-/// Caratteri della vecchia pergamena del regolamento (spariscono con la nuova lettura).
-const serifFont = 'CormorantGaramond';
-const scriptFont = 'GreatVibes';
-
 /// I colori che cambiano tra tema scuro (predefinito) e tema chiaro.
 @immutable
 class AppPalette extends ThemeExtension<AppPalette> {
@@ -450,7 +446,11 @@ ThemeData buildTheme([Brightness brightness = Brightness.dark]) {
     listTileTheme: ListTileThemeData(
       iconColor: p.textMuted,
       textColor: p.text,
-      subtitleTextStyle: TextStyle(color: p.textMuted, fontSize: 14),
+      subtitleTextStyle: TextStyle(
+        fontFamily: bodyFont,
+        color: p.textMuted,
+        fontSize: 14,
+      ),
     ),
     dividerTheme: DividerThemeData(color: p.divider, space: 1, thickness: 1),
     dialogTheme: DialogThemeData(

@@ -18,7 +18,8 @@ abstract class MatchesRepository {
   Future<String> save(ClubMatch match);
   Future<void> delete(String id);
 
-  Stream<List<MatchMedia>> watchMedia(String matchId);
+  /// Foto, clip e link di tutte le partite.
+  Stream<List<MatchMedia>> watchAllMedia();
   Future<void> addLink(String matchId, String url, {String? caption});
   Future<void> uploadMedia(
     String matchId, {
@@ -39,13 +40,27 @@ final matchesRepositoryProvider = Provider<MatchesRepository>((ref) {
   return _SupabaseMatchesRepository(ref);
 });
 
-final matchesProvider = StreamProvider<List<ClubMatch>>(
-  (ref) => ref.watch(matchesRepositoryProvider).watchAll(),
-);
+final matchesProvider = StreamProvider<List<ClubMatch>>((ref) {
+  // Al cambio di account si ricarica con i permessi del nuovo utente.
+  ref.watch(currentUserIdProvider);
+  return ref.watch(matchesRepositoryProvider).watchAll();
+});
 
-final matchMediaProvider = StreamProvider.family<List<MatchMedia>, String>(
-  (ref, matchId) => ref.watch(matchesRepositoryProvider).watchMedia(matchId),
-);
+/// I media di tutte le partite: un solo canale in tempo reale per tutte le schede
+/// (prima ne apriva uno ogni partita in elenco) e, senza filtro sul server,
+/// arrivano anche le eliminazioni.
+final allMatchMediaProvider = StreamProvider<List<MatchMedia>>((ref) {
+  ref.watch(currentUserIdProvider);
+  return ref.watch(matchesRepositoryProvider).watchAllMedia();
+});
+
+/// I media di una partita (dallo stream condiviso).
+final matchMediaProvider =
+    Provider.family<AsyncValue<List<MatchMedia>>, String>(
+      (ref, matchId) => ref
+          .watch(allMatchMediaProvider)
+          .whenData((all) => [for (final m in all) if (m.matchId == matchId) m]),
+    );
 
 class _SupabaseMatchesRepository implements MatchesRepository {
   _SupabaseMatchesRepository(this._ref);
@@ -89,10 +104,9 @@ class _SupabaseMatchesRepository implements MatchesRepository {
   }
 
   @override
-  Stream<List<MatchMedia>> watchMedia(String matchId) => _client
+  Stream<List<MatchMedia>> watchAllMedia() => _client
       .from('match_media')
       .stream(primaryKey: ['id'])
-      .eq('match_id', matchId)
       .order('created_at')
       .map((rows) => rows.map(MatchMedia.fromMap).toList());
 
@@ -248,13 +262,10 @@ class DemoMatchesRepository implements MatchesRepository {
     _mediaCtrl.add(null);
   }
 
-  List<MatchMedia> _mediaOf(String matchId) =>
-      _media.where((m) => m.matchId == matchId).toList();
-
   @override
-  Stream<List<MatchMedia>> watchMedia(String matchId) async* {
-    yield _mediaOf(matchId);
-    yield* _mediaCtrl.stream.map((_) => _mediaOf(matchId));
+  Stream<List<MatchMedia>> watchAllMedia() async* {
+    yield List.of(_media);
+    yield* _mediaCtrl.stream.map((_) => List.of(_media));
   }
 
   @override

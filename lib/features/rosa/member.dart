@@ -2,6 +2,13 @@ import '../../core/auth/profile.dart';
 import '../../core/teams.dart';
 import '../volto/face.dart';
 
+/// Valore predefinito dei campi svuotabili di [Member.copyWith]: "non toccare".
+class _Same {
+  const _Same();
+}
+
+const _same = _Same();
+
 /// Un membro della rosa (riga della tabella `profiles`).
 class Member {
   const Member({
@@ -107,18 +114,21 @@ class Member {
   /// Etichette del Direttivo ("Capitano, Gestore"), vuoto per i giocatori.
   String get direttivoLabel => direttivoRoles.map((r) => r.label).join(', ');
 
+  /// Copia con i campi indicati. Gamertag, posizione, numero di maglia, stile e
+  /// piattaforma si possono svuotare passando null (omessi restano come sono);
+  /// per gli altri campi null vuol dire "invariato".
   Member copyWith({
     String? displayName,
     ClubRole? role,
     DateTime? joinedAt,
-    String? gamertag,
-    String? fieldPosition,
-    int? shirtNumber,
+    Object? gamertag = _same,
+    Object? fieldPosition = _same,
+    Object? shirtNumber = _same,
     bool? active,
     Set<Team>? teams,
     int? overall,
-    String? playStyle,
-    GamePlatform? platform,
+    Object? playStyle = _same,
+    Object? platform = _same,
     Face? face,
     String? motto,
   }) => Member(
@@ -126,16 +136,24 @@ class Member {
     displayName: displayName ?? this.displayName,
     role: role ?? this.role,
     joinedAt: joinedAt ?? this.joinedAt,
-    gamertag: gamertag ?? this.gamertag,
-    fieldPosition: fieldPosition ?? this.fieldPosition,
-    shirtNumber: shirtNumber ?? this.shirtNumber,
+    gamertag: identical(gamertag, _same) ? this.gamertag : gamertag as String?,
+    fieldPosition: identical(fieldPosition, _same)
+        ? this.fieldPosition
+        : fieldPosition as String?,
+    shirtNumber: identical(shirtNumber, _same)
+        ? this.shirtNumber
+        : shirtNumber as int?,
     avatarUrl: avatarUrl,
     active: active ?? this.active,
     requestedRole: requestedRole,
     teams: teams ?? this.teams,
     overall: overall ?? this.overall,
-    playStyle: playStyle ?? this.playStyle,
-    platform: platform ?? this.platform,
+    playStyle: identical(playStyle, _same)
+        ? this.playStyle
+        : playStyle as String?,
+    platform: identical(platform, _same)
+        ? this.platform
+        : platform as GamePlatform?,
     avatarPath: avatarPath,
     birthDate: birthDate,
     city: city,

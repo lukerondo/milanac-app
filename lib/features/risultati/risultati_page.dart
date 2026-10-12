@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/providers.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import 'match.dart';
 import 'match_detail_page.dart';
 import 'match_editor.dart';
@@ -43,9 +44,9 @@ class _RisultatiPageState extends ConsumerState<RisultatiPage> {
               label: const Text('Nuova partita'),
             )
           : null,
-      body: matches.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore nel caricamento: $e')),
+      body: AsyncView(
+        value: matches,
+        onRetry: () => ref.invalidate(matchesProvider),
         data: (all) {
           final list = all
               .where(
@@ -159,7 +160,10 @@ class MatchCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final media = ref.watch(matchMediaProvider(match.id)).value ?? const [];
+    // Solo il numero: la scheda non si ridisegna per i media delle altre partite.
+    final mediaCount = ref.watch(
+      matchMediaProvider(match.id).select((m) => m.value?.length ?? 0),
+    );
     final color = outcomeColor(match.outcome);
     final score = match.outcome == MatchOutcome.daGiocare
         ? '– : –'
@@ -216,7 +220,7 @@ class MatchCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  if (media.isNotEmpty) ...[
+                  if (mediaCount > 0) ...[
                     const Icon(
                       Icons.perm_media_rounded,
                       size: 16,
@@ -224,7 +228,7 @@ class MatchCard extends ConsumerWidget {
                     ),
                     const SizedBox(width: 2),
                     Text(
-                      '${media.length}',
+                      '$mediaCount',
                       style: const TextStyle(
                         color: MilanacColors.gold,
                         fontSize: 12,

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/errors.dart';
 import '../../core/theme.dart';
 import 'albo_doro_page.dart';
 import 'scene_painters.dart';
@@ -72,8 +73,20 @@ Future<void> showTrophyDetails(
                         ],
                       ),
                     );
-                    if (ok != true) return;
-                    await ref.read(trophiesRepositoryProvider).delete(t);
+                    if (ok != true || !context.mounted) return;
+                    final messenger = ScaffoldMessenger.of(context);
+                    try {
+                      await ref.read(trophiesRepositoryProvider).delete(t);
+                    } catch (e) {
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            friendlyError(e, action: 'Eliminazione non riuscita'),
+                          ),
+                        ),
+                      );
+                      return;
+                    }
                     ref.invalidate(trophiesProvider(t.seasonId));
                     if (sheet.mounted) Navigator.of(sheet).pop();
                   },
@@ -156,13 +169,20 @@ class _TrophyEditorState extends ConsumerState<_TrophyEditor> {
   }
 
   Future<void> _pickImage() async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1000,
-    );
-    if (file == null) return;
-    final bytes = await file.readAsBytes();
-    setState(() => _image = bytes);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1000,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (mounted) setState(() => _image = bytes);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyError(e, action: 'Foto non caricata'))),
+      );
+    }
   }
 
   Future<void> _save() async {
@@ -208,9 +228,11 @@ class _TrophyEditorState extends ConsumerState<_TrophyEditor> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 

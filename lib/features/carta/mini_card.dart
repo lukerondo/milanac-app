@@ -186,8 +186,7 @@ class _Initial extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final photo = memberPhoto(ref, member);
-    if (photo != null) return Image(image: photo, fit: BoxFit.cover);
-    return Center(
+    final initial = Center(
       child: Text(
         member.displayName.isEmpty
             ? '?'
@@ -198,6 +197,12 @@ class _Initial extends ConsumerWidget {
           color: color,
         ),
       ),
+    );
+    if (photo == null) return initial;
+    return Image(
+      image: photo,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => initial,
     );
   }
 }

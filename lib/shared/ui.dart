@@ -245,13 +245,16 @@ class FilterPill extends StatelessWidget {
           child: Container(
             height: 36,
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                color: selected ? p.accentText : p.text,
+            // Larga quanto il testo anche dentro una Wrap.
+            child: Center(
+              widthFactor: 1,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  color: selected ? p.accentText : p.text,
+                ),
               ),
             ),
           ),
