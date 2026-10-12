@@ -47,6 +47,18 @@
                 <data android:scheme="com.milanacproclub.milanac" android:host="login-callback"/>
             </intent-filter>
         </activity>
+        <!-- Notifiche push (Firebase): lo scudo del club come icona, l'oro del club e il
+             canale "Avvisi del club" (lo crea MainActivity all'avvio) per quelle che non
+             ne indicano uno. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notifica_club" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notifica_oro" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="@string/canale_avvisi_club" />
         <!-- Notifica fissa "Sei nella stanza vocale": tiene vivo il microfono in
              background; chiudendo l'app dalle recenti si ferma con lei. -->
         <service

@@ -37,8 +37,9 @@ android {
     }
 
     signingConfigs {
-        // Chiave di prova fissa (password "android", come quella di debug) per gli APK di prova:
-        // così ogni nuovo APK si installa sopra quello vecchio. Per Google Play si usa "release".
+        // Chiave di prova fissa (password "android", come quella di debug): è nel repository,
+        // quindi pubblica. Si usa solo senza la chiave privata (sviluppo locale, CI senza i
+        // secret ANDROID_KEYSTORE_*): così ogni nuovo APK si installa sopra quello vecchio.
         create("prova") {
             storeFile = file("apk-di-prova.keystore")
             storePassword = "android"
@@ -70,7 +71,8 @@ android {
 
     buildTypes {
         release {
-            // Senza key.properties (APK di prova, sviluppo locale) si firma con la chiave di prova.
+            // La chiave privata quando c'è android/key.properties (la CI lo scrive dai secret,
+            // sia per gli APK di prova sia per l'App Bundle); senza, la chiave di prova.
             signingConfig = if (keystoreProperties.isNotEmpty()) {
                 signingConfigs.getByName("release")
             } else {

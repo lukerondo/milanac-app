@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0B0B0D</color>
+    <!-- Oro del club per le notifiche push (come il colore mandato dalla funzione notify). -->
+    <color name="notifica_oro">#D6B354</color>
 </resources>
