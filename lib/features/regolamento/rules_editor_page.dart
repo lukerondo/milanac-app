@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import 'rules_repository.dart';
 
 /// Editor del Direttivo: la bozza degli articoli, da pubblicare come nuova versione.
@@ -33,7 +36,7 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
       await ref.read(rulesRepositoryProvider).saveArticle(result);
       ref.invalidate(rulesDraftProvider);
     } catch (e) {
-      _toast('Salvataggio non riuscito: $e');
+      _toast(friendlyError(e, action: 'Salvataggio non riuscito'));
     }
   }
 
@@ -60,7 +63,7 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
       await ref.read(rulesRepositoryProvider).deleteArticle(a.id!);
       ref.invalidate(rulesDraftProvider);
     } catch (e) {
-      _toast('Eliminazione non riuscita: $e');
+      _toast(friendlyError(e, action: 'Eliminazione non riuscita'));
     }
   }
 
@@ -72,7 +75,7 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
       await ref.read(rulesRepositoryProvider).reorder(items);
       ref.invalidate(rulesDraftProvider);
     } catch (e) {
-      _toast('Riordino non riuscito: $e');
+      _toast(friendlyError(e, action: 'Riordino non riuscito'));
     }
   }
 
@@ -101,16 +104,21 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
     setState(() => _publishing = true);
     try {
       final n = await ref.read(rulesRepositoryProvider).publish();
+      if (!mounted) return;
+      // Chi pubblica risulta averla accettata: profilo e versione si rileggono insieme,
+      // così il router non lo manda ad accettare quello che ha appena scritto.
+      ref.invalidate(profileProvider);
       ref.invalidate(latestRulesProvider);
       _toast('Versione $n pubblicata: tutti dovranno accettarla.');
-      if (!mounted) return;
       if (widget.firstTime) {
         context.go('/');
       } else {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      _toast('Pubblicazione non riuscita: $e');
+      if (mounted) {
+        _toast(friendlyError(e, action: 'Pubblicazione non riuscita'));
+      }
     } finally {
       if (mounted) setState(() => _publishing = false);
     }
@@ -209,10 +217,10 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Nuovo articolo'),
       ),
-      body: draft.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) =>
-            Center(child: Text('Impossibile caricare la bozza: $e')),
+      body: AsyncView<List<RulesArticle>>(
+        value: draft,
+        action: 'Impossibile caricare la bozza',
+        onRetry: () => ref.invalidate(rulesDraftProvider),
         data: _body,
       ),
     );

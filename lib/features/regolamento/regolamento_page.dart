@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import 'pages_repository.dart';
 import 'parchment.dart';
 import 'rules_editor_page.dart';
@@ -60,34 +62,47 @@ class _Scroll extends StatelessWidget {
   );
 }
 
-class _RulesTab extends ConsumerWidget {
+class _RulesTab extends ConsumerStatefulWidget {
   const _RulesTab({required this.editable});
   final bool editable;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_RulesTab> createState() => _RulesTabState();
+}
+
+class _RulesTabState extends ConsumerState<_RulesTab> {
+  @override
+  void initState() {
+    super.initState();
+    // Le versioni non arrivano in tempo reale: aprendo la sezione si rilegge l'ultima
+    // (se è nuova, il router chiede di accettarla).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.invalidate(latestRulesProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final rules = ref.watch(latestRulesProvider);
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: editable
+      floatingActionButton: widget.editable
           ? FloatingActionButton.extended(
               backgroundColor: MilanacColors.red,
               onPressed: () async {
                 await Navigator.of(context, rootNavigator: true).push(
                   MaterialPageRoute(builder: (_) => const RulesEditorPage()),
                 );
-                ref.invalidate(latestRulesProvider);
+                if (mounted) ref.invalidate(latestRulesProvider);
               },
               icon: const Icon(Icons.edit_rounded),
               label: const Text('Modifica'),
             )
           : null,
-      body: rules.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _Retry(
-          text: 'Impossibile caricare il regolamento.',
-          onRetry: () => ref.invalidate(latestRulesProvider),
-        ),
+      body: AsyncView<RulesVersion?>(
+        value: rules,
+        action: 'Impossibile caricare il regolamento',
+        onRetry: () => ref.invalidate(latestRulesProvider),
         data: (version) => version == null
             ? const Center(
                 child: Text(
@@ -118,12 +133,10 @@ class _StoryTab extends ConsumerWidget {
               label: const Text('Modifica'),
             )
           : null,
-      body: content.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _Retry(
-          text: 'Impossibile caricare la storia.',
-          onRetry: () => ref.invalidate(pageContentProvider(ClubPage.storia)),
-        ),
+      body: AsyncView<String>(
+        value: content,
+        action: 'Impossibile caricare la storia',
+        onRetry: () => ref.invalidate(pageContentProvider(ClubPage.storia)),
         data: (text) => _Scroll(child: StoryReader(text: text)),
       ),
     );
@@ -143,32 +156,15 @@ class _StoryTab extends ConsumerWidget {
       await ref.read(pagesRepositoryProvider).save(ClubPage.storia, result);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+          ),
+        );
       }
     }
-    ref.invalidate(pageContentProvider(ClubPage.storia));
+    if (context.mounted) ref.invalidate(pageContentProvider(ClubPage.storia));
   }
-}
-
-class _Retry extends StatelessWidget {
-  const _Retry({required this.text, required this.onRetry});
-  final String text;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.wifi_off_rounded, size: 40, color: Colors.white54),
-        const SizedBox(height: 8),
-        Text(text),
-        TextButton(onPressed: onRetry, child: const Text('Riprova')),
-      ],
-    ),
-  );
 }
 
 class _StoryEditorPage extends StatefulWidget {
