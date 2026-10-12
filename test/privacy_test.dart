@@ -6,6 +6,8 @@ import 'package:milanac/core/push/push_service.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 
+import 'helpers.dart';
+
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
@@ -27,9 +29,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    // La Privacy sta nelle Impostazioni (ingranaggio in alto a destra).
-    await tester.tap(find.byTooltip('Impostazioni'));
-    await tester.pumpAndSettle();
+    // La Privacy sta nelle Impostazioni (dal profilo, foto in alto a destra).
+    await goToSection(tester, 'Impostazioni');
     await tester.scrollUntilVisible(
       find.text('Privacy'),
       150,

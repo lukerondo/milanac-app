@@ -44,7 +44,9 @@ class AsyncView<T> extends StatelessWidget {
         ],
       );
     }
-    if (v.hasError && !v.isLoading) {
+    // Con i nuovi tentativi automatici lo stato resta "in caricamento" insieme
+    // all'errore: si mostra comunque l'errore con Riprova, non uno spinner infinito.
+    if (v.hasError && (!v.isLoading || v.retrying)) {
       return ErrorRetry(
         message: friendlyError(v.error!, action: action),
         onRetry: onRetry,
@@ -69,7 +71,11 @@ class ErrorRetry extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: scheme.onSurfaceVariant),
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 40,
+              color: scheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 12),
             Text(
               message,
@@ -107,11 +113,17 @@ class _OfflineStrip extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
         child: Row(
           children: [
-            Icon(Icons.wifi_off_rounded, size: 18, color: scheme.onInverseSurface),
+            Icon(
+              Icons.wifi_off_rounded,
+              size: 18,
+              color: scheme.onInverseSurface,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                retrying ? 'Connessione persa: riprovo…' : 'Dati non aggiornati',
+                retrying
+                    ? 'Connessione persa: riprovo…'
+                    : 'Dati non aggiornati',
                 style: TextStyle(color: scheme.onInverseSurface, fontSize: 13),
               ),
             ),

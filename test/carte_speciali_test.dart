@@ -4,27 +4,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/teams.dart';
 import 'package:milanac/features/carte/special_cards_repository.dart';
 
+import 'helpers.dart';
 import 'home_test.dart';
-
-/// Apre una voce del menu laterale (scorrendo se serve).
-Future<void> openSection(WidgetTester tester, String title) async {
-  await tester.tap(find.byIcon(Icons.menu));
-  await tester.pumpAndSettle();
-  final item = find.descendant(
-    of: find.byType(Drawer),
-    matching: find.text(title),
-  );
-  await tester.scrollUntilVisible(
-    item,
-    200,
-    scrollable: find.descendant(
-      of: find.byType(Drawer),
-      matching: find.byType(Scrollable),
-    ),
-  );
-  await tester.tap(item);
-  await tester.pumpAndSettle();
-}
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
@@ -63,7 +44,7 @@ void main() {
       'e assegnazione dal risultato', (tester) async {
     await startAppAt(tester, todayAt(17));
 
-    await openSection(tester, 'Carte speciali');
+    await goToSection(tester, 'Carte speciali');
     expect(find.text('QUESTA SETTIMANA'), findsOneWidget);
     expect(find.text('ATT · Marco Rossi'), findsOneWidget);
     expect(find.text('POR · Andrea Neri'), findsOneWidget);
@@ -79,7 +60,7 @@ void main() {
     expect(find.text('Milan AC 0–1 Sporting Joypad'), findsOneWidget);
 
     // La mia carta: overall 82 + 5 e la nota della carta nero/oro.
-    await openSection(tester, 'La mia carta');
+    await goToSection(tester, 'La mia carta');
     expect(find.text('87'), findsOneWidget);
     expect(find.text('+5'), findsOneWidget);
     expect(find.text('Carta nero/oro +5'), findsOneWidget);
@@ -95,7 +76,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Dal risultato dell'amichevole del Futuro il Direttivo assegna una nero/oro.
-    await openSection(tester, 'Risultati');
+    await goToSection(tester, 'Risultati');
     await tester.scrollUntilVisible(
       find.text('Real Brianza'),
       300,

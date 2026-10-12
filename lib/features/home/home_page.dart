@@ -6,8 +6,10 @@ import 'package:intl/intl.dart';
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../../shared/shared_links.dart';
 import '../calendario/club_event.dart';
 import '../calendario/events_repository.dart';
@@ -245,37 +247,19 @@ class PresenzePanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(profileProvider).value;
     final events = ref.watch(eventsProvider).value ?? const <ClubEvent>[];
-    final entries =
-        ref.watch(attendanceProvider).value ?? const <AttendanceEntry>[];
-    final all = ref.watch(rosaProvider).value ?? const <Member>[];
+    final attendance = ref.watch(attendanceProvider);
+    final rosa = ref.watch(rosaProvider);
     final now = ref.watch(clockProvider)();
-    final today = dayOnly(now);
+    // Stasera in Italia, come sul server (anche la scadenza delle 18:30).
+    final today = italianDay(now);
     final myTeams = me?.teams ?? const {Team.milanac};
     final event = eveningEvent(events, today, teams: myTeams);
     final team = event.team ?? mainTeam(myTeams);
-    final members = all
-        .where(
-          (m) => m.active && m.role != ClubRole.pending && m.teams.contains(team),
-        )
-        .toList();
-    final tonight = {
-      for (final e in entries.where((e) => e.date == today)) e.playerId: e,
-    };
-    final mine = me == null ? null : tonight[me.id];
-    final isMember = me != null && members.any((m) => m.id == me.id);
-    final open = answersOpen(today, now);
-    int count(AttendanceStatus s) =>
-        members.where((m) => tonight[m.id]?.status == s).length;
-    final missing = members.where((m) => !tonight.containsKey(m.id)).length;
 
-    final status = !isMember
-        ? null
-        : mine != null
-        ? 'La tua risposta: ${describeAttendance(mine)}'
-            '${open ? ' · modificabile fino alle $attendanceDeadlineLabel' : ''}'
-        : open
-        ? 'Ci sei stasera? Rispondi entro le $attendanceDeadlineLabel.'
-        : 'Risposte chiuse alle $attendanceDeadlineLabel: chi non ha risposto risulta assente.';
+    void retry() {
+      ref.invalidate(rosaProvider);
+      ref.invalidate(attendanceProvider);
+    }
 
     return HomePanel(
       title: 'Presenze',
@@ -310,14 +294,78 @@ class PresenzePanel extends ConsumerWidget {
             ),
           ],
         ),
+        AsyncView(
+          value: rosa,
+          onRetry: retry,
+          data: (all) => AsyncView(
+            value: attendance,
+            onRetry: retry,
+            data: (entries) => _Tonight(
+              me: me,
+              members: [
+                for (final m in all)
+                  if (m.active &&
+                      m.role != ClubRole.pending &&
+                      m.teams.contains(team))
+                    m,
+              ],
+              tonight: {
+                for (final e in entries.where((e) => e.date == today))
+                  e.playerId: e,
+              },
+              today: today,
+              open: answersOpen(today, now),
+              event: event,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// La propria risposta per stasera e i conteggi della squadra.
+class _Tonight extends ConsumerWidget {
+  const _Tonight({
+    required this.me,
+    required this.members,
+    required this.tonight,
+    required this.today,
+    required this.open,
+    required this.event,
+  });
+  final Profile? me;
+  final List<Member> members;
+  final Map<String, AttendanceEntry> tonight;
+  final DateTime today;
+  final bool open;
+  final ClubEvent event;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = this.me;
+    final mine = me == null ? null : tonight[me.id];
+    final isMember = me != null && members.any((m) => m.id == me.id);
+    final counts = DayCounts(members.map((m) => m.id), tonight);
+
+    final status = !isMember
+        ? null
+        : mine != null
+        ? 'La tua risposta: ${describeAttendance(mine)}'
+              '${open ? ' · modificabile fino alle $attendanceDeadlineLabel' : ''}'
+        : open
+        ? 'Ci sei stasera? Rispondi entro le $attendanceDeadlineLabel.'
+        : 'Risposte chiuse alle $attendanceDeadlineLabel: chi non ha risposto risulta assente.';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         if (status != null) ...[
           const SizedBox(height: 8),
           Text(
             status,
             style: TextStyle(
-              color: mine == null && open
-                  ? MilanacColors.gold
-                  : Colors.white70,
+              color: mine == null && open ? MilanacColors.gold : Colors.white70,
               fontSize: 13,
             ),
           ),
@@ -354,21 +402,21 @@ class PresenzePanel extends ConsumerWidget {
         Row(
           children: [
             _Count(
-              count(AttendanceStatus.presente),
+              counts.present,
               'presenti',
               statusColor(AttendanceStatus.presente),
             ),
             _Count(
-              count(AttendanceStatus.ritardo),
+              counts.late,
               'in ritardo',
               statusColor(AttendanceStatus.ritardo),
             ),
             _Count(
-              count(AttendanceStatus.assente),
+              counts.absent,
               'assenti',
               statusColor(AttendanceStatus.assente),
             ),
-            _Count(missing, 'senza risposta', Colors.white54),
+            _Count(counts.waiting, 'senza risposta', Colors.white54),
           ],
         ),
       ],

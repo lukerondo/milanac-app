@@ -5,6 +5,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 
+import 'helpers.dart';
+
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
@@ -25,9 +27,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Senza musica scelta, la nota in alto porta alla sezione.
-    await tester.tap(find.byTooltip('Colonna sonora'));
-    await tester.pumpAndSettle();
+    // Senza musica scelta non c'è il muto in alto; la sezione sta nel Club.
+    expect(find.byTooltip('Metti in muto'), findsNothing);
+    await goToSection(tester, 'Colonna sonora');
     expect(find.text('COLONNA SONORA'), findsOneWidget);
     expect(find.text('Le canzoni più iconiche di FIFA'), findsOneWidget);
 

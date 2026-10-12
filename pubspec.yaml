@@ -35,7 +35,6 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   supabase_flutter: ^2.18.0
   flutter_riverpod: ^3.4.3
   go_router: ^18.0.2
@@ -97,10 +96,20 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
-  # Font sportivo (titoli, numeri, carte): Oswald, come nella vecchia app.
+  # Font sportivo (titoli, numeri, carte): Oswald. Testi, pulsanti ed elenchi: Barlow.
   # Pergamena (regolamento e storia): Cormorant Garamond. Firme: Great Vibes.
   # Tutti con licenza OFL (assets/fonts/OFL.txt).
   fonts:
+    - family: Barlow
+      fonts:
+        - asset: assets/fonts/Barlow-400.ttf
+          weight: 400
+        - asset: assets/fonts/Barlow-500.ttf
+          weight: 500
+        - asset: assets/fonts/Barlow-600.ttf
+          weight: 600
+        - asset: assets/fonts/Barlow-700.ttf
+          weight: 700
     - family: Oswald
       fonts:
         - asset: assets/fonts/Oswald-400.ttf

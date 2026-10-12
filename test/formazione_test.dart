@@ -2,14 +2,124 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:milanac/core/auth/providers.dart';
+import 'package:milanac/core/teams.dart';
+import 'package:milanac/features/formazione/formation_repository.dart';
 import 'package:milanac/features/formazione/modules.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 
 import 'helpers.dart';
+import 'home_test.dart' show startAppAt, todayInItalyAt;
+import 'presenze_test.dart' show testAccountProvider;
+
+/// Formazioni su un server lento: ogni salvataggio resta "in corso" mezzo secondo.
+class _SlowFormations implements FormationRepository {
+  final saved = <Team, Formation>{};
+
+  /// Le formazioni ricevute dai salvataggi, nell'ordine.
+  final received = <Formation>[];
+  Formation? published;
+  var fail = false;
+
+  @override
+  Future<Formation> loadCurrent(Team team) async =>
+      saved[team] ?? Formation(team: team);
+
+  @override
+  Future<Formation> save(Formation f) async {
+    received.add(f);
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (fail) throw Exception('server irraggiungibile');
+    return saved[f.team] = f.copyWith(
+      id: f.id.isEmpty ? 'nuova-${received.length}' : f.id,
+      updatedAt: DateTime.now().toUtc(),
+    );
+  }
+
+  @override
+  Future<Formation> publish(Formation f) async {
+    return published = saved[f.team] = f.copyWith(
+      publishedAt: DateTime.now().toUtc(),
+      publishedModule: f.module,
+      publishedPlayers: Map.of(f.players),
+    );
+  }
+}
+
+class _CountingFormations extends DemoFormationRepository {
+  var reads = 0;
+
+  @override
+  Future<Formation> loadCurrent(Team team) {
+    reads++;
+    return super.loadCurrent(team);
+  }
+}
+
+/// Dalla Sala Direttivo all'editor delle formazioni (su uno schermo alto).
+Future<void> openFormationEditor(WidgetTester tester) async {
+  tester.view.physicalSize = const Size(1080, 4800);
+  await tester.pumpAndSettle();
+  await goToSection(tester, 'Sala Direttivo');
+  await tester.tap(find.text('Formazioni'));
+  await tester.pumpAndSettle();
+}
+
+FilledButton publishButton(WidgetTester tester, String label) =>
+    tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text(label),
+        matching: find.byWidgetPredicate((w) => w is FilledButton),
+      ),
+    );
+
+ChoiceChip moduleChip(WidgetTester tester, String module) =>
+    tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, module));
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
+
+  test('i posti come li vuole save_formation', () {
+    final json = formationSlotsJson(
+      const Formation(module: '4-4-2', players: {0: 'p4', 9: 'p2'}),
+    );
+    expect(json, hasLength(11));
+    expect(json.first, {
+      'slot_index': 0,
+      'x': .5,
+      'y': .92,
+      'label': 'POR',
+      'player_id': 'p4',
+    });
+    expect(json[9]['label'], 'ATT');
+    expect(json[9]['player_id'], 'p2');
+    expect(json[1]['player_id'], isNull, reason: 'posto libero');
+  });
+
+  test('"modificata dopo la pubblicazione" guarda modulo e giocatori, non '
+      'gli orari', () {
+    final published = Formation(
+      module: '4-4-2',
+      players: const {0: 'p4', 9: 'p2'},
+      publishedAt: DateTime.utc(2026, 10, 12, 18),
+      // Salvata poco dopo con l'ora del server, più avanti di quella del telefono.
+      updatedAt: DateTime.utc(2026, 10, 12, 18, 5),
+      publishedModule: '4-4-2',
+      publishedPlayers: const {0: 'p4', 9: 'p2'},
+    );
+    expect(published.hasUnpublishedChanges, isFalse);
+    expect(published.copyWith(module: '3-5-2').hasUnpublishedChanges, isTrue);
+    expect(published.assign(9, 'p3').hasUnpublishedChanges, isTrue);
+    expect(published.assign(9, null).hasUnpublishedChanges, isTrue);
+    expect(const Formation().hasUnpublishedChanges, isFalse);
+    // Pubblicata oggi in Italia: le 23:30 UTC del 12 sono già il 13.
+    final lateNight = published.copyWith(
+      publishedAt: DateTime.utc(2026, 10, 12, 23, 30),
+    );
+    expect(lateNight.isPublishedOn(DateTime(2026, 10, 13)), isTrue);
+    expect(lateNight.isPublishedOn(DateTime(2026, 10, 12)), isFalse);
+  });
 
   test('ogni modulo ha 11 posizioni, portiere per primo, dentro il campo', () {
     for (final entry in formationModules.entries) {
@@ -142,5 +252,146 @@ void main() {
     expect(find.text('Verdi'), findsOneWidget);
     expect(find.text('Neri'), findsOneWidget);
     expect(find.text('Rossi'), findsNothing);
+  });
+
+  testWidgets('Formazione: salvataggi uno alla volta e "Pubblica" solo a '
+      'salvataggio finito, con i dati salvati', (tester) async {
+    final formations = _SlowFormations();
+    await startAppAt(
+      tester,
+      todayInItalyAt(17),
+      overrides: [formationRepositoryProvider.overrideWithValue(formations)],
+    );
+    await openFormationEditor(tester);
+    // FUTURO: la formazione non esiste ancora.
+    await tester.tap(find.text('FUTURO'));
+    await tester.pumpAndSettle();
+
+    // Due cambi di modulo di fila: il secondo mentre il primo si sta salvando.
+    await tester.tap(find.text('3-5-2'));
+    await tester.pump();
+    await tester.tap(find.text('4-4-2'));
+    await tester.pump();
+    expect(moduleChip(tester, '4-4-2').selected, isTrue);
+    expect(publishButton(tester, 'Salvataggio in corso…').onPressed, isNull);
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    // Nell'ordine; il secondo usa l'id appena creato (niente seconda formazione).
+    expect(
+      [for (final f in formations.received) (f.id, f.module)],
+      [('', '3-5-2'), ('nuova-1', '4-4-2')],
+    );
+    expect(formations.saved[Team.futuro]!.module, '4-4-2');
+
+    expect(
+      publishButton(tester, 'Pubblica la formazione di stasera').onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.text('Pubblica la formazione di stasera'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Pubblica'));
+    await tester.pumpAndSettle();
+    expect(formations.published!.id, 'nuova-1');
+    expect(formations.published!.module, '4-4-2');
+    expect(find.text('Ripubblica e avvisa i giocatori'), findsOneWidget);
+  });
+
+  testWidgets('Formazione: se il salvataggio non riesce si torna all\'ultima '
+      'salvata', (tester) async {
+    final formations = _SlowFormations()..fail = true;
+    await startAppAt(
+      tester,
+      todayInItalyAt(17),
+      overrides: [formationRepositoryProvider.overrideWithValue(formations)],
+    );
+    await openFormationEditor(tester);
+
+    await tester.tap(find.text('3-5-2'));
+    await tester.pump();
+    expect(moduleChip(tester, '3-5-2').selected, isTrue);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Salvataggio non riuscito. Riprova.'), findsOneWidget);
+    expect(moduleChip(tester, '4-3-3').selected, isTrue);
+    expect(
+      publishButton(tester, 'Pubblica la formazione di stasera').onPressed,
+      isNotNull,
+    );
+  });
+
+  test('la formazione si rilegge quando entra un altro account', () async {
+    final formations = _CountingFormations();
+    final container = ProviderContainer(
+      overrides: [
+        currentUserIdProvider.overrideWith(
+          (ref) => ref.watch(testAccountProvider),
+        ),
+        formationRepositoryProvider.overrideWithValue(formations),
+      ],
+    );
+    addTearDown(container.dispose);
+    final milanac = formationProvider(Team.milanac);
+    container.listen(milanac, (_, _) {});
+    expect((await container.read(milanac.future)).id, 'demo');
+    container.read(testAccountProvider.notifier).enter('b');
+    expect((await container.read(milanac.future)).id, 'demo');
+    expect(formations.reads, 2);
+    container.read(testAccountProvider.notifier).enter(null);
+    expect((await container.read(milanac.future)).id, isEmpty);
+    expect(formations.reads, 2);
+  });
+
+  testWidgets('Formazione: chi la guarda vede la pubblicazione fatta da un '
+      'altro telefono, senza riavviare l\'app', (tester) async {
+    final container = await startAppAt(tester, todayInItalyAt(17));
+    await goToSection(tester, 'Formazione');
+    expect(
+      find.textContaining('non è ancora stata pubblicata'),
+      findsOneWidget,
+    );
+    // Il Direttivo pubblica da un altro telefono (qui: direttamente sul "server").
+    final server = container.read(formationRepositoryProvider);
+    Future<void> publishElsewhere(String module) async => server.publish(
+      (await server.loadCurrent(Team.milanac)).copyWith(module: module),
+    );
+
+    // Riaprendo la sezione (dalla notifica) si rilegge.
+    await publishElsewhere('4-3-3');
+    await goToSection(tester, 'Home');
+    await goToSection(tester, 'Formazione');
+    expect(find.textContaining('non è ancora stata pubblicata'), findsNothing);
+    expect(find.widgetWithText(Chip, '4-3-3'), findsOneWidget);
+
+    // Tornando in primo piano.
+    await publishElsewhere('3-5-2');
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(Chip, '3-5-2'), findsOneWidget);
+
+    // Con la pagina aperta (la notifica arriva in primo piano): entro un minuto.
+    await publishElsewhere('4-4-2');
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(Chip, '4-4-2'), findsOneWidget);
+
+    // E trascinando in giù.
+    await publishElsewhere('5-3-2');
+    await tester.fling(
+      find.widgetWithText(Chip, '4-4-2'),
+      const Offset(0, 400),
+      1000,
+    );
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(Chip, '5-3-2'), findsOneWidget);
   });
 }

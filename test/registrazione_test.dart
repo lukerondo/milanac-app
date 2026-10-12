@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:milanac/core/auth/profile.dart';
+import 'package:milanac/core/auth/providers.dart';
 import 'package:milanac/core/router.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/regolamento/parchment.dart';
 import 'package:milanac/features/registrazione/registration_repository.dart';
 import 'package:milanac/features/volto/face.dart';
 import 'package:milanac/main.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
@@ -186,4 +189,155 @@ void main() {
     expect(find.byType(ChoiceChip), findsWidgets);
     expect(find.byType(FilterChip), findsNothing);
   });
+
+  Future<void> fillWho(WidgetTester tester) async {
+    await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Mario');
+    await tester.enterText(find.widgetWithText(TextField, 'Cognome'), 'Rossi');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Anno di nascita'),
+      '1995',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nome sulla maglia e sulla carta'),
+      'ROSSI',
+    );
+    await tester.tap(find.text('Avanti'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Indietro di Android: al passo precedente, non fuori dall\'app', (
+    tester,
+  ) async {
+    await startAt(tester, '/registrazione');
+    await fillWho(tester);
+    expect(find.text('PASSO 2 DI 3 · SQUADRA E RUOLO'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('PASSO 1 DI 3 · CHI SEI'), findsOneWidget);
+    expect(find.text('ROSSI'), findsWidgets);
+  });
+
+  testWidgets(
+    'Password del Direttivo sbagliata: si torna al passo 2 con il campo evidenziato',
+    (tester) async {
+      final container = await startAt(tester, '/registrazione');
+      await fillWho(tester);
+      await tester.tap(find.text('Faccio parte del Direttivo'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Password del Direttivo'),
+        'sbagliata',
+      );
+      await reveal(tester, 2, find.text('Capitano'));
+      await tester.tap(find.text('Capitano'));
+      await pickPosition(tester, 'ATT');
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Completa la registrazione'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('PASSO 2 DI 3 · SQUADRA E RUOLO'), findsOneWidget);
+      final field = find.widgetWithText(TextField, 'Password del Direttivo');
+      expect(
+        find.descendant(
+          of: field,
+          matching: find.text('Password del Direttivo non corretta'),
+        ),
+        findsOneWidget,
+      );
+      final repo = container.read(
+        registrationRepositoryProvider,
+      ) as DemoRegistrationRepository;
+      expect(repo.last, isNull);
+
+      // Corretta la password l'errore sparisce e la registrazione va a buon fine.
+      await tester.enterText(
+        field,
+        DemoRegistrationRepository.direttivoPassword,
+      );
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: field,
+          matching: find.text('Password del Direttivo non corretta'),
+        ),
+        findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Completa la registrazione'));
+      await tester.pumpAndSettle();
+      expect(repo.last?.direttivo, isTrue);
+      expect(find.text('Ho letto e accetto'), findsOneWidget);
+    },
+  );
+
+  test('troppi tentativi con la password: stesso trattamento della password errata', () {
+    expect(
+      isDirettivoPasswordError(
+        const RegistrationError('Password del Direttivo non corretta'),
+      ),
+      isTrue,
+    );
+    expect(
+      isDirettivoPasswordError(
+        const PostgrestException(
+          message: 'Troppi tentativi con la password del Direttivo: riprova tra 15 minuti',
+          code: 'P0001',
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      isDirettivoPasswordError(
+        const PostgrestException(message: 'Nome non valido', code: 'P0001'),
+      ),
+      isFalse,
+    );
+  });
+
+  testWidgets(
+    'Profilo non caricato: errore con Riprova, non la rotella infinita',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      var offline = true;
+      final container = ProviderContainer(
+        overrides: [
+          profileProvider.overrideWith(
+            (ref) => offline
+                ? Stream<Profile?>.error(
+                    Exception('SocketException: Failed host lookup'),
+                  )
+                : Stream.value(Profile.demo),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(introDoneProvider.notifier).complete();
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MilanacApp(),
+        ),
+      );
+      container.read(routerProvider).go('/registrazione');
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        find.text('Nessuna connessione: controlla la rete e riprova.'),
+        findsOneWidget,
+      );
+      expect(find.text('PASSO 1 DI 3 · CHI SEI'), findsNothing);
+
+      offline = false;
+      await tester.tap(find.text('Riprova'));
+      await tester.pumpAndSettle();
+      expect(find.text('PASSO 1 DI 3 · CHI SEI'), findsOneWidget);
+    },
+  );
 }

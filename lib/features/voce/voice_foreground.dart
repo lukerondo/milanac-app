@@ -1,0 +1,64 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/config.dart';
+
+/// Avviso fisso "Sei nella stanza vocale di #canale" finché si è dentro.
+///
+/// Su Android è un servizio in primo piano di tipo microfono (VoiceRoomService in
+/// MainActivity.kt): senza, con l'app in background o lo schermo spento il
+/// microfono registra solo silenzio. Su iOS basta la modalità "audio" in background
+/// (Info.plist); sul web, nella demo e nei test non fa niente.
+abstract class VoiceForeground {
+  /// Avvia (o aggiorna) l'avviso; false se adesso il telefono non lo permette
+  /// (per esempio app già in background): si riprova al ritorno nell'app.
+  Future<bool> start(String channelName);
+
+  Future<void> stop();
+}
+
+final voiceForegroundProvider = Provider<VoiceForeground>(
+  (ref) =>
+      !kIsWeb &&
+          !AppConfig.isDemo &&
+          defaultTargetPlatform == TargetPlatform.android
+      ? const AndroidVoiceForeground()
+      : const NoVoiceForeground(),
+);
+
+class AndroidVoiceForeground implements VoiceForeground {
+  const AndroidVoiceForeground();
+
+  static const _channel = MethodChannel('milanac/stanza_vocale');
+
+  @override
+  Future<bool> start(String channelName) async {
+    try {
+      return await _channel.invokeMethod<bool>('start', {
+            'title': 'Sei nella stanza vocale di #$channelName',
+            'text': 'Tocca per tornare nell\'app',
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> stop() async {
+    try {
+      await _channel.invokeMethod<void>('stop');
+    } catch (_) {}
+  }
+}
+
+class NoVoiceForeground implements VoiceForeground {
+  const NoVoiceForeground();
+
+  @override
+  Future<bool> start(String channelName) async => true;
+
+  @override
+  Future<void> stop() async {}
+}

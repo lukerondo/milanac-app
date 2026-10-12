@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -17,8 +18,9 @@ void main() {
     String path, {
     required RulesRepository rules,
     Profile? profile,
+    Size screen = const Size(360, 780),
   }) async {
-    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.physicalSize = screen * 3;
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
@@ -127,4 +129,170 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
   });
+
+  /// Club con un regolamento di un solo articolo, già pubblicato (versione 1).
+  Future<DemoRulesRepository> shortRules({bool slow = false}) async {
+    final repo = slow ? _SlowRules() : DemoRulesRepository.unpublished();
+    await repo.saveArticle(
+      const RulesArticle(
+        sortOrder: 0,
+        title: 'Art. 1 – Ingresso',
+        body: 'Rispetto e puntualità.',
+      ),
+    );
+    await repo.publish();
+    return repo;
+  }
+
+  ButtonStyleButton acceptButton(WidgetTester tester) => tester.widget(
+    find.ancestor(
+      of: find.text('Ho letto e accetto'),
+      matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+    ),
+  );
+
+  // Tablet in verticale: il regolamento corto sta tutto nello schermo.
+  const tablet = Size(800, 1280);
+
+  testWidgets('Regolamento corto: si accetta senza dover scorrere', (
+    tester,
+  ) async {
+    // Rete lenta: la pagina parte con la rotella, poi arriva il testo.
+    await startAt(
+      tester,
+      '/regolamento/accetta',
+      rules: await shortRules(slow: true),
+      screen: tablet,
+    );
+    expect(find.text('ART. 1 – INGRESSO'), findsOneWidget);
+    expect(
+      find.text('Scorri fino in fondo per poter accettare.'),
+      findsNothing,
+    );
+    expect(acceptButton(tester).onPressed, isNotNull);
+  });
+
+  testWidgets(
+    'Regolamento comparso dopo un ricaricamento: il pulsante si abilita lo stesso',
+    (tester) async {
+      final repo = DemoRulesRepository.unpublished();
+      await startAt(
+        tester,
+        '/regolamento/accetta',
+        rules: repo,
+        screen: tablet,
+      );
+      expect(find.text('REGOLAMENTO NON ANCORA PUBBLICATO'), findsOneWidget);
+
+      // Nel frattempo un altro del Direttivo lo pubblica: l'ingresso senza regolamento
+      // viene rifiutato e la pagina mostra quello appena uscito.
+      await repo.saveArticle(
+        const RulesArticle(
+          sortOrder: 0,
+          title: 'Art. 1 – Ingresso',
+          body: 'Rispetto e puntualità.',
+        ),
+      );
+      await repo.publish();
+      await tester.tap(find.text('Entra e scrivilo'));
+      await tester.pumpAndSettle();
+      expect(find.text('C\'è un regolamento da accettare'), findsOneWidget);
+      expect(find.text('ART. 1 – INGRESSO'), findsOneWidget);
+      expect(acceptButton(tester).onPressed, isNotNull);
+    },
+  );
+
+  testWidgets(
+    'Nuova versione uscita mentre si legge: si carica e si accetta quella',
+    (tester) async {
+      final repo = await shortRules();
+      await startAt(
+        tester,
+        '/regolamento/accetta',
+        rules: repo,
+        screen: tablet,
+      );
+      expect(find.textContaining('Versione 1'), findsOneWidget);
+
+      // Il Direttivo pubblica la versione 2 mentre il membro legge la 1.
+      await repo.saveArticle(
+        const RulesArticle(
+          sortOrder: 1,
+          title: 'Art. 2 – Novità',
+          body: 'Le amichevoli si giocano il martedì.',
+        ),
+      );
+      await repo.publish();
+      await tester.pump(const Duration(minutes: 2));
+      await tester.tap(find.text('Ho letto e accetto'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'È uscita una nuova versione del regolamento: leggila e accetta.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Versione 2'), findsOneWidget);
+      expect(find.text('ART. 2 – NOVITÀ'), findsOneWidget);
+      // L'avviso copre il pulsante finché non sparisce.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      // La nuova versione si legge da capo: di nuovo il tempo minimo.
+      await tester.tap(find.text('Ho letto e accetto'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Servono 2 minuti di lettura'),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(minutes: 2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ho letto e accetto'));
+      await tester.pumpAndSettle();
+      expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Il tempo di lettura non scorre con l\'app in background', (
+    tester,
+  ) async {
+    Future<void> lifecycle(AppLifecycleState state) =>
+        tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+          SystemChannels.lifecycle.name,
+          SystemChannels.lifecycle.codec.encodeMessage(state.toString()),
+          (_) {},
+        );
+
+    await startAt(
+      tester,
+      '/regolamento/accetta',
+      rules: await shortRules(),
+      screen: tablet,
+    );
+    await lifecycle(AppLifecycleState.paused);
+    await tester.pump(const Duration(minutes: 5));
+    await lifecycle(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ho letto e accetto'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Servono 2 minuti di lettura'), findsOneWidget);
+
+    // In primo piano invece conta.
+    await tester.pump(const Duration(minutes: 2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ho letto e accetto'));
+    await tester.pumpAndSettle();
+    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+  });
+}
+
+/// Il regolamento arriva con qualche secondo di ritardo (rete lenta).
+class _SlowRules extends DemoRulesRepository {
+  _SlowRules() : super.unpublished();
+
+  @override
+  Future<RulesVersion?> latest() async {
+    await Future<void>.delayed(const Duration(seconds: 3));
+    return super.latest();
+  }
 }

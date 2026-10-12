@@ -1293,3 +1293,22 @@ do $$ begin
     'niente "letto" sui canali che non si vedono';
 end $$;
 reset role;
+
+-- ================================================================ preferenze notifiche (0024)
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+update profiles set notify_prefs = '{"chat": false}' where id = '00000000-0000-0000-0000-0000000000e1';
+do $$ begin
+  assert (select notify_prefs->>'chat' from profiles where id = '00000000-0000-0000-0000-0000000000e1') = 'false',
+    'ognuno sceglie le proprie notifiche';
+end $$;
+select pg_temp.expect_error(
+  $q$update profiles set notify_prefs = '[]' where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'notify_prefs');
+-- Le preferenze degli altri non si toccano.
+update profiles set notify_prefs = '{"chat": false}' where id = '00000000-0000-0000-0000-0000000000e2';
+reset role;
+do $$ begin
+  assert (select notify_prefs from profiles where id = '00000000-0000-0000-0000-0000000000e2') = '{}'::jsonb,
+    'preferenze altrui invariate';
+end $$;

@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- Stanza vocale con l'app in background o lo schermo spento: servizio in primo
+         piano di tipo microfono (VoiceRoomService), altrimenti il microfono tace. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <!-- Agora li chiede per video e chiamate telefoniche: la stanza vocale non li usa. -->
     <uses-permission android:name="android.permission.CAMERA" tools:node="remove"/>
     <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove"/>
@@ -43,6 +47,13 @@
                 <data android:scheme="com.milanacproclub.milanac" android:host="login-callback"/>
             </intent-filter>
         </activity>
+        <!-- Notifica fissa "Sei nella stanza vocale": tiene vivo il microfono in
+             background; chiudendo l'app dalle recenti si ferma con lei. -->
+        <service
+            android:name=".VoiceRoomService"
+            android:exported="false"
+            android:stopWithTask="true"
+            android:foregroundServiceType="microphone"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

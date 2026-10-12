@@ -143,8 +143,8 @@ in una stanza, dice che la voce non è ancora attiva.
    In alternativa al passo 3, i due codici si possono incollare direttamente nel modulo
    *Run workflow* (campi *App ID di Agora* e *App Certificate di Agora*): finiscono solo tra i
    segreti delle funzioni su Supabase e non compaiono nel log.
-L'App Certificate non sta mai nell'app: i biglietti d'ingresso (token validi 3 ore) li firma la
-funzione `voice-token` solo per chi ha accesso al canale. Per controllare: `select jobname from
+L'App Certificate non sta mai nell'app: i biglietti d'ingresso (token validi un'ora, rinnovati
+dall'app) li firma la funzione `voice-token` solo per chi è entrato nella stanza. Per controllare: `select jobname from
 cron.job;` deve mostrare anche `stanze-vocali` (chiude le stanze abbandonate) e
 `select * from voice_rooms where closed_at is null;` elenca le stanze aperte adesso.
 Sul telefono l'app chiede il permesso del microfono la prima volta che si entra.

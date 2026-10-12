@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/clock.dart';
+import '../../core/errors.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import 'club_event.dart';
@@ -76,10 +79,25 @@ Future<void> showEventDetails(
               children: [
                 TextButton.icon(
                   onPressed: () async {
+                    final repository = ref.read(eventsRepositoryProvider);
+                    final messenger = ScaffoldMessenger.of(context);
                     final ok = await _confirmDelete(context);
                     if (ok != true) return;
-                    await ref.read(eventsRepositoryProvider).delete(e.id);
-                    if (sheet.mounted) Navigator.of(sheet).pop();
+                    try {
+                      await repository.delete(e.id);
+                      if (sheet.mounted) Navigator.of(sheet).pop();
+                    } catch (err) {
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            friendlyError(
+                              err,
+                              action: 'Eliminazione non riuscita',
+                            ),
+                          ),
+                        ),
+                      );
+                    }
                   },
                   icon: const Icon(Icons.delete_outline_rounded),
                   label: const Text('Elimina'),
@@ -147,10 +165,19 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
   late final _description = TextEditingController(
     text: widget.event?.description,
   );
-  late DateTime _date = widget.event?.startsAt ?? widget.day ?? DateTime.now();
+
+  /// Oggi in Italia: data e ora dell'evento sono in ora italiana, come lo vedono tutti.
+  late final DateTime _today = italianDay(ref.read(clockProvider)());
+  late DateTime _date = clampToCalendar(
+    widget.event?.startsAt ?? widget.day ?? _today,
+    _today,
+  );
   late TimeOfDay _time = widget.event == null
       ? const TimeOfDay(hour: 21, minute: 30)
-      : TimeOfDay.fromDateTime(widget.event!.startsAt);
+      : TimeOfDay(
+          hour: widget.event!.startsAt.hour,
+          minute: widget.event!.startsAt.minute,
+        );
   bool _saving = false;
 
   @override
@@ -172,7 +199,8 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
       id: widget.event?.id ?? '',
       type: _type,
       title: _title.text.trim(),
-      startsAt: DateTime(
+      // Ora italiana (vedi ClubEvent.startsAt).
+      startsAt: DateTime.utc(
         _date.year,
         _date.month,
         _date.day,
@@ -192,7 +220,11 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Salvataggio non riuscito: $err')),
+          SnackBar(
+            content: Text(
+              friendlyError(err, action: 'Salvataggio non riuscito'),
+            ),
+          ),
         );
       }
     }
@@ -267,11 +299,12 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
                       DateFormat('EEE d MMM yyyy', 'it').format(_date),
                     ),
                     onTap: () async {
+                      // Gli stessi limiti del calendario e delle presenze.
                       final d = await showDatePicker(
                         context: context,
                         initialDate: _date,
-                        firstDate: DateTime(2024),
-                        lastDate: DateTime(DateTime.now().year + 3),
+                        firstDate: calendarFirstDay,
+                        lastDate: calendarLastDay(_today),
                       );
                       if (d != null) setState(() => _date = d);
                     },
@@ -286,6 +319,7 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
                       final t = await showTimePicker(
                         context: context,
                         initialTime: _time,
+                        helpText: 'Inizio (ora italiana)',
                       );
                       if (t != null) setState(() => _time = t);
                     },

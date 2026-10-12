@@ -96,6 +96,11 @@ class VoiceException implements Exception {
   String toString() => message;
 }
 
+/// Il server ci ha fatto uscire dalla stanza (3 minuti senza segni di vita): lo dicono
+/// il segno di vita (false) e la funzione `voice-token` (409).
+const voiceLeftMessage =
+    'Sei uscito dalla stanza (nessun segnale per qualche minuto): rientra.';
+
 /// Numero utente Agora ricavato dall'id del profilo: sempre lo stesso per la
 /// stessa persona, così la stanza sa subito chi sta parlando. Lo stesso calcolo
 /// sta nella funzione `voice-token` (il biglietto vale solo per questo numero) e

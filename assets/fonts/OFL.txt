@@ -4,6 +4,9 @@ Font inclusi nell'app, tutti con licenza SIL Open Font License, Version 1.1
 Oswald
 Copyright 2016 The Oswald Project Authors (https://github.com/googlefonts/OswaldFont)
 
+Barlow
+Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
+
 Cormorant Garamond
 Copyright 2015 The Cormorant Project Authors (https://github.com/CatharsisFonts/Cormorant)
 

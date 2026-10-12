@@ -10,7 +10,7 @@ import 'helpers.dart';
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
-  testWidgets('demo: intro, poi Home, Mondo Proclub e menu laterale', (
+  testWidgets('demo: intro, poi Home, Mondo Proclub e schede in basso', (
     tester,
   ) async {
     // Schermo di uno smartphone (1080x2340).
@@ -36,34 +36,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Leggi la notizia'), findsWidgets);
 
-    // Il menu è a gruppi; la Sala Direttivo c'è perché la demo è Direttivo.
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    expect(find.text('SQUADRA'), findsOneWidget);
+    // Cinque schede in basso; nel Club c'è la Sala Direttivo perché la demo è Direttivo.
+    expect(find.byType(NavigationBar), findsOneWidget);
+    await goToSection(tester, 'Club');
     expect(find.text('CLUB'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Sala Direttivo'),
-      100,
-      scrollable: find.descendant(
-        of: find.byType(Drawer),
-        matching: find.byType(Scrollable),
-      ),
+      150,
+      scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Sala Direttivo'), findsOneWidget);
-    expect(find.text('Demo Direttivo'), findsOneWidget);
-    expect(find.text('Direttivo · Capitano, Gestore'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.descendant(of: find.byType(Drawer), matching: find.text('Chat')),
-      -100,
-      scrollable: find.descendant(
-        of: find.byType(Drawer),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Chat'));
-    await tester.pumpAndSettle();
+    await goToSection(tester, 'Chat');
     expect(find.text('CHAT'), findsOneWidget);
+    // Indietro da un'altra scheda riporta alla Home.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
   });
 
   test('intro state parte da false', () {

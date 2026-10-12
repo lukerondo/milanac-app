@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
-import 'carte_speciali_test.dart' show openSection;
+import 'helpers.dart';
+
 import 'home_test.dart';
 
 void main() {
@@ -12,7 +13,7 @@ void main() {
     tester,
   ) async {
     await startAppAt(tester, todayAt(17));
-    await openSection(tester, 'Rosa completa');
+    await goToSection(tester, 'Rosa completa');
 
     // Vista predefinita: le mini carte di tutti (ordinate per overall).
     expect(find.text('MARCO ROSSI'), findsOneWidget);

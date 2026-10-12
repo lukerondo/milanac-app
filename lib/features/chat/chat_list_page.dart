@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../voce/voice_repository.dart';
 import 'chat_repository.dart';
 
@@ -17,9 +18,10 @@ class ChatListPage extends ConsumerWidget {
     final overview = ref.watch(chatOverviewProvider).value ?? const {};
     final muted = ref.watch(mutedChannelsProvider).value ?? const {};
 
-    return channels.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Errore: $e')),
+    return AsyncView<List<Channel>>(
+      value: channels,
+      onRetry: () => ref.invalidate(channelsProvider),
+      action: 'Canali non caricati',
       data: (list) => ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: list.length,

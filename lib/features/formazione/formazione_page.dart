@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,8 +7,12 @@ import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
+import '../../core/clock.dart';
+import '../../core/errors.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
@@ -55,30 +61,106 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
     return mine.contains(Team.milanac) ? Team.milanac : Team.futuro;
   }();
 
-  Future<void> _update(Formation f) async {
-    final previous = _draft;
-    setState(() => _draft = f);
-    try {
-      final saved = await ref.read(formationRepositoryProvider).save(f);
-      if (mounted) setState(() => _draft = saved);
-      ref.invalidate(formationProvider);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _draft = previous);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+  /// Salvataggi in coda: uno alla volta, nell'ordine delle modifiche.
+  Future<void> _saves = Future.value();
+
+  /// Salvataggi non ancora finiti: intanto "Pubblica" aspetta.
+  var _pendingSaves = 0;
+  var _publishing = false;
+
+  /// Ultima formazione salvata davvero, per squadra: ci si torna se un salvataggio non
+  /// riesce, e il suo id serve alle modifiche fatte mentre la formazione nasceva.
+  final _lastSaved = <Team, Formation>{};
+
+  late final AppLifecycleListener _lifecycle;
+  Timer? _refresh;
+
+  @override
+  void initState() {
+    super.initState();
+    // La formazione la pubblica il Direttivo da un altro telefono: si rilegge quando l'app
+    // torna in primo piano e, per chi la guarda, ogni minuto (anche se la notifica arriva
+    // con la pagina già aperta).
+    _lifecycle = AppLifecycleListener(onResume: _reload);
+    if (!widget.editable) {
+      _refresh = Timer.periodic(const Duration(minutes: 1), (_) => _reload());
     }
   }
 
-  Future<void> _publish(Formation f) async {
+  /// La scheda Partite resta viva quando si passa a un'altra scheda: tornando a vederla
+  /// (anche aprendo la notifica della formazione) si rilegge.
+  bool _visible = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = TickerMode.valuesOf(context).enabled;
+    if (visible && !_visible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
+    }
+    _visible = visible;
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    _refresh?.cancel();
+    super.dispose();
+  }
+
+  void _reload() {
+    if (!mounted) return;
+    // Senza salvataggi in corso la bozza locale lascia il posto a quella del server.
+    if (_draft != null && _pendingSaves == 0 && !_publishing) {
+      setState(() => _draft = null);
+    }
+    ref.invalidate(formationProvider);
+  }
+
+  /// Mostra subito la modifica e la salva. I salvataggi vanno uno alla volta, nell'ordine
+  /// delle modifiche: ognuno salva la formazione intera, quindi vince l'ultima.
+  Future<void> _update(Formation f) {
+    final repository = ref.read(formationRepositoryProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _draft = f;
+      _pendingSaves++;
+    });
+    return _saves = _saves.then((_) async {
+      try {
+        final id = f.id.isNotEmpty ? f.id : _lastSaved[f.team]?.id ?? '';
+        final saved = await repository.save(f.copyWith(id: id));
+        _lastSaved[f.team] = saved;
+        if (mounted && identical(_draft, f)) setState(() => _draft = saved);
+      } catch (e) {
+        // Si torna all'ultima salvata (null = quella letta dal server).
+        if (mounted && identical(_draft, f)) {
+          setState(() => _draft = _lastSaved[f.team]);
+        }
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+          ),
+        );
+      } finally {
+        _pendingSaves--;
+        if (mounted) setState(() {});
+        if (_pendingSaves == 0) container.invalidate(formationProvider);
+      }
+    });
+  }
+
+  Future<void> _publish(Team team) async {
+    final repository = ref.read(formationRepositoryProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Pubblicare la formazione?'),
         content: Text(
-          'Ogni giocatore di ${f.team.label} riceverà una notifica: '
+          'Ogni giocatore di ${team.label} riceverà una notifica: '
           'titolare (con il suo ruolo) o panchina.',
         ),
         actions: [
@@ -93,12 +175,23 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
+    setState(() => _publishing = true);
     try {
-      final published = await ref.read(formationRepositoryProvider).publish(f);
+      // Si pubblica quello che è davvero salvato: prima finiscono i salvataggi in corso
+      // (le notifiche leggono i posti dal database).
+      await _saves;
+      final draft = _draft;
+      final f = draft != null && draft.team == team
+          ? draft
+          : _lastSaved[team] ??
+                (mounted ? ref.read(formationProvider(team)).value : null);
+      if (f == null) return;
+      final published = await repository.publish(f);
       HapticFeedback.heavyImpact();
-      if (mounted) setState(() => _draft = published);
-      ref.invalidate(formationProvider);
+      _lastSaved[team] = published;
+      if (mounted && _team == team) setState(() => _draft = published);
+      container.invalidate(formationProvider);
       messenger.showSnackBar(
         const SnackBar(
           content: Text(
@@ -108,9 +201,26 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Pubblicazione non riuscita: $e')),
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Pubblicazione non riuscita')),
+        ),
       );
+    } finally {
+      if (mounted) setState(() => _publishing = false);
     }
+  }
+
+  /// Trascinando in giù si rilegge la formazione (senza rete la pagina lo segnala
+  /// e continua a riprovare da sola).
+  Future<void> _pullToRefresh() async {
+    if (_draft != null && _pendingSaves == 0 && !_publishing) {
+      setState(() => _draft = null);
+    }
+    try {
+      await ref
+          .refresh(formationProvider(_team).future)
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
   }
 
   @override
@@ -119,23 +229,49 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
     final canEdit = widget.editable && isDirettivo;
     final saved = ref.watch(formationProvider(_team));
     final rosa = ref.watch(rosaProvider);
+    final today = italianDay(ref.watch(clockProvider)());
 
-    if (saved.isLoading || rosa.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (saved.hasError || rosa.hasError) {
-      return Center(
-        child: Text('Errore nel caricamento: ${saved.error ?? rosa.error}'),
-      );
+    void retry() {
+      ref.invalidate(formationProvider(_team));
+      ref.invalidate(rosaProvider);
     }
 
+    return RefreshIndicator(
+      onRefresh: _pullToRefresh,
+      child: AsyncView(
+        value: saved,
+        onRetry: retry,
+        data: (savedFormation) => AsyncView(
+          value: rosa,
+          onRetry: retry,
+          data: (all) => _board(
+            canEdit: canEdit,
+            isDirettivo: isDirettivo,
+            savedFormation: savedFormation,
+            all: all,
+            today: today,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _board({
+    required bool canEdit,
+    required bool isDirettivo,
+    required Formation savedFormation,
+    required List<Member> all,
+    required DateTime today,
+  }) {
     final draft = _draft;
-    final current = draft != null && draft.team == _team ? draft : saved.value!;
+    final current = draft != null && draft.team == _team
+        ? draft
+        : savedFormation;
     // I giocatori vedono la versione pubblicata, il Direttivo (in sala) la bozza.
     final formation = canEdit ? current : current.publishedView;
     // Tutti i membri (per mostrare chi è già schierato) e quelli della squadra (per le scelte).
     final allMembers = {
-      for (final m in rosa.value!)
+      for (final m in all)
         if (m.active && m.role != ClubRole.pending) m.id: m,
     };
     final members = {
@@ -149,6 +285,8 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
           ..sort((a, b) => a.displayName.compareTo(b.displayName));
 
     return ListView(
+      // Si trascina in giù per rileggere anche quando la pagina è quasi vuota.
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 32),
       children: [
         SegmentedButton<Team>(
@@ -164,7 +302,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
           }),
         ),
         const SizedBox(height: 10),
-        _PublishStatus(formation: current, forPlayers: !canEdit),
+        _PublishStatus(formation: current, today: today, forPlayers: !canEdit),
         if (!canEdit && !current.isPublished) ...[
           const SizedBox(height: 40),
           const Icon(
@@ -291,11 +429,23 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
               ),
             ),
             const SizedBox(height: 10),
+            // Si pubblica solo a salvataggio finito: le notifiche leggono i posti salvati.
             FilledButton.icon(
-              onPressed: () => _publish(formation),
-              icon: const Icon(Icons.campaign_rounded),
+              onPressed: _pendingSaves > 0 || _publishing
+                  ? null
+                  : () => _publish(formation.team),
+              icon: _pendingSaves > 0 || _publishing
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.campaign_rounded),
               label: Text(
-                formation.isPublished && !formation.hasUnpublishedChanges
+                _pendingSaves > 0
+                    ? 'Salvataggio in corso…'
+                    : _publishing
+                    ? 'Pubblicazione in corso…'
+                    : formation.isPublished && !formation.hasUnpublishedChanges
                     ? 'Ripubblica e avvisa i giocatori'
                     : 'Pubblica la formazione di stasera',
               ),
@@ -504,8 +654,15 @@ class _PlayerToken extends StatelessWidget {
 
 /// Stato della formazione: bozza, pubblicata, oppure modificata dopo la pubblicazione.
 class _PublishStatus extends StatelessWidget {
-  const _PublishStatus({required this.formation, this.forPlayers = false});
+  const _PublishStatus({
+    required this.formation,
+    required this.today,
+    this.forPlayers = false,
+  });
   final Formation formation;
+
+  /// Oggi in Italia.
+  final DateTime today;
 
   /// Vista dei giocatori: niente "bozza" o "modificata", solo quando è stata pubblicata.
   final bool forPlayers;
@@ -513,7 +670,11 @@ class _PublishStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (forPlayers && !formation.isPublished) return const SizedBox.shrink();
-    final (icon, color, text) = !formation.isPublished
+    // Giorno e ora della pubblicazione in ora italiana.
+    final published = formation.publishedAt == null
+        ? null
+        : italianClock(formation.publishedAt!);
+    final (icon, color, text) = published == null
         ? (
             Icons.edit_note_rounded,
             Colors.white54,
@@ -528,8 +689,8 @@ class _PublishStatus extends StatelessWidget {
         : (
             Icons.verified_rounded,
             const Color(0xFF2E9E5B),
-            'Pubblicata ${formation.isPublishedToday ? 'oggi' : 'il ${DateFormat('d MMM', 'it').format(formation.publishedAt!.toLocal())}'}'
-                ' alle ${DateFormat('HH:mm').format(formation.publishedAt!.toLocal())}',
+            'Pubblicata ${formation.isPublishedOn(today) ? 'oggi' : 'il ${DateFormat('d MMM', 'it').format(published)}'}'
+                ' alle ${DateFormat('HH:mm').format(published)}',
           );
     return Row(
       children: [

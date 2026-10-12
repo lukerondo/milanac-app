@@ -1,4 +1,6 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
@@ -104,9 +106,18 @@ final latestRulesProvider = FutureProvider<RulesVersion?>((ref) {
   // Il router lo legge già all'avvio, prima del login, quando le policy non mostrano
   // nessuna versione: si ricarica a ogni cambio di utente, così dopo l'accesso non resta
   // in memoria un "nessun regolamento" che non c'è.
-  ref.watch(sessionProvider.select((s) => s.value?.user.id));
+  ref.watch(currentUserIdProvider);
+  // Le versioni non arrivano in tempo reale: una pubblicata mentre l'app era in
+  // background si scopre al ritorno in primo piano (e all'apertura del Regolamento).
+  final lifecycle = AppLifecycleListener(onResume: ref.invalidateSelf);
+  ref.onDispose(lifecycle.dispose);
   return ref.watch(rulesRepositoryProvider).latest();
 });
+
+/// Risposta di `accept_rules` quando nel frattempo è uscita un'altra versione.
+bool isOutdatedRulesError(Object e) =>
+    e is PostgrestException &&
+    e.message.contains('Versione del regolamento non aggiornata');
 
 final rulesDraftProvider = FutureProvider<List<RulesArticle>>(
   (ref) => ref.watch(rulesRepositoryProvider).draft(),
@@ -258,8 +269,16 @@ class DemoRulesRepository implements RulesRepository {
           publishedAt: DateTime(2026, 9, 1),
         );
 
+  /// Come `enter_club`: solo finché non c'è una versione pubblicata.
   @override
-  Future<void> enter() async {}
+  Future<void> enter() async {
+    if (_version != 0) {
+      throw const PostgrestException(
+        message: 'C\'è un regolamento da accettare',
+        code: 'P0001',
+      );
+    }
+  }
 
   @override
   Future<List<RulesArticle>> draft() async => List.of(_draft);
@@ -300,6 +319,14 @@ class DemoRulesRepository implements RulesRepository {
     return ++_version;
   }
 
+  /// Come `accept_rules`: solo l'ultima versione pubblicata.
   @override
-  Future<void> accept(int version) async {}
+  Future<void> accept(int version) async {
+    if (version != _version) {
+      throw const PostgrestException(
+        message: 'Versione del regolamento non aggiornata',
+        code: 'P0001',
+      );
+    }
+  }
 }

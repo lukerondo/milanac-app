@@ -69,8 +69,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         await auth.signInWithEmail(_email.text, _password.text);
       } else {
         final result = await auth.signUpWithEmail(_email.text, _password.text);
-        if (result == EmailSignUpResult.needsConfirmation && mounted) {
-          setState(() => _sentTo = _email.text.trim());
+        if (!mounted) return;
+        switch (result) {
+          case EmailSignUpResult.needsConfirmation:
+            setState(() => _sentTo = _email.text.trim());
+          case EmailSignUpResult.alreadyRegistered:
+            // Nessuna email inviata: si passa all'accesso (con "Password dimenticata?").
+            setState(() => _mode = _EmailMode.signIn);
+            _toast(alreadyRegisteredText);
+          case EmailSignUpResult.signedIn:
+          // Conferma dell'email disattivata: si entra subito, prosegue il router.
         }
       }
     } catch (e) {

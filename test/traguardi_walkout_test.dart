@@ -66,6 +66,7 @@ void main() {
     await tester.tap(find.text('Carte'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('MARCO ROSSI'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('MARCO ROSSI'));
     await tester.pumpAndSettle();
 
