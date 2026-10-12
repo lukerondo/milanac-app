@@ -210,7 +210,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
-            routes: [_section('/chat', (_) => const ChatListPage())],
+            routes: [
+              _section(
+                '/chat',
+                (_) => const ChatListPage(),
+                actions: const [ChatSearchButton()],
+              ),
+            ],
           ),
           StatefulShellBranch(
             routes: [
