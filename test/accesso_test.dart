@@ -7,7 +7,7 @@ import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/core/auth/providers.dart';
 import 'package:milanac/core/router.dart';
 import 'package:milanac/core/theme.dart';
-import 'package:milanac/features/auth/offline_page.dart';
+import 'package:milanac/shared/offline_page.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -186,12 +186,13 @@ void main() {
       ),
     );
     await tester.pump();
+    expect(find.text('NESSUNA CONNESSIONE'), findsOneWidget);
     expect(
-      find.text('Nessuna connessione: controlla la rete e riprova.'),
+      find.textContaining('Non riusciamo a raggiungere il club'),
       findsOneWidget,
     );
     final before = loads;
-    await tester.tap(find.text('Riprova'));
+    await tester.tap(find.text('Riprova adesso'));
     await tester.pump();
     expect(loads, before + 1);
   });

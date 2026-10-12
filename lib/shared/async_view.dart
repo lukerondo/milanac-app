@@ -44,7 +44,9 @@ class AsyncView<T> extends StatelessWidget {
         ],
       );
     }
-    if (v.hasError && !v.isLoading) {
+    // Con i nuovi tentativi automatici lo stato resta "in caricamento" insieme
+    // all'errore: si mostra comunque l'errore con Riprova, non uno spinner infinito.
+    if (v.hasError && (!v.isLoading || v.retrying)) {
       return ErrorRetry(
         message: friendlyError(v.error!, action: action),
         onRetry: onRetry,
