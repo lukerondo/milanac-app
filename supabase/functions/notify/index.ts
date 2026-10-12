@@ -4,7 +4,8 @@
 // Eventi gestiti:
 //   { kind: "formation", id }               → ai membri della squadra: titolare (con ruolo) o panchina
 //   { kind: "chat_message", id }            → ai membri del canale, escluso l'autore e chi l'ha silenziato
-//                                             (un replay della lavagna: "Nuovo schema con audio")
+//                                             (un replay della lavagna: "Nuovo schema con audio";
+//                                             nella Sala Direttivo anche l'avviso di un nuovo ingresso)
 //   { kind: "match_result", id }            → ai giocatori della squadra: risultato e marcatori
 //   { kind: "rules", version }              → a tutti i membri: nuova versione del regolamento da accettare
 //   { kind: "event", id }                   → alla squadra (o a tutti): nuovo appuntamento in calendario
@@ -25,7 +26,15 @@
 
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 
-type Push = { userId: string; title: string; body: string; route: string; data?: Record<string, string> };
+type Push = {
+  userId: string;
+  title: string;
+  body: string;
+  route: string;
+  data?: Record<string, string>;
+  /// Arriva anche a chi ha spento la categoria (avvisi del Direttivo, nuovi ingressi).
+  always?: boolean;
+};
 
 Deno.serve(async (req) => {
   if (req.headers.get("x-milanac-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
@@ -75,12 +84,13 @@ const CATEGORY: Record<string, string> = {
 
 /// Toglie chi ha spento questa categoria (profiles.notify_prefs: { presenze|chat|notizie: false }).
 async function withoutMuted(db: SupabaseClient, pushes: Push[], category: string): Promise<Push[]> {
-  const ids = [...new Set(pushes.map((p) => p.userId))];
+  const ids = [...new Set(pushes.filter((p) => !p.always).map((p) => p.userId))];
+  if (ids.length === 0) return pushes;
   const { data } = await db.from("profiles").select("id, notify_prefs").in("id", ids);
   const off = new Set(
     (data ?? []).filter((r) => r.notify_prefs?.[category] === false).map((r) => r.id),
   );
-  return pushes.filter((p) => !off.has(p.userId));
+  return pushes.filter((p) => p.always || !off.has(p.userId));
 }
 
 const TEAM_NAMES: Record<string, string> = { milanac: "Milan AC", futuro: "Milan AC Futuro" };
@@ -131,7 +141,7 @@ async function formationPushes(db: SupabaseClient, formationId: string): Promise
       userId: m.id,
       title: `📋 ${teamName}: formazione pubblicata`,
       body: role ? `Sei titolare: ${role}. Forza ${teamName}!` : "Parti dalla panchina: tieniti pronto!",
-      route: "/formazione",
+      route: `/formazione?squadra=${team}`,
       data: { team },
     };
   });
@@ -294,6 +304,9 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
   const { data: mutes } = await db
     .from("channel_mutes").select("user_id").eq("channel_id", msg.channel_id);
   const muted = new Set((mutes ?? []).map((m) => m.user_id));
+  // Gli avvisi ufficiali arrivano anche a chi ha spento le notifiche della chat
+  // (il silenzio esplicito del singolo canale invece vale sempre).
+  const official = msg.meta?.type === "announcement" || msg.meta?.type === "new_member";
   const text = msg.meta?.type === "replay"
     ? `🎬 Nuovo schema con audio${msg.meta?.title ? `: ${msg.meta.title}` : ""}`
     : msg.body?.trim() || (msg.image_path ? "📷 Foto" : msg.audio_path ? "🎤 Messaggio vocale" : "");
@@ -308,6 +321,7 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
       body: text.length > 140 ? text.slice(0, 137) + "…" : text,
       route: `/chat/${channel?.slug ?? ""}`,
       data: { channel: channel?.slug ?? "" },
+      always: official,
     }));
 }
 

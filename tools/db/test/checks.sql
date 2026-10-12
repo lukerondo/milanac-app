@@ -341,7 +341,7 @@ end $$;
 -- Profilo: ognuno aggiorna i propri dati e carica la foto solo nella propria cartella.
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
-update profiles set birth_date = '1998-05-12', city = 'Milano', nationality = 'IT',
+update profiles set city = 'Milano', nationality = 'IT',
   preferred_foot = 'sinistro', avatar_path = '00000000-0000-0000-0000-0000000000e1/foto.jpg'
   where id = '00000000-0000-0000-0000-0000000000e1';
 insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-0000000000e1/foto.jpg');
@@ -792,8 +792,8 @@ do $$ begin
   assert match_number('00000000-0000-0000-0000-0000000000b3') between 1 and 3, 'numero della giornata';
   assert (select count(*) from net.calls where body->>'kind' = 'special_card') = 4,
     'un avviso per ogni carta ricevuta (blu Rossi, nero/oro e1 ed e2, blu portiere)';
-  assert (select count(*) from net.calls where body->>'kind' = 'special_cards_week') = 2,
-    'un avviso alla squadra per ogni assegnazione';
+  assert (select count(*) from net.calls where body->>'kind' = 'special_cards_week') = 1,
+    'avviso alla squadra solo quando arrivano carte nuove (non per un bonus corretto)';
   assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 0,
     'l''annuncio delle carte non manda l''avviso generico della chat';
   assert (select count(*) from net.calls where body->>'kind' = 'match_result') = 4, 'una notifica per ogni risultato';
@@ -1311,4 +1311,232 @@ reset role;
 do $$ begin
   assert (select notify_prefs from profiles where id = '00000000-0000-0000-0000-0000000000e2') = '{}'::jsonb,
     'preferenze altrui invariate';
+end $$;
+
+-- ================================================================ rifiniture (0025)
+-- Partita eliminata: via le sue carte speciali e il loro annuncio; la serie del portiere si
+-- ricontrolla sulle partite successive.
+update matches set goals_against = 0 where id = '00000000-0000-0000-0000-0000000000d1';
+do $$ begin
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000d3'
+          and kind = 'blu' and player_id = '00000000-0000-0000-0000-0000000000a9') = 1,
+    'di nuovo tre porte inviolate: torna la blu';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select assign_special_cards('00000000-0000-0000-0000-0000000000d2',
+  '[{"player_id": "00000000-0000-0000-0000-0000000000e1", "reparto": "DIF"}]');
+do $$ begin
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000d2') = 1,
+    'carta nero/oro della partita';
+  assert (select count(*) from messages where meta->>'type' = 'special_cards'
+          and meta->>'match' = '00000000-0000-0000-0000-0000000000d2') = 1, 'annuncio della partita';
+end $$;
+delete from matches where id = '00000000-0000-0000-0000-0000000000d2';
+do $$ begin
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000d2') = 0,
+    'partita eliminata: via le sue carte';
+  assert (select count(*) from messages where meta->>'type' = 'special_cards'
+          and meta->>'match' = '00000000-0000-0000-0000-0000000000d2') = 0, 'e il loro annuncio';
+end $$;
+reset role;
+do $$ begin
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000d3'
+          and kind = 'blu') = 0, 'senza la partita eliminata la serie del portiere non c''è più';
+  assert (select count(*) from special_cards where match_id is null) = 0, 'nessuna carta senza partita';
+end $$;
+
+-- La blu ha la precedenza anche quando arriva dopo: chi ha la nero/oro e poi fa tripletta
+-- tiene solo la blu.
+update matches set goals_for = 4, goals_against = 1, scorers = 'Gialli 2'
+  where id = '00000000-0000-0000-0000-0000000000b9';
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select assign_special_cards('00000000-0000-0000-0000-0000000000b9',
+  '[{"player_id": "00000000-0000-0000-0000-0000000000a9"}]');
+reset role;
+do $$ begin
+  assert (select kind from special_cards where match_id = '00000000-0000-0000-0000-0000000000b9'
+          and player_id = '00000000-0000-0000-0000-0000000000a9') = 'nero_oro', 'prima la nero/oro';
+end $$;
+update matches set scorers = 'Gialli 3, Verdi' where id = '00000000-0000-0000-0000-0000000000b9';
+do $$ begin
+  assert (select string_agg(kind, ',') from special_cards where match_id = '00000000-0000-0000-0000-0000000000b9'
+          and player_id = '00000000-0000-0000-0000-0000000000a9') = 'blu', 'poi la tripletta: resta solo la blu';
+  assert (select body from messages where meta->>'type' = 'special_cards'
+          and meta->>'match' = '00000000-0000-0000-0000-0000000000b9') like '%Blu elettrico: GIALLI%',
+    'annuncio aggiornato con la blu';
+end $$;
+
+-- Carte nero/oro: chi cambia reparto tiene la sua carta (stesse date, nessun nuovo avviso).
+reset role;
+update special_cards set starts_at = now() - interval '2 days', ends_at = now() + interval '5 days'
+  where match_id = '00000000-0000-0000-0000-0000000000b3' and kind = 'nero_oro';
+delete from net.calls;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select assign_special_cards('00000000-0000-0000-0000-0000000000b3',
+  '[{"player_id": "00000000-0000-0000-0000-0000000000e1", "reparto": "DIF"},
+    {"player_id": "00000000-0000-0000-0000-0000000000e2", "reparto": "CEN", "bonus": 3}]');
+reset role;
+do $$ begin
+  assert (select reparto from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
+          and kind = 'nero_oro' and player_id = '00000000-0000-0000-0000-0000000000e1') = 'DIF', 'reparto cambiato';
+  assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
+          and kind = 'nero_oro' and starts_at < now() - interval '1 day') = 2, 'stesse date di prima';
+  assert (select bonus from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3'
+          and kind = 'nero_oro' and player_id = '00000000-0000-0000-0000-0000000000e2') = 3, 'bonus corretto';
+  assert (select count(*) from net.calls where body->>'kind' in ('special_card', 'special_cards_week')) = 0,
+    'nessun nuovo avviso per un cambio di reparto o di bonus';
+end $$;
+
+-- Formazione: ora di pubblicazione dal server; il portiere viene dalla formazione pubblicata.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select save_formation(current_setting('test.formazione')::uuid, 'futuro', '4-4-2',
+  '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "00000000-0000-0000-0000-0000000000e2"},
+    {"slot_index": 1, "x": 0.2, "y": 0.7, "label": "TS", "player_id": "00000000-0000-0000-0000-0000000000f1"},
+    {"slot_index": 2, "x": 0.4, "y": 0.7, "label": "DC", "player_id": "00000000-0000-0000-0000-0000000000e1"}]');
+update formations set published_at = '2001-01-01', published_module = '4-4-2',
+  published_players = '{"0": "00000000-0000-0000-0000-0000000000e2", "1": "00000000-0000-0000-0000-0000000000f1",
+                        "2": "00000000-0000-0000-0000-0000000000e1"}'
+  where id = current_setting('test.formazione')::uuid;
+reset role;
+do $$ begin
+  assert (select published_at from formations where id = current_setting('test.formazione')::uuid)
+         > now() - interval '1 hour', 'ora di pubblicazione dal server, non dal telefono';
+  assert (select body from messages where meta->>'type' = 'formation'
+          and meta->>'id' = current_setting('test.formazione')
+          order by created_at desc limit 1) like 'Formazione Milan AC Futuro (4-4-2): POR VERDI, DC %',
+    'annuncio con i soli giocatori attivi (f1 è uscito dal club)';
+end $$;
+-- La bozza cambia portiere senza pubblicare: il risultato prende quello pubblicato.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select save_formation(current_setting('test.formazione')::uuid, 'futuro', '4-4-2',
+  '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "00000000-0000-0000-0000-0000000000a9"}]');
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against)
+values ('00000000-0000-0000-0000-0000000000d7', 'amichevole', 'Gatti', now() + interval '30 days', 'futuro', 1, 0);
+do $$ begin
+  assert (select goalkeeper_id from matches where id = '00000000-0000-0000-0000-0000000000d7')
+         = '00000000-0000-0000-0000-0000000000e2', 'portiere della formazione pubblicata, non della bozza';
+end $$;
+-- Scegliere di nuovo "dalla formazione" (portiere vuoto) lo ricalcola.
+update matches set goalkeeper_id = '00000000-0000-0000-0000-0000000000a9' where id = '00000000-0000-0000-0000-0000000000d7';
+update matches set goalkeeper_id = null where id = '00000000-0000-0000-0000-0000000000d7';
+do $$ begin
+  assert (select goalkeeper_id from matches where id = '00000000-0000-0000-0000-0000000000d7')
+         = '00000000-0000-0000-0000-0000000000e2', 'portiere ricalcolato dalla formazione';
+end $$;
+-- Posto del portiere vuoto nella formazione pubblicata: nessun portiere (non quello della bozza).
+update formations set published_at = now() + interval '1 second',
+  published_players = '{"1": "00000000-0000-0000-0000-0000000000e1"}'
+  where id = current_setting('test.formazione')::uuid;
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against)
+values ('00000000-0000-0000-0000-0000000000d8', 'amichevole', 'Volpi', now() + interval '31 days', 'futuro', 2, 0);
+do $$ begin
+  assert (select goalkeeper_id from matches where id = '00000000-0000-0000-0000-0000000000d8') is null,
+    'nessun portiere se nella formazione pubblicata il posto era vuoto';
+end $$;
+
+-- Classifica dei tornei e contatti social: solo il Direttivo, in una transazione.
+reset role;
+insert into tournaments (id, name, team) values ('00000000-0000-0000-0000-0000000000aa', 'Coppa di prova', 'milanac');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$select save_standings('00000000-0000-0000-0000-0000000000aa', '[]')$q$, 'Solo il Direttivo');
+select pg_temp.expect_error($q$select save_club_links('[]')$q$, 'Solo il Direttivo');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select save_standings('00000000-0000-0000-0000-0000000000aa',
+  '[{"team_name": " Milan AC ", "won": 3, "drawn": 1, "goals_for": 9, "goals_against": 2, "is_us": true},
+    {"team_name": "Rivali", "lost": 2}]');
+do $$ begin
+  assert (select count(*) from tournament_standings where tournament_id = '00000000-0000-0000-0000-0000000000aa') = 2,
+    'classifica salvata';
+  assert (select won from tournament_standings where tournament_id = '00000000-0000-0000-0000-0000000000aa'
+          and team_name = 'Milan AC' and is_us) = 3, 'righe complete';
+end $$;
+select save_standings('00000000-0000-0000-0000-0000000000aa', '[{"team_name": "Rivali", "won": 1}]');
+select pg_temp.expect_error(
+  $q$select save_standings('00000000-0000-0000-0000-0000000000aa', '[{"team_name": ""}]')$q$,
+  'tournament_standings_team_name_check');
+do $$ begin
+  assert (select count(*) from tournament_standings where tournament_id = '00000000-0000-0000-0000-0000000000aa') = 1,
+    'la classifica nuova sostituisce la vecchia; un errore non tocca niente';
+end $$;
+select save_club_links('[{"kind": "instagram", "url": "https://instagram.com/milanac"},
+                         {"kind": "sito", "url": "https://milanac.example"}]');
+select pg_temp.expect_error($q$select save_club_links('[{"kind": "sito", "url": "ftp://x"}]')$q$, 'Link non valido');
+do $$ begin
+  assert (select string_agg(kind || sort_order, ',' order by sort_order) from club_links) = 'instagram0,sito1',
+    'contatti salvati nell''ordine; un errore non tocca niente';
+end $$;
+reset role;
+
+-- Dati anagrafici: li vedono e li cambiano solo l'interessato e il Direttivo.
+do $$ begin
+  assert not exists (select 1 from information_schema.columns where table_schema = 'public'
+                     and table_name = 'profiles' and column_name in ('first_name', 'last_name', 'birth_year', 'birth_date')),
+    'nome, cognome e nascita non sono più in profiles';
+  assert (select first_name || ' ' || last_name || ' ' || birth_year from profile_private
+          where id = '00000000-0000-0000-0000-0000000000a1') = 'Mario Rossi 1995', 'la registrazione li salva a parte';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
+do $$ begin
+  assert (select count(*) from profile_private) = 1, 'un giocatore vede solo i propri';
+end $$;
+update profile_private set first_name = 'Marione' where id = '00000000-0000-0000-0000-0000000000a1';
+update profile_private set first_name = 'Hacker' where id = '00000000-0000-0000-0000-0000000000a2';
+select pg_temp.expect_error(
+  $q$insert into profile_private (id, first_name) values ('00000000-0000-0000-0000-0000000000e1', 'Hacker')$q$,
+  'row-level security');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select count(*) from profile_private) >= 2, 'il Direttivo li vede tutti';
+end $$;
+insert into profile_private (id, first_name, last_name) values ('00000000-0000-0000-0000-0000000000e1', 'Enzo', 'Verdi');
+reset role;
+do $$ begin
+  assert (select first_name from profile_private where id = '00000000-0000-0000-0000-0000000000a1') = 'Marione',
+    'ognuno cambia i propri';
+  assert (select first_name from profile_private where id = '00000000-0000-0000-0000-0000000000a2') = 'Fabio',
+    'non quelli degli altri';
+  assert (select first_name from profile_private where id = '00000000-0000-0000-0000-0000000000e1') = 'Enzo',
+    'il Direttivo li completa';
+  assert (select count(*) from pg_publication_tables where pubname = 'supabase_realtime'
+          and tablename in ('tournament_standings', 'news', 'club_links', 'rules_versions', 'profile_private')) = 5,
+    'tempo reale per classifiche, notizie, contatti, regolamento e dati anagrafici';
+end $$;
+set role anon;
+select pg_temp.expect_error($q$select count(*) from profile_private$q$, 'permission denied');
+reset role;
+
+-- Nuovo ingresso: il Direttivo lo sa dalla Sala Direttivo; gli altri non vedono l'avviso.
+do $$ begin
+  assert (select body from messages where meta->>'type' = 'new_member'
+          and meta->>'member' = '00000000-0000-0000-0000-0000000000a1')
+         like 'Nuovo ingresso: Rossi (Mario Rossi) · Giocatore · Milan AC · ATT.%', 'avviso del nuovo ingresso';
+  assert (select c.slug from messages m join channels c on c.id = m.channel_id
+          where m.meta->>'type' = 'new_member' and m.meta->>'member' = '00000000-0000-0000-0000-0000000000a1')
+         = 'direttivo', 'nella Sala Direttivo';
+end $$;
+delete from net.calls;
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ab', 'nuovo@example.com');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000ab');
+select complete_registration('Nuovo', 'Arrivato', 2000, 'NUOVO', null, array['futuro'], false, null, null, 'DC', 5, 'ps5', '{}');
+select accept_rules((select max(number) from rules_versions));
+do $$ begin
+  assert (select count(*) from messages where meta->>'type' = 'new_member') = 0,
+    'un giocatore non vede gli avvisi della Sala Direttivo';
+end $$;
+reset role;
+do $$ begin
+  assert (select body from messages where meta->>'type' = 'new_member'
+          and meta->>'member' = '00000000-0000-0000-0000-0000000000ab')
+         = 'Nuovo ingresso: NUOVO (Nuovo Arrivato) · Giocatore · Milan AC Futuro · DC. Se non lo conoscete, toglietelo dalla Rosa.',
+    'avviso con nome, ruolo e squadra';
+  assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 1, 'e la notifica al Direttivo';
 end $$;

@@ -39,7 +39,8 @@ con un unico codice.
 
 Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `complete_registration`:
 
-1. **Chi sei**: nome, cognome, anno di nascita (li vede solo il Direttivo), **nome sulla carta**
+1. **Chi sei**: nome, cognome, anno di nascita (li vedono solo l'interessato e il Direttivo:
+   stanno nella tabella riservata `profile_private`), **nome sulla carta**
    (è il nome mostrato in tutta l'app: `display_name`), motto.
 2. **Squadra e ruolo**: Milan AC o Milan AC Futuro (entrambe solo per il Direttivo); "Faccio parte
    del Direttivo" richiede la **password del club** (solo l'hash bcrypt sta in `app_config`,
@@ -49,8 +50,9 @@ Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `compl
    carta e walkout.
 
 Il profilo resta `pending` finché non si **accetta il regolamento** (`accept_rules`): da lì il ruolo
-richiesto diventa effettivo. Non serve nessuna approvazione del Direttivo; il Direttivo può
-comunque sospendere un membro (`active = false`).
+richiesto diventa effettivo. Non serve nessuna approvazione del Direttivo: ogni nuovo ingresso
+compare però nella Sala Direttivo (messaggio con nome, ruolo e squadra, che arriva anche come
+notifica) e il Direttivo può togliere dalla Rosa chi non conosce (`active = false`).
 
 ## 3. Ruoli e permessi
 
@@ -226,8 +228,9 @@ tournaments   id, name, organizer, url, team, status, starts_on, ends_on, notes
 tournament_standings  tournament_id, team_name, won, drawn, lost, goals_for, goals_against, is_us
 rules_articles id, sort_order, title, body                -- bozza del Direttivo
 rules_versions number, snapshot(jsonb), published_at       -- versioni pubblicate del regolamento
-profiles      + first_name, last_name, birth_year, motto, direttivo_roles[], face(jsonb),
+profiles      + motto, direttivo_roles[], face(jsonb),
                 registration_completed_at, rules_accepted_version, rules_accepted_at
+                (nome, cognome e anno di nascita: dalla 0025 in profile_private)
 app_config    + direttivo_password_hash (bcrypt)
 -- dalla migrazione 0017
 attendance    + auto (assenza automatica), set_by (chi ha corretto); nota obbligatoria per il ritardo
@@ -248,6 +251,11 @@ tournaments   + image_path (foto o logo nel bucket tournaments)
 tactics       + board (jsonb: modulo, squadra, gettoni, frecce, heatmap), team
 messages      + replay_path (JSON delle azioni con i tempi; l'audio in audio_path fino a 300 s);
               un replay scade dopo 3 giorni
+-- dalla migrazione 0024
+profiles      + notify_prefs (jsonb: presenze|chat|notizie = false per spegnerle)
+-- dalla migrazione 0025
+profile_private id(→ profiles), first_name, last_name, birth_year, birth_date, updated_at
+              (RLS: solo l'interessato e il Direttivo leggono e scrivono)
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
@@ -262,7 +270,14 @@ reparto, sostituisce l'elenco precedente, aggiorna l'annuncio in *Comunicazioni*
 `announce_special_cards` e manda gli avvisi `special_card` / `special_cards_week`);
 `award_blue_cards` gira dal trigger del risultato e legge i marcatori con `scorer_goals`
 (nome sulla carta, cognome o gamertag, "Rossi (3)" / "x3") e la serie del portiere;
-`match_number` numera le giornate (partite ufficiali con risultato dal 1° agosto). Chat:
+`match_number` numera le giornate (partite ufficiali con risultato dal 1° agosto). Eliminare
+una partita toglie le sue carte e il loro annuncio e ricontrolla la serie del portiere delle
+due partite ufficiali successive; la blu ha sempre la precedenza sulla nero/oro della stessa
+partita; correggere un bonus o un reparto non manda nuovi avvisi. La formazione pubblicata
+prende l'ora del server e il portiere del risultato viene dalla formazione pubblicata.
+`save_standings` e `save_club_links` (solo Direttivo) salvano classifica e contatti in una
+transazione. Nuovo ingresso (`pending` → giocatore/Direttivo) → messaggio nella Sala Direttivo
+(`on_member_joined`). Chat:
 `messages_before_insert` (risposta nello stesso canale, scadenza a 60 giorni),
 `expire_attachments()` ogni notte alle 3:15 (pg_cron) toglie gli allegati scaduti (foto e
 vocali dopo 60 giorni, replay della lavagna dopo 3), mette i file in `storage_cleanup` e
