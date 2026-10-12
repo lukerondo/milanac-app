@@ -2,14 +2,18 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/clock.dart';
+import '../../core/errors.dart';
 import '../../core/local_flags.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../carte/special_cards_repository.dart';
 import '../presenze/attendance_repository.dart';
 import '../risultati/matches_repository.dart';
@@ -27,11 +31,13 @@ import 'fut_card.dart';
 final cardStatsProvider = Provider.family<CardStats?, String>((ref, id) {
   final members = ref.watch(rosaProvider).value;
   final member = members?.where((m) => m.id == id).firstOrNull;
-  if (member == null) return null;
+  if (members == null || member == null) return null;
   return CardStats.of(
     member,
     attendance: ref.watch(attendanceProvider).value ?? const [],
     matches: ref.watch(matchesProvider).value ?? const [],
+    roster: members,
+    now: ref.watch(clockProvider)(),
   );
 });
 
@@ -98,7 +104,9 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Condivisione non riuscita: $e')),
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Condivisione non riuscita')),
+        ),
       );
     } finally {
       if (mounted) setState(() => _sharing = false);
@@ -107,16 +115,29 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
 
   @override
   Widget build(BuildContext context) {
-    final me = ref.watch(profileProvider).value;
-    final member = ref
-        .watch(rosaProvider)
-        .value
+    final rosa = ref.watch(rosaProvider);
+    final member = rosa.value
         ?.where((m) => m.id == widget.memberId)
         .firstOrNull;
     final stats = ref.watch(cardStatsProvider(widget.memberId));
     if (member == null || stats == null) {
-      return const Center(child: CircularProgressIndicator());
+      // Lo spinner mentre la rosa carica, poi l'errore con "Riprova" o
+      // "non trovato" (prima lo spinner girava per sempre).
+      if (rosa.hasError && (!rosa.isLoading || rosa.retrying)) {
+        return ErrorRetry(
+          message: friendlyError(rosa.error!, action: 'Caricamento non riuscito'),
+          onRetry: () => ref.invalidate(rosaProvider),
+        );
+      }
+      if (rosa.isLoading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      return ErrorRetry(
+        message: 'Giocatore non trovato.',
+        onRetry: () => ref.invalidate(rosaProvider),
+      );
     }
+    final me = ref.watch(profileProvider).value;
     // La carta speciale della settimana (se c'è) sostituisce quella normale.
     final special = ref.watch(activeSpecialCardProvider(member.id));
     final isMine = me?.id == member.id;
@@ -297,9 +318,10 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
   Future<void> _save() async {
     setState(() => _saving = true);
     final style = _style.text.trim();
+    // Numero, stile e piattaforma lasciati vuoti si cancellano davvero.
     final updated = widget.member.copyWith(
       fieldPosition: _position,
-      shirtNumber: int.tryParse(_number.text),
+      shirtNumber: int.tryParse(_number.text.trim()),
       overall: _overall,
       playStyle: style.isEmpty ? null : style,
       platform: _platform,
@@ -337,9 +359,11 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 
@@ -427,6 +451,10 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
                   child: TextField(
                     controller: _number,
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
                     decoration: const InputDecoration(labelText: 'Numero'),
                   ),
                 ),

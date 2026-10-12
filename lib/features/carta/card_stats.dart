@@ -1,3 +1,4 @@
+import '../../core/auth/profile.dart';
 import '../../core/teams.dart';
 import '../presenze/attendance.dart';
 import '../risultati/match.dart';
@@ -23,7 +24,7 @@ class CardStats {
   /// Serate in cui c'era, ultimi 60 giorni.
   final int nights;
 
-  /// Gol segnati (dai marcatori delle partite).
+  /// Gol segnati (dai marcatori delle partite giocate dalle sue squadre).
   final int goals;
 
   /// Mesi nel club.
@@ -32,27 +33,42 @@ class CardStats {
   /// % di vittorie delle sue squadre; null se non ci sono partite giocate.
   final int? winRate;
 
+  /// [roster]: tutta la rosa, per riconoscere i marcatori come fa il server
+  /// (omonimi compresi).
   static CardStats of(
     Member m, {
     required List<AttendanceEntry> attendance,
     required List<ClubMatch> matches,
+    required List<Member> roster,
     DateTime? now,
   }) {
-    final mine = attendance.where((e) => e.playerId == m.id).toList();
+    final today = now ?? DateTime.now();
+    // Le risposte date in anticipo per i giorni che devono ancora venire non
+    // contano: solo fino a oggi in ora italiana, come sul server.
+    final until = italianDay(today);
+    final mine = attendance
+        .where(
+          (e) =>
+              e.playerId == m.id &&
+              !DateTime(e.date.year, e.date.month, e.date.day).isAfter(until),
+        )
+        .toList();
     final stats = AttendanceStats(mine);
     final came = stats.present + stats.late;
-    final today = now ?? DateTime.now();
     final months =
         (today.year - m.joinedAt.year) * 12 + today.month - m.joinedAt.month;
-    final played = matches.where(
-      (x) => m.teams.contains(x.team) && x.outcome != MatchOutcome.daGiocare,
-    );
+    final played = matches
+        .where(
+          (x) =>
+              m.teams.contains(x.team) && x.outcome != MatchOutcome.daGiocare,
+        )
+        .toList();
     final record = MatchRecord(played);
     return CardStats(
       presence: stats.percent,
       punctuality: came == 0 ? null : (stats.present / came * 100).round(),
       nights: came,
-      goals: matches.fold(0, (sum, x) => sum + goalsIn(x.scorers, m)),
+      goals: goalsOf(m, played, roster),
       months: months < 0 ? 0 : months,
       winRate: record.played == 0
           ? null
@@ -61,28 +77,83 @@ class CardStats {
   }
 }
 
-/// Gol di [m] in un elenco marcatori scritto a mano, es. "Rossi 2, Neri" o
-/// "Rossi (2), Diavolo_9 x2". Riconosce cognome, nome completo o gamertag.
-int goalsIn(String? scorers, Member m) {
-  if (scorers == null || scorers.trim().isEmpty) return 0;
-  final names = {
-    _norm(m.displayName),
-    _norm(m.displayName.split(' ').last),
-    if (m.gamertag != null && m.gamertag!.isNotEmpty) _norm(m.gamertag!),
-  }..remove('');
+/// Il giorno di calendario in Italia (Europe/Rome) nell'istante [t], senza ora (come
+/// le date delle presenze): ora solare UTC+1, ora legale UTC+2 dall'ultima domenica
+/// di marzo all'ultima di ottobre (il cambio è alle 01:00 UTC).
+DateTime italianDay(DateTime t) {
+  final utc = t.toUtc();
+  DateTime lastSunday(int month) {
+    final last = DateTime.utc(utc.year, month + 1, 0);
+    return DateTime.utc(utc.year, month, last.day - last.weekday % 7, 1);
+  }
+
+  final summer = !utc.isBefore(lastSunday(3)) && utc.isBefore(lastSunday(10));
+  final it = utc.add(Duration(hours: summer ? 2 : 1));
+  return DateTime(it.year, it.month, it.day);
+}
+
+/// Gol di [m] nelle partite giocate dalle sue squadre: in ogni partita i marcatori si
+/// cercano solo tra i giocatori della squadra che l'ha giocata (attivi, non in attesa),
+/// come fa il server.
+int goalsOf(Member m, Iterable<ClubMatch> matches, Iterable<Member> roster) {
   var total = 0;
-  for (final raw in scorers.split(RegExp(r'[,;\n]'))) {
-    final match = RegExp(
-      r'^(.*?)(?:\s*[x×(]\s*(\d+)\s*\)?|\s+(\d+))?\s*$',
-      caseSensitive: false,
-    ).firstMatch(raw.trim());
-    if (match == null) continue;
-    final name = _norm(match.group(1) ?? '');
-    final count = int.tryParse(match.group(2) ?? match.group(3) ?? '') ?? 1;
-    if (names.contains(name)) total += count;
+  for (final x in matches) {
+    if (!m.teams.contains(x.team) || x.outcome == MatchOutcome.daGiocare) {
+      continue;
+    }
+    final players = [
+      for (final p in roster)
+        if (p.active && p.role != ClubRole.pending && p.teams.contains(x.team))
+          p,
+    ];
+    total += scorerGoals(x.scorers, players)[m.id] ?? 0;
   }
   return total;
 }
+
+final _scorerItem = RegExp(
+  r'^(.*?)(?:\s*[x×(]\s*(\d+)\s*\)?|\s+(\d+))?\s*$',
+  caseSensitive: false,
+);
+
+/// Gol per giocatore (id → gol) in un elenco marcatori scritto a mano, es.
+/// "Rossi 2, Neri" o "Rossi (2), Diavolo_9 x2", come la funzione `scorer_goals` del
+/// database: ogni nome vale per un solo giocatore tra [players], cercato prima per nome
+/// sulla carta, poi per cognome, poi per gamertag; se allo stesso livello corrispondono
+/// due giocatori (omonimi), quel nome non assegna gol a nessuno.
+Map<String, int> scorerGoals(String? scorers, Iterable<Member> players) {
+  final goals = <String, int>{};
+  if (scorers == null || scorers.trim().isEmpty) return goals;
+  final levels = <String? Function(Member)>[
+    (p) => _norm(p.displayName),
+    (p) => _norm(p.displayName).split(' ').last,
+    (p) => p.gamertag?.trim().toLowerCase(),
+  ];
+  for (final raw in scorers.split(RegExp(r'[,;\n]'))) {
+    final match = _scorerItem.firstMatch(raw.trim());
+    if (match == null) continue;
+    final name = _norm(match.group(1) ?? '');
+    if (name.isEmpty) continue;
+    final count = int.tryParse(match.group(2) ?? match.group(3) ?? '') ?? 1;
+    for (final key in levels) {
+      final found = {
+        for (final p in players)
+          if (key(p) == name) p.id,
+      };
+      if (found.isEmpty) continue;
+      if (found.length == 1) {
+        goals.update(found.single, (g) => g + count, ifAbsent: () => count);
+      }
+      break;
+    }
+  }
+  return goals;
+}
+
+/// Gol di [m] in un elenco marcatori, cercando tra [players] (di solito la squadra;
+/// senza, solo [m]).
+int goalsIn(String? scorers, Member m, [Iterable<Member>? players]) =>
+    scorerGoals(scorers, players ?? [m])[m.id] ?? 0;
 
 String _norm(String s) =>
     s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');

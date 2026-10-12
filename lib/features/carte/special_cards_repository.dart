@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../risultati/match.dart';
@@ -132,6 +133,18 @@ Map<String, SpecialCard> activeSpecialCards(
   return best;
 }
 
+/// Il prossimo istante dopo [now] in cui una carta comincia o scade (null = nessuno):
+/// lì può cambiare la carta valida di qualcuno.
+DateTime? nextSpecialCardChange(Iterable<SpecialCard> cards, DateTime now) {
+  DateTime? next;
+  for (final c in cards) {
+    for (final t in [c.startsAt, c.endsAt]) {
+      if (t.isAfter(now) && (next == null || t.isBefore(next))) next = t;
+    }
+  }
+  return next;
+}
+
 /// Overall mostrato sulla carta: base più bonus, mai oltre 99.
 int? overallWith(int? base, SpecialCard? card) =>
     base == null ? null : (base + (card?.bonus ?? 0)).clamp(40, 99);
@@ -172,14 +185,29 @@ final specialCardsRepositoryProvider = Provider<SpecialCardsRepository>((ref) {
   return repo;
 });
 
-final specialCardsProvider = StreamProvider<List<SpecialCard>>(
-  (ref) => ref.watch(specialCardsRepositoryProvider).watchAll(),
-);
+final specialCardsProvider = StreamProvider<List<SpecialCard>>((ref) {
+  // Al cambio di account si ricarica con i permessi del nuovo utente.
+  ref.watch(currentUserIdProvider);
+  return ref.watch(specialCardsRepositoryProvider).watchAll();
+});
 
-/// Carte valide adesso, per giocatore.
+/// Carte valide adesso, per giocatore. Quando una carta scade (o comincia) si ricalcola
+/// da sé: prima una nero/oro scaduta restava sulla carta finché non arrivava una
+/// carta nuova o non si riapriva l'app.
 final activeSpecialCardsProvider = Provider<Map<String, SpecialCard>>((ref) {
   final cards = ref.watch(specialCardsProvider).value ?? const [];
-  return activeSpecialCards(cards, ref.watch(clockProvider)());
+  final now = ref.watch(clockProvider)();
+  final next = nextSpecialCardChange(cards, now);
+  // Nella demo e nei test l'orologio è finto (e le carte di esempio durano giorni):
+  // niente timer.
+  if (next != null && !AppConfig.isDemo) {
+    final timer = Timer(
+      next.difference(now) + const Duration(seconds: 1),
+      ref.invalidateSelf,
+    );
+    ref.onDispose(timer.cancel);
+  }
+  return activeSpecialCards(cards, now);
 });
 
 /// La carta speciale valida adesso di un giocatore (null = carta normale).
@@ -277,14 +305,26 @@ class DemoSpecialCardsRepository extends SpecialCardsRepository {
     yield* _changes.stream.map((_) => _sorted);
   }
 
+  /// Come `assign_special_cards` del database: un giocatore riceve una sola carta,
+  /// un reparto ne ha una sola; chi cambia reparto riceve una carta nuova.
   @override
   Future<int> assign(ClubMatch match, List<CardAward> awards) async {
-    final keep = awards.map((a) => a.playerId).toSet();
+    final players = <String>{};
+    final reps = <String>{};
+    for (final a in awards) {
+      if (!players.add(a.playerId)) {
+        throw const AppError('Un giocatore riceve una sola carta nero/oro');
+      }
+      if (!reps.add(a.reparto)) {
+        throw AppError('Una sola carta nero/oro per reparto (${a.reparto})');
+      }
+    }
+    final kept = {for (final a in awards) (a.playerId, a.reparto)};
     _cards.removeWhere(
       (c) =>
           c.matchId == match.id &&
           c.kind == CardSpecial.neroOro &&
-          !keep.contains(c.playerId),
+          !kept.contains((c.playerId, c.reparto)),
     );
     final now = DateTime.now();
     var added = 0;
@@ -297,7 +337,7 @@ class DemoSpecialCardsRepository extends SpecialCardsRepository {
         (c) => same(c) && c.kind == CardSpecial.neroOro,
       );
       if (i >= 0) {
-        _cards[i] = _cards[i].copyWith(bonus: a.bonus, reparto: a.reparto);
+        _cards[i] = _cards[i].copyWith(bonus: a.bonus);
       } else {
         _cards.add(
           SpecialCard(
