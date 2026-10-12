@@ -291,7 +291,7 @@ class _ReplayPageState extends ConsumerState<ReplayPage> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
             Text(
-              ((m.meta['title'] as String?) ?? 'Schema').toUpperCase(),
+              (m.replayTitle ?? 'Schema').toUpperCase(),
               style: TextStyle(
                 fontFamily: sportFont,
                 fontSize: 22,
