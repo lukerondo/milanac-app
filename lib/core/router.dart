@@ -200,7 +200,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                   initialTab: state.uri.queryParameters['scheda'],
                 ),
               ),
-              _section('/formazione', (_) => const FormazionePage()),
+              _section(
+                '/formazione',
+                (_) => const FormazionePage(),
+                actions: const [FormationPdfAction()],
+              ),
               // Partita (dalla lista dei risultati e dalla notifica del risultato).
               GoRoute(
                 path: '/partita/:id',
