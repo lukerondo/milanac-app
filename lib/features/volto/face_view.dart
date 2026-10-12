@@ -182,7 +182,7 @@ class FacePainter extends CustomPainter {
     for (var x = 14.0; x < 186; x += 24) {
       canvas.drawRect(
         Rect.fromLTWH(x, 150, 12, 50),
-        Paint()..color = MilanacColors.red,
+        Paint()..color = MilanacColors.kitRed,
       );
       canvas.drawRect(
         Rect.fromLTWH(x + 12, 150, 12, 50),
@@ -464,7 +464,7 @@ class FacePainter extends CustomPainter {
         canvas.clipPath(_headPath().shift(Offset.zero));
         canvas.drawRect(
           const Rect.fromLTRB(40, 58, 160, 70),
-          Paint()..color = MilanacColors.red,
+          Paint()..color = MilanacColors.kitRed,
         );
         canvas.drawRect(
           const Rect.fromLTRB(40, 63, 160, 65),

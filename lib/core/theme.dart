@@ -31,12 +31,9 @@ class MilanacColors {
   static const surface = Color(0xFF151517);
   static const surfaceHigh = Color(0xFF1E1E21);
 
-  // Nomi della vecchia palette rossonera, ancora usati da alcune schermate: puntano
-  // ai colori nero oro più vicini e spariscono man mano che le schermate passano
-  // ai colori del tema (context.pal).
-  static const red = goldDeep;
-  static const redDark = Color(0xFF5E4C1E);
-  static const redText = Color(0xFFFF7A82);
+  /// Rosso della maglia del club (le strisce rossonere del volto disegnato): è la
+  /// divisa vera, non un colore dell'interfaccia.
+  static const kitRed = Color(0xFFC61C23);
 }
 
 /// Font sportivo condensato per titoli, numeri e carte.
@@ -558,15 +555,4 @@ ThemeData buildTheme([Brightness brightness = Brightness.dark]) {
       },
     ),
   );
-}
-
-/// Sfondo delle schermate: il nero del tema (nel chiaro, l'avorio). Resta come
-/// contenitore per le pagine che lo usano ancora.
-class StadiumBackground extends StatelessWidget {
-  const StadiumBackground({super.key, required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) =>
-      ColoredBox(color: context.pal.bg, child: child);
 }

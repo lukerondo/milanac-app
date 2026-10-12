@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/theme.dart';
 import '../../shared/app_shell.dart';
 import '../../shared/ui.dart';
 import '../carta/carta_page.dart';
@@ -13,6 +14,8 @@ class ProfiloPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
+      // Un solo blocco con la testata della carta (tavola 23).
+      backgroundColor: context.pal.hero,
       leading: IconButton(
         tooltip: 'Indietro',
         icon: const Icon(Icons.arrow_back_rounded),

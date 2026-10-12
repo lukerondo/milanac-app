@@ -225,7 +225,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               _section('/club', (_) => const ClubPage()),
-              _section('/rosa', (_) => const RosaPage()),
+              _section(
+                '/rosa',
+                (_) => const RosaPage(),
+                actions: const [RosaViewButton()],
+              ),
               _section('/carte-speciali', (_) => const CarteSpecialiPage()),
               _section('/tattiche', (_) => const TattichePage()),
               _section(
