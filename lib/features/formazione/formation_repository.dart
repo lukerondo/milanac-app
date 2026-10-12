@@ -167,11 +167,6 @@ class _SupabaseFormationRepository implements FormationRepository {
 }
 
 class DemoFormationRepository implements FormationRepository {
-  DemoFormationRepository({this.latency = Duration.zero});
-
-  /// Attesa finta della rete per salvare e pubblicare (nei test: salvataggi "in corso").
-  final Duration latency;
-
   final _current = <Team, Formation>{
     Team.milanac: const Formation(
       id: 'demo',
@@ -185,29 +180,18 @@ class DemoFormationRepository implements FormationRepository {
     ),
   };
 
-  /// La formazione salvata di una squadra (per i test).
-  Formation? current(Team team) => _current[team];
-
-  Future<void> _network() async {
-    if (latency > Duration.zero) await Future<void>.delayed(latency);
-  }
-
   @override
   Future<Formation> loadCurrent(Team team) async =>
       _current[team] ?? Formation(team: team);
 
   @override
-  Future<Formation> save(Formation f) async {
-    await _network();
-    return _current[f.team] = f.copyWith(
-      id: 'demo-${f.team.name}',
-      updatedAt: DateTime.now().toUtc(),
-    );
-  }
+  Future<Formation> save(Formation f) async => _current[f.team] = f.copyWith(
+    id: 'demo-${f.team.name}',
+    updatedAt: DateTime.now().toUtc(),
+  );
 
   @override
   Future<Formation> publish(Formation f) async {
-    await _network();
     final now = DateTime.now().toUtc();
     return _current[f.team] = f.copyWith(
       id: 'demo-${f.team.name}',
