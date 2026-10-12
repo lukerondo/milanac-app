@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:table_calendar/table_calendar.dart';
@@ -88,23 +89,36 @@ class _PresenzePageState extends ConsumerState<PresenzePage> {
   @override
   void didUpdateWidget(covariant PresenzePage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Stessa pagina, rotta cambiata (es. dalla notifica di un evento).
+    // Stessa pagina, rotta cambiata (una scelta qui, la notifica di un evento o il
+    // promemoria delle 18:00, che riporta a oggi).
     if (widget.initialTab != oldWidget.initialTab) {
       setState(() => _tab = _tabOf(widget.initialTab));
     }
-    final day = widget.initialDay;
-    if (day != null && day != oldWidget.initialDay) {
+    if (widget.initialDay != oldWidget.initialDay) {
       setState(() {
-        _day = _dayToOpen(day);
+        _day = _dayToOpen(widget.initialDay);
         _focused = _day;
       });
     }
   }
 
-  void _select(DateTime day) => setState(() {
-    _day = dayOnly(day);
-    _focused = _day;
-  });
+  /// Scheda e giorno scelti qui stanno nella rotta, come in Partite: così una notifica
+  /// o un collegamento che riporta a `/presenze` cambia sempre la rotta e la pagina lo
+  /// segue (con la scelta tenuta solo nella pagina, una rotta uguale non la toccava).
+  void _goTo({int? tab, DateTime? day}) {
+    final t = tab ?? _tab;
+    context.go(
+      Uri(
+        path: '/presenze',
+        queryParameters: {
+          if (t == 1) 'scheda': 'statistiche',
+          'giorno': DateFormat('yyyy-MM-dd').format(dayOnly(day ?? _day)),
+        },
+      ).toString(),
+    );
+  }
+
+  void _select(DateTime day) => _goTo(day: day);
 
   /// Avanti o indietro di una settimana (di un mese con il mese intero aperto).
   void _move(int step, DateTime today) {
@@ -140,7 +154,7 @@ class _PresenzePageState extends ConsumerState<PresenzePage> {
       children: [
         _Band(
           tab: _tab,
-          onTab: (i) => setState(() => _tab = i),
+          onTab: (i) => _goTo(tab: i),
           picker: _tab != 0
               ? null
               : _DayPicker(

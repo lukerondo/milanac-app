@@ -402,6 +402,42 @@ void main() {
     await scrollTo(tester, find.text('PRESENTI · 1'));
   });
 
+  testWidgets(
+    'il promemoria riporta a oggi anche dopo una scelta nella pagina',
+    (tester) async {
+      final container = await openPresenze(tester, italyAt(2026, 10, 12, 17));
+      final router = container.read(routerProvider);
+      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+
+      // Un altro giorno scelto toccandolo: la rotta lo segue.
+      final wednesday = find.byWidgetPredicate(
+        (w) =>
+            w.runtimeType.toString() == '_DayTile' &&
+            (w as dynamic).day == DateTime(2026, 10, 14),
+      );
+      await tester.tap(wednesday);
+      await tester.pumpAndSettle();
+      expect(find.text('MERCOLEDÌ 14 OTTOBRE · MILAN AC'), findsOneWidget);
+      expect(
+        router.routeInformationProvider.value.uri.toString(),
+        '/presenze?giorno=2026-10-14',
+      );
+
+      // La notifica delle 18:00 apre `/presenze`: si torna a oggi.
+      router.go('/presenze');
+      await tester.pumpAndSettle();
+      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+
+      // Lo stesso con le statistiche aperte.
+      await tester.tap(find.text('Statistiche'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('puntuale'), findsWidgets);
+      router.go('/presenze');
+      await tester.pumpAndSettle();
+      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+    },
+  );
+
   testWidgets('giorno chiesto fuori dal calendario: si apre il più vicino', (
     tester,
   ) async {

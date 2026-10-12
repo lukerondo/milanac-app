@@ -423,6 +423,7 @@ class _SharedLinkDialogState extends State<_SharedLinkDialog> {
               ),
             TextField(
               controller: _title,
+              maxLength: 120,
               decoration: InputDecoration(
                 labelText: 'Titolo',
                 hintText: widget.titleHint,
@@ -438,6 +439,7 @@ class _SharedLinkDialogState extends State<_SharedLinkDialog> {
             ),
             TextField(
               controller: _note,
+              maxLength: 300,
               decoration: InputDecoration(labelText: widget.noteLabel),
             ),
             if (_error != null)
