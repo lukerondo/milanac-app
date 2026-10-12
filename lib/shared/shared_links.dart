@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/auth/providers.dart';
 import '../core/config.dart';
 import '../core/push/push_service.dart' show showAppMessage;
+import '../core/theme.dart';
 
 /// Sezioni che usano i link condivisi (tabella `shared_links`):
 /// la colonna sonora e i video dei creator di Mondo Proclub.
@@ -61,8 +62,7 @@ class SharedLink {
         ? null
         : DateTime.parse(m['created_at'] as String).toLocal(),
     sortOrder: (m['sort_order'] as num?)?.toInt() ?? 0,
-    status:
-        LinkStatus.values.asNameMap()[m['status']] ?? LinkStatus.pubblicato,
+    status: LinkStatus.values.asNameMap()[m['status']] ?? LinkStatus.pubblicato,
     publishedBy: m['published_by'] as String?,
     publishedAt: m['published_at'] == null
         ? null
@@ -445,7 +445,7 @@ class _SharedLinkDialogState extends State<_SharedLinkDialog> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   _error!,
-                  style: const TextStyle(color: Colors.redAccent),
+                  style: TextStyle(color: context.pal.danger),
                 ),
               ),
           ],

@@ -35,14 +35,15 @@ void main() {
     await openAlbo(tester);
 
     // Stagione in corso (2026/27) ancora vuota.
-    expect(find.text('Stagione 2026/27'), findsOneWidget);
+    expect(find.text('2026/27'), findsOneWidget);
     expect(find.textContaining('Bacheca ancora vuota'), findsOneWidget);
 
-    // Selettore in alto a destra: stagione precedente con 5 trofei.
-    await tester.tap(find.text('Stagione 2026/27'));
+    // Le stagioni in alto: quella precedente ha 5 trofei.
+    await tester.tap(find.text('2025/26'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Stagione 2025/26').last);
-    await tester.pumpAndSettle();
+    expect(find.text('5'), findsOneWidget);
+    expect(find.text('TROFEI'), findsOneWidget);
+    expect(find.text('nella stagione 2025/26'), findsOneWidget);
     expect(find.bySemanticsLabel('Coppa FVPA'), findsOneWidget);
 
     // Dettaglio del trofeo.
@@ -55,7 +56,9 @@ void main() {
     await tester.pumpAndSettle();
 
     // Il Direttivo aggiunge un trofeo alla stagione mostrata.
-    await tester.tap(find.text('Aggiungi trofeo'));
+    await tester.ensureVisible(find.text('Aggiungi un trofeo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aggiungi un trofeo'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Nome del trofeo'),
@@ -67,7 +70,9 @@ void main() {
     await tester.tap(find.text('Metti in bacheca'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Stagione 2025/26'), findsOneWidget);
+    // Resta sulla stagione mostrata, con un trofeo in più.
+    expect(find.text('6'), findsOneWidget);
+    expect(find.text('nella stagione 2025/26'), findsOneWidget);
     expect(find.bySemanticsLabel('Supercoppa'), findsOneWidget);
   });
 }

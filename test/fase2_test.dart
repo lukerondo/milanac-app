@@ -4,10 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/regolamento/rules_reader.dart';
+import 'package:milanac/features/rosa/rosa_page.dart';
 import 'package:milanac/main.dart';
 import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
+import 'rosa_view.dart';
 
 Future<void> openSection(WidgetTester tester, String title) =>
     goToSection(tester, title);
@@ -32,8 +34,7 @@ void main() {
     await startApp(tester);
     await openSection(tester, 'Rosa completa');
     // L'elenco classico (la vista predefinita sono le mini carte).
-    await tester.tap(find.text('Elenco'));
-    await tester.pumpAndSettle();
+    await showRosaAs(tester, RosaView.elenco);
 
     await tester.scrollUntilVisible(
       find.text('Marco Rossi'),
@@ -98,9 +99,8 @@ void main() {
 
     // Filtro FUTURO in Rosa: Neri (entrambe), Verdi e ora Rossi.
     await openSection(tester, 'Rosa completa');
-    await tester.tap(find.text('Elenco'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO (3)'));
+    await showRosaAs(tester, RosaView.elenco);
+    await tester.tap(find.widgetWithText(FilterPill, 'Futuro · 3'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Paolo Verdi'),

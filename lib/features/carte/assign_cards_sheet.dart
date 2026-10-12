@@ -143,6 +143,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
         .toList();
     final blueIds = blue.map((c) => c.playerId).toSet();
     final byId = {for (final m in members) m.id: m};
+    final p = context.pal;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -161,21 +162,21 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
             ),
             Text(
               matchTitle(widget.match),
-              style: const TextStyle(color: Colors.white60),
+              style: TextStyle(fontSize: 15, color: p.textSecondary),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Un premiato per reparto (una sola carta a testa), con il bonus '
               'sull\'overall. La carta vale 7 giorni.',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+              style: TextStyle(fontSize: 14, color: p.textMuted),
             ),
             if (blue.isNotEmpty) ...[
               const SizedBox(height: 8),
               for (final c in blue)
                 SpecialCardRow(card: c, member: byId[c.playerId]),
-              const Text(
+              Text(
                 'La blu elettrico è automatica e batte la nero/oro.',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+                style: TextStyle(fontSize: 13, color: p.textMuted),
               ),
             ],
             for (final r in reparti) ...[
@@ -227,17 +228,20 @@ class _RepartoPicker extends StatelessWidget {
   final ValueChanged<int> onBonus;
 
   /// [other]: il reparto in cui il giocatore ha già la carta (null = libero).
-  static DropdownMenuItem<String?> _item(Member m, String? other) =>
-      DropdownMenuItem(
-        value: m.id,
-        enabled: other == null,
-        child: Text(
-          '${m.displayName}${m.fieldPosition == null ? '' : ' (${m.fieldPosition})'}'
-          '${other == null ? '' : ' · ha già la carta $other'}',
-          overflow: TextOverflow.ellipsis,
-          style: other == null ? null : const TextStyle(color: Colors.white38),
-        ),
-      );
+  static DropdownMenuItem<String?> _item(
+    Member m,
+    String? other,
+    Color disabled,
+  ) => DropdownMenuItem(
+    value: m.id,
+    enabled: other == null,
+    child: Text(
+      '${m.displayName}${m.fieldPosition == null ? '' : ' (${m.fieldPosition})'}'
+      '${other == null ? '' : ' · ha già la carta $other'}',
+      overflow: TextOverflow.ellipsis,
+      style: other == null ? null : TextStyle(color: disabled),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -258,7 +262,8 @@ class _RepartoPicker extends StatelessWidget {
           ),
           items: [
             const DropdownMenuItem(value: null, child: Text('Nessuno')),
-            for (final m in sorted) _item(m, takenBy(m.id)),
+            for (final m in sorted)
+              _item(m, takenBy(m.id), context.pal.textDisabled),
           ],
           onChanged: onChanged,
         ),
@@ -267,11 +272,11 @@ class _RepartoPicker extends StatelessWidget {
             children: [
               Text(
                 '+$bonus',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: sportFont,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: MilanacColors.gold,
+                  color: context.pal.accentText,
                 ),
               ),
               Expanded(

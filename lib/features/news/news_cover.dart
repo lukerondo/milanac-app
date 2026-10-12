@@ -3,10 +3,11 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
+import '../carta/card_colors.dart';
 import 'news_item.dart';
 
-/// Immagine in testa alla notizia: la foto della fonte se disponibile,
-/// altrimenti una copertina "EA SPORTS FC 27" disegnata (colore per categoria).
+/// Immagine della notizia: la foto della fonte se disponibile, altrimenti una
+/// copertina "EA SPORTS FC 27" disegnata, nera e oro, con l'icona della categoria.
 class NewsImage extends StatelessWidget {
   const NewsImage({
     super.key,
@@ -17,7 +18,7 @@ class NewsImage extends StatelessWidget {
   final NewsItem item;
   final double height;
 
-  /// Miniatura (card stretta della Home): copertina semplificata.
+  /// Miniatura (riga della notizia): copertina semplificata.
   final bool compact;
 
   @override
@@ -44,6 +45,7 @@ class NewsImage extends StatelessWidget {
   }
 }
 
+/// Copertina disegnata (colori fissi: è un'immagine, uguale nei due temi).
 class NewsCover extends StatelessWidget {
   const NewsCover({
     super.key,
@@ -55,59 +57,43 @@ class NewsCover extends StatelessWidget {
   final double height;
   final bool compact;
 
-  static (Color, Color, IconData, String) styleFor(String category) =>
-      switch (category) {
-        'aggiornamenti' => (
-          const Color(0xFF1F6FEB),
-          const Color(0xFF0B1A33),
-          Icons.system_update_rounded,
-          'AGGIORNAMENTO',
-        ),
-        'tornei' => (
-          MilanacColors.gold,
-          const Color(0xFF2A1F05),
-          Icons.emoji_events_rounded,
-          'TORNEI',
-        ),
-        'ultimate_team' => (
-          const Color(0xFF12B886),
-          const Color(0xFF062A20),
-          Icons.style_rounded,
-          'ULTIMATE TEAM',
-        ),
-        _ => (
-          MilanacColors.red,
-          const Color(0xFF2A060C),
-          Icons.groups_rounded,
-          'PRO CLUBS',
-        ),
-      };
+  static (IconData, String) styleFor(String category) => switch (category) {
+    'aggiornamenti' => (Icons.system_update_rounded, 'AGGIORNAMENTO'),
+    'console' => (Icons.sports_esports_rounded, 'CONSOLE'),
+    'tornei' => (Icons.emoji_events_rounded, 'TORNEI'),
+    'ultimate_team' => (Icons.style_rounded, 'ULTIMATE TEAM'),
+    _ => (Icons.groups_rounded, 'PRO CLUBS'),
+  };
 
   @override
   Widget build(BuildContext context) {
-    final (accent, dark, icon, label) = styleFor(category);
+    final (icon, label) = styleFor(category);
     if (compact) {
       return SizedBox(
         height: height,
         width: double.infinity,
         child: CustomPaint(
-          painter: _CoverPainter(accent: accent, dark: dark),
+          painter: _CoverPainter(),
           child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 26, color: Colors.white.withValues(alpha: .9)),
-                const SizedBox(height: 2),
-                const Text(
-                  'FC 27',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                    height: 1,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 24, color: CardColors.goldText),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'FC 27',
+                    style: TextStyle(
+                      fontFamily: sportFont,
+                      color: MilanacColors.ivory,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      height: 1,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -117,7 +103,7 @@ class NewsCover extends StatelessWidget {
       height: height,
       width: double.infinity,
       child: CustomPaint(
-        painter: _CoverPainter(accent: accent, dark: dark),
+        painter: _CoverPainter(),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -130,8 +116,8 @@ class NewsCover extends StatelessWidget {
                     const Text(
                       'EA SPORTS',
                       style: TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w800,
+                        color: MilanacColors.ivoryMuted,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: 3,
                         fontSize: 12,
                       ),
@@ -140,11 +126,11 @@ class NewsCover extends StatelessWidget {
                       child: Text(
                         'FC 27',
                         style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
+                          fontFamily: sportFont,
+                          color: MilanacColors.ivory,
+                          fontWeight: FontWeight.w700,
                           fontSize: 54,
                           height: 1,
-                          letterSpacing: -1,
                         ),
                       ),
                     ),
@@ -155,17 +141,15 @@ class NewsCover extends StatelessWidget {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: accent,
+                        color: MilanacColors.gold,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         label,
-                        style: TextStyle(
-                          color: accent.computeLuminance() > .5
-                              ? Colors.black
-                              : Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 11,
+                        style: const TextStyle(
+                          color: MilanacColors.ink,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
                           letterSpacing: 1.2,
                         ),
                       ),
@@ -173,7 +157,7 @@ class NewsCover extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(icon, size: 72, color: Colors.white.withValues(alpha: .85)),
+              Icon(icon, size: 72, color: CardColors.goldText),
             ],
           ),
         ),
@@ -182,42 +166,36 @@ class NewsCover extends StatelessWidget {
   }
 }
 
-/// Sfondo: gradiente scuro, luce da stadio e linee del campo in prospettiva.
+/// Sfondo: nero caldo, luce da stadio d'oro e linee del campo in prospettiva.
 class _CoverPainter extends CustomPainter {
-  _CoverPainter({required this.accent, required this.dark});
-  final Color accent;
-  final Color dark;
-
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     canvas.drawRect(
       rect,
       Paint()
-        ..shader = LinearGradient(
+        ..shader = const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [dark, Colors.black],
+          colors: [CardColors.neroOroLight, MilanacColors.black],
         ).createShader(rect),
     );
     // Riflettore in alto a destra.
+    final light = Offset(size.width * .85, -size.height * .1);
     canvas.drawCircle(
-      Offset(size.width * .85, -size.height * .1),
+      light,
       size.width * .6,
       Paint()
-        ..shader =
-            RadialGradient(
-              colors: [accent.withValues(alpha: .45), Colors.transparent],
-            ).createShader(
-              Rect.fromCircle(
-                center: Offset(size.width * .85, -size.height * .1),
-                radius: size.width * .6,
-              ),
-            ),
+        ..shader = RadialGradient(
+          colors: [
+            MilanacColors.gold.withValues(alpha: .4),
+            MilanacColors.gold.withValues(alpha: 0),
+          ],
+        ).createShader(Rect.fromCircle(center: light, radius: size.width * .6)),
     );
     // Linee del campo in prospettiva.
     final line = Paint()
-      ..color = Colors.white.withValues(alpha: .08)
+      ..color = MilanacColors.ivory.withValues(alpha: .08)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
     final vanish = Offset(size.width * .6, -size.height * .6);
@@ -229,14 +207,13 @@ class _CoverPainter extends CustomPainter {
       final y = size.height * (1 - pow(.55, j));
       canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
     }
-    // Barra colorata in basso.
+    // Filo d'oro in basso.
     canvas.drawRect(
-      Rect.fromLTWH(0, size.height - 4, size.width, 4),
-      Paint()..color = accent,
+      Rect.fromLTWH(0, size.height - 3, size.width, 3),
+      Paint()..color = MilanacColors.gold,
     );
   }
 
   @override
-  bool shouldRepaint(covariant _CoverPainter old) =>
-      old.accent != accent || old.dark != dark;
+  bool shouldRepaint(covariant _CoverPainter old) => false;
 }

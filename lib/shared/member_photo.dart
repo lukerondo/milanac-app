@@ -50,20 +50,27 @@ ImageProvider? memberPhoto(WidgetRef ref, Member m) {
   return social == null || social.isEmpty ? null : NetworkImage(social);
 }
 
-/// Avatar tondo: foto se c'è, altrimenti numero di maglia o iniziale.
+/// Avatar tondo: foto se c'è, altrimenti numero di maglia o iniziale. Senza foto
+/// usa i colori del tema ([background] e [foreground] per i fondi sempre scuri).
 class MemberAvatar extends ConsumerWidget {
   const MemberAvatar({
     super.key,
     required this.member,
     this.radius = 22,
     this.showNumber = true,
+    this.background,
+    this.foreground,
   });
   final Member member;
   final double radius;
   final bool showNumber;
+  final Color? background;
+  final Color? foreground;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
+    final fill = background ?? p.surfaceHigher;
     // Il volto disegnato ha la precedenza su qualsiasi foto.
     final face = member.face;
     if (face != null) {
@@ -72,25 +79,29 @@ class MemberAvatar extends ConsumerWidget {
           face: face,
           size: radius * 2,
           crop: FaceCrop.head,
-          background: MilanacColors.surfaceHigh,
+          background: fill,
         ),
       );
     }
     final photo = memberPhoto(ref, member);
     final label = showNumber && member.shirtNumber != null
         ? '${member.shirtNumber}'
+        : member.displayName.isEmpty
+        ? '?'
         : member.displayName.characters.first.toUpperCase();
     return CircleAvatar(
       radius: radius,
-      backgroundColor: MilanacColors.red,
+      backgroundColor: fill,
       backgroundImage: photo,
       child: photo == null
           ? Text(
               label,
               style: TextStyle(
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                fontSize: radius * .7,
+                fontFamily: sportFont,
+                fontWeight: FontWeight.w600,
+                color: foreground ?? p.textSecondary,
+                fontSize: (radius * .75).clamp(12, 48).toDouble(),
+                height: 1,
               ),
             )
           : null,

@@ -5,12 +5,16 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
+import '../carta/card_colors.dart';
 import '../carta/card_stats.dart';
 import '../carta/fut_card.dart';
+import '../carte/special_cards_repository.dart';
+import '../risultati/match.dart';
 import '../rosa/member.dart';
 
 /// Apre il walkout come nei pacchetti FUT: luci, bandiera, ruolo, stemma, poi la carta.
 /// [previousOverall] valorizzato = "overall aumentato", altrimenti "benvenuto".
+/// [caption] è la frase sotto la carta (es. perché è arrivata la carta speciale).
 Future<void> showWalkout(
   BuildContext context, {
   required Member member,
@@ -18,6 +22,7 @@ Future<void> showWalkout(
   int? previousOverall,
   CardSpecial? special,
   int bonus = 0,
+  String? caption,
 }) => Navigator.of(context, rootNavigator: true).push(
   PageRouteBuilder<void>(
     opaque: true,
@@ -28,11 +33,34 @@ Future<void> showWalkout(
       previousOverall: previousOverall,
       special: special,
       bonus: bonus,
+      caption: caption,
     ),
     transitionsBuilder: (_, animation, _, child) =>
         FadeTransition(opacity: animation, child: child),
   ),
 );
+
+/// La frase sotto la carta speciale nel walkout: "Il Direttivo ti ha scelto per il
+/// centrocampo della 2ª giornata." (con [name], per la carta di un compagno).
+String specialCardCaption(SpecialCard card, {ClubMatch? match, String? name}) {
+  if (card.isBlue) {
+    final reason =
+        card.reason ?? 'Tripletta o tre partite di fila senza subire gol';
+    return reason.endsWith('.') ? reason : '$reason.';
+  }
+  final reparto = switch (card.reparto) {
+    'POR' => 'la porta',
+    'DIF' => 'la difesa',
+    'CEN' => 'il centrocampo',
+    'ATT' => "l'attacco",
+    _ => 'la squadra',
+  };
+  final day = match == null
+      ? null
+      : matchdayOf(match) ?? 'partita con ${match.opponent}';
+  final who = name == null ? 'ti ha scelto' : 'ha scelto $name';
+  return 'Il Direttivo $who per $reparto${day == null ? '' : ' della $day'}.';
+}
 
 class WalkoutPage extends StatefulWidget {
   const WalkoutPage({
@@ -42,6 +70,7 @@ class WalkoutPage extends StatefulWidget {
     this.previousOverall,
     this.special,
     this.bonus = 0,
+    this.caption,
   });
   final Member member;
   final CardStats stats;
@@ -50,6 +79,9 @@ class WalkoutPage extends StatefulWidget {
   /// Carta speciale appena ricevuta (nero/oro o blu elettrico) con il suo bonus.
   final CardSpecial? special;
   final int bonus;
+
+  /// Frase sotto la carta; senza, una frase per l'overall nuovo o il benvenuto.
+  final String? caption;
 
   static const duration = Duration(milliseconds: 7600);
 
@@ -97,38 +129,48 @@ class _WalkoutPageState extends State<WalkoutPage>
     }
   }
 
-  /// Tocco: salta alla fine; a fine animazione chiude.
-  void _onTap() {
-    if (_c.isCompleted) {
-      Navigator.of(context).pop();
-    } else {
-      _lastStep = 99;
-      _c.value = 1;
-    }
+  /// Salta alla fine dell'animazione.
+  void _skip() {
+    _lastStep = 99;
+    _c.value = 1;
   }
 
+  /// Tocco: salta alla fine; a fine animazione chiude.
+  void _onTap() => _c.isCompleted ? Navigator.of(context).pop() : _skip();
+
+  /// Colore delle luci e del titolo: quello della carta.
   Color get _accent => switch (widget.special) {
-    CardSpecial.blu => const Color(0xFF3D8BFF),
-    CardSpecial.neroOro => const Color(0xFFF3D27A),
-    null => _tierAccent,
+    CardSpecial.blu => CardColors.blueRing,
+    CardSpecial.neroOro => CardColors.goldText,
+    null => switch (tierOf(widget.member.overall)) {
+      CardTier.vuota => MilanacColors.ivory,
+      final tier => CardColors.tier(tier),
+    },
   };
 
-  Color get _tierAccent => switch (tierOf(widget.member.overall)) {
-    CardTier.rossonera => const Color(0xFFE0182F),
-    CardTier.oro => const Color(0xFFF3D27A),
-    CardTier.argento => const Color(0xFFDDE2EA),
-    CardTier.bronzo => const Color(0xFFD9A273),
-    CardTier.vuota => Colors.white,
+  int? get _up {
+    final m = widget.member;
+    final before = widget.previousOverall;
+    return before != null && m.overall != null ? m.overall! - before : null;
+  }
+
+  String get _title => switch (widget.special) {
+    CardSpecial.blu => 'BLU ELETTRICO',
+    CardSpecial.neroOro => 'CARTA DELLA SETTIMANA',
+    null => (_up ?? 0) > 0 ? 'OVERALL +$_up' : 'NUOVO ACQUISTO!',
   };
+
+  String get _caption =>
+      widget.caption ??
+      ((_up ?? 0) > 0
+          ? "L'overall sale a ${widget.member.overall}."
+          : 'Benvenuto nel MILANAC Pro Club.');
 
   @override
   Widget build(BuildContext context) {
     final m = widget.member;
-    final up = widget.previousOverall != null && m.overall != null
-        ? m.overall! - widget.previousOverall!
-        : null;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: MilanacColors.black,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _onTap,
@@ -136,11 +178,12 @@ class _WalkoutPageState extends State<WalkoutPage>
           animation: _c,
           builder: (context, _) {
             final t = _c.value;
+            final end = ((t - _flipEnd) / (1 - _flipEnd)).clamp(0.0, 1.0);
             return Stack(
               fit: StackFit.expand,
               children: [
                 CustomPaint(
-                  painter: _BeamsPainter(t: t, color: _accent),
+                  painter: _BackdropPainter(t: t, color: _accent),
                 ),
                 // Rivelazioni una alla volta, al centro.
                 _Reveal(
@@ -151,7 +194,7 @@ class _WalkoutPageState extends State<WalkoutPage>
                       ? const Icon(
                           Icons.public_rounded,
                           size: 120,
-                          color: Colors.white,
+                          color: MilanacColors.ivory,
                         )
                       : Text(
                           flagEmoji(m.nationality!),
@@ -167,7 +210,7 @@ class _WalkoutPageState extends State<WalkoutPage>
                     style: TextStyle(
                       fontFamily: sportFont,
                       fontSize: 120,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w700,
                       color: _accent,
                       letterSpacing: 4,
                       shadows: [Shadow(color: _accent, blurRadius: 30)],
@@ -183,67 +226,114 @@ class _WalkoutPageState extends State<WalkoutPage>
                     height: 170,
                   ),
                 ),
-                if (t >= _flipAt) _flippingCard(t),
-                // Titolo in alto.
-                Positioned(
-                  top: 70,
-                  left: 24,
-                  right: 24,
-                  child: Opacity(
-                    opacity: t < .06
-                        ? t / .06
-                        : (t > _flipAt && t < _flipEnd ? .4 : 1),
-                    child: Text(
-                      t < _flipEnd
-                          ? 'MILANAC PRO CLUB'
-                          : widget.special == CardSpecial.blu
-                          ? 'BLU ELETTRICO +${widget.bonus}'
-                          : widget.special == CardSpecial.neroOro
-                          ? 'CARTA DELLA SETTIMANA +${widget.bonus}'
-                          : up != null && up > 0
-                          ? 'OVERALL +$up'
-                          : 'NUOVO ACQUISTO!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: sportFont,
-                        color: t < _flipEnd ? Colors.white70 : _accent,
-                        fontSize: t < _flipEnd ? 16 : 30,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 3,
-                      ),
+                // Titolo, carta e frase, come nella tavola del walkout.
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 70, 24, 120),
+                    child: Column(
+                      children: [
+                        Opacity(
+                          opacity: t < .06
+                              ? t / .06
+                              : (t > _flipAt && t < _flipEnd ? .4 : 1),
+                          child: Text(
+                            t < _flipEnd ? 'MILANAC PRO CLUB' : _title,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontFamily: sportFont,
+                              color: t < _flipEnd
+                                  ? MilanacColors.ivoryMuted
+                                  : _accent,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 4,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Flexible(
+                          child: t >= _flipAt
+                              ? _flippingCard(t)
+                              : const SizedBox.shrink(),
+                        ),
+                        const SizedBox(height: 18),
+                        Opacity(
+                          opacity: end,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 300),
+                            child: Text(
+                              _caption,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                height: 1.4,
+                                color: MilanacColors.ivoryMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                Positioned(
-                  bottom: 40,
-                  left: 24,
-                  right: 24,
-                  child: t >= 1
-                      ? Column(
-                          children: [
-                            Text(
-                              m.displayName,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontFamily: sportFont,
-                                color: Colors.white,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1,
+                if (t < 1)
+                  SafeArea(
+                    child: Align(
+                      alignment: Alignment.topRight,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 8, 16, 0),
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(horizontal: 18),
+                            foregroundColor: MilanacColors.ivory,
+                            backgroundColor: MilanacColors.black.withValues(
+                              alpha: .5,
+                            ),
+                            side: BorderSide(
+                              color: MilanacColors.goldLight.withValues(
+                                alpha: .6,
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            FilledButton(
+                            shape: const StadiumBorder(),
+                            textStyle: const TextStyle(
+                              fontFamily: bodyFont,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: _skip,
+                          child: const Text('Salta'),
+                        ),
+                      ),
+                    ),
+                  ),
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+                      child: t >= 1
+                          ? FilledButton(
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size.fromHeight(54),
+                                backgroundColor: MilanacColors.gold,
+                                foregroundColor: MilanacColors.ink,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontFamily: bodyFont,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                               onPressed: () => Navigator.of(context).pop(),
                               child: const Text('Continua'),
-                            ),
-                          ],
-                        )
-                      : const Text(
-                          'Tocca per saltare',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white30, fontSize: 12),
-                        ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
                 ),
               ],
             );
@@ -261,35 +351,33 @@ class _WalkoutPageState extends State<WalkoutPage>
     final a = (p * 4 * pi) % (2 * pi);
     final front = a < pi / 2 || a > 3 * pi / 2;
     final scale = .55 + .45 * Curves.easeOutBack.transform(p);
-    return Center(
-      child: Transform.scale(
-        scale: scale,
-        child: Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.identity()
-            ..setEntry(3, 2, .0012)
-            ..rotateY(front ? a : a - pi),
-          child: SizedBox(
-            width: 260,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                boxShadow: [
-                  BoxShadow(
-                    color: _accent.withValues(alpha: .5 * p),
-                    blurRadius: 60,
-                    spreadRadius: 10,
-                  ),
-                ],
-              ),
-              child: front
-                  ? FutCard(
-                      member: widget.member,
-                      stats: widget.stats,
-                      special: widget.special,
-                      bonus: widget.bonus,
-                    )
-                  : const _CardBack(),
+    return Transform.scale(
+      scale: scale,
+      child: Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.identity()
+          ..setEntry(3, 2, .0012)
+          ..rotateY(front ? a : a - pi),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 250),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: _accent.withValues(alpha: .32 * p),
+                  blurRadius: 60,
+                ),
+              ],
             ),
+            child: front
+                ? FutCard(
+                    member: widget.member,
+                    special: widget.special,
+                    bonus: widget.bonus,
+                    glow: false,
+                  )
+                : const FutCardBack(),
           ),
         ),
       ),
@@ -323,62 +411,46 @@ class _Reveal extends StatelessWidget {
   }
 }
 
-/// Retro della carta: rosso scuro con lo stemma.
-class _CardBack extends StatelessWidget {
-  const _CardBack();
-
-  @override
-  Widget build(BuildContext context) => AspectRatio(
-    aspectRatio: 300 / 428,
-    child: ClipPath(
-      clipper: _CardClipper(),
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF8E0B20), Color(0xFF0B0B0D)],
-          ),
-        ),
-        child: Center(
-          child: Image.asset('assets/images/stemma_256.png', width: 110),
-        ),
-      ),
-    ),
-  );
-}
-
-class _CardClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) => cardShape(size);
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
-}
-
-/// Fasci di luce da stadio che ruotano dal basso, più intensi verso la fine.
-class _BeamsPainter extends CustomPainter {
-  _BeamsPainter({required this.t, required this.color});
+/// Sfondo del walkout: righe verticali d'oro, l'alone dietro la carta e, mentre si
+/// rivela, i fasci di luce da stadio che ruotano (spariscono quando la carta è girata).
+class _BackdropPainter extends CustomPainter {
+  _BackdropPainter({required this.t, required this.color});
   final double t;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * .62);
-    final radius = size.longestSide;
+    // Righe verticali, come la tavola.
+    final lines = Paint()
+      ..color = MilanacColors.gold.withValues(alpha: .09)
+      ..strokeWidth = 1.5;
+    for (var x = .75; x < size.width; x += 32) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), lines);
+    }
     final intensity = (.25 + .75 * t).clamp(0.0, 1.0);
-    // Alone centrale.
+    // Alone dietro la carta.
+    final glowCenter = Offset(size.width / 2, size.height * .45);
+    final glowRadius = size.width * .8;
     canvas.drawCircle(
-      center,
-      radius * .5,
+      glowCenter,
+      glowRadius,
       Paint()
         ..shader = RadialGradient(
           colors: [
-            color.withValues(alpha: .35 * intensity),
-            Colors.transparent,
+            color.withValues(alpha: .34 * intensity),
+            color.withValues(alpha: .12 * intensity),
+            color.withValues(alpha: 0),
           ],
-        ).createShader(Rect.fromCircle(center: center, radius: radius * .5)),
+          stops: const [0, .55, 1],
+        ).createShader(Rect.fromCircle(center: glowCenter, radius: glowRadius)),
     );
-    // Raggi.
+    // Fasci di luce fino a quando la carta è girata.
+    final beamsOpacity = t < _flipAt
+        ? 1.0
+        : (1 - (t - _flipAt) / (_flipEnd - _flipAt)).clamp(0.0, 1.0);
+    if (beamsOpacity == 0) return;
+    final center = Offset(size.width / 2, size.height * .62);
+    final radius = size.longestSide;
     const beams = 14;
     final rotation = t * pi * .9;
     for (var i = 0; i < beams; i++) {
@@ -399,8 +471,10 @@ class _BeamsPainter extends CustomPainter {
         Paint()
           ..shader = RadialGradient(
             colors: [
-              color.withValues(alpha: (i.isEven ? .28 : .14) * intensity),
-              Colors.transparent,
+              color.withValues(
+                alpha: (i.isEven ? .28 : .14) * intensity * beamsOpacity,
+              ),
+              color.withValues(alpha: 0),
             ],
           ).createShader(Rect.fromCircle(center: center, radius: radius)),
       );
@@ -414,11 +488,14 @@ class _BeamsPainter extends CustomPainter {
       canvas.drawCircle(
         Offset(x, y),
         1 + rnd.nextDouble() * 1.5,
-        Paint()..color = color.withValues(alpha: .6 * twinkle * intensity),
+        Paint()
+          ..color = color.withValues(
+            alpha: .6 * twinkle * intensity * beamsOpacity,
+          ),
       );
     }
   }
 
   @override
-  bool shouldRepaint(_BeamsPainter old) => old.t != t || old.color != color;
+  bool shouldRepaint(_BackdropPainter old) => old.t != t || old.color != color;
 }

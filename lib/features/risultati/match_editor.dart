@@ -83,9 +83,8 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
         ? "Inserisci il nome dell'avversario."
         : resultError(goalsFor, goalsAgainst);
     if (error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     setState(() => _saving = true);
@@ -234,10 +233,11 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
               ],
             ),
             const SizedBox(height: 4),
-            const Center(
+            Center(
               child: Text(
                 'Lascia vuoto il punteggio se la partita non è ancora stata giocata.',
-                style: TextStyle(color: Colors.white38, fontSize: 12),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: context.pal.textMuted),
               ),
             ),
             const SizedBox(height: 8),
@@ -263,7 +263,6 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _saving ? null : _save,
-              style: FilledButton.styleFrom(backgroundColor: MilanacColors.red),
               child: const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Text('Salva partita'),

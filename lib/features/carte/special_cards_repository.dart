@@ -10,6 +10,7 @@ import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../carta/card_colors.dart';
 import '../risultati/match.dart';
 
 /// Tipo di carta speciale: la nero/oro della settimana (assegnata dal Direttivo, una per
@@ -17,7 +18,7 @@ import '../risultati/match.dart';
 /// senza subire gol). Durano 7 giorni e sostituiscono la carta normale.
 enum CardSpecial {
   neroOro('nero_oro', 'Nero/oro', 'CARTA DELLA SETTIMANA', MilanacColors.gold),
-  blu('blu', 'Blu elettrico', 'BLU ELETTRICO', Color(0xFF3D8BFF));
+  blu('blu', 'Blu elettrico', 'BLU ELETTRICO', CardColors.blueRing);
 
   const CardSpecial(this.db, this.label, this.cardLabel, this.color);
 
@@ -27,6 +28,8 @@ enum CardSpecial {
 
   /// Scritta in alto sulla carta.
   final String cardLabel;
+
+  /// Colore fisso della carta (anello delle foto, icone): uguale nei due temi.
   final Color color;
 
   IconData get icon =>
@@ -111,6 +114,15 @@ class SpecialCard {
 /// Ordine di presentazione: per reparto, poi la blu prima della nero/oro.
 int compareCards(SpecialCard a, SpecialCard b) {
   final r = reparti.indexOf(a.reparto).compareTo(reparti.indexOf(b.reparto));
+  if (r != 0) return r;
+  if (a.isBlue != b.isBlue) return a.isBlue ? -1 : 1;
+  return b.startsAt.compareTo(a.startsAt);
+}
+
+/// Ordine delle tavole (giornata, carte speciali): dall'attacco alla porta, la blu
+/// prima della nero/oro dello stesso reparto.
+int compareCardsForDisplay(SpecialCard a, SpecialCard b) {
+  final r = reparti.indexOf(b.reparto).compareTo(reparti.indexOf(a.reparto));
   if (r != 0) return r;
   if (a.isBlue != b.isBlue) return a.isBlue ? -1 : 1;
   return b.startsAt.compareTo(a.startsAt);
@@ -276,7 +288,15 @@ class DemoSpecialCardsRepository extends SpecialCardsRepository {
       // Questa settimana (dalla 2ª giornata): una nero/oro per reparto e la blu del portiere.
       card('sc1', 'p2', CardSpecial.neroOro, 'ATT', 5, match: 'm1', daysAgo: 2),
       card('sc2', 'p3', CardSpecial.neroOro, 'DIF', 4, match: 'm1', daysAgo: 2),
-      card('sc3', 'demo', CardSpecial.neroOro, 'CEN', 5, match: 'm1', daysAgo: 2),
+      card(
+        'sc3',
+        'demo',
+        CardSpecial.neroOro,
+        'CEN',
+        5,
+        match: 'm1',
+        daysAgo: 2,
+      ),
       card(
         'sc4',
         'p4',
@@ -288,7 +308,15 @@ class DemoSpecialCardsRepository extends SpecialCardsRepository {
         reason: 'Tre partite di fila senza subire gol',
       ),
       // La settimana scorsa (1ª giornata).
-      card('sc5', 'p2', CardSpecial.neroOro, 'ATT', 5, match: 'm3', daysAgo: 11),
+      card(
+        'sc5',
+        'p2',
+        CardSpecial.neroOro,
+        'ATT',
+        5,
+        match: 'm3',
+        daysAgo: 11,
+      ),
     ]);
   }
 

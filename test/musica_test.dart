@@ -31,17 +31,34 @@ void main() {
     expect(find.byTooltip('Metti in muto'), findsNothing);
     await goToSection(tester, 'Colonna sonora');
     expect(find.text('COLONNA SONORA'), findsOneWidget);
-    expect(find.text('Le canzoni più iconiche di FIFA'), findsOneWidget);
+    expect(find.text('Nessuna musica scelta'), findsOneWidget);
 
     await tester.tap(find.text('Scegli il file audio'));
     await tester.pumpAndSettle();
     expect(find.text('Canzoni iconiche FIFA.mp3'), findsOneWidget);
-    expect(find.text('In riproduzione (in loop)'), findsOneWidget);
+    expect(find.text('Scelto dal tuo telefono'), findsOneWidget);
+    expect(find.byTooltip('Metti in pausa'), findsOneWidget);
 
     // Muto dalla barra in alto.
     await tester.tap(find.byTooltip('Metti in muto'));
     await tester.pumpAndSettle();
-    expect(find.text('In muto'), findsOneWidget);
+    expect(find.byTooltip('Fai partire la musica'), findsOneWidget);
     expect(find.byTooltip('Riattiva la musica'), findsOneWidget);
+
+    // Il pulsante grande la fa ripartire; in muto il lettore resta fermo.
+    await tester.tap(find.byTooltip('Fai partire la musica'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Metti in muto'), findsOneWidget);
+    await tester.tap(find.byTooltip('Metti in pausa'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Riattiva la musica'), findsOneWidget);
+
+    // Sotto, le playlist e i video del club.
+    await tester.scrollUntilVisible(
+      find.text('Le canzoni più iconiche di FIFA'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Le canzoni più iconiche di FIFA'), findsOneWidget);
   });
 }

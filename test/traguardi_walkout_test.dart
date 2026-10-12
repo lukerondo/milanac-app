@@ -63,8 +63,6 @@ void main() {
   testWidgets('Carta: traguardi e walkout', (tester) async {
     await startApp(tester);
     await goToSection(tester, 'Rosa completa');
-    await tester.tap(find.text('Carte'));
-    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('MARCO ROSSI'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('MARCO ROSSI'));
@@ -72,15 +70,19 @@ void main() {
 
     final page = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(find.text('48/50'), 200, scrollable: page);
+    expect(
+      find.textContaining(RegExp(r'^TRAGUARDI · \d+ DI 11$')),
+      findsOneWidget,
+    );
     expect(find.text('Presenza fissa'), findsOneWidget);
     expect(find.text('48/50'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('Walkout'),
+      find.text('Guarda il walkout'),
       -200,
       scrollable: page,
     );
-    await tester.tap(find.text('Walkout'));
+    await tester.tap(find.text('Guarda il walkout'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
@@ -88,7 +90,13 @@ void main() {
     expect(find.text('ATT'), findsOneWidget); // ruolo rivelato
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
-    expect(find.text('CARTA DELLA SETTIMANA +5'), findsOneWidget);
+    expect(find.text('CARTA DELLA SETTIMANA'), findsOneWidget);
+    expect(
+      find.text(
+        'Il Direttivo ha scelto Marco Rossi per l\'attacco della 2ª giornata.',
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Continua'));
     await tester.pumpAndSettle();
     expect(find.text('CARTA GIOCATORE'), findsOneWidget);

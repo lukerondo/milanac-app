@@ -34,7 +34,7 @@ void main() {
     expect(rows.first.played, 5);
   });
 
-  testWidgets('Tornei: elenco, filtro, dettaglio con classifica', (
+  testWidgets('Tornei: elenco con stato e classifica, dettaglio', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1080, 2340);
@@ -52,17 +52,18 @@ void main() {
     await tester.pumpAndSettle();
     await goToSection(tester, 'Tornei');
 
-    expect(find.text('FVPA Serie B'), findsOneWidget);
-    expect(find.text('FVPA · 1° posto · 7 pt'), findsOneWidget);
-    expect(find.text('Coppa Riserve'), findsOneWidget);
+    // Il torneo in corso con la classifica e il sito, poi quello con le iscrizioni.
+    expect(find.text('FVPA SERIE B'), findsOneWidget);
+    expect(find.text('Milan AC · in corso dal 15 settembre'), findsOneWidget);
+    expect(find.text('In corso'), findsOneWidget);
+    expect(find.text('Squadra'), findsOneWidget);
+    expect(find.text('Dinamo Pixel'), findsOneWidget);
+    expect(find.text('Sito del torneo'), findsOneWidget);
+    expect(find.text('COPPA RISERVE'), findsOneWidget);
+    expect(find.text('Milan AC Futuro · Torneo amatoriale'), findsOneWidget);
+    expect(find.text('Iscrizioni'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ChoiceChip, 'FUTURO'));
-    await tester.pumpAndSettle();
-    expect(find.text('FVPA Serie B'), findsNothing);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Tutte'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('FVPA Serie B'));
+    await tester.tap(find.text('FVPA SERIE B'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'TORNEO'), findsOneWidget);
     expect(find.text('CLASSIFICA'), findsOneWidget);

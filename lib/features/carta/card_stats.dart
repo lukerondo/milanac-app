@@ -102,7 +102,43 @@ final _scorerItem = RegExp(
 /// due giocatori (omonimi), quel nome non assegna gol a nessuno.
 Map<String, int> scorerGoals(String? scorers, Iterable<Member> players) {
   final goals = <String, int>{};
-  if (scorers == null || scorers.trim().isEmpty) return goals;
+  for (final (_, count, member) in _scorerItems(scorers, players)) {
+    if (member == null) continue;
+    goals.update(member.id, (g) => g + count, ifAbsent: () => count);
+  }
+  return goals;
+}
+
+/// I marcatori di una partita da mostrare, nell'ordine in cui sono scritti: nome, gol
+/// e giocatore riconosciuto tra [players] (null se il nome non corrisponde a nessuno,
+/// o a più di uno). Lo stesso giocatore scritto due volte diventa una riga sola.
+List<(String, int, Member?)> scorerLines(
+  String? scorers,
+  Iterable<Member> players,
+) {
+  final lines = <(String, int, Member?)>[];
+  for (final (name, count, member) in _scorerItems(scorers, players)) {
+    final shown = member?.displayName ?? name;
+    final i = lines.indexWhere(
+      (l) => member != null
+          ? l.$3?.id == member.id
+          : l.$3 == null && l.$1 == shown,
+    );
+    if (i < 0) {
+      lines.add((shown, count, member));
+    } else {
+      lines[i] = (shown, lines[i].$2 + count, member);
+    }
+  }
+  return lines;
+}
+
+/// Ogni voce dell'elenco marcatori: nome come è scritto, gol, giocatore riconosciuto.
+Iterable<(String, int, Member?)> _scorerItems(
+  String? scorers,
+  Iterable<Member> players,
+) sync* {
+  if (scorers == null || scorers.trim().isEmpty) return;
   final levels = <String? Function(Member)>[
     (p) => _norm(p.displayName),
     (p) => _norm(p.displayName).split(' ').last,
@@ -111,22 +147,23 @@ Map<String, int> scorerGoals(String? scorers, Iterable<Member> players) {
   for (final raw in scorers.split(RegExp(r'[,;\n]'))) {
     final match = _scorerItem.firstMatch(raw.trim());
     if (match == null) continue;
-    final name = _norm(match.group(1) ?? '');
+    final written = (match.group(1) ?? '').trim();
+    final name = _norm(written);
     if (name.isEmpty) continue;
     final count = int.tryParse(match.group(2) ?? match.group(3) ?? '') ?? 1;
+    Member? member;
     for (final key in levels) {
-      final found = {
+      final found = [
         for (final p in players)
-          if (key(p) == name) p.id,
-      };
+          if (key(p) == name) p,
+      ];
       if (found.isEmpty) continue;
-      if (found.length == 1) {
-        goals.update(found.single, (g) => g + count, ifAbsent: () => count);
-      }
+      // Omonimi allo stesso livello: il nome non vale per nessuno.
+      if (found.map((p) => p.id).toSet().length == 1) member = found.first;
       break;
     }
+    yield (written, count, member);
   }
-  return goals;
 }
 
 /// Gol di [m] in un elenco marcatori, cercando tra [players] (di solito la squadra;

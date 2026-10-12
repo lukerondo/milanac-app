@@ -5,17 +5,20 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/core/teams.dart';
 import 'package:milanac/features/carta/card_stats.dart';
+import 'package:milanac/features/carta/mini_card.dart';
 import 'package:milanac/features/carte/special_cards_repository.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/presenze/attendance.dart';
 import 'package:milanac/features/presenze/attendance_repository.dart';
 import 'package:milanac/features/risultati/match.dart';
 import 'package:milanac/features/rosa/member.dart';
+import 'package:milanac/features/rosa/rosa_page.dart';
 import 'package:milanac/features/rosa/rosa_repository.dart';
 import 'package:milanac/features/traguardi/player_stats.dart';
 import 'package:milanac/main.dart';
 
 import 'helpers.dart';
+import 'rosa_view.dart';
 
 final rossi = Member(
   id: 'r',
@@ -92,7 +95,11 @@ void main() {
   });
 
   test('gol: contano solo le partite giocate dalle sue squadre', () {
-    final neri = _player('n', 'Andrea Neri', teams: {Team.milanac, Team.futuro});
+    final neri = _player(
+      'n',
+      'Andrea Neri',
+      teams: {Team.milanac, Team.futuro},
+    );
     final verdi = _player('v', 'Paolo Verdi', teams: {Team.futuro});
     final roster = [rossi, neri, verdi];
     final matches = [
@@ -108,14 +115,13 @@ void main() {
         scorers: 'Rossi',
       ),
     ];
-    int goals(Member m) =>
-        CardStats.of(
-          m,
-          attendance: const [],
-          matches: matches,
-          roster: roster,
-          now: DateTime(2026, 10, 3),
-        ).goals;
+    int goals(Member m) => CardStats.of(
+      m,
+      attendance: const [],
+      matches: matches,
+      roster: roster,
+      now: DateTime(2026, 10, 3),
+    ).goals;
     expect(goals(rossi), 2);
     expect(goals(neri), 2);
     expect(goals(verdi), 1);
@@ -149,8 +155,11 @@ void main() {
   });
 
   test('presenze: le risposte per i giorni che devono venire non contano', () {
-    AttendanceEntry entry(int day, AttendanceStatus s) =>
-        AttendanceEntry(playerId: 'r', date: DateTime(2026, 10, day), status: s);
+    AttendanceEntry entry(int day, AttendanceStatus s) => AttendanceEntry(
+      playerId: 'r',
+      date: DateTime(2026, 10, day),
+      status: s,
+    );
     final attendance = [
       entry(10, AttendanceStatus.assente),
       entry(12, AttendanceStatus.presente),
@@ -174,89 +183,94 @@ void main() {
     expect(afterMidnight.presence, 67);
   });
 
-  test('traguardi: i numeri si ricaricano con una carta nuova o una presenza', () async {
-    final stats = _CountingStats();
-    final container = ProviderContainer(
-      overrides: [playerStatsRepositoryProvider.overrideWithValue(stats)],
-    );
-    addTearDown(container.dispose);
-    container.listen(playerStatsProvider('p6'), (_, _) {});
-    await container.read(playerStatsProvider('p6').future);
-    await pumpEventQueue();
-    expect(stats.loads, 1, reason: 'il primo arrivo dei dati non ricarica');
+  test(
+    'traguardi: i numeri si ricaricano con una carta nuova o una presenza',
+    () async {
+      final stats = _CountingStats();
+      final container = ProviderContainer(
+        overrides: [playerStatsRepositoryProvider.overrideWithValue(stats)],
+      );
+      addTearDown(container.dispose);
+      container.listen(playerStatsProvider('p6'), (_, _) {});
+      await container.read(playerStatsProvider('p6').future);
+      await pumpEventQueue();
+      expect(stats.loads, 1, reason: 'il primo arrivo dei dati non ricarica');
 
-    // Il Direttivo gli assegna una carta nero/oro.
-    await container
-        .read(specialCardsRepositoryProvider)
-        .assign(_played('m2', '2-2', team: Team.futuro), const [
-          CardAward(playerId: 'p6', reparto: 'CEN'),
-        ]);
-    await pumpEventQueue();
-    expect(stats.loads, 2);
+      // Il Direttivo gli assegna una carta nero/oro.
+      await container.read(specialCardsRepositoryProvider).assign(
+        _played('m2', '2-2', team: Team.futuro),
+        const [CardAward(playerId: 'p6', reparto: 'CEN')],
+      );
+      await pumpEventQueue();
+      expect(stats.loads, 2);
 
-    // Risponde per stasera.
-    final attendance = container.read(attendanceRepositoryProvider);
-    await attendance.save(
-      AttendanceEntry(
-        playerId: 'p6',
-        date: DateTime.now(),
-        status: AttendanceStatus.presente,
-      ),
-    );
-    await pumpEventQueue();
-    expect(stats.loads, 3);
+      // Risponde per stasera.
+      final attendance = container.read(attendanceRepositoryProvider);
+      await attendance.save(
+        AttendanceEntry(
+          playerId: 'p6',
+          date: DateTime.now(),
+          status: AttendanceStatus.presente,
+        ),
+      );
+      await pumpEventQueue();
+      expect(stats.loads, 3);
 
-    // Le risposte degli altri non lo riguardano.
-    await attendance.save(
-      AttendanceEntry(
-        playerId: 'p3',
-        date: DateTime.now(),
-        status: AttendanceStatus.assente,
-      ),
-    );
-    await pumpEventQueue();
-    expect(stats.loads, 3);
-  });
+      // Le risposte degli altri non lo riguardano.
+      await attendance.save(
+        AttendanceEntry(
+          playerId: 'p3',
+          date: DateTime.now(),
+          status: AttendanceStatus.assente,
+        ),
+      );
+      await pumpEventQueue();
+      expect(stats.loads, 3);
+    },
+  );
 
-  test('copyWith: numero, stile, piattaforma e gamertag si possono svuotare', () {
-    final m = Member(
-      id: 'x',
-      displayName: 'Marco Rossi',
-      role: ClubRole.giocatore,
-      joinedAt: DateTime(2025),
-      gamertag: 'Diavolo_9',
-      fieldPosition: 'ATT',
-      shirtNumber: 9,
-      overall: 86,
-      playStyle: 'Finalizzatore',
-      platform: GamePlatform.ps5,
-    );
-    final same = m.copyWith(overall: 87);
-    expect(same.overall, 87);
-    expect(same.shirtNumber, 9);
-    expect(same.playStyle, 'Finalizzatore');
-    expect(same.platform, GamePlatform.ps5);
-    expect(same.gamertag, 'Diavolo_9');
+  test(
+    'copyWith: numero, stile, piattaforma e gamertag si possono svuotare',
+    () {
+      final m = Member(
+        id: 'x',
+        displayName: 'Marco Rossi',
+        role: ClubRole.giocatore,
+        joinedAt: DateTime(2025),
+        gamertag: 'Diavolo_9',
+        fieldPosition: 'ATT',
+        shirtNumber: 9,
+        overall: 86,
+        playStyle: 'Finalizzatore',
+        platform: GamePlatform.ps5,
+      );
+      final same = m.copyWith(overall: 87);
+      expect(same.overall, 87);
+      expect(same.shirtNumber, 9);
+      expect(same.playStyle, 'Finalizzatore');
+      expect(same.platform, GamePlatform.ps5);
+      expect(same.gamertag, 'Diavolo_9');
 
-    final cleared = m.copyWith(
-      shirtNumber: null,
-      playStyle: null,
-      platform: null,
-      gamertag: null,
-    );
-    expect(cleared.shirtNumber, isNull);
-    expect(cleared.playStyle, isNull);
-    expect(cleared.platform, isNull);
-    expect(cleared.gamertag, isNull);
-    expect(cleared.fieldPosition, 'ATT');
-    expect(cleared.overall, 86);
-    expect(cleared.cardMap(), {
-      'play_style': null,
-      'platform': null,
-      'field_position': 'ATT',
-      'shirt_number': null,
-    });
-  });
+      final cleared = m.copyWith(
+        shirtNumber: null,
+        playStyle: null,
+        platform: null,
+        gamertag: null,
+      );
+      expect(cleared.shirtNumber, isNull);
+      expect(cleared.playStyle, isNull);
+      expect(cleared.platform, isNull);
+      expect(cleared.gamertag, isNull);
+      expect(cleared.fieldPosition, 'ATT');
+      expect(cleared.overall, 86);
+      expect(cleared.cardMap(), {
+        'play_style': null,
+        'platform': null,
+        'field_position': 'ATT',
+        'shirt_number': null,
+      });
+    },
+  );
 
   test('statistiche e livello della carta', () {
     final d = DateTime(2026, 9, 1);
@@ -353,6 +367,8 @@ void main() {
     expect(find.text('87'), findsOneWidget);
     expect(find.text('+5'), findsOneWidget);
     expect(find.textContaining('non ha ancora assegnato'), findsNothing);
+    await tester.ensureVisible(find.text('Modifica la mia carta'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Modifica la mia carta'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Regista'));
@@ -360,6 +376,12 @@ void main() {
     await tester.tap(find.text('Salva la carta'));
     await tester.pumpAndSettle();
 
+    // Lo stile scelto compare sulla carta, in cima al profilo.
+    await tester.scrollUntilVisible(
+      find.text('REGISTA'),
+      -200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('87'), findsOneWidget);
     expect(find.text('REGISTA'), findsOneWidget);
   });
@@ -371,8 +393,7 @@ void main() {
     Member rossiNow() =>
         container.read(rosaProvider).value!.firstWhere((m) => m.id == 'p2');
     await goToSection(tester, 'Rosa completa');
-    await tester.tap(find.text('Elenco'));
-    await tester.pumpAndSettle();
+    await showRosaAs(tester, RosaView.elenco);
     await tester.scrollUntilVisible(
       find.text('Marco Rossi'),
       200,
@@ -388,8 +409,13 @@ void main() {
     await tester.tap(find.text('Modifica carta'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Numero'), '');
-    await tester.enterText(find.widgetWithText(TextField, 'Stile di gioco'), '');
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'PlayStation 5'));
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Stile di gioco'),
+      '',
+    );
+    await tester.ensureVisible(
+      find.widgetWithText(ChoiceChip, 'PlayStation 5'),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, 'PlayStation 5'));
     await tester.ensureVisible(find.text('Salva la carta'));
@@ -415,7 +441,7 @@ void main() {
     expect(rossiNow().fieldPosition, 'ATT');
   });
 
-  testWidgets('Rosa: vista a carte', (tester) async {
+  testWidgets('Rosa: mini carte in ordine di overall', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -430,12 +456,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     await goToSection(tester, 'Rosa completa');
-    await tester.tap(find.text('Carte'));
-    await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('MARCO ROSSI'));
-    // Prima la carta con l'overall più alto (Rossi, 86: rossonera).
-    expect(find.text('MARCO ROSSI'), findsOneWidget);
-    expect(find.text('86'), findsWidgets);
+    // Prima la carta con l'overall più alto (Rossi, 86 e il +5 della nero/oro).
+    final first = tester.widgetList<MiniCard>(find.byType(MiniCard)).first;
+    expect(first.member.displayName, 'Marco Rossi');
+    expect(find.text('91'), findsOneWidget);
+    expect(find.text('+5'), findsWidgets);
   });
 }

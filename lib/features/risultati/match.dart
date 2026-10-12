@@ -90,6 +90,15 @@ class ClubMatch {
   };
 }
 
+final _matchday = RegExp(r'(\d+)\s*[ªa°]?\s*giornata', caseSensitive: false);
+
+/// La giornata scritta nella competizione ("FVPA Serie B – 2ª giornata" → "2ª giornata").
+String? matchdayOf(ClubMatch m) {
+  final c = m.competition;
+  final found = c == null ? null : _matchday.firstMatch(c);
+  return found == null ? null : '${found.group(1)}ª giornata';
+}
+
 enum MediaType { link, video, photo }
 
 /// Foto, clip (max 15s) o link allegato a una partita (tabella `match_media`).

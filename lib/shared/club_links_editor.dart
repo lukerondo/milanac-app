@@ -5,6 +5,7 @@ import '../core/errors.dart';
 import '../core/theme.dart';
 import 'async_view.dart';
 import 'club_links.dart';
+import 'ui.dart';
 
 /// Editor dei contatti social (solo Direttivo).
 class ClubLinksEditorPage extends ConsumerStatefulWidget {
@@ -79,20 +80,26 @@ class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('CONTATTI SOCIAL'),
+        flexibleSpace: const Align(
+          alignment: Alignment.topCenter,
+          child: GoldRule(),
+        ),
         actions: [
+          // La barra è sempre scura: l'oro chiaro si legge in tutti e due i temi.
           TextButton(
-            onPressed: _saving || rows == null ? null : () => _save(rows),
-            child: const Text(
-              'SALVA',
-              style: TextStyle(color: MilanacColors.gold),
+            style: TextButton.styleFrom(
+              foregroundColor: MilanacColors.goldLight,
             ),
+            onPressed: _saving || rows == null ? null : () => _save(rows),
+            child: const Text('SALVA'),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       floatingActionButton: rows == null
           ? null
           : FloatingActionButton(
-              backgroundColor: MilanacColors.red,
+              tooltip: 'Aggiungi un contatto',
               onPressed: () =>
                   setState(() => rows.add(_Row(LinkKind.instagram, ''))),
               child: const Icon(Icons.add_rounded),
@@ -135,6 +142,7 @@ class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
                             ),
                           ),
                           IconButton(
+                            tooltip: 'Togli il contatto',
                             icon: const Icon(Icons.delete_outline_rounded),
                             onPressed: () => setState(() {
                               rows.remove(r);
