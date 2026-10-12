@@ -9,7 +9,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/appearance.dart';
 import 'package:milanac/core/audio_focus.dart';
 import 'package:milanac/core/theme.dart';
-import 'package:milanac/features/chat/chat_repository.dart' show maxVoiceSeconds;
+import 'package:milanac/features/chat/chat_repository.dart'
+    show maxVoiceSeconds;
 import 'package:milanac/features/chat/voice_recorder.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/lavagna/board_model.dart';
@@ -75,7 +76,9 @@ Future<ProviderContainer> _openPage(
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
-    overrides: [if (mic != null) replayMicProvider.overrideWithValue(() => mic)],
+    overrides: [
+      if (mic != null) replayMicProvider.overrideWithValue(() => mic),
+    ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -87,9 +90,9 @@ Future<ProviderContainer> _openPage(
           builder: (c) => Scaffold(
             body: Center(
               child: TextButton(
-                onPressed: () => Navigator.of(
-                  c,
-                ).push(MaterialPageRoute(builder: (_) => page())),
+                onPressed: () =>
+                    Navigator.of(c)
+                        .push(MaterialPageRoute(builder: (_) => page())),
                 child: const Text('apri'),
               ),
             ),
@@ -121,7 +124,9 @@ void main() {
     final recorded = <BoardCommand>[];
     editor.onCommand = recorded.add;
     editor.apply(
-      const AddToken(BoardToken(id: 'a', x: .5, y: .5, label: '9', name: 'Rossi')),
+      const AddToken(
+        BoardToken(id: 'a', x: .5, y: .5, label: '9', name: 'Rossi'),
+      ),
     );
     editor.apply(const DragStart('a'));
     editor.apply(const MoveToken('a', .6, .4));
@@ -129,12 +134,18 @@ void main() {
     editor.apply(const DragEnd());
     expect(editor.state.tokenById('a')!.x, .7);
     editor.apply(const Undo());
-    expect(editor.state.tokenById('a')!.x, .5, reason: 'annulla tutto il trascinamento');
+    expect(
+      editor.state.tokenById('a')!.x,
+      .5,
+      reason: 'annulla tutto il trascinamento',
+    );
     editor.apply(const HeatStart());
     editor.apply(const Heat(.2, .2));
     editor.apply(const Heat(.21, .22));
     editor.apply(const HeatEnd());
-    editor.apply(const AddArrow(BoardArrow(x1: .1, y1: .1, x2: .4, y2: .4, dashed: true)));
+    editor.apply(
+      const AddArrow(BoardArrow(x1: .1, y1: .1, x2: .4, y2: .4, dashed: true)),
+    );
     expect(editor.state.heat, hasLength(2));
     expect(editor.state.arrows.single.dashed, isTrue);
     expect(recorded, hasLength(11));
@@ -151,9 +162,7 @@ void main() {
     final data = ReplayData(
       initial: const BoardState(),
       durationMs: 5000,
-      events: [
-        for (final (i, c) in recorded.indexed) ReplayEvent(i * 400, c),
-      ],
+      events: [for (final (i, c) in recorded.indexed) ReplayEvent(i * 400, c)],
     );
     expect(data.stateAt(0).tokens, hasLength(1));
     expect(data.stateAt(1300).tokenById('a')!.x, .7); // dopo il trascinamento
@@ -174,119 +183,131 @@ void main() {
     expect(demoReplay().finalState.arrows, hasLength(2));
   });
 
-  testWidgets('Lavagna: gettoni, freccia, fuoco, annulla, salvataggio e replay in chat', (
-    tester,
-  ) async {
-    final container = await startAppAt(tester, todayAt(17));
-    await goToSection(tester, 'Tattiche & Build');
-    expect(find.text('SCHEMI DEL CLUB'), findsOneWidget);
-    await tester.tap(find.text('Lavagna')); // azione principale, in cima
-    await tester.pumpAndSettle();
-    expect(find.text('LAVAGNA'), findsOneWidget);
-    final board = find.byKey(const ValueKey('lavagna'));
-    expect(board, findsOneWidget);
+  testWidgets(
+    'Lavagna: gettoni, freccia, fuoco, annulla, salvataggio e replay in chat',
+    (tester) async {
+      final container = await startAppAt(tester, todayAt(17));
+      await goToSection(tester, 'Tattiche & Build');
+      expect(find.text('SCHEMI DEL CLUB'), findsOneWidget);
+      await tester.tap(find.text('Lavagna')); // azione principale, in cima
+      await tester.pumpAndSettle();
+      expect(find.text('LAVAGNA'), findsOneWidget);
+      final board = find.byKey(const ValueKey('lavagna'));
+      expect(board, findsOneWidget);
 
-    // Giocatore: un tocco in un punto libero apre la scelta; aggiungiamo un avversario.
-    final rect = tester.getRect(board);
-    await tester.tapAt(rect.topLeft + Offset(rect.width * .5, rect.height * .36));
-    await tester.pumpAndSettle();
-    expect(find.text('Avversario'), findsOneWidget);
-    await tester.tap(find.text('Avversario'));
-    await tester.pumpAndSettle();
+      // Giocatore: un tocco in un punto libero apre la scelta; aggiungiamo un avversario.
+      final rect = tester.getRect(board);
+      await tester.tapAt(
+        rect.topLeft + Offset(rect.width * .5, rect.height * .36),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Avversario'), findsOneWidget);
+      await tester.tap(find.text('Avversario'));
+      await tester.pumpAndSettle();
 
-    // Freccia: trascinando compare una freccia; Annulla la toglie.
-    await tester.tap(find.text('Freccia'));
-    await tester.pumpAndSettle();
-    await tester.dragFrom(
-      rect.topLeft + Offset(rect.width * .3, rect.height * .5),
-      Offset(0, -rect.height * .2),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Fuoco'));
-    await tester.pumpAndSettle();
-    await tester.dragFrom(
-      rect.topLeft + Offset(rect.width * .8, rect.height * .5),
-      Offset(0, rect.height * .15),
-    );
-    await tester.pumpAndSettle();
+      // Freccia: trascinando compare una freccia; Annulla la toglie.
+      await tester.tap(find.text('Freccia'));
+      await tester.pumpAndSettle();
+      await tester.dragFrom(
+        rect.topLeft + Offset(rect.width * .3, rect.height * .5),
+        Offset(0, -rect.height * .2),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Fuoco'));
+      await tester.pumpAndSettle();
+      await tester.dragFrom(
+        rect.topLeft + Offset(rect.width * .8, rect.height * .5),
+        Offset(0, rect.height * .15),
+      );
+      await tester.pumpAndSettle();
 
-    // Salva: lo schema compare in Tattiche e schemi con la lavagna.
-    await tester.tap(find.byTooltip('Salva lo schema'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Prova lavagna');
-    await tester.tap(
-      find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.widgetWithText(FilledButton, 'Salva'),
-      ),
-    );
-    // L'immagine dello schema si disegna davvero (serve il tempo reale).
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 800)),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Prova lavagna'), findsOneWidget);
-    final saved = container
-        .read(tacticsProvider)
-        .value!
-        .firstWhere((t) => t.title == 'Prova lavagna');
-    expect(saved.board!.tokens, hasLength(12)); // 11 del modulo + l'avversario
-    expect(saved.board!.tokens.where((t) => t.side == 'avversari'), hasLength(1));
-    expect(saved.board!.arrows, hasLength(1));
-    expect(saved.board!.heat, isNotEmpty);
-    expect(saved.localImage, isNotNull); // immagine esportata
+      // Salva: lo schema compare in Tattiche e schemi con la lavagna.
+      await tester.tap(find.byTooltip('Salva lo schema'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nome'),
+        'Prova lavagna',
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.widgetWithText(FilledButton, 'Salva'),
+        ),
+      );
+      // L'immagine dello schema si disegna davvero (serve il tempo reale).
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 800)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Prova lavagna'), findsOneWidget);
+      final saved = container
+          .read(tacticsProvider)
+          .value!
+          .firstWhere((t) => t.title == 'Prova lavagna');
+      expect(
+        saved.board!.tokens,
+        hasLength(12),
+      ); // 11 del modulo + l'avversario
+      expect(
+        saved.board!.tokens.where((t) => t.side == 'avversari'),
+        hasLength(1),
+      );
+      expect(saved.board!.arrows, hasLength(1));
+      expect(saved.board!.heat, isNotEmpty);
+      expect(saved.localImage, isNotNull); // immagine esportata
 
-    // Riaperto, si può annullare... no: la cronologia riparte; ma la freccia c'è.
-    // La card nuova è sotto le azioni del Direttivo: la si porta in vista.
-    await scrollAndTap(tester, find.text('Prova lavagna'));
-    expect(find.text('Apri la lavagna'), findsOneWidget);
-    await tester.tap(find.text('Apri la lavagna'));
-    await tester.pumpAndSettle();
-    expect(find.text('LAVAGNA'), findsOneWidget);
-    expect(find.text('Prova lavagna'), findsOneWidget); // sotto il titolo
-    await tester.tap(find.text('Freccia'));
-    await tester.pumpAndSettle();
-    final rect2 = tester.getRect(find.byKey(const ValueKey('lavagna')));
-    await tester.dragFrom(
-      rect2.topLeft + Offset(rect2.width * .6, rect2.height * .6),
-      Offset(rect2.width * .2, 0),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Annulla'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Indietro'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Indietro'));
-    await tester.pumpAndSettle();
+      // Riaperto, si può annullare... no: la cronologia riparte; ma la freccia c'è.
+      // La card nuova è sotto le azioni del Direttivo: la si porta in vista.
+      await scrollAndTap(tester, find.text('Prova lavagna'));
+      expect(find.text('Apri la lavagna'), findsOneWidget);
+      await tester.tap(find.text('Apri la lavagna'));
+      await tester.pumpAndSettle();
+      expect(find.text('LAVAGNA'), findsOneWidget);
+      expect(find.text('Prova lavagna'), findsOneWidget); // sotto il titolo
+      await tester.tap(find.text('Freccia'));
+      await tester.pumpAndSettle();
+      final rect2 = tester.getRect(find.byKey(const ValueKey('lavagna')));
+      await tester.dragFrom(
+        rect2.topLeft + Offset(rect2.width * .6, rect2.height * .6),
+        Offset(rect2.width * .2, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Annulla'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Indietro'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Indietro'));
+      await tester.pumpAndSettle();
 
-    // Il replay in chat: riquadro con Play, poi la riproduzione (senza audio in demo).
-    await goToSection(tester, 'Chat');
-    await tester.tap(find.text('Tattiche & Schemi'));
-    await tester.pumpAndSettle();
-    expect(find.text('SCHEMA CON AUDIO'), findsOneWidget);
-    expect(find.text('Uscita dal basso'), findsOneWidget);
-    await tester.tap(find.byTooltip('Riproduci il replay'));
-    await tester.pumpAndSettle();
-    expect(find.text('REPLAY DELLA LAVAGNA'), findsOneWidget);
-    expect(find.text('Senza audio'), findsOneWidget);
-    expect(find.text('0:00 / 0:20'), findsOneWidget);
-    await tester.tap(find.byTooltip('Play'));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 2));
-    expect(find.text('0:02 / 0:20'), findsOneWidget);
-    expect(container.read(audioFocusProvider), {AudioUse.replay});
-    await tester.tap(find.byTooltip('Pausa'));
-    await tester.pumpAndSettle();
-    expect(container.read(audioFocusProvider), isEmpty);
+      // Il replay in chat: riquadro con Play, poi la riproduzione (senza audio in demo).
+      await goToSection(tester, 'Chat');
+      await tester.tap(find.text('Tattiche & Schemi'));
+      await tester.pumpAndSettle();
+      expect(find.text('SCHEMA CON AUDIO'), findsOneWidget);
+      expect(find.text('Uscita dal basso'), findsOneWidget);
+      await tester.tap(find.byTooltip('Riproduci il replay'));
+      await tester.pumpAndSettle();
+      expect(find.text('REPLAY DELLA LAVAGNA'), findsOneWidget);
+      expect(find.text('Senza audio'), findsOneWidget);
+      expect(find.text('0:00 / 0:20'), findsOneWidget);
+      await tester.tap(find.byTooltip('Play'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('0:02 / 0:20'), findsOneWidget);
+      expect(container.read(audioFocusProvider), {AudioUse.replay});
+      await tester.tap(find.byTooltip('Pausa'));
+      await tester.pumpAndSettle();
+      expect(container.read(audioFocusProvider), isEmpty);
 
-    // Un altro prende l'audio (un vocale): il replay va in pausa.
-    await tester.tap(find.byTooltip('Play'));
-    await tester.pump(const Duration(seconds: 1));
-    container.read(audioFocusProvider.notifier).claim(AudioUse.vocale);
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.byTooltip('Play'), findsOneWidget);
-    expect(find.text('0:03 / 0:20'), findsOneWidget);
-  });
+      // Un altro prende l'audio (un vocale): il replay va in pausa.
+      await tester.tap(find.byTooltip('Play'));
+      await tester.pump(const Duration(seconds: 1));
+      container.read(audioFocusProvider.notifier).claim(AudioUse.vocale);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byTooltip('Play'), findsOneWidget);
+      expect(find.text('0:03 / 0:20'), findsOneWidget);
+    },
+  );
 
   test('replay: durata in millisecondi, l\'ultima mossa si vede', () {
     var now = 0;
@@ -316,41 +337,45 @@ void main() {
     expect(old.finalState.arrows, hasLength(3));
   });
 
-  testWidgets('replay senza voce: orologio senza ritardi, alla fine l\'ultima mossa', (
-    tester,
-  ) async {
-    const data = ReplayData(
-      initial: BoardState(),
-      durationMs: 10300,
-      events: [
-        ReplayEvent(10300, AddArrow(BoardArrow(x1: .1, y1: .1, x2: .5, y2: .5))),
-      ],
-    );
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
-    final player = ReplayPlayer(
-      data,
-      focus: container.read(audioFocusProvider.notifier),
-    );
-    addTearDown(player.dispose);
+  testWidgets(
+    'replay senza voce: orologio senza ritardi, alla fine l\'ultima mossa',
+    (tester) async {
+      const data = ReplayData(
+        initial: BoardState(),
+        durationMs: 10300,
+        events: [
+          ReplayEvent(
+            10300,
+            AddArrow(BoardArrow(x1: .1, y1: .1, x2: .5, y2: .5)),
+          ),
+        ],
+      );
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final player = ReplayPlayer(
+        data,
+        focus: container.read(audioFocusProvider.notifier),
+      );
+      addTearDown(player.dispose);
 
-    await player.play();
-    expect(container.read(audioFocusProvider), {AudioUse.replay});
-    await tester.pump(const Duration(seconds: 5));
-    expect(player.positionMs, 5000); // i passi si contano, non si sommano
-    expect(player.state.arrows, isEmpty);
-    await tester.pump(const Duration(seconds: 6));
-    expect(player.playing, isFalse);
-    expect(player.positionMs, 10300);
-    expect(player.state.arrows, hasLength(1));
-    expect(container.read(audioFocusProvider), isEmpty);
+      await player.play();
+      expect(container.read(audioFocusProvider), {AudioUse.replay});
+      await tester.pump(const Duration(seconds: 5));
+      expect(player.positionMs, 5000); // i passi si contano, non si sommano
+      expect(player.state.arrows, isEmpty);
+      await tester.pump(const Duration(seconds: 6));
+      expect(player.playing, isFalse);
+      expect(player.positionMs, 10300);
+      expect(player.state.arrows, hasLength(1));
+      expect(container.read(audioFocusProvider), isEmpty);
 
-    // Spostando la barra a fine replay non riparte da solo.
-    await player.seek(2000);
-    await tester.pump(const Duration(seconds: 1));
-    expect(player.positionMs, 2000);
-    expect(player.state.arrows, isEmpty);
-  });
+      // Spostando la barra a fine replay non riparte da solo.
+      await player.seek(2000);
+      await tester.pump(const Duration(seconds: 1));
+      expect(player.positionMs, 2000);
+      expect(player.state.arrows, isEmpty);
+    },
+  );
 
   test('Annulla durante la registrazione: nel replay come nel vivo', () {
     var now = 0;
@@ -398,93 +423,111 @@ void main() {
     expect(jsonEncode(full.toJson()).length, lessThan(100000));
   });
 
-  testWidgets('Registra: il doppio tocco apre una sola registrazione, un solo contatore', (
-    tester,
-  ) async {
-    final mic = _FakeMic()..opening = Completer<bool>();
-    final container = await _openPage(tester, () => const BoardPage(), mic: mic);
-    // Il microfono ci mette un po' ad aprirsi: intanto si tocca di nuovo.
-    await tester.tap(find.byTooltip('Registra il replay'));
-    await tester.pump();
-    await tester.tap(find.byTooltip('Registra il replay'));
-    await tester.pump();
-    expect(container.read(audioFocusProvider), {AudioUse.registrazioneReplay});
-    mic.opening!.complete(true);
-    await tester.pump();
-    expect(mic.starts, 1);
-    await tester.pump(const Duration(seconds: 3));
-    expect(find.text('0:03'), findsOneWidget); // con due contatori sarebbe 0:06
-
-    await tester.tap(find.byTooltip('Ferma la registrazione'));
-    await tester.pumpAndSettle();
-    expect(mic.stops, 1);
-    expect(container.read(audioFocusProvider), isEmpty);
-    expect(find.text('ANTEPRIMA DEL REPLAY'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 5));
-    expect(find.text('0:03'), findsNothing); // nessun contatore rimasto acceso
-
-    // Indietro dall'anteprima: prima si chiede, il replay non inviato si perderebbe.
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(find.text('Eliminare il replay?'), findsOneWidget);
-    await tester.tap(find.text('Annulla'));
-    await tester.pumpAndSettle();
-    expect(find.text('ANTEPRIMA DEL REPLAY'), findsOneWidget);
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Elimina'));
-    await tester.pumpAndSettle();
-    expect(find.text('ANTEPRIMA DEL REPLAY'), findsNothing);
-    expect(find.text('LAVAGNA'), findsOneWidget);
-  });
-
-  testWidgets('Annulla durante la registrazione: il replay finisce come la lavagna', (
-    tester,
-  ) async {
-    final mic = _FakeMic();
-    await _openPage(tester, () => const BoardPage(), mic: mic);
-    final rect = tester.getRect(find.byKey(const ValueKey('lavagna')));
-    Future<void> arrow(double x) async {
-      await tester.dragFrom(
-        rect.topLeft + Offset(rect.width * x, rect.height * .5),
-        Offset(0, -rect.height * .2),
+  testWidgets(
+    'Registra: il doppio tocco apre una sola registrazione, un solo contatore',
+    (tester) async {
+      final mic = _FakeMic()..opening = Completer<bool>();
+      final container = await _openPage(
+        tester,
+        () => const BoardPage(),
+        mic: mic,
       );
+      // Il microfono ci mette un po' ad aprirsi: intanto si tocca di nuovo.
+      await tester.tap(find.byTooltip('Registra il replay'));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Registra il replay'));
+      await tester.pump();
+      expect(container.read(audioFocusProvider), {
+        AudioUse.registrazioneReplay,
+      });
+      mic.opening!.complete(true);
+      await tester.pump();
+      expect(mic.starts, 1);
+      await tester.pump(const Duration(seconds: 3));
+      expect(
+        find.text('0:03'),
+        findsOneWidget,
+      ); // con due contatori sarebbe 0:06
+
+      await tester.tap(find.byTooltip('Ferma la registrazione'));
       await tester.pumpAndSettle();
-    }
+      expect(mic.stops, 1);
+      expect(container.read(audioFocusProvider), isEmpty);
+      expect(find.text('ANTEPRIMA DEL REPLAY'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      expect(
+        find.text('0:03'),
+        findsNothing,
+      ); // nessun contatore rimasto acceso
 
-    await tester.tap(find.text('Freccia'));
-    await tester.pumpAndSettle();
-    await arrow(.3); // prima di registrare
-    expect(_live(tester).arrows, hasLength(1));
+      // Indietro dall'anteprima: prima si chiede, il replay non inviato si perderebbe.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Eliminare il replay?'), findsOneWidget);
+      await tester.tap(find.text('Annulla'));
+      await tester.pumpAndSettle();
+      expect(find.text('ANTEPRIMA DEL REPLAY'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Elimina'));
+      await tester.pumpAndSettle();
+      expect(find.text('ANTEPRIMA DEL REPLAY'), findsNothing);
+      expect(find.text('LAVAGNA'), findsOneWidget);
+    },
+  );
 
-    await tester.tap(find.byTooltip('Registra il replay'));
-    await tester.pump();
-    // "Annulla" non toglie la freccia di prima: nel replay c'è già dall'inizio e
-    // l'annullamento non avrebbe niente da togliere.
-    await tester.tap(find.text('Annulla'));
-    await tester.pump();
-    expect(_live(tester).arrows, hasLength(1));
-    await arrow(.6);
-    expect(_live(tester).arrows, hasLength(2));
-    await tester.tap(find.text('Annulla'));
-    await tester.pump();
-    expect(_live(tester).arrows, hasLength(1));
-    await tester.pump(const Duration(seconds: 2));
-    await tester.tap(find.byTooltip('Ferma la registrazione'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'Annulla durante la registrazione: il replay finisce come la lavagna',
+    (tester) async {
+      final mic = _FakeMic();
+      await _openPage(tester, () => const BoardPage(), mic: mic);
+      final rect = tester.getRect(find.byKey(const ValueKey('lavagna')));
+      Future<void> arrow(double x) async {
+        await tester.dragFrom(
+          rect.topLeft + Offset(rect.width * x, rect.height * .5),
+          Offset(0, -rect.height * .2),
+        );
+        await tester.pumpAndSettle();
+      }
 
-    final data = tester
-        .widget<ReplayPreviewPage>(find.byType(ReplayPreviewPage))
-        .data;
-    expect(data.initial.arrows, hasLength(1));
-    expect(_json(data.finalState), _json(_live(tester)));
-  });
+      await tester.tap(find.text('Freccia'));
+      await tester.pumpAndSettle();
+      await arrow(.3); // prima di registrare
+      expect(_live(tester).arrows, hasLength(1));
+
+      await tester.tap(find.byTooltip('Registra il replay'));
+      await tester.pump();
+      // "Annulla" non toglie la freccia di prima: nel replay c'è già dall'inizio e
+      // l'annullamento non avrebbe niente da togliere.
+      await tester.tap(find.text('Annulla'));
+      await tester.pump();
+      expect(_live(tester).arrows, hasLength(1));
+      await arrow(.6);
+      expect(_live(tester).arrows, hasLength(2));
+      await tester.tap(find.text('Annulla'));
+      await tester.pump();
+      expect(_live(tester).arrows, hasLength(1));
+      await tester.pump(const Duration(seconds: 2));
+      await tester.tap(find.byTooltip('Ferma la registrazione'));
+      await tester.pumpAndSettle();
+
+      final data = tester
+          .widget<ReplayPreviewPage>(find.byType(ReplayPreviewPage))
+          .data;
+      expect(data.initial.arrows, hasLength(1));
+      expect(_json(data.finalState), _json(_live(tester)));
+    },
+  );
 
   testWidgets('Registrazione troppo breve e uscita a metà: la voce si butta', (
     tester,
   ) async {
     final mic = _FakeMic();
-    final container = await _openPage(tester, () => const BoardPage(), mic: mic);
+    final container = await _openPage(
+      tester,
+      () => const BoardPage(),
+      mic: mic,
+    );
     await tester.tap(find.byTooltip('Registra il replay'));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.byTooltip('Ferma la registrazione'));
@@ -512,118 +555,126 @@ void main() {
     expect(container.read(audioFocusProvider), isEmpty);
   });
 
-  testWidgets('Lavagna da un link vecchio: "Schema non trovato" e si torna indietro', (
-    tester,
-  ) async {
-    await _openPage(tester, () => const SavedBoardPage(tacticId: 'non-esiste'));
-    expect(find.text('Schema non trovato'), findsOneWidget);
-    await tester.tap(find.text('Torna alle tattiche'));
-    await tester.pumpAndSettle();
-    expect(find.text('apri'), findsOneWidget);
-  });
+  testWidgets(
+    'Lavagna da un link vecchio: "Schema non trovato" e si torna indietro',
+    (tester) async {
+      await _openPage(
+        tester,
+        () => const SavedBoardPage(tacticId: 'non-esiste'),
+      );
+      expect(find.text('Schema non trovato'), findsOneWidget);
+      await tester.tap(find.text('Torna alle tattiche'));
+      await tester.pumpAndSettle();
+      expect(find.text('apri'), findsOneWidget);
+    },
+  );
 
-  testWidgets('Tema chiaro: Tattiche, schema, lavagna e anteprima senza eccezioni né overflow', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 3;
-    addTearDown(tester.view.reset);
-    final mic = _FakeMic();
-    final container = ProviderContainer(
-      overrides: [replayMicProvider.overrideWithValue(() => mic)],
-    );
-    addTearDown(container.dispose);
-    container.read(introDoneProvider.notifier).complete();
-    await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const MilanacApp()),
-    );
-    await tester.pumpAndSettle();
-    // L'aspetto scelto in Impostazioni (dopo l'avvio, come sul telefono).
-    await container.read(appearanceProvider.notifier).set(Appearance.chiaro);
-    await tester.pumpAndSettle();
-    Brightness brightnessAt(Finder f) =>
-        Theme.of(tester.element(f.first)).brightness;
+  testWidgets(
+    'Tema chiaro: Tattiche, schema, lavagna e anteprima senza eccezioni né overflow',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final mic = _FakeMic();
+      final container = ProviderContainer(
+        overrides: [replayMicProvider.overrideWithValue(() => mic)],
+      );
+      addTearDown(container.dispose);
+      container.read(introDoneProvider.notifier).complete();
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MilanacApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // L'aspetto scelto in Impostazioni (dopo l'avvio, come sul telefono).
+      await container.read(appearanceProvider.notifier).set(Appearance.chiaro);
+      await tester.pumpAndSettle();
+      Brightness brightnessAt(Finder f) =>
+          Theme.of(tester.element(f.first)).brightness;
 
-    // Elenco degli schemi, con il filtro per modulo.
-    await goToSection(tester, 'Tattiche & Build');
-    expect(brightnessAt(find.text('SCHEMI DEL CLUB')), Brightness.light);
-    await tester.tap(find.widgetWithText(FilterPill, 'Piazzati'));
-    await tester.pumpAndSettle();
-    expect(find.text('Calcio d\'angolo a rientrare'), findsOneWidget);
-    expect(find.text('Pressing alto dopo palla persa'), findsNothing);
-    await tester.tap(find.widgetWithText(FilterPill, 'Tutti'));
-    await tester.pumpAndSettle();
-    expect(find.text('Pressing alto dopo palla persa'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+      // Elenco degli schemi, con il filtro per modulo.
+      await goToSection(tester, 'Tattiche & Build');
+      expect(brightnessAt(find.text('SCHEMI DEL CLUB')), Brightness.light);
+      await tester.tap(find.widgetWithText(FilterPill, 'Piazzati'));
+      await tester.pumpAndSettle();
+      expect(find.text('Calcio d\'angolo a rientrare'), findsOneWidget);
+      expect(find.text('Pressing alto dopo palla persa'), findsNothing);
+      await tester.tap(find.widgetWithText(FilterPill, 'Tutti'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pressing alto dopo palla persa'), findsOneWidget);
+      expect(tester.takeException(), isNull);
 
-    // Il foglio della nuova tattica.
-    await tester.tap(find.text('Nuova tattica'));
-    await tester.pumpAndSettle();
-    expect(find.text('NUOVA TATTICA'), findsOneWidget);
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
+      // Il foglio della nuova tattica.
+      await tester.tap(find.text('Nuova tattica'));
+      await tester.pumpAndSettle();
+      expect(find.text('NUOVA TATTICA'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
 
-    // La lavagna nuova: barra in alto e strumenti restano scuri, il resto è chiaro.
-    await tester.tap(find.text('Lavagna'));
-    await tester.pumpAndSettle();
-    expect(brightnessAt(find.text('Gettoni')), Brightness.dark);
-    expect(brightnessAt(find.text('Milan AC')), Brightness.dark);
-    expect(
-      brightnessAt(find.byKey(const ValueKey('lavagna'))),
-      Brightness.light,
-    );
-    // Modulo e squadra: lavagna nuova dal 4-4-2 (il modulo in alto cambia).
-    await tester.tap(find.byTooltip('Nuova lavagna dal modulo').first);
-    await tester.pumpAndSettle();
-    expect(find.text('NUOVA LAVAGNA DAL MODULO'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterPill, '4-4-2'));
-    await tester.pumpAndSettle();
-    expect(find.text('4-4-2'), findsOneWidget);
-    expect(find.text('4-3-3'), findsNothing);
-    // Un avversario (gettone nero, numerato).
-    final rect = tester.getRect(find.byKey(const ValueKey('lavagna')));
-    await tester.tapAt(
-      rect.topLeft + Offset(rect.width * .5, rect.height * .36),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('AGGIUNGI UN GETTONE'), findsOneWidget);
-    await tester.tap(find.text('Avversario'));
-    await tester.pumpAndSettle();
-    expect(
-      _live(tester).tokens.where((t) => t.side == 'avversari').single.label,
-      '1',
-    );
-    expect(tester.takeException(), isNull);
+      // La lavagna nuova: barra in alto e strumenti restano scuri, il resto è chiaro.
+      await tester.tap(find.text('Lavagna'));
+      await tester.pumpAndSettle();
+      expect(brightnessAt(find.text('Gettoni')), Brightness.dark);
+      expect(brightnessAt(find.text('Milan AC')), Brightness.dark);
+      expect(
+        brightnessAt(find.byKey(const ValueKey('lavagna'))),
+        Brightness.light,
+      );
+      // Modulo e squadra: lavagna nuova dal 4-4-2 (il modulo in alto cambia).
+      await tester.tap(find.byTooltip('Nuova lavagna dal modulo').first);
+      await tester.pumpAndSettle();
+      expect(find.text('NUOVA LAVAGNA DAL MODULO'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilterPill, '4-4-2'));
+      await tester.pumpAndSettle();
+      expect(find.text('4-4-2'), findsOneWidget);
+      expect(find.text('4-3-3'), findsNothing);
+      // Un avversario (gettone nero, numerato).
+      final rect = tester.getRect(find.byKey(const ValueKey('lavagna')));
+      await tester.tapAt(
+        rect.topLeft + Offset(rect.width * .5, rect.height * .36),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('AGGIUNGI UN GETTONE'), findsOneWidget);
+      await tester.tap(find.text('Avversario'));
+      await tester.pumpAndSettle();
+      expect(
+        _live(tester).tokens.where((t) => t.side == 'avversari').single.label,
+        '1',
+      );
+      expect(tester.takeException(), isNull);
 
-    // Registrazione e anteprima del replay.
-    await tester.tap(find.byTooltip('Registra il replay'));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 2));
-    expect(find.text('0:02'), findsOneWidget);
-    await tester.tap(find.byTooltip('Ferma la registrazione'));
-    await tester.pumpAndSettle();
-    expect(find.text('ANTEPRIMA DEL REPLAY'), findsOneWidget);
-    expect(find.text('Senza audio'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.tap(find.byTooltip('Indietro'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Elimina'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Indietro'));
-    await tester.pumpAndSettle();
+      // Registrazione e anteprima del replay.
+      await tester.tap(find.byTooltip('Registra il replay'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('0:02'), findsOneWidget);
+      await tester.tap(find.byTooltip('Ferma la registrazione'));
+      await tester.pumpAndSettle();
+      expect(find.text('ANTEPRIMA DEL REPLAY'), findsOneWidget);
+      expect(find.text('Senza audio'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('Indietro'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Elimina'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Indietro'));
+      await tester.pumpAndSettle();
 
-    // Lo schema salvato e la sua lavagna.
-    await scrollAndTap(tester, find.text('Uscita dal basso'));
-    expect(find.text('USCITA DAL BASSO'), findsOneWidget);
-    expect(find.text('SPIEGAZIONE'), findsOneWidget);
-    await tester.tap(find.text('Apri la lavagna'));
-    await tester.pumpAndSettle();
-    expect(find.text('Uscita dal basso'), findsOneWidget); // sotto il titolo
-    await tester.tap(find.byTooltip('Indietro'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Indietro'));
-    await tester.pumpAndSettle();
-    expect(find.text('TATTICHE'), findsOneWidget); // di nuovo nell'elenco
-    expect(tester.takeException(), isNull);
-  });
+      // Lo schema salvato e la sua lavagna.
+      await scrollAndTap(tester, find.text('Uscita dal basso'));
+      expect(find.text('USCITA DAL BASSO'), findsOneWidget);
+      expect(find.text('SPIEGAZIONE'), findsOneWidget);
+      await tester.tap(find.text('Apri la lavagna'));
+      await tester.pumpAndSettle();
+      expect(find.text('Uscita dal basso'), findsOneWidget); // sotto il titolo
+      await tester.tap(find.byTooltip('Indietro'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Indietro'));
+      await tester.pumpAndSettle();
+      expect(find.text('TATTICHE'), findsOneWidget); // di nuovo nell'elenco
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

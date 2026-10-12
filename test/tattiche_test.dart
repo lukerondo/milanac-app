@@ -85,65 +85,69 @@ void main() {
     expect(find.text('Il portiere apre sul DC destro.'), findsOneWidget);
   });
 
-  testWidgets('Tattiche: cambiare il testo di uno schema non ne cancella il disegno', (
-    tester,
-  ) async {
-    final spy = _SpyTactics();
-    await openTattiche(
-      tester,
-      overrides: [tacticsRepositoryProvider.overrideWithValue(spy)],
-    );
-    // Lo schema con la lavagna, più in basso nell'elenco.
-    await scrollAndTap(tester, find.text('Uscita dal basso'));
-    expect(find.text('Apri la lavagna'), findsOneWidget);
+  testWidgets(
+    'Tattiche: cambiare il testo di uno schema non ne cancella il disegno',
+    (tester) async {
+      final spy = _SpyTactics();
+      await openTattiche(
+        tester,
+        overrides: [tacticsRepositoryProvider.overrideWithValue(spy)],
+      );
+      // Lo schema con la lavagna, più in basso nell'elenco.
+      await scrollAndTap(tester, find.text('Uscita dal basso'));
+      expect(find.text('Apri la lavagna'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Modifica'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Spiegazione'),
-      'Il portiere apre sul DC sinistro.',
-    );
-    await tester.ensureVisible(find.text('Salva tattica'));
-    await tester.tap(find.text('Salva tattica'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Modifica'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Spiegazione'),
+        'Il portiere apre sul DC sinistro.',
+      );
+      await tester.ensureVisible(find.text('Salva tattica'));
+      await tester.tap(find.text('Salva tattica'));
+      await tester.pumpAndSettle();
 
-    // Al salvataggio arrivano anche lavagna e squadra (prima: null, e il database
-    // le cancellava).
-    expect(spy.saved!.board!.tokens, hasLength(12));
-    expect(spy.saved!.team, 'milanac');
-    // Lo schema resta disegnato, con il testo nuovo.
-    expect(find.text('Il portiere apre sul DC sinistro.'), findsOneWidget);
-    expect(find.text('Apri la lavagna'), findsOneWidget);
-    final t3 = (await spy.watchAll().first).firstWhere((t) => t.id == 't3');
-    expect(t3.board!.arrows, hasLength(2));
-    expect(t3.description, 'Il portiere apre sul DC sinistro.');
-  });
+      // Al salvataggio arrivano anche lavagna e squadra (prima: null, e il database
+      // le cancellava).
+      expect(spy.saved!.board!.tokens, hasLength(12));
+      expect(spy.saved!.team, 'milanac');
+      // Lo schema resta disegnato, con il testo nuovo.
+      expect(find.text('Il portiere apre sul DC sinistro.'), findsOneWidget);
+      expect(find.text('Apri la lavagna'), findsOneWidget);
+      final t3 = (await spy.watchAll().first).firstWhere((t) => t.id == 't3');
+      expect(t3.board!.arrows, hasLength(2));
+      expect(t3.description, 'Il portiere apre sul DC sinistro.');
+    },
+  );
 
-  test('schema: i campi vuoti non si scrivono (né cancellano quelli salvati)', () async {
-    // Verso il database: lavagna e squadra solo se ci sono.
-    final soloTesto = const Tactic(id: 't3', title: 'Solo testo').toMap();
-    expect(soloTesto.containsKey('board'), isFalse);
-    expect(soloTesto.containsKey('team'), isFalse);
-    final conLavagna = Tactic(
-      id: 't3',
-      title: 'Con lavagna',
-      board: demoBoard(),
-      team: 'milanac',
-    ).toMap();
-    expect((conLavagna['board'] as Map)['tokens'], hasLength(12));
-    expect(conLavagna['team'], 'milanac');
+  test(
+    'schema: i campi vuoti non si scrivono (né cancellano quelli salvati)',
+    () async {
+      // Verso il database: lavagna e squadra solo se ci sono.
+      final soloTesto = const Tactic(id: 't3', title: 'Solo testo').toMap();
+      expect(soloTesto.containsKey('board'), isFalse);
+      expect(soloTesto.containsKey('team'), isFalse);
+      final conLavagna = Tactic(
+        id: 't3',
+        title: 'Con lavagna',
+        board: demoBoard(),
+        team: 'milanac',
+      ).toMap();
+      expect((conLavagna['board'] as Map)['tokens'], hasLength(12));
+      expect(conLavagna['team'], 'milanac');
 
-    // La demo si comporta come il database.
-    final repo = DemoTacticsRepository();
-    await repo.save(const Tactic(id: 't3', title: 'Uscita dal basso (2)'));
-    final t3 = (await repo.watchAll().first).firstWhere((t) => t.id == 't3');
-    expect(t3.title, 'Uscita dal basso (2)');
-    expect(t3.board, isNotNull);
-    expect(t3.team, 'milanac');
-    // Uno schema eliminato nel frattempo non si "salva" in silenzio.
-    await expectLater(
-      repo.save(const Tactic(id: 'eliminato', title: 'x')),
-      throwsA(isA<AppError>()),
-    );
-  });
+      // La demo si comporta come il database.
+      final repo = DemoTacticsRepository();
+      await repo.save(const Tactic(id: 't3', title: 'Uscita dal basso (2)'));
+      final t3 = (await repo.watchAll().first).firstWhere((t) => t.id == 't3');
+      expect(t3.title, 'Uscita dal basso (2)');
+      expect(t3.board, isNotNull);
+      expect(t3.team, 'milanac');
+      // Uno schema eliminato nel frattempo non si "salva" in silenzio.
+      await expectLater(
+        repo.save(const Tactic(id: 'eliminato', title: 'x')),
+        throwsA(isA<AppError>()),
+      );
+    },
+  );
 }

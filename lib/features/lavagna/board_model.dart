@@ -253,7 +253,12 @@ class MoveToken extends BoardCommand {
   final String id;
   final double x, y;
   @override
-  Map<String, dynamic> toJson() => {'k': 'mv', 'id': id, 'x': _r(x), 'y': _r(y)};
+  Map<String, dynamic> toJson() => {
+    'k': 'mv',
+    'id': id,
+    'x': _r(x),
+    'y': _r(y),
+  };
 }
 
 class DragEnd extends BoardCommand {
@@ -510,21 +515,59 @@ BoardState demoBoard() => BoardState(
   module: '4-3-3',
   team: 'milanac',
   tokens: const [
-    BoardToken(id: 't0', x: .5, y: .92, playerId: 'p4', label: '1', name: 'Andrea Neri', side: 'milanac'),
+    BoardToken(
+      id: 't0',
+      x: .5,
+      y: .92,
+      playerId: 'p4',
+      label: '1',
+      name: 'Andrea Neri',
+      side: 'milanac',
+    ),
     BoardToken(id: 't1', x: .12, y: .72, label: 'TS'),
-    BoardToken(id: 't2', x: .37, y: .76, playerId: 'p3', label: '4', name: 'Luca Bianchi'),
+    BoardToken(
+      id: 't2',
+      x: .37,
+      y: .76,
+      playerId: 'p3',
+      label: '4',
+      name: 'Luca Bianchi',
+    ),
     BoardToken(id: 't3', x: .63, y: .76, label: 'DC'),
     BoardToken(id: 't4', x: .88, y: .72, label: 'TD'),
-    BoardToken(id: 't5', x: .25, y: .5, playerId: 'demo', label: '10', name: 'Demo Direttivo'),
+    BoardToken(
+      id: 't5',
+      x: .25,
+      y: .5,
+      playerId: 'demo',
+      label: '10',
+      name: 'Demo Direttivo',
+    ),
     BoardToken(id: 't6', x: .5, y: .56, label: 'CDC'),
     BoardToken(id: 't7', x: .75, y: .5, label: 'CC'),
     BoardToken(id: 't8', x: .18, y: .24, label: 'AS'),
-    BoardToken(id: 't9', x: .5, y: .17, playerId: 'p2', label: '9', name: 'Marco Rossi'),
+    BoardToken(
+      id: 't9',
+      x: .5,
+      y: .17,
+      playerId: 'p2',
+      label: '9',
+      name: 'Marco Rossi',
+    ),
     BoardToken(id: 't10', x: .82, y: .24, label: 'AD'),
     BoardToken(id: 'a1', x: .5, y: .3, label: 'A', side: 'avversari'),
   ],
-  arrows: const [BoardArrow(x1: .5, y1: .92, x2: .37, y2: .76), BoardArrow(x1: .37, y1: .76, x2: .12, y2: .6, dashed: true)],
-  heat: const [HeatPoint(.12, .55), HeatPoint(.13, .5), HeatPoint(.15, .45), HeatPoint(.16, .4), HeatPoint(.15, .36)],
+  arrows: const [
+    BoardArrow(x1: .5, y1: .92, x2: .37, y2: .76),
+    BoardArrow(x1: .37, y1: .76, x2: .12, y2: .6, dashed: true),
+  ],
+  heat: const [
+    HeatPoint(.12, .55),
+    HeatPoint(.13, .5),
+    HeatPoint(.15, .45),
+    HeatPoint(.16, .4),
+    HeatPoint(.15, .36),
+  ],
 );
 
 /// Replay di esempio (demo): venti secondi in cui il CDC si abbassa tra i centrali,
@@ -541,10 +584,17 @@ ReplayData demoReplay() {
       ReplayEvent(5000 + i * 100, MoveToken('t1', .12, .72 - .3 * i / 20)),
     const ReplayEvent(7100, DragEnd()),
     const ReplayEvent(9000, HeatStart()),
-    for (var i = 0; i < 12; i++) ReplayEvent(9000 + i * 150, Heat(.12 + i * .01, .42 - i * .012)),
+    for (var i = 0; i < 12; i++)
+      ReplayEvent(9000 + i * 150, Heat(.12 + i * .01, .42 - i * .012)),
     const ReplayEvent(10900, HeatEnd()),
-    const ReplayEvent(13000, AddArrow(BoardArrow(x1: .5, y1: .92, x2: .5, y2: .74))),
-    const ReplayEvent(16000, AddArrow(BoardArrow(x1: .5, y1: .74, x2: .14, y2: .44, dashed: true))),
+    const ReplayEvent(
+      13000,
+      AddArrow(BoardArrow(x1: .5, y1: .92, x2: .5, y2: .74)),
+    ),
+    const ReplayEvent(
+      16000,
+      AddArrow(BoardArrow(x1: .5, y1: .74, x2: .14, y2: .44, dashed: true)),
+    ),
   ];
   return ReplayData(initial: initial, events: events, durationMs: 20000);
 }

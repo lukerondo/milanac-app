@@ -92,9 +92,7 @@ class VoiceRoomBanner extends ConsumerWidget {
               background: call.muted
                   ? MilanacColors.gold
                   : AppPalette.dark.surfaceHigher,
-              foreground: call.muted
-                  ? MilanacColors.ink
-                  : MilanacColors.ivory,
+              foreground: call.muted ? MilanacColors.ink : MilanacColors.ivory,
               onPressed: notifier.toggleMute,
             ),
             const SizedBox(width: 8),
@@ -120,8 +118,7 @@ class VoiceRoomBanner extends ConsumerWidget {
       padding: padding,
       child: _LiveCard(
         // Se va a capo, il nome del canale resta intero sulla seconda riga.
-        title:
-            'Stanza vocale aperta · ${channel.name.replaceAll(' ', ' ')}',
+        title: 'Stanza vocale aperta · ${channel.name.replaceAll(' ', ' ')}',
         subtitle: Text(inside),
         onTap: () => showVoiceRoom(context, channel),
         trailing: [

@@ -44,9 +44,9 @@ enum BoardTool {
     giocatore =>
       'Trascina i gettoni. Oro: noi · nero: avversari.\n'
           'Tocca per aggiungere, tieni premuto per togliere.',
-    fuoco => 'Tieni premuto e muovi il dito: la heatmap si accumula dove insisti.',
-    freccia =>
-      'Trascina da un punto all\'altro. Doppio tocco per le frecce tratteggiate.',
+    fuoco =>
+      'Tieni premuto e muovi il dito: la heatmap si accumula dove insisti.',
+    freccia => 'Trascina da un punto all\'altro. Doppio tocco per le frecce tratteggiate.',
   };
 }
 
@@ -521,7 +521,9 @@ class _BoardPageState extends ConsumerState<BoardPage> {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Pulire la lavagna?'),
-        content: const Text('Via gettoni, frecce e heatmap (si può annullare).'),
+        content: const Text(
+          'Via gettoni, frecce e heatmap (si può annullare).',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
@@ -1331,7 +1333,9 @@ class _PlayerSheetState extends ConsumerState<_PlayerSheet> {
                   !widget.onBoard.contains(m.id),
             )
             .toList()
-          ..sort((a, b) => (a.shirtNumber ?? 99).compareTo(b.shirtNumber ?? 99));
+          ..sort(
+            (a, b) => (a.shirtNumber ?? 99).compareTo(b.shirtNumber ?? 99),
+          );
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -1473,7 +1477,11 @@ class _SaveDialogState extends State<_SaveDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final modules = {...formationModules.keys, ..._otherModules, _module}.toList();
+    final modules = {
+      ...formationModules.keys,
+      ..._otherModules,
+      _module,
+    }.toList();
     return AlertDialog(
       title: const Text('Salva lo schema'),
       content: SingleChildScrollView(
@@ -1492,7 +1500,9 @@ class _SaveDialogState extends State<_SaveDialog> {
             DropdownButtonFormField<String>(
               initialValue: _module,
               isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Modulo di partenza'),
+              decoration: const InputDecoration(
+                labelText: 'Modulo di partenza',
+              ),
               items: [
                 for (final m in modules)
                   DropdownMenuItem(value: m, child: Text(m)),

@@ -46,33 +46,34 @@ void main() {
     expect(find.text('Stasera si gioca alle 22'), findsOneWidget);
   });
 
-  testWidgets('Presenze di stasera: il Direttivo corregge anche dopo le 18:30', (
-    tester,
-  ) async {
-    await startAppAt(tester, todayInItalyAt(18, 31));
-    await goToSection(tester, 'Sala Direttivo');
-    await tester.tap(find.text('Senza risposta stasera'));
-    await tester.pumpAndSettle();
-    expect(find.text('PRESENZE DI STASERA'), findsOneWidget);
-    expect(find.textContaining('risposte chiuse alle 18:30'), findsOneWidget);
-    expect(find.text('SENZA RISPOSTA · 4'), findsOneWidget);
+  testWidgets(
+    'Presenze di stasera: il Direttivo corregge anche dopo le 18:30',
+    (tester) async {
+      await startAppAt(tester, todayInItalyAt(18, 31));
+      await goToSection(tester, 'Sala Direttivo');
+      await tester.tap(find.text('Senza risposta stasera'));
+      await tester.pumpAndSettle();
+      expect(find.text('PRESENZE DI STASERA'), findsOneWidget);
+      expect(find.textContaining('risposte chiuse alle 18:30'), findsOneWidget);
+      expect(find.text('SENZA RISPOSTA · 4'), findsOneWidget);
 
-    await tester.tap(find.text('Luca Bianchi'));
-    await tester.pumpAndSettle();
-    expect(find.text('Segna per lui (Direttivo):'), findsOneWidget);
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Presente'));
-    await tester.pumpAndSettle();
-    expect(find.text('SENZA RISPOSTA · 3'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Presente · segnata dal Direttivo'),
-      100,
-      scrollable: find.descendant(
-        of: find.byType(TonightAttendancePage),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    expect(find.text('Presente · segnata dal Direttivo'), findsOneWidget);
-  });
+      await tester.tap(find.text('Luca Bianchi'));
+      await tester.pumpAndSettle();
+      expect(find.text('Segna per lui (Direttivo):'), findsOneWidget);
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Presente'));
+      await tester.pumpAndSettle();
+      expect(find.text('SENZA RISPOSTA · 3'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Presente · segnata dal Direttivo'),
+        100,
+        scrollable: find.descendant(
+          of: find.byType(TonightAttendancePage),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(find.text('Presente · segnata dal Direttivo'), findsOneWidget);
+    },
+  );
 
   testWidgets('Rosa e squadre: i membri rimossi si vedono e si riattivano', (
     tester,
