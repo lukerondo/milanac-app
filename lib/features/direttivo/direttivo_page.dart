@@ -43,21 +43,29 @@ class DirettivoPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final all = ref.watch(rosaProvider).value ?? const <Member>[];
-    final members = all
+    final all = ref.watch(rosaProvider).value;
+    final members = (all ?? const <Member>[])
         .where((m) => m.active && m.role != ClubRole.pending)
         .toList();
     // Stasera in Italia, come sul server.
     final today = italianDay(ref.watch(clockProvider)());
+    final attendance = ref.watch(attendanceProvider).value;
     final answered = {
-      for (final e in ref.watch(attendanceProvider).value ?? const [])
+      for (final e in attendance ?? const [])
         if (e.date == today) e.playerId,
     };
-    final missing = members.where((m) => !answered.contains(m.id)).length;
-    final toPublish = Team.values.where((t) {
-      final f = ref.watch(formationProvider(t)).value;
-      return f == null || !f.isPublishedOn(today) || f.hasUnpublishedChanges;
-    }).length;
+    // Finché i dati non arrivano i numeri restano vuoti (non "tutti senza risposta").
+    final missing = all == null || attendance == null
+        ? null
+        : members.where((m) => !answered.contains(m.id)).length;
+    final formations = [
+      for (final t in Team.values) ref.watch(formationProvider(t)).value,
+    ];
+    final toPublish = formations.contains(null)
+        ? null
+        : formations
+              .where((f) => !f!.isPublishedOn(today) || f.hasUnpublishedChanges)
+              .length;
     final proposals =
         (ref.watch(sharedLinksProvider(LinkCategory.video)).value ??
                 const <SharedLink>[])
@@ -127,13 +135,13 @@ class DirettivoPage extends ConsumerWidget {
               _Stat(
                 value: missing,
                 label: 'senza risposta stasera',
-                highlight: missing > 0,
+                highlight: (missing ?? 0) > 0,
                 onTap: () => push(const TonightAttendancePage()),
               ),
               _Stat(
                 value: toPublish,
                 label: 'formazioni da pubblicare',
-                highlight: toPublish > 0,
+                highlight: (toPublish ?? 0) > 0,
                 onTap: () => push(const FormationEditorPage()),
               ),
               _Stat(
@@ -331,7 +339,9 @@ class _Stat extends StatelessWidget {
     this.highlight = false,
     this.onTap,
   });
-  final int value;
+
+  /// null = dati non ancora arrivati.
+  final int? value;
   final String label;
   final bool highlight;
   final VoidCallback? onTap;
@@ -348,7 +358,7 @@ class _Stat extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                '$value',
+                '${value ?? '–'}',
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w900,
