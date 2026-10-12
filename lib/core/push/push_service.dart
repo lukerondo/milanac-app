@@ -108,41 +108,95 @@ class PushService {
     }
   }
 
+  /// Iscrizioni e uscite una alla volta, nell'ordine in cui arrivano (l'uscita di un
+  /// account finisce prima che il successivo si iscriva).
+  Future<void> _queue = Future.value();
+
+  Future<void> _serial(Future<void> Function() op) =>
+      _queue = _queue.then((_) => op()).catchError((Object e) {
+        debugPrint('Notifiche: $e');
+      });
+
+  /// Senza rete le chiamate a FCM possono restare in sospeso (le iscrizioni ai topic
+  /// aspettano la connessione): oltre qualche secondo si va avanti, così un'uscita
+  /// dall'account non resta bloccata dietro un'iscrizione.
+  static Future<T> _limited<T>(Future<T> call) =>
+      call.timeout(const Duration(seconds: 5));
+
+  /// true quando il token di questo telefono è stato cancellato e nessuno si è più
+  /// iscritto: un'altra uscita non ha niente da togliere.
+  bool _tokenDeleted = false;
+
   /// Iscrive il dispositivo alle notifiche del club (solo membri approvati).
   /// [onToken] salva il token del telefono per le notifiche personali (formazione, chat).
-  Future<void> subscribe({Future<void> Function(String token)? onToken}) async {
-    if (!_ready || _subscribed) return;
-    try {
-      final settings = await FirebaseMessaging.instance.requestPermission();
-      if (settings.authorizationStatus == AuthorizationStatus.denied) return;
-      await FirebaseMessaging.instance.subscribeToTopic(clubTopic);
-      _subscribed = true;
-      if (onToken != null) {
-        final token = await FirebaseMessaging.instance.getToken();
-        if (token != null) await onToken(token);
-        await _tokenRefresh?.cancel();
-        _tokenRefresh = FirebaseMessaging.instance.onTokenRefresh.listen(
-          onToken,
-        );
+  /// Risulta iscritto solo a token salvato: se qualcosa non riesce (rete, server) si
+  /// riprova alla chiamata successiva.
+  Future<void> subscribe({Future<void> Function(String token)? onToken}) {
+    if (!_ready) return Future.value();
+    return _serial(() async {
+      if (_subscribed) return;
+      _tokenDeleted = false;
+      try {
+        final settings = await FirebaseMessaging.instance.requestPermission();
+        if (settings.authorizationStatus == AuthorizationStatus.denied) return;
+        if (onToken != null) {
+          // Prima l'ascolto dei rinnovi, poi il token: un rinnovo nel mezzo non si perde.
+          await _tokenRefresh?.cancel();
+          _tokenRefresh = FirebaseMessaging.instance.onTokenRefresh.listen((
+            token,
+          ) async {
+            try {
+              await onToken(token);
+            } catch (e) {
+              debugPrint('Token delle notifiche non salvato: $e');
+            }
+          });
+          final token = await _limited(FirebaseMessaging.instance.getToken());
+          if (token == null) return;
+          await _limited(onToken(token));
+        }
+        await _limited(FirebaseMessaging.instance.subscribeToTopic(clubTopic));
+        _subscribed = true;
+      } catch (e) {
+        debugPrint('Iscrizione alle notifiche non riuscita: $e');
       }
-    } catch (e) {
-      debugPrint('Iscrizione alle notifiche non riuscita: $e');
-    }
+    });
   }
 
-  /// All'uscita dall'account il dispositivo smette di ricevere le notifiche del club.
+  /// All'uscita dall'account il dispositivo smette di ricevere le notifiche del club e
+  /// quelle personali dell'account appena uscito.
   Future<void> unsubscribe({
     Future<void> Function(String token)? onRemoveToken,
-  }) async {
-    if (!_ready) return;
-    try {
-      await _tokenRefresh?.cancel();
-      _tokenRefresh = null;
-      final token = await FirebaseMessaging.instance.getToken();
-      if (token != null && onRemoveToken != null) await onRemoveToken(token);
-      await FirebaseMessaging.instance.unsubscribeFromTopic(clubTopic);
-      _subscribed = false;
-    } catch (_) {}
+  }) {
+    if (!_ready) return Future.value();
+    return _serial(() async {
+      if (_tokenDeleted && !_subscribed) return;
+      try {
+        await _tokenRefresh?.cancel();
+        _tokenRefresh = null;
+        final token = await _limited(FirebaseMessaging.instance.getToken());
+        if (token != null && onRemoveToken != null) {
+          await _limited(onRemoveToken(token));
+        }
+        await _limited(
+          FirebaseMessaging.instance.unsubscribeFromTopic(clubTopic),
+        );
+      } catch (e) {
+        debugPrint('Uscita dalle notifiche non riuscita: $e');
+      } finally {
+        _subscribed = false;
+      }
+      // Il token si butta comunque: se la riga non si è potuta cancellare (sessione già
+      // scaduta, i permessi lo impediscono) FCM risponde UNREGISTERED e la funzione
+      // notify la cancella, così le notifiche personali di chi è uscito non arrivano
+      // più qui. Il prossimo account si iscrive con un token nuovo.
+      try {
+        await _limited(FirebaseMessaging.instance.deleteToken());
+        _tokenDeleted = true;
+      } catch (e) {
+        debugPrint('Token delle notifiche non cancellato: $e');
+      }
+    });
   }
 
   bool get isReady => _ready;
@@ -150,3 +204,14 @@ class PushService {
 
 /// Usato per mostrare messaggi da qualunque punto dell'app.
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
+
+/// Avviso in basso sulla pagina aperta, da qualunque punto dell'app (anche fuori dai
+/// widget).
+void showAppMessage(
+  String text, {
+  Duration duration = const Duration(seconds: 4),
+}) {
+  messengerKey.currentState?.showSnackBar(
+    SnackBar(content: Text(text), duration: duration),
+  );
+}
