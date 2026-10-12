@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/clock.dart';
+import 'package:milanac/core/italian_time.dart';
 import 'package:milanac/core/teams.dart';
 import 'package:milanac/features/calendario/club_event.dart';
 import 'package:milanac/features/intro/intro_state.dart';
@@ -10,13 +12,17 @@ import 'package:milanac/features/presenze/attendance.dart';
 import 'package:milanac/features/presenze/evening.dart';
 import 'package:milanac/main.dart';
 
-/// Avvia l'app demo con l'orologio fermo a [now].
-Future<ProviderContainer> startAppAt(WidgetTester tester, DateTime now) async {
+/// Avvia l'app demo con l'orologio fermo a [now] (e altri provider sostituiti).
+Future<ProviderContainer> startAppAt(
+  WidgetTester tester,
+  DateTime now, {
+  List<Override> overrides = const [],
+}) async {
   tester.view.physicalSize = const Size(1080, 2340);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
-    overrides: [clockProvider.overrideWithValue(() => now)],
+    overrides: [clockProvider.overrideWithValue(() => now), ...overrides],
   );
   addTearDown(container.dispose);
   container.read(introDoneProvider.notifier).complete();
@@ -27,10 +33,22 @@ Future<ProviderContainer> startAppAt(WidgetTester tester, DateTime now) async {
   return container;
 }
 
+/// Oggi alle [hour]:[minute] del computer che lancia i test.
 DateTime todayAt(int hour, [int minute = 0]) {
   final t = DateTime.now();
   return DateTime(t.year, t.month, t.day, hour, minute);
 }
+
+/// L'istante in cui in Italia sono le [hour]:[minute] di oggi (l'app ragiona in ora
+/// italiana, qualunque sia il fuso del computer che lancia i test).
+DateTime todayInItalyAt(int hour, [int minute = 0]) {
+  final t = italianClock(DateTime.now());
+  return italyAt(t.year, t.month, t.day, hour, minute);
+}
+
+/// L'istante in cui in Italia sono le [hour]:[minute] del giorno indicato.
+DateTime italyAt(int year, int month, int day, int hour, [int minute = 0]) =>
+    fromItalianClock(DateTime.utc(year, month, day, hour, minute));
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
@@ -40,32 +58,33 @@ void main() {
     final day = DateTime(2026, 10, 3);
     final fallback = eveningEvent(const [], day);
     expect(fallback.type, EventType.allenamento);
-    expect(fallback.startsAt, DateTime(2026, 10, 3, 21, 30));
+    // Gli orari degli eventi sono in ora italiana (vedi ClubEvent.startsAt).
+    expect(fallback.startsAt, DateTime.utc(2026, 10, 3, 21, 30));
 
     final partita = ClubEvent(
       id: 'p',
       type: EventType.amichevole,
       title: 'Amichevole',
-      startsAt: DateTime(2026, 10, 3, 22),
+      startsAt: DateTime.utc(2026, 10, 3, 22),
     );
     final riunione = ClubEvent(
       id: 'r',
       type: EventType.riunione,
       title: 'Riunione',
-      startsAt: DateTime(2026, 10, 3, 20),
+      startsAt: DateTime.utc(2026, 10, 3, 20),
     );
     final domani = ClubEvent(
       id: 'd',
       type: EventType.amichevole,
       title: 'Domani',
-      startsAt: DateTime(2026, 10, 4, 21),
+      startsAt: DateTime.utc(2026, 10, 4, 21),
     );
     final futuro = ClubEvent(
       id: 'f',
       team: Team.futuro,
       type: EventType.torneo,
       title: 'Coppa Futuro',
-      startsAt: DateTime(2026, 10, 3, 21),
+      startsAt: DateTime.utc(2026, 10, 3, 21),
     );
     expect(
       eveningEvent([domani, riunione, partita, futuro], day).id,
@@ -86,16 +105,16 @@ void main() {
     );
   });
 
-  test('risposte aperte fino alle 18:30, anche per i giorni successivi', () {
+  test('risposte aperte fino alle 18:30 italiane, anche per i giorni successivi', () {
     final day = DateTime(2026, 10, 3);
-    expect(answersOpen(day, DateTime(2026, 10, 3, 18, 29)), isTrue);
-    expect(answersOpen(day, DateTime(2026, 10, 3, 18, 30)), isFalse);
-    expect(answersOpen(day, DateTime(2026, 10, 2, 23)), isTrue);
-    expect(answersOpen(day, DateTime(2026, 10, 4, 9)), isFalse);
+    expect(answersOpen(day, italyAt(2026, 10, 3, 18, 29)), isTrue);
+    expect(answersOpen(day, italyAt(2026, 10, 3, 18, 30)), isFalse);
+    expect(answersOpen(day, italyAt(2026, 10, 2, 23)), isTrue);
+    expect(answersOpen(day, italyAt(2026, 10, 4, 9)), isFalse);
   });
 
   testWidgets('Home: i due riquadri e la risposta per stasera', (tester) async {
-    await startAppAt(tester, todayAt(17));
+    await startAppAt(tester, todayInItalyAt(17));
 
     expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
     expect(find.text('MONDO PROCLUB'), findsOneWidget);
@@ -115,7 +134,7 @@ void main() {
   });
 
   testWidgets('Home: dopo le 18:30 le risposte sono chiuse', (tester) async {
-    await startAppAt(tester, todayAt(18, 31));
+    await startAppAt(tester, todayInItalyAt(18, 31));
     expect(find.textContaining('Risposte chiuse alle 18:30'), findsOneWidget);
     final button = tester.widget<OutlinedButton>(
       find.widgetWithText(OutlinedButton, 'Presente'),

@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/clock.dart';
 import '../../core/config.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import 'club_event.dart';
 
 abstract class EventsRepository {
+  /// Tutti gli eventi, dal primo all'ultimo, aggiornati in tempo reale.
   Stream<List<ClubEvent>> watchAll();
 
   /// Crea l'evento se [ClubEvent.id] è vuoto, altrimenti lo aggiorna.
@@ -16,13 +19,21 @@ abstract class EventsRepository {
 }
 
 final eventsRepositoryProvider = Provider<EventsRepository>((ref) {
-  if (AppConfig.isDemo) return DemoEventsRepository();
+  if (AppConfig.isDemo) {
+    return DemoEventsRepository(now: ref.read(clockProvider)());
+  }
   return _SupabaseEventsRepository(ref);
 });
 
-final eventsProvider = StreamProvider<List<ClubEvent>>(
-  (ref) => ref.watch(eventsRepositoryProvider).watchAll(),
-);
+/// Gli eventi letti con i permessi dell'utente: si ricaricano quando entra un altro account.
+final eventsProvider = StreamProvider<List<ClubEvent>>((ref) {
+  if (ref.watch(currentUserIdProvider) == null) return Stream.value(const []);
+  return ref.watch(eventsRepositoryProvider).watchAll();
+});
+
+/// Dal primo all'ultimo: l'ordine di arrivo dal server non conta.
+List<ClubEvent> sortedByStart(Iterable<ClubEvent> events) =>
+    events.toList()..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
 class _SupabaseEventsRepository implements EventsRepository {
   _SupabaseEventsRepository(this._ref);
@@ -33,8 +44,9 @@ class _SupabaseEventsRepository implements EventsRepository {
       .read(supabaseProvider)
       .from('events')
       .stream(primaryKey: ['id'])
-      .order('starts_at')
-      .map((rows) => rows.map(ClubEvent.fromMap).toList());
+      // Senza ascending lo stream ordina dal più lontano (default false).
+      .order('starts_at', ascending: true)
+      .map((rows) => sortedByStart(rows.map(ClubEvent.fromMap)));
 
   @override
   Future<void> save(ClubEvent e) async {
@@ -55,11 +67,13 @@ class _SupabaseEventsRepository implements EventsRepository {
   }
 }
 
+/// Eventi di esempio in memoria (modalità demo e test), intorno al giorno italiano di [now].
 class DemoEventsRepository implements EventsRepository {
-  DemoEventsRepository() {
-    final now = DateTime.now();
+  DemoEventsRepository({DateTime? now}) {
+    final today = italianClock(now ?? DateTime.now());
+    // Ore italiane, come gli eventi letti dal server.
     DateTime at(int days, [int h = 21, int m = 30]) =>
-        DateTime(now.year, now.month, now.day + days, h, m);
+        DateTime.utc(today.year, today.month, today.day + days, h, m);
     _events.addAll([
       ClubEvent(
         id: 'e1',
@@ -102,8 +116,7 @@ class DemoEventsRepository implements EventsRepository {
   final _controller = StreamController<List<ClubEvent>>.broadcast();
   var _nextId = 100;
 
-  List<ClubEvent> get _sorted =>
-      List.of(_events)..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+  List<ClubEvent> get _sorted => sortedByStart(_events);
 
   @override
   Stream<List<ClubEvent>> watchAll() async* {

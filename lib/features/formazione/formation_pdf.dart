@@ -8,6 +8,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/errors.dart';
+import '../../core/italian_time.dart';
 import '../../core/theme.dart';
 import '../carta/mini_card.dart';
 import '../carte/special_cards_repository.dart';
@@ -214,7 +216,10 @@ Future<Uint8List> buildFormationPdf({
   final crest = pw.MemoryImage(
     (await rootBundle.load('assets/images/stemma_256.png')).buffer.asUint8List(),
   );
-  final when = DateFormat("EEEE d MMMM yyyy", 'it').format(date ?? DateTime.now());
+  final when = DateFormat(
+    "EEEE d MMMM yyyy",
+    'it',
+  ).format(date ?? italianDay(DateTime.now()));
   final starters = [
     for (final (i, slot) in formation.slots.indexed)
       if (members[formation.players[i]] case final m?)
@@ -315,9 +320,12 @@ Future<void> shareFormationPdf(
       members: members,
       bench: bench,
       image: image,
-      date: formation.publishedAt?.toLocal(),
+      // Il giorno della pubblicazione in Italia.
+      date: formation.publishedAt == null
+          ? null
+          : italianClock(formation.publishedAt!),
     );
-    final day = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final day = DateFormat('yyyy-MM-dd').format(italianDay(DateTime.now()));
     await SharePlus.instance.share(
       ShareParams(
         files: [
@@ -332,6 +340,8 @@ Future<void> shareFormationPdf(
       ),
     );
   } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('PDF non creato: $e')));
+    messenger.showSnackBar(
+      SnackBar(content: Text(friendlyError(e, action: 'PDF non creato'))),
+    );
   }
 }

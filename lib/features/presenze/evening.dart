@@ -2,7 +2,7 @@ import '../../core/config.dart';
 import '../../core/teams.dart';
 import '../calendario/club_event.dart';
 
-/// L'allenamento di ogni sera (lunedì-domenica, 21:30), quando il Direttivo non ha
+/// L'allenamento di ogni sera (lunedì-domenica, 21:30 italiane), quando il Direttivo non ha
 /// messo in calendario altro per quel giorno.
 ClubEvent trainingOn(DateTime day, {Team? team}) {
   final parts = AppConfig.defaultArrivalTime.split(':');
@@ -11,7 +11,8 @@ ClubEvent trainingOn(DateTime day, {Team? team}) {
     type: EventType.allenamento,
     title: 'Allenamento',
     team: team,
-    startsAt: DateTime(
+    // Ora italiana, come tutti gli eventi (vedi ClubEvent.startsAt).
+    startsAt: DateTime.utc(
       day.year,
       day.month,
       day.day,
@@ -21,8 +22,8 @@ ClubEvent trainingOn(DateTime day, {Team? team}) {
   );
 }
 
-/// L'appuntamento della serata di [day] per chi gioca in [teams]: il primo evento
-/// del giorno che li riguarda (partita, amichevole o allenamento a un altro orario),
+/// L'appuntamento della serata di [day] (giorno italiano) per chi gioca in [teams]: il primo
+/// evento del giorno che li riguarda (partita, amichevole o allenamento a un altro orario),
 /// altrimenti l'allenamento delle 21:30. Le riunioni non chiedono presenze.
 ClubEvent eveningEvent(
   List<ClubEvent> events,

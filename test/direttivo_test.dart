@@ -4,7 +4,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/direttivo/direttivo_page.dart';
 
 import 'helpers.dart';
-import 'home_test.dart' show startAppAt, todayAt;
+import 'home_test.dart' show startAppAt, todayInItalyAt;
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
@@ -12,7 +12,7 @@ void main() {
   testWidgets('Sala Direttivo: avviso in Comunicazioni e chat riservata', (
     tester,
   ) async {
-    await startAppAt(tester, todayAt(17));
+    await startAppAt(tester, todayInItalyAt(17));
     await goToSection(tester, 'Sala Direttivo');
     expect(find.text('senza risposta stasera'), findsOneWidget);
     expect(find.text('video proposto'), findsOneWidget);
@@ -46,7 +46,7 @@ void main() {
   testWidgets('Presenze di stasera: il Direttivo corregge anche dopo le 18:30', (
     tester,
   ) async {
-    await startAppAt(tester, todayAt(18, 31));
+    await startAppAt(tester, todayInItalyAt(18, 31));
     await goToSection(tester, 'Sala Direttivo');
     await tester.tap(find.text('Presenze di stasera'));
     await tester.pumpAndSettle();
@@ -74,7 +74,7 @@ void main() {
   testWidgets('Rosa e squadre: i membri rimossi si vedono e si riattivano', (
     tester,
   ) async {
-    await startAppAt(tester, todayAt(17));
+    await startAppAt(tester, todayInItalyAt(17));
     await goToSection(tester, 'Sala Direttivo');
     await tester.scrollUntilVisible(
       find.text('Rosa e squadre'),

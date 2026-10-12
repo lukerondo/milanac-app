@@ -5,8 +5,11 @@ import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/clock.dart';
+import '../../core/errors.dart';
+import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../../shared/club_links.dart';
 import '../../shared/club_links_editor.dart';
 import '../../shared/member_photo.dart';
@@ -44,7 +47,8 @@ class DirettivoPage extends ConsumerWidget {
     final members = all
         .where((m) => m.active && m.role != ClubRole.pending)
         .toList();
-    final today = dayOnly(ref.watch(clockProvider)());
+    // Stasera in Italia, come sul server.
+    final today = italianDay(ref.watch(clockProvider)());
     final answered = {
       for (final e in ref.watch(attendanceProvider).value ?? const [])
         if (e.date == today) e.playerId,
@@ -52,7 +56,7 @@ class DirettivoPage extends ConsumerWidget {
     final missing = members.where((m) => !answered.contains(m.id)).length;
     final toPublish = Team.values.where((t) {
       final f = ref.watch(formationProvider(t)).value;
-      return f == null || !f.isPublishedToday || f.hasUnpublishedChanges;
+      return f == null || !f.isPublishedOn(today) || f.hasUnpublishedChanges;
     }).length;
     final proposals =
         (ref.watch(sharedLinksProvider(LinkCategory.video)).value ??
@@ -269,7 +273,9 @@ class DirettivoPage extends ConsumerWidget {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Avviso non inviato: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(friendlyError(e, action: 'Avviso non inviato'))),
+      );
     }
   }
 }
@@ -438,137 +444,146 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
   Team? _team;
 
   Future<void> _setTeams(Member m, Set<Team> teams) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(rosaRepositoryProvider).save(m.copyWith(teams: teams));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Modifica non riuscita: $e')));
-      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Modifica non riuscita')),
+        ),
+      );
     }
   }
 
   /// Un membro rimosso torna nella rosa (e può di nuovo entrare nell'app).
   Future<void> _reactivate(Member m) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(rosaRepositoryProvider).save(m.copyWith(active: true));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${m.displayName} è di nuovo nella rosa.')),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('${m.displayName} è di nuovo nella rosa.')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Modifica non riuscita: $e')));
-      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Modifica non riuscita')),
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final all = ref.watch(rosaProvider).value ?? const <Member>[];
+    return Scaffold(
+      appBar: AppBar(title: const Text('ROSA E SQUADRE')),
+      body: AsyncView(
+        value: ref.watch(rosaProvider),
+        onRetry: () => ref.invalidate(rosaProvider),
+        data: _list,
+      ),
+    );
+  }
+
+  Widget _list(List<Member> all) {
     final members =
         all.where((m) => m.active && m.role != ClubRole.pending).toList()
           ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final removed = all.where((m) => !m.active).toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final shown = members.where((m) => m.inTeam(_team)).toList();
-    return Scaffold(
-      appBar: AppBar(title: const Text('ROSA E SQUADRE')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-        children: [
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      children: [
+        const Text(
+          'Tocca le squadre per spostare un giocatore (anche in entrambe). '
+          'Tocca il nome per ruolo, numero e altri dati.',
+          style: TextStyle(color: Colors.white60),
+        ),
+        const SizedBox(height: 8),
+        TeamFilter(
+          value: _team,
+          onChanged: (t) => setState(() => _team = t),
+          counts: {
+            null: members.length,
+            for (final t in Team.values)
+              t: members.where((m) => m.teams.contains(t)).length,
+          },
+        ),
+        const SizedBox(height: 8),
+        for (final m in shown)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    contentPadding: const EdgeInsets.only(left: 8),
+                    leading: MemberAvatar(member: m),
+                    title: Text(
+                      m.displayName,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      [
+                        m.roleLabel,
+                        if (m.fieldPosition != null) m.fieldPosition!,
+                        if (m.shirtNumber != null) '#${m.shirtNumber}',
+                      ].join(' · '),
+                    ),
+                    trailing: const Icon(Icons.edit_rounded, size: 18),
+                    onTap: () => showMemberEditor(context, m),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: TeamsPicker(
+                      value: m.teams,
+                      onChanged: (t) => _setTeams(m, t),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (removed.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 16, 4, 4),
+            child: Text(
+              'RIMOSSI',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: Colors.white70,
+              ),
+            ),
+          ),
           const Text(
-            'Tocca le squadre per spostare un giocatore (anche in entrambe). '
-            'Tocca il nome per ruolo, numero e altri dati.',
-            style: TextStyle(color: Colors.white60),
+            'Non possono entrare nell\'app finché non vengono riattivati.',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 8),
-          TeamFilter(
-            value: _team,
-            onChanged: (t) => setState(() => _team = t),
-            counts: {
-              null: members.length,
-              for (final t in Team.values)
-                t: members.where((m) => m.teams.contains(t)).length,
-            },
-          ),
-          const SizedBox(height: 8),
-          for (final m in shown)
+          for (final m in removed)
             Card(
               margin: const EdgeInsets.only(bottom: 8),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 4, 12, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ListTile(
-                      contentPadding: const EdgeInsets.only(left: 8),
-                      leading: MemberAvatar(member: m),
-                      title: Text(
-                        m.displayName,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(
-                        [
-                          m.roleLabel,
-                          if (m.fieldPosition != null) m.fieldPosition!,
-                          if (m.shirtNumber != null) '#${m.shirtNumber}',
-                        ].join(' · '),
-                      ),
-                      trailing: const Icon(Icons.edit_rounded, size: 18),
-                      onTap: () => showMemberEditor(context, m),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 12),
-                      child: TeamsPicker(
-                        value: m.teams,
-                        onChanged: (t) => _setTeams(m, t),
-                      ),
-                    ),
-                  ],
+              child: ListTile(
+                leading: MemberAvatar(member: m),
+                title: Text(
+                  m.displayName,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  m.fullName == m.displayName ? m.roleLabel : m.fullName,
+                ),
+                trailing: FilledButton.tonal(
+                  onPressed: () => _reactivate(m),
+                  child: const Text('Riattiva'),
                 ),
               ),
             ),
-          if (removed.isNotEmpty) ...[
-            const Padding(
-              padding: EdgeInsets.fromLTRB(4, 16, 4, 4),
-              child: Text(
-                'RIMOSSI',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
-                  color: Colors.white70,
-                ),
-              ),
-            ),
-            const Text(
-              'Non possono entrare nell\'app finché non vengono riattivati.',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            for (final m in removed)
-              Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: MemberAvatar(member: m),
-                  title: Text(
-                    m.displayName,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Text(
-                    m.fullName == m.displayName ? m.roleLabel : m.fullName,
-                  ),
-                  trailing: FilledButton.tonal(
-                    onPressed: () => _reactivate(m),
-                    child: const Text('Riattiva'),
-                  ),
-                ),
-              ),
-          ],
         ],
-      ),
+      ],
     );
   }
 }
@@ -580,16 +595,54 @@ class TonightAttendancePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final members =
-        (ref.watch(rosaProvider).value ?? const <Member>[])
-            .where((m) => m.active && m.role != ClubRole.pending)
-            .toList()
-          ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    final rosa = ref.watch(rosaProvider);
+    final attendance = ref.watch(attendanceProvider);
     final now = ref.watch(clockProvider)();
-    final today = dayOnly(now);
+    // Stasera in Italia, come sul server.
+    final today = italianDay(now);
     final events = ref.watch(eventsProvider).value ?? const <ClubEvent>[];
+
+    void retry() {
+      ref.invalidate(rosaProvider);
+      ref.invalidate(attendanceProvider);
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('PRESENZE DI STASERA')),
+      body: AsyncView(
+        value: rosa,
+        onRetry: retry,
+        data: (all) => AsyncView(
+          value: attendance,
+          onRetry: retry,
+          data: (entries) => _list(
+            context,
+            ref,
+            all: all,
+            entries: entries,
+            events: events,
+            today: today,
+            now: now,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _list(
+    BuildContext context,
+    WidgetRef ref, {
+    required List<Member> all,
+    required List<AttendanceEntry> entries,
+    required List<ClubEvent> events,
+    required DateTime today,
+    required DateTime now,
+  }) {
+    final members =
+        all.where((m) => m.active && m.role != ClubRole.pending).toList()
+          ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final tonight = {
-      for (final e in ref.watch(attendanceProvider).value ?? const [])
+      for (final e in entries)
         if (e.date == today) e.playerId: e,
     };
     List<Member> withStatus(AttendanceStatus? s) => members
@@ -666,35 +719,32 @@ class TonightAttendancePage extends ConsumerWidget {
     );
 
     final closed = !answersOpen(today, now);
-    return Scaffold(
-      appBar: AppBar(title: const Text('PRESENZE DI STASERA')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-        children: [
-          Text(
-            '${DateFormat('EEEE d MMMM', 'it').format(today)} · '
-            '${closed ? 'risposte chiuse alle $attendanceDeadlineLabel' : 'risposte aperte fino alle $attendanceDeadlineLabel'}. '
-            'Tocca un giocatore per correggere la sua risposta: resta registrato chi l\'ha fatto.',
-            style: const TextStyle(color: Colors.white60, fontSize: 13),
-          ),
-          group('Senza risposta', MilanacColors.gold, withStatus(null)),
-          group(
-            'In ritardo',
-            statusColor(AttendanceStatus.ritardo),
-            withStatus(AttendanceStatus.ritardo),
-          ),
-          group(
-            'Assenti',
-            statusColor(AttendanceStatus.assente),
-            withStatus(AttendanceStatus.assente),
-          ),
-          group(
-            'Presenti',
-            statusColor(AttendanceStatus.presente),
-            withStatus(AttendanceStatus.presente),
-          ),
-        ],
-      ),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+      children: [
+        Text(
+          '${DateFormat('EEEE d MMMM', 'it').format(today)} · '
+          '${closed ? 'risposte chiuse alle $attendanceDeadlineLabel' : 'risposte aperte fino alle $attendanceDeadlineLabel'}. '
+          'Tocca un giocatore per correggere la sua risposta: resta registrato chi l\'ha fatto.',
+          style: const TextStyle(color: Colors.white60, fontSize: 13),
+        ),
+        group('Senza risposta', MilanacColors.gold, withStatus(null)),
+        group(
+          'In ritardo',
+          statusColor(AttendanceStatus.ritardo),
+          withStatus(AttendanceStatus.ritardo),
+        ),
+        group(
+          'Assenti',
+          statusColor(AttendanceStatus.assente),
+          withStatus(AttendanceStatus.assente),
+        ),
+        group(
+          'Presenti',
+          statusColor(AttendanceStatus.presente),
+          withStatus(AttendanceStatus.presente),
+        ),
+      ],
     );
   }
 }
