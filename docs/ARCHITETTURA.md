@@ -95,7 +95,7 @@ accettano al primo accesso successivo.
      Tattiche, Mondo Proclub, Albo d'oro, Regolamento e Storia, Colonna sonora, Tornei, Sala
      Direttivo per chi ne fa parte, contatti social modificabili dal Direttivo)
    - in alto a destra la propria foto: profilo con la carta, i traguardi e le Impostazioni
-     (dati, volto, notifiche, aspetto scuro/chiaro/come il telefono, account);
+     (dati, volto, notifiche, aspetto scuro/chiaro/automatico come il telefono, account);
    - i vecchi indirizzi delle notifiche (/calendario, /risultati, /tornei, /carta) portano
      alla nuova posizione; una sottosezione aperta da notifica torna indietro alla sua scheda.
 3b. **Mondo Proclub** – scheda *Video*: i video dei creator pubblicati dal Direttivo,

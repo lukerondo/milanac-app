@@ -170,20 +170,14 @@ class GoldFadeLine extends StatelessWidget {
   );
 }
 
-/// Lo stemma del club con gli angoli arrotondati (l'immagine ha il fondo nero).
+/// Lo stemma del club (immagine con il fondo trasparente).
 class ClubCrest extends StatelessWidget {
   const ClubCrest({super.key, this.size = 60});
   final double size;
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(size * .18),
-    child: Image.asset(
-      'assets/images/stemma_256.png',
-      width: size,
-      height: size,
-    ),
-  );
+  Widget build(BuildContext context) =>
+      Image.asset('assets/images/stemma_256.png', width: size, height: size);
 }
 
 /// Iniziali di un nome per i tondi senza foto ("Dinamo Pixel" → "DP").
