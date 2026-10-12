@@ -68,24 +68,43 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      # Simboli di debug fuori dall'APK (in un artifact a parte, per leggere eventuali crash)
+      # e nomi del codice offuscati: l'app pesa qualche MB in meno.
       - name: APK per tutti i telefoni
         run: |
           # Solo i processori dei telefoni (32 e 64 bit): senza x86, usato dagli emulatori, pesa un terzo in meno.
-          flutter build apk --release --target-platform android-arm,android-arm64 --dart-define-from-file=env/prod.json
+          # Librerie compresse: l'APK universale si scarica in metà spazio.
+          flutter build apk --release --target-platform android-arm,android-arm64 \
+            --obfuscate --split-debug-info=build/simboli/universale \
+            --android-project-arg milanac.compressLibs=true \
+            --dart-define-from-file=env/prod.json
           cp build/app/outputs/flutter-apk/app-release.apk MILANAC.apk
       # Versione leggera (circa metà) per i telefoni a 64 bit, comoda da mandare in chat.
       # --split-per-abi tiene nel file solo le librerie di quella architettura (anche quelle dei plugin);
       # il numero di versione resta quello dell'APK completo, così si passa dall'uno all'altro senza disinstallare.
       - name: APK solo arm64
         run: |
-          flutter build apk --release --split-per-abi --android-project-arg force-version-code-ignoring-abi=true --dart-define-from-file=env/prod.json
+          flutter build apk --release --split-per-abi --android-project-arg force-version-code-ignoring-abi=true \
+            --obfuscate --split-debug-info=build/simboli/arm64 \
+            --dart-define-from-file=env/prod.json
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk MILANAC-arm64.apk
+      - name: Peso degli APK
+        run: |
+          for f in MILANAC.apk MILANAC-arm64.apk; do
+            echo "$f: $(du -m "$f" | cut -f1) MB"
+            echo "- $f: $(du -m "$f" | cut -f1) MB" >> "$GITHUB_STEP_SUMMARY"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: milanac-apk
           path: |
             MILANAC.apk
             MILANAC-arm64.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: milanac-simboli
+          path: build/simboli/
+          retention-days: 90
       # Controllo: gli APK di prova devono essere firmati con la chiave fissa (non con una casuale).
       - name: Verifica la firma
         run: |

@@ -61,6 +61,10 @@ android {
     packaging {
         jniLibs {
             excludes += setOf("**/libagora_*_extension.so")
+            // Con -Pmilanac.compressLibs=true le librerie native si comprimono nell'APK:
+            // si scarica in metà spazio (lo usa l'APK universale a 32 e 64 bit). L'APK
+            // arm64 le tiene non compresse: pesa di più da scaricare ma meno da installato.
+            useLegacyPackaging = project.findProperty("milanac.compressLibs") == "true"
         }
     }
 
