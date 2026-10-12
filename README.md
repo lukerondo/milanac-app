@@ -72,11 +72,12 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
    flutter run --dart-define-from-file=env/prod.json
    ```
    **Non** inserire mai nel repository la chiave `secret` / `service_role`.
-6. Fai il primo login, poi nell'SQL Editor nomina il primo Direttivo:
-   ```sql
-   update profiles set club_role = 'direttivo' where display_name = 'Il tuo nome';
-   ```
-   Da lì in poi è il Direttivo ad approvare gli altri dall'app.
+6. Registrati dall'app scegliendo *Faccio parte del Direttivo* con la password del Direttivo
+   (impostata nel database: vedi `docs/SETUP_SUPABASE.md`, § 8): il primo del Direttivo che entra
+   scrive e pubblica il regolamento d'ingresso.
+   Gli altri entrano da soli, completando la registrazione e accettando il regolamento: non c'è
+   un'approvazione, ma il Direttivo riceve l'avviso di ogni nuovo ingresso nella chat *Sala
+   Direttivo* e può togliere dalla Rosa chi non conosce (Sala Direttivo → Rosa e squadre).
 7. **Stanza vocale** (facoltativa): serve un account Agora gratuito; App ID e App Certificate vanno
    nei secret `AGORA_APP_ID` e `AGORA_APP_CERTIFICATE` di GitHub (vedi `docs/SETUP_SUPABASE.md`, § 13).
    Senza, l'app funziona lo stesso e la stanza dice che la voce non è ancora attiva.
