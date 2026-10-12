@@ -22,7 +22,6 @@ con un unico codice.
 - `video_player` – intro e clip highlights · `youtube_player_iframe` – video da link
 - `image_picker`, `video_compress`, `video_trimmer` – caricamento media (taglio a 15s)
 - `table_calendar` – calendario · `url_launcher` – apertura notizie/social
-- `sensors_plus` – effetto parallasse 2.5D dell'Albo d'oro
 - `firebase_messaging` – notifiche push
 
 ## 2. Login (Supabase Auth)
@@ -71,8 +70,8 @@ I permessi sono applicati nel database con **Row Level Security** (non solo nell
 
 Gli articoli vivono in una **bozza** (`rules_articles`, solo Direttivo). "Pubblica" crea una riga in
 `rules_versions` con la fotografia degli articoli e manda la notifica `rules`. Ogni profilo
-ricorda la versione accettata (`rules_accepted_version`): se non è l'ultima, l'app mostra la
-pergamena e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti (non mostrati).
+ricorda la versione accettata (`rules_accepted_version`): se non è l'ultima, l'app mostra il
+regolamento e lascia accettare solo dopo essere arrivati in fondo e dopo 2 minuti (non mostrati).
 Finché non esiste **nessuna versione pubblicata** nessuno resta bloccato: chi ha completato la
 registrazione entra con `enter_club()` (prende il ruolo richiesto, senza versione accettata); il
 primo del Direttivo che entra trova l'editor del regolamento d'ingresso con la spiegazione
@@ -118,14 +117,11 @@ accettano al primo accesso successivo.
    Per ogni partita il Direttivo allega media in **due modi**:
    - **Link** (YouTube, Twitch, Instagram, TikTok…) → riprodotto/aperto nell'app
    - **Clip caricata**: video **max 15 secondi** (tagliato nell'app) o foto, compressi prima dell'upload
-8. **Albo d'oro** – scena 2.5D: illustrazione della sala trofei con un giocatore del Pro Club
-   (di spalle) che ammira la bacheca; le mensole sono "vive": i trofei caricati dal Direttivo
-   (PNG trasparente) vengono posizionati sulle mensole, con riflessi, luce e leggero parallasse
-   inclinando il telefono. **Selettore stagione in alto a destra** (es. 2025/26, 2026/27).
-   Tocco su un trofeo → dettaglio (competizione, data, finale, foto).
-   Evoluzione futura: trofei 3D ruotabili (`.glb`).
+8. **Albo d'oro** – stagioni a schede (es. 2025/26, 2026/27), targa con il numero di trofei ed
+   elenco dei trofei caricati dal Direttivo (foto o sagoma disegnata); tocco su un trofeo →
+   dettaglio (competizione, data, finale, foto).
 9. **Regolamento & Storia** – una pagina con due schede, testo formattato modificabile dal Direttivo.
-10. **Presenze** – a calendario: oggi cerchiato in rosso, un puntino per ogni evento. Per il
+10. **Presenze** – settimana a colpo d'occhio (e mese intero): oggi in oro, un puntino per ogni evento. Per il
     giorno scelto: la serata della squadra, la propria risposta (*Presente* · *In ritardo*
     con orario e nota obbligatoria · *Assente* con nota facoltativa), totali e gli elenchi
     (senza risposta, presenti, in ritardo, assenti). Le risposte chiudono alle **18:30**
@@ -348,12 +344,13 @@ la testata e il link, la descrizione rimanda all'articolo originale.
 milanac-app/
   lib/
     main.dart
-    core/      theme/ (rossonero), router/, supabase/, auth/, widgets/
+    core/      theme (nero oro, scuro e chiaro), router (5 schede e porte), auth/, push/,
+               errors, audio_focus, appearance, italian_time
     features/  intro/ auth/ registrazione/ home/ mondo/ news/ rosa/ carta/ carte/ formazione/
                calendario/ risultati/ presenze/ chat/ tornei/ albo_doro/ regolamento/
                tattiche/ lavagna/ voce/ musica/ traguardi/ walkout/ volto/ direttivo/
-               impostazioni/
-  assets/      video/intro.mp4, images/ (stemma, sala trofei), fonts/
+               impostazioni/ profilo/ club/ partite/
+  assets/      video/intro.mp4 (720p), images/ (stemma), fonts/ (Oswald, Barlow)
   supabase/    migrations/ (schema + RLS), seed.sql
   tools/news_fetcher/   script raccolta notizie
   .github/workflows/    news.yml, build-android.yml, build-ios.yml, web-pages.yml
