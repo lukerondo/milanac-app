@@ -1500,6 +1500,44 @@ void main() {
     expect(loaded.hasMore, isFalse);
   });
 
+  testWidgets('Buco dopo una riconnessione con le pagine che non arrivano: '
+      'si riprova da solo, senza aspettare una novità', (tester) async {
+    final start = DateTime.now().subtract(const Duration(hours: 3));
+    ChatMessage numbered(int i) => ChatMessage(
+      id: 'v$i',
+      channelId: 'c-main',
+      authorId: 'p2',
+      body: 'Messaggio $i',
+      createdAt: start.add(Duration(minutes: i)),
+    );
+    final repo = _ReconnectingRepository(
+      messages: [for (var i = 1; i <= 40; i++) numbered(i)],
+    );
+    final container = await startChat(tester, repo: repo);
+    await openChannel(tester, 'Generale');
+
+    for (var i = 41; i <= 110; i++) {
+      repo.receive(numbered(i), realtime: false);
+    }
+    repo.olderFail = true;
+    repo.fail();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(history(container, 'c-main').gap, isTrue);
+
+    // La rete torna, ma nel canale non scrive nessuno: il recupero riparte da solo.
+    repo.olderFail = false;
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    final loaded = history(container, 'c-main');
+    expect(loaded.gap, isFalse);
+    final ids = {for (final m in loaded.messages) m.id};
+    for (var i = 41; i <= 110; i++) {
+      expect(ids, contains('v$i'));
+    }
+    expect(repo.readUntil.last, numbered(110).createdAt);
+  });
+
   testWidgets(
     'Uscita dalla conversazione mentre il messaggio parte: se non parte '
     'lo si dice, e al ritorno è lì da riprovare',

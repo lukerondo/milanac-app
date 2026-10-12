@@ -299,7 +299,9 @@ void main() {
     expect(c.state.phase, VoicePhase.idle);
     expect(engine.joined, isFalse);
     expect(c.repo.beats, 0);
-    expect(c.foreground.calls, isEmpty);
+    // L'avviso fisso parte al tocco di "Entra" (con l'app in primo piano) e si
+    // ferma uscendo; la join finita tardi non lo riaccende.
+    expect(c.foreground.calls, ['start #Generale', 'stop']);
     c.container.dispose();
   });
 
@@ -693,6 +695,26 @@ void main() {
       );
       expect(attempts, 6);
       expect(now.isAfter(until), isFalse, reason: 'non oltre la scadenza');
+    });
+
+    test('una richiesta bloccata non consuma tutto il tempo: dopo il tempo '
+        'massimo si riprova', () async {
+      var attempts = 0;
+      final problem = await renewVoiceTicket(
+        refresh: () {
+          // La prima richiesta non risponde mai, la seconda sì.
+          if (++attempts == 1) return Completer<String>().future;
+          return Future.value('nuovo');
+        },
+        apply: (_) async {},
+        stopped: () => false,
+        until: start.add(const Duration(seconds: 30)),
+        now: () => start,
+        wait: (_) async {},
+        attemptTimeout: const Duration(milliseconds: 20),
+      );
+      expect(problem, isNull);
+      expect(attempts, 2);
     });
 
     test('una risposta definitiva del server non si riprova; uscendo intanto '

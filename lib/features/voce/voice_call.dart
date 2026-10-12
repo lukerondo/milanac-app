@@ -169,6 +169,11 @@ class VoiceCall extends Notifier<VoiceCallState> {
       // prima di entrare, così la chiamata parte già con loro.
       await _foreground.askBluetooth();
       if (stale()) return;
+      // L'avviso fisso parte subito, con l'app in primo piano e il permesso del
+      // microfono già dato: Android non lo lascia avviare dal background, e chi blocca
+      // lo schermo mentre entra resterebbe senza microfono. Se l'ingresso non riesce,
+      // o si esce prima, lo ferma [_teardown].
+      _startForeground(attempt);
       final roomId = await repo.open(channel.id);
       // Aprendo si è già dentro: la sessione serve anche per chiuderla se intanto
       // si è usciti.
@@ -210,7 +215,6 @@ class VoiceCall extends Notifier<VoiceCallState> {
         (_) => _beat(attempt, periodic: true),
       );
       _onResume = _OnResume(() => _resumed(attempt));
-      _startForeground(attempt);
     } catch (e) {
       if (!stale()) {
         final teardown = _teardown();

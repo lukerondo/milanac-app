@@ -46,8 +46,9 @@ final voiceEngineFactoryProvider = Provider<VoiceEngine Function()>(
 /// ad Agora con [apply]. Un errore di rete (o del server) non chiude la chiamata: si
 /// riprova dopo 2, 4, 8 secondi... finché il biglietto vale ([until]). Una risposta
 /// definitiva ([VoiceException]: non sei più nella stanza, stanza chiusa) non si
-/// riprova. Restituisce il motivo per cui non è riuscito, null se è riuscito o se
-/// intanto si è usciti ([stopped]).
+/// riprova. Una richiesta bloccata vale come un errore dopo [attemptTimeout], così non
+/// consuma da sola tutto il tempo che resta. Restituisce il motivo per cui non è
+/// riuscito, null se è riuscito o se intanto si è usciti ([stopped]).
 Future<VoiceException?> renewVoiceTicket({
   required Future<String> Function() refresh,
   required Future<void> Function(String token) apply,
@@ -55,11 +56,12 @@ Future<VoiceException?> renewVoiceTicket({
   required DateTime until,
   DateTime Function() now = DateTime.now,
   Future<void> Function(Duration) wait = _wait,
+  Duration attemptTimeout = const Duration(seconds: 10),
 }) async {
   var pause = const Duration(seconds: 2);
   while (!stopped()) {
     try {
-      await apply(await refresh());
+      await apply(await refresh().timeout(attemptTimeout));
       return null;
     } on VoiceException catch (e) {
       return stopped() ? null : e;

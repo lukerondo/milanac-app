@@ -21,6 +21,7 @@ import '../../shared/link_text.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
 import '../carte/special_cards_repository.dart';
+import '../formazione/formazione_page.dart' show formationPath;
 import '../lavagna/board_model.dart';
 import '../lavagna/board_painter.dart';
 import '../lavagna/replay_pages.dart';
@@ -1280,13 +1281,6 @@ class _SystemMessage extends StatelessWidget {
   const _SystemMessage({required this.message});
   final ChatMessage message;
 
-  /// La formazione della squadra del messaggio (`meta.team`; se manca, quella di
-  /// sempre).
-  static String _formation(Object? team) {
-    final squad = Team.parse(team);
-    return squad == null ? '/formazione' : '/formazione?squadra=${squad.name}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
@@ -1301,7 +1295,8 @@ class _SystemMessage extends StatelessWidget {
     // Pagine dentro le schede, mentre la conversazione sta sopra: ci si va con go
     // (push farebbe una seconda copia delle schede).
     final route = switch (type) {
-      'formation' => _formation(message.meta['team']),
+      // La formazione della squadra del messaggio (se manca, quella del giocatore).
+      'formation' => formationPath(Team.parse(message.meta['team'])),
       'special_cards' => '/carte-speciali',
       'new_member' => '/rosa',
       _ => null,

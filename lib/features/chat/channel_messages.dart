@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -92,6 +93,17 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
   /// arriva scorrendo in cima (o alla prossima novità).
   static const _catchUpPages = 10;
 
+  /// Se le pagine del buco non arrivano (rete instabile) e nel canale non arriva
+  /// nessuna novità che rilanci il recupero, si riprova da soli dopo 5, 10, 30 secondi
+  /// (poi ogni 30): finché manca qualcosa il canale non si segna letto.
+  static const _catchUpRetryDelays = [
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+    Duration(seconds: 30),
+  ];
+  Timer? _catchUpRetry;
+  int _catchUpFailures = 0;
+
   /// La conversazione resta in memoria, anche uscendo dalla pagina, finché un
   /// messaggio scritto qui sta partendo o non è partito: al ritorno lo si ritrova.
   KeepAliveLink? _hold;
@@ -151,6 +163,8 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       for (final s in subs) {
         s.cancel();
       }
+      _catchUpRetry?.cancel();
+      _catchUpRetry = null;
       out.close();
     });
     return out.stream;
@@ -265,7 +279,27 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       }
     } finally {
       _catchingUp = false;
+      _retryCatchUpLater();
     }
+  }
+
+  void _retryCatchUpLater() {
+    _catchUpRetry?.cancel();
+    _catchUpRetry = null;
+    if (!ref.mounted || _gapAfter == null || !_loadMoreFailed) {
+      _catchUpFailures = 0;
+      return;
+    }
+    final delays = _catchUpRetryDelays;
+    final delay = delays[math.min(_catchUpFailures, delays.length - 1)];
+    _catchUpFailures++;
+    _catchUpRetry = Timer(delay, () {
+      _catchUpRetry = null;
+      if (!ref.mounted || _gapAfter == null || _catchingUp) return;
+      _loadMoreFailed = false;
+      _emit();
+      unawaited(_catchUp());
+    });
   }
 
   /// Il messaggio [m] dal server al posto di quello che c'era ([old]).
