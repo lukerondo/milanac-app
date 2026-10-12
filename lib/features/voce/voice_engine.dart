@@ -42,6 +42,43 @@ final voiceEngineFactoryProvider = Provider<VoiceEngine Function()>(
       : AgoraVoiceEngine.new,
 );
 
+/// Rinnovo del biglietto della stanza: chiede quello nuovo con [refresh] e lo passa
+/// ad Agora con [apply]. Un errore di rete (o del server) non chiude la chiamata: si
+/// riprova dopo 2, 4, 8 secondi... finché il biglietto vale ([until]). Una risposta
+/// definitiva ([VoiceException]: non sei più nella stanza, stanza chiusa) non si
+/// riprova. Restituisce il motivo per cui non è riuscito, null se è riuscito o se
+/// intanto si è usciti ([stopped]).
+Future<VoiceException?> renewVoiceTicket({
+  required Future<String> Function() refresh,
+  required Future<void> Function(String token) apply,
+  required bool Function() stopped,
+  required DateTime until,
+  DateTime Function() now = DateTime.now,
+  Future<void> Function(Duration) wait = _wait,
+}) async {
+  var pause = const Duration(seconds: 2);
+  while (!stopped()) {
+    try {
+      await apply(await refresh());
+      return null;
+    } on VoiceException catch (e) {
+      return stopped() ? null : e;
+    } catch (_) {
+      if (stopped()) return null;
+      if (now().add(pause).isAfter(until)) {
+        return const VoiceException(
+          'Biglietto della stanza non rinnovato: controlla la rete e rientra.',
+        );
+      }
+      await wait(pause);
+      if (pause < const Duration(seconds: 8)) pause *= 2;
+    }
+  }
+  return null;
+}
+
+Future<void> _wait(Duration d) => Future<void>.delayed(d);
+
 /// Stanza vera su Agora (solo audio, profilo "comunicazione").
 class AgoraVoiceEngine implements VoiceEngine {
   RtcEngine? _engine;
@@ -52,6 +89,9 @@ class AgoraVoiceEngine implements VoiceEngine {
   Future<void>? _setup;
   Future<void>? _disposed;
   Future<String> Function()? _refreshToken;
+
+  /// Rinnovo del biglietto in corso: un altro avviso di Agora non ne avvia un secondo.
+  var _renewing = false;
   var _local = const <int>{};
   var _remote = const <int>{};
   int _uid = 0;
@@ -91,7 +131,9 @@ class AgoraVoiceEngine implements VoiceEngine {
           onError: (err, msg) {
             if (!_joined.isCompleted) {
               _joined.completeError(
-                VoiceException('La stanza non risponde (${err.name}). Riprova.'),
+                VoiceException(
+                  'La stanza non risponde (${err.name}). Riprova.',
+                ),
               );
             }
           },
@@ -103,13 +145,18 @@ class AgoraVoiceEngine implements VoiceEngine {
               _fail(VoiceException(_lostMessage(reason)));
             } else {
               _joined.completeError(
-                VoiceException('Connessione fallita (${reason.name}). Riprova.'),
+                VoiceException(
+                  'Connessione fallita (${reason.name}). Riprova.',
+                ),
               );
             }
           },
           onAudioVolumeIndication: (_, speakers, _, _) => _onVolumes(speakers),
-          onTokenPrivilegeWillExpire: (_, _) => _renew(),
-          onRequestToken: (_) => _renew(),
+          // Agora avvisa 30 secondi prima della scadenza; se il biglietto è già
+          // scaduto lo chiede di nuovo: si prova ancora per qualche secondo.
+          onTokenPrivilegeWillExpire: (_, _) =>
+              _renew(const Duration(seconds: 30)),
+          onRequestToken: (_) => _renew(const Duration(seconds: 10)),
         ),
       );
       await engine.enableAudio();
@@ -154,22 +201,25 @@ class AgoraVoiceEngine implements VoiceEngine {
   }
 
   // Il biglietto sta per scadere (o è scaduto): se ne chiede uno nuovo e si rinnova
-  // senza uscire. Se non arriva (non si è più nella stanza, rete assente) la chiamata
-  // finisce con il motivo, invece di cadere in silenzio alla scadenza.
-  Future<void> _renew() async {
+  // senza uscire, riprovando finché vale ancora ([validFor]). Se non arriva (non si
+  // è più nella stanza, rete assente fino alla scadenza) la chiamata finisce con il
+  // motivo, invece di cadere in silenzio.
+  Future<void> _renew(Duration validFor) async {
     final refresh = _refreshToken;
-    if (refresh == null) return;
+    if (refresh == null || _renewing) return;
+    _renewing = true;
     try {
-      final token = await refresh();
-      await _engine?.renewToken(token);
-    } catch (e) {
-      _fail(
-        e is VoiceException
-            ? e
-            : const VoiceException(
-                'Biglietto della stanza non rinnovato: controlla la rete e rientra.',
-              ),
+      final problem = await renewVoiceTicket(
+        refresh: refresh,
+        apply: (token) async {
+          await _engine?.renewToken(token);
+        },
+        stopped: () => _disposed != null,
+        until: DateTime.now().add(validFor),
       );
+      if (problem != null) _fail(problem);
+    } finally {
+      _renewing = false;
     }
   }
 

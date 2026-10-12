@@ -54,9 +54,6 @@ class VoiceCallState {
 
   bool isIn(String channelId) => isActive && channel?.id == channelId;
 
-  bool concerns(String channelId) =>
-      phase != VoicePhase.idle && channel?.id == channelId;
-
   VoiceCallState copyWith({
     VoicePhase? phase,
     String? roomId,
@@ -168,6 +165,10 @@ class VoiceCall extends Notifier<VoiceCallState> {
         );
       }
       if (stale()) return;
+      // Gli auricolari Bluetooth (Android 12+) vanno con il loro permesso: si chiede
+      // prima di entrare, così la chiamata parte già con loro.
+      await _foreground.askBluetooth();
+      if (stale()) return;
       final roomId = await repo.open(channel.id);
       // Aprendo si è già dentro: la sessione serve anche per chiuderla se intanto
       // si è usciti.
@@ -258,10 +259,6 @@ class VoiceCall extends Notifier<VoiceCallState> {
     await _applySpeaker();
   }
 
-  void dismissError() {
-    if (state.phase == VoicePhase.error) state = const VoiceCallState();
-  }
-
   /// Chiude la chiamata attuale: subito motore, segno di vita e avviso; poi,
   /// dopo l'ingresso o l'uscita ancora in corso, l'uscita sul server. Un ingresso
   /// ancora in connessione chiude da sé la sua sessione.
@@ -323,11 +320,19 @@ class VoiceCall extends Notifier<VoiceCallState> {
   }
 
   // Ritorno nell'app: subito un segno di vita (se il server ci ha fatto uscire
-  // mentre eravamo via, lo si dice adesso) e l'avviso fisso, se non era partito.
+  // mentre eravamo via, lo si dice adesso) e l'avviso fisso, se non è attivo.
   void _resumed(int attempt) {
     if (attempt != _attempt) return;
-    if (!_foregroundOn) _startForeground(attempt);
+    unawaited(_checkForeground(attempt));
     unawaited(_beat(attempt));
+  }
+
+  /// L'avviso fisso può non essere attivo anche dopo un avvio accettato: Android lo
+  /// rifiuta dentro il servizio (o lo ferma dopo). Si chiede com'è e, se serve, si
+  /// riavvia: senza, in background il microfono tacerebbe.
+  Future<void> _checkForeground(int attempt) async {
+    if (_foregroundOn && await _foreground.isRunning()) return;
+    if (attempt == _attempt) _startForeground(attempt);
   }
 
   void _startForeground(int attempt) {

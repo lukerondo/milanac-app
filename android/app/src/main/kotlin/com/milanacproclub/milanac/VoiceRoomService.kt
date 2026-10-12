@@ -1,5 +1,7 @@
 package com.milanacproclub.milanac
 
+import android.Manifest
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,7 +9,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -18,7 +23,9 @@ import android.util.Log
  * l'app in background o lo schermo spento il microfono registra solo silenzio; da
  * Android 11 il servizio deve essere di tipo "microphone".
  *
- * Lo avvia e lo ferma l'app Flutter dal canale "milanac/stanza_vocale" (MainActivity).
+ * Lo avvia e lo ferma l'app Flutter dal canale "milanac/stanza_vocale" (MainActivity),
+ * che al ritorno nell'app chiede anche se è davvero attivo ([isRunning]): Android può
+ * rifiutare l'avvio dentro onStartCommand, dopo averlo accettato.
  */
 class VoiceRoomService : Service() {
 
@@ -101,6 +108,7 @@ class VoiceRoomService : Service() {
         private const val NOTIFICATION_ID = 4120
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_TEXT = "text"
+        private const val BLUETOOTH_REQUEST = 4121
 
         // Letti e scritti solo sul thread principale (canale Flutter e ciclo di vita
         // del servizio ci girano entrambi).
@@ -109,6 +117,37 @@ class VoiceRoomService : Service() {
 
         /** startForeground riuscito e servizio non ancora distrutto. */
         private var running = false
+
+        /** Il permesso Bluetooth è già stato chiesto mentre l'app è aperta. */
+        private var bluetoothAsked = false
+
+        /** L'avviso è davvero attivo (startForeground riuscito, servizio non distrutto). */
+        fun isRunning(): Boolean = running
+
+        /**
+         * Android 12+: con auricolari Bluetooth collegati, Agora li usa solo con il
+         * permesso "Dispositivi nelle vicinanze" (BLUETOOTH_CONNECT, dichiarato nel
+         * manifest). Se manca lo chiede, una volta per apertura dell'app; true se è
+         * partito il dialogo del sistema (la risposta arriva al ritorno nell'app).
+         */
+        fun askBluetooth(activity: Activity): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || bluetoothAsked) return false
+            val permission = Manifest.permission.BLUETOOTH_CONNECT
+            if (activity.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+                return false
+            }
+            // Senza auricolari Bluetooth il permesso non serve: niente dialogo.
+            val audio = activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val bluetooth = audio.getDevices(AudioManager.GET_DEVICES_ALL).any {
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
+            if (!bluetooth) return false
+            bluetoothAsked = true
+            activity.requestPermissions(arrayOf(permission), BLUETOOTH_REQUEST)
+            return true
+        }
 
         /** Avvia (o aggiorna) il servizio; false se adesso Android non lo permette. */
         fun start(context: Context, title: String, text: String): Boolean {

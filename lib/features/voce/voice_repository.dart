@@ -38,9 +38,13 @@ final voiceRepositoryProvider = Provider<VoiceRepository>((ref) {
   return _SupabaseVoiceRepository(ref);
 });
 
-final openVoiceRoomsProvider = StreamProvider<List<VoiceRoom>>(
-  (ref) => ref.watch(voiceRepositoryProvider).watchOpenRooms(),
-);
+// Come i dati della chat, le stanze dipendono da chi è entrato (si vedono quelle dei
+// suoi canali): con un altro account sullo stesso telefono si ricaricano da zero.
+
+final openVoiceRoomsProvider = StreamProvider<List<VoiceRoom>>((ref) {
+  if (ref.watch(currentUserIdProvider) == null) return Stream.value(const []);
+  return ref.watch(voiceRepositoryProvider).watchOpenRooms();
+});
 
 /// La stanza aperta di un canale (null se nessuna).
 final channelVoiceRoomProvider = Provider.family<VoiceRoom?, String>(
@@ -50,9 +54,10 @@ final channelVoiceRoomProvider = Provider.family<VoiceRoom?, String>(
 );
 
 final voiceSessionsProvider = StreamProvider.autoDispose
-    .family<List<VoiceSession>, String>(
-      (ref, roomId) => ref.watch(voiceRepositoryProvider).watchSessions(roomId),
-    );
+    .family<List<VoiceSession>, String>((ref, roomId) {
+      ref.watch(currentUserIdProvider);
+      return ref.watch(voiceRepositoryProvider).watchSessions(roomId);
+    });
 
 /// Chi è dentro la stanza adesso, nell'ordine di ingresso.
 final voiceParticipantsProvider = Provider.autoDispose
@@ -64,9 +69,10 @@ final voiceParticipantsProvider = Provider.autoDispose
             ..sort((a, b) => a.joinedAt.compareTo(b.joinedAt)),
     );
 
-final voiceMinutesProvider = FutureProvider.autoDispose<int>(
-  (ref) => ref.watch(voiceRepositoryProvider).minutesThisMonth(),
-);
+final voiceMinutesProvider = FutureProvider.autoDispose<int>((ref) {
+  ref.watch(currentUserIdProvider);
+  return ref.watch(voiceRepositoryProvider).minutesThisMonth();
+});
 
 /// Quanti minuti-partecipante dà il piano gratuito di Agora ogni mese.
 const voiceMinutesPerMonth = 10000;
@@ -147,7 +153,9 @@ class _SupabaseVoiceRepository implements VoiceRepository {
       if (e.status == 401 || e.status == 403) {
         throw const VoiceException('Non hai accesso a questa stanza.');
       }
-      throw VoiceException('Biglietto non ricevuto (${e.status}). Riprova.');
+      // Altri errori del server (5xx, troppe richieste): passano, si può riprovare
+      // (il rinnovo del biglietto durante la chiamata lo fa da solo).
+      rethrow;
     }
     final data = res.data;
     if (data is! Map) throw const VoiceException('Risposta inattesa. Riprova.');

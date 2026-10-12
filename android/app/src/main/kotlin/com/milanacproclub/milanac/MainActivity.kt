@@ -22,6 +22,10 @@ class MainActivity : FlutterActivity() {
                         VoiceRoomService.stop(applicationContext)
                         result.success(null)
                     }
+                    // Al ritorno nell'app: l'avviso è davvero partito? (se no, si riavvia)
+                    "running" -> result.success(VoiceRoomService.isRunning())
+                    // Auricolari Bluetooth: true se è partito il dialogo del permesso.
+                    "bluetooth" -> result.success(VoiceRoomService.askBluetooth(this@MainActivity))
                     else -> result.notImplemented()
                 }
             }

@@ -95,8 +95,7 @@ class _VoiceRoomView extends ConsumerWidget {
                     child: Row(
                       children: [
                         IconButton(
-                          tooltip:
-                              'Riduci la stanza a una striscia e torna alla chat',
+                          tooltip: 'Riduci la stanza a una striscia e torna alla chat',
                           icon: const Icon(
                             Icons.keyboard_arrow_down_rounded,
                             size: 30,
@@ -234,11 +233,17 @@ class _VoiceRoomView extends ConsumerWidget {
                                   label: 'Esci',
                                   semanticLabel: 'Esci dalla stanza',
                                   danger: true,
-                                  onTap: () async {
-                                    await notifier.leave();
-                                    if (context.mounted) {
-                                      Navigator.of(context).maybePop();
-                                    }
+                                  onTap: () {
+                                    // La pagina si chiude subito: motore e
+                                    // microfono si fermano adesso, l'uscita sul
+                                    // server continua da sola (senza rete la
+                                    // chiude il server dopo qualche minuto).
+                                    unawaited(
+                                      notifier.leave().catchError(
+                                        (Object _) {},
+                                      ),
+                                    );
+                                    Navigator.of(context).maybePop();
                                   },
                                 ),
                               ),
@@ -274,10 +279,7 @@ class _VoiceRoomView extends ConsumerWidget {
                         Text(
                           'I minuti contano sui 10.000 gratuiti del mese',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: p.textDisabled,
-                          ),
+                          style: TextStyle(fontSize: 13, color: p.textDisabled),
                         ),
                       ],
                     ),
