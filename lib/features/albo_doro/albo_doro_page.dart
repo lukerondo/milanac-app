@@ -7,7 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import 'scene_painters.dart';
 import 'trophies_repository.dart';
 import 'trophy.dart';
@@ -89,36 +91,62 @@ class _AlboDoroPageState extends ConsumerState<AlboDoroPage> {
               label: const Text('Aggiungi trofeo'),
             )
           : null,
-      body: seasons.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore nel caricamento: $e')),
-        data: (list) {
-          if (list.isEmpty) {
-            return _Scene(
-              trophies: const [],
-              tilt: _tilt,
-              header: const _Header(seasons: [], selected: null),
-            );
-          }
-          final current = currentSeasonLabel();
-          final selected =
-              list.where((s) => s.id == _seasonId).firstOrNull ??
-              list.where((s) => s.label == current).firstOrNull ??
-              list.first;
-          final trophies = ref.watch(trophiesProvider(selected.id));
-          return _Scene(
-            tilt: _tilt,
-            trophies: trophies.value ?? const [],
-            loading: trophies.isLoading,
-            canEdit: isDirettivo,
-            header: _Header(
-              seasons: list,
-              selected: selected,
-              onChanged: (s) => setState(() => _seasonId = s.id),
+      body: _body(seasons, isDirettivo),
+    );
+  }
+
+  Widget _body(AsyncValue<List<Season>> seasons, bool isDirettivo) {
+    final list = seasons.value;
+    if (list == null) {
+      return AsyncView(
+        value: seasons,
+        onRetry: () => ref.invalidate(seasonsProvider),
+        data: (_) => const SizedBox.shrink(),
+      );
+    }
+    if (list.isEmpty) {
+      return _Scene(
+        trophies: const [],
+        tilt: _tilt,
+        header: const _Header(seasons: [], selected: null),
+      );
+    }
+    final current = currentSeasonLabel();
+    final selected =
+        list.where((s) => s.id == _seasonId).firstOrNull ??
+        list.where((s) => s.label == current).firstOrNull ??
+        list.first;
+    final trophies = ref.watch(trophiesProvider(selected.id));
+    final header = _Header(
+      seasons: list,
+      selected: selected,
+      onChanged: (s) => setState(() => _seasonId = s.id),
+    );
+    // Trofei non arrivati: l'errore con "Riprova", non la bacheca vuota.
+    if (!trophies.hasValue &&
+        trophies.hasError &&
+        (!trophies.isLoading || trophies.retrying)) {
+      return Column(
+        children: [
+          header,
+          Expanded(
+            child: ErrorRetry(
+              message: friendlyError(
+                trophies.error!,
+                action: 'Caricamento non riuscito',
+              ),
+              onRetry: () => ref.invalidate(trophiesProvider(selected.id)),
             ),
-          );
-        },
-      ),
+          ),
+        ],
+      );
+    }
+    return _Scene(
+      tilt: _tilt,
+      trophies: trophies.value ?? const [],
+      loading: trophies.isLoading,
+      canEdit: isDirettivo,
+      header: header,
     );
   }
 }
@@ -344,12 +372,21 @@ class _TrophyOnShelf extends StatelessWidget {
 }
 
 /// Immagine caricata dal Direttivo oppure forma disegnata.
-class TrophyVisual extends ConsumerWidget {
+class TrophyVisual extends ConsumerStatefulWidget {
   const TrophyVisual({super.key, required this.trophy});
   final Trophy trophy;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TrophyVisual> createState() => _TrophyVisualState();
+}
+
+class _TrophyVisualState extends ConsumerState<TrophyVisual> {
+  /// L'URL rifiutato (di solito scaduto) si rigenera una volta sola.
+  bool _renewed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final trophy = widget.trophy;
     final drawn = CustomPaint(
       painter: TrophyShapePainter(trophy.shape),
       child: const SizedBox.expand(),
@@ -365,7 +402,15 @@ class TrophyVisual extends ConsumerWidget {
       data: (u) => Image.network(
         u,
         fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => drawn,
+        errorBuilder: (_, _, _) {
+          if (!_renewed) {
+            _renewed = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) ref.invalidate(trophyImageUrlProvider(trophy));
+            });
+          }
+          return drawn;
+        },
       ),
     );
   }

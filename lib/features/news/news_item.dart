@@ -33,7 +33,9 @@ class NewsItem {
     url: m['url'] as String,
     source: m['source'] as String,
     category: m['category'] as String,
-    publishedAt: DateTime.parse(m['published_at'] as String),
+    // Ora del telefono: in UTC le notizie uscite tra mezzanotte e le 2 finivano
+    // sul giorno prima.
+    publishedAt: DateTime.parse(m['published_at'] as String).toLocal(),
     imageUrl: m['image_url'] as String?,
     platform: m['platform'] as String?,
   );

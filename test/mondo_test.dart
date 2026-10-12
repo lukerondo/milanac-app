@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/features/intro/intro_state.dart';
+import 'package:milanac/features/news/news_item.dart';
 import 'package:milanac/main.dart';
 
 import 'helpers.dart';
@@ -23,6 +24,19 @@ Future<void> openMondo(WidgetTester tester) async {
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
+
+  test('notizie: la data è nell\'ora del telefono, non in UTC', () {
+    final n = NewsItem.fromMap({
+      'title': 'Aggiornamento',
+      'url': 'https://www.ea.com/',
+      'source': 'EA SPORTS',
+      'category': 'aggiornamenti',
+      // Mezzanotte e mezza in Italia: in UTC sarebbe ancora il giorno prima.
+      'published_at': '2026-10-12T22:30:00+00:00',
+    });
+    expect(n.publishedAt.isUtc, isFalse);
+    expect(n.publishedAt, DateTime.utc(2026, 10, 12, 22, 30).toLocal());
+  });
 
   testWidgets('Mondo Proclub: il Direttivo pubblica una proposta e aggiunge '
       'un video', (tester) async {
