@@ -9,7 +9,8 @@ import '../../core/config.dart';
 import '../../core/theme.dart';
 import 'intro_state.dart';
 
-/// Intro: video del club (assets/video/intro.mp4; se manca, sfondo nero), stemma del Milano FC e barra di caricamento. Tocca per saltare.
+/// Intro: video del club (assets/video/intro.mp4; se manca, sfondo nero), stemma del
+/// Milano FC, barra di caricamento in oro e "Milano siamo noi". Tocca per saltare.
 class IntroPage extends ConsumerStatefulWidget {
   const IntroPage({super.key});
 
@@ -86,7 +87,7 @@ class _IntroPageState extends ConsumerState<IntroPage>
     // server, il router prosegue da solo appena arriva.
     final waiting = ref.watch(introDoneProvider);
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: MilanacColors.black,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _finish,
@@ -102,62 +103,80 @@ class _IntroPageState extends ConsumerState<IntroPage>
                   child: VideoPlayer(video),
                 ),
               ),
-            // Finché il video non è pronto (o se manca) lo sfondo resta nero:
-            // nessuna immagine intermedia.
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Color(0xCC000000)],
-                  stops: [0.55, 1],
+            // Finché il video non è pronto (o se manca) lo sfondo resta nero; in basso
+            // una sfumatura scura sotto stemma, barra e motto.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 280,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      MilanacColors.black.withValues(alpha: 0),
+                      MilanacColors.black.withValues(alpha: .9),
+                    ],
+                    stops: const [0, .72],
+                  ),
                 ),
               ),
             ),
             SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    // Riquadro di caricamento: stemma Milano FC (versione non ufficiale di
-                    // EA SPORTS FC 27) e barra che si riempie in sincronia con il video.
-                    FadeTransition(
-                      opacity: CurvedAnimation(
-                        parent: _progress,
-                        curve: const Interval(0, .12, curve: Curves.easeOut),
-                      ),
-                      child: _LoadingPanel(progress: _progress),
-                    ),
-                    const SizedBox(height: 4),
-                    TextButton.icon(
+              child: Stack(
+                children: [
+                  Positioned(
+                    top: 8,
+                    right: 16,
+                    child: _SkipButton(
+                      waiting: waiting,
                       onPressed: waiting ? null : _finish,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        disabledForegroundColor: Colors.white70,
-                        minimumSize: const Size(120, 44),
-                      ),
-                      icon: waiting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white70,
-                              ),
-                            )
-                          : const Icon(Icons.skip_next_rounded),
-                      label: Text(
-                        waiting ? 'UN ATTIMO…' : 'SALTA',
-                        style: const TextStyle(
-                          fontFamily: sportFont,
-                          fontSize: 15,
-                          letterSpacing: 2,
-                        ),
-                      ),
                     ),
-                  ],
-                ),
+                  ),
+                  Positioned(
+                    left: 32,
+                    right: 32,
+                    bottom: 40,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Stemma Milano FC (versione non ufficiale di EA SPORTS FC 27).
+                        FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: _progress,
+                            curve: const Interval(
+                              0,
+                              .12,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                          child: Image.asset(
+                            'assets/images/stemma_256.png',
+                            height: 96,
+                            filterQuality: FilterQuality.high,
+                            semanticLabel: 'Stemma MILANAC Pro Club',
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        _GoldProgress(progress: _progress),
+                        const SizedBox(height: 14),
+                        const Text(
+                          'MILANO SIAMO NOI',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: sportFont,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 15,
+                            letterSpacing: 3.3,
+                            color: MilanacColors.goldLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -167,13 +186,94 @@ class _IntroPageState extends ConsumerState<IntroPage>
   }
 }
 
+/// "Salta" in alto a destra; finita l'intro, l'attesa del profilo.
+class _SkipButton extends StatelessWidget {
+  const _SkipButton({required this.waiting, required this.onPressed});
+  final bool waiting;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton(
+    onPressed: onPressed,
+    style: OutlinedButton.styleFrom(
+      minimumSize: const Size(44, 44),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      backgroundColor: MilanacColors.black.withValues(alpha: .55),
+      foregroundColor: MilanacColors.ivory,
+      disabledForegroundColor: MilanacColors.ivory,
+      side: BorderSide(color: MilanacColors.goldLight.withValues(alpha: .7)),
+      shape: const StadiumBorder(),
+      textStyle: const TextStyle(
+        fontFamily: bodyFont,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (waiting) ...[
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: MilanacColors.goldLight,
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        Text(waiting ? 'Un attimo…' : 'Salta'),
+      ],
+    ),
+  );
+}
+
+/// Barra di caricamento sottile, in oro, che si riempie con il video.
+class _GoldProgress extends StatelessWidget {
+  const _GoldProgress({required this.progress});
+  final Animation<double> progress;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: progress,
+    builder: (context, _) => Semantics(
+      label: 'Caricamento',
+      value: '${(progress.value * 100).round()}%',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: SizedBox(
+          height: 3,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ColoredBox(color: MilanacColors.ivory.withValues(alpha: .22)),
+              FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: progress.value.clamp(0, 1),
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [MilanacColors.goldDeep, MilanacColors.goldLight],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 /// Build di release compilata senza le chiavi del server: niente demo, solo l'errore.
 class _ConfigError extends StatelessWidget {
   const _ConfigError();
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.black,
+    backgroundColor: MilanacColors.black,
     body: SafeArea(
       child: Center(
         child: Padding(
@@ -188,9 +288,10 @@ class _ConfigError extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: sportFont,
-                  fontSize: 20,
-                  letterSpacing: 2,
-                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 22,
+                  letterSpacing: 1.5,
+                  color: MilanacColors.goldLight,
                 ),
               ),
               const SizedBox(height: 10),
@@ -198,7 +299,11 @@ class _ConfigError extends StatelessWidget {
                 'Questa versione è stata compilata senza il collegamento al server '
                 'del club (manca env/prod.json). Installa la versione ufficiale.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, height: 1.4),
+                style: TextStyle(
+                  color: MilanacColors.ivoryMuted,
+                  fontSize: 16,
+                  height: 1.4,
+                ),
               ),
             ],
           ),
@@ -206,75 +311,4 @@ class _ConfigError extends StatelessWidget {
       ),
     ),
   );
-}
-
-/// Riquadro scuro arrotondato con lo stemma a sinistra e la barra di caricamento.
-class _LoadingPanel extends StatelessWidget {
-  const _LoadingPanel({required this.progress});
-  final Animation<double> progress;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 18, 12),
-      decoration: BoxDecoration(
-        color: const Color(0xE61C1C1F),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white12),
-        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 18)],
-      ),
-      child: Row(
-        children: [
-          Image.asset(
-            'assets/images/stemma_256.png',
-            height: 64,
-            filterQuality: FilterQuality.high,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: AnimatedBuilder(
-              animation: progress,
-              builder: (context, _) => Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'MILANAC PRO CLUB',
-                    style: TextStyle(
-                      fontFamily: sportFont,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                      letterSpacing: 2,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: progress.value,
-                      minHeight: 8,
-                      backgroundColor: Colors.white12,
-                      valueColor: const AlwaysStoppedAnimation(
-                        MilanacColors.red,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Caricamento… ${(progress.value * 100).round()}%',
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 12,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
