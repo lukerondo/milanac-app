@@ -7,23 +7,32 @@ import '../../core/config.dart';
 import 'voice_models.dart';
 
 /// Il motore audio della stanza: Agora sul telefono, finto nella demo e nei test.
+/// Serve per un solo ingresso: dopo [dispose] se ne crea uno nuovo.
 abstract class VoiceEngine {
   /// I numeri utente Agora di chi sta parlando in questo momento.
   Stream<Set<int>> get speaking;
 
+  /// La chiamata è caduta dopo l'ingresso (connessione persa, biglietto non
+  /// rinnovato): il messaggio è già pronto per l'utente.
+  Stream<VoiceException> get failures;
+
   /// Entra nella stanza con il proprio numero utente; [refreshToken] fornisce
-  /// un biglietto nuovo quando quello in uso sta per scadere (dopo 3 ore).
+  /// un biglietto nuovo quando quello in uso sta per scadere (dopo un'ora).
+  /// Se nel frattempo arriva [dispose], si interrompe con un errore.
   Future<void> join(
     VoiceTicket ticket,
     int uid, {
     Future<String> Function()? refreshToken,
   });
 
+  /// Solo dopo [join].
   Future<void> setMuted(bool muted);
 
+  /// Solo dopo [join].
   Future<void> setSpeakerphone(bool on);
 
-  /// Esce dalla stanza e libera il motore.
+  /// Esce dalla stanza e libera il motore (anche a join in corso; chiamarlo più
+  /// volte non fa danni).
   Future<void> dispose();
 }
 
@@ -37,6 +46,12 @@ final voiceEngineFactoryProvider = Provider<VoiceEngine Function()>(
 class AgoraVoiceEngine implements VoiceEngine {
   RtcEngine? _engine;
   final _speaking = StreamController<Set<int>>.broadcast();
+  final _failures = StreamController<VoiceException>.broadcast();
+  // L'esito può arrivare (anche come errore) prima che qualcuno lo aspetti.
+  final _joined = Completer<void>()..future.ignore();
+  Future<void>? _setup;
+  Future<void>? _disposed;
+  Future<String> Function()? _refreshToken;
   var _local = const <int>{};
   var _remote = const <int>{};
   int _uid = 0;
@@ -45,67 +60,85 @@ class AgoraVoiceEngine implements VoiceEngine {
   Stream<Set<int>> get speaking => _speaking.stream;
 
   @override
+  Stream<VoiceException> get failures => _failures.stream;
+
+  @override
   Future<void> join(
     VoiceTicket ticket,
     int uid, {
     Future<String> Function()? refreshToken,
   }) async {
     _uid = uid;
-    final engine = createAgoraRtcEngine();
-    _engine = engine;
-    await engine.initialize(
-      RtcEngineContext(
-        appId: ticket.appId,
-        channelProfile: ChannelProfileType.channelProfileCommunication,
-        audioScenario: AudioScenarioType.audioScenarioDefault,
-      ),
-    );
-    final joined = Completer<void>();
-    engine.registerEventHandler(
-      RtcEngineEventHandler(
-        onJoinChannelSuccess: (_, _) {
-          if (!joined.isCompleted) joined.complete();
-        },
-        onError: (err, msg) {
-          if (!joined.isCompleted) {
-            joined.completeError(
-              VoiceException('La stanza non risponde (${err.name}). Riprova.'),
-            );
-          }
-        },
-        onConnectionStateChanged: (_, state, reason) {
-          if (state == ConnectionStateType.connectionStateFailed &&
-              !joined.isCompleted) {
-            joined.completeError(
-              VoiceException('Connessione fallita (${reason.name}). Riprova.'),
-            );
-          }
-        },
-        onAudioVolumeIndication: (_, speakers, _, _) => _onVolumes(speakers),
-        onTokenPrivilegeWillExpire: (_, _) => _renew(refreshToken),
-      ),
-    );
-    await engine.enableAudio();
-    await engine.enableAudioVolumeIndication(
-      interval: 300,
-      smooth: 3,
-      reportVad: true,
-    );
-    await engine.setDefaultAudioRouteToSpeakerphone(true);
-    await engine.joinChannel(
-      token: ticket.token,
-      channelId: ticket.channel,
-      uid: uid,
-      options: const ChannelMediaOptions(
-        channelProfile: ChannelProfileType.channelProfileCommunication,
-        clientRoleType: ClientRoleType.clientRoleBroadcaster,
-        publishMicrophoneTrack: true,
-        publishCameraTrack: false,
-        autoSubscribeAudio: true,
-        autoSubscribeVideo: false,
-      ),
-    );
-    await joined.future.timeout(
+    _refreshToken = refreshToken;
+    final setup = Completer<void>();
+    _setup = setup.future;
+    try {
+      final engine = createAgoraRtcEngine();
+      _engine = engine;
+      await engine.initialize(
+        RtcEngineContext(
+          appId: ticket.appId,
+          channelProfile: ChannelProfileType.channelProfileCommunication,
+          audioScenario: AudioScenarioType.audioScenarioDefault,
+        ),
+      );
+      _checkOpen();
+      engine.registerEventHandler(
+        RtcEngineEventHandler(
+          onJoinChannelSuccess: (_, _) {
+            if (!_joined.isCompleted) _joined.complete();
+          },
+          onError: (err, msg) {
+            if (!_joined.isCompleted) {
+              _joined.completeError(
+                VoiceException('La stanza non risponde (${err.name}). Riprova.'),
+              );
+            }
+          },
+          onConnectionStateChanged: (_, state, reason) {
+            if (state != ConnectionStateType.connectionStateFailed) return;
+            if (_joined.isCompleted) {
+              // Agora ha smesso di riprovare (rete assente da 20 minuti,
+              // biglietto non valido, uscita forzata): la chiamata è finita.
+              _fail(VoiceException(_lostMessage(reason)));
+            } else {
+              _joined.completeError(
+                VoiceException('Connessione fallita (${reason.name}). Riprova.'),
+              );
+            }
+          },
+          onAudioVolumeIndication: (_, speakers, _, _) => _onVolumes(speakers),
+          onTokenPrivilegeWillExpire: (_, _) => _renew(),
+          onRequestToken: (_) => _renew(),
+        ),
+      );
+      await engine.enableAudio();
+      _checkOpen();
+      await engine.enableAudioVolumeIndication(
+        interval: 300,
+        smooth: 3,
+        reportVad: true,
+      );
+      _checkOpen();
+      await engine.setDefaultAudioRouteToSpeakerphone(true);
+      _checkOpen();
+      await engine.joinChannel(
+        token: ticket.token,
+        channelId: ticket.channel,
+        uid: uid,
+        options: const ChannelMediaOptions(
+          channelProfile: ChannelProfileType.channelProfileCommunication,
+          clientRoleType: ClientRoleType.clientRoleBroadcaster,
+          publishMicrophoneTrack: true,
+          publishCameraTrack: false,
+          autoSubscribeAudio: true,
+          autoSubscribeVideo: false,
+        ),
+      );
+    } finally {
+      setup.complete();
+    }
+    await _joined.future.timeout(
       const Duration(seconds: 15),
       onTimeout: () => throw const VoiceException(
         'La stanza non risponde: controlla la connessione e riprova.',
@@ -113,14 +146,49 @@ class AgoraVoiceEngine implements VoiceEngine {
     );
   }
 
-  // Il biglietto sta per scadere: se ne chiede uno nuovo e si rinnova senza uscire.
-  Future<void> _renew(Future<String> Function()? refreshToken) async {
-    if (refreshToken == null) return;
-    try {
-      final token = await refreshToken();
-      await _engine?.renewToken(token);
-    } catch (_) {}
+  // Uscita chiesta durante la join: ci si ferma qui (il motore lo libera dispose).
+  void _checkOpen() {
+    if (_disposed != null) {
+      throw const VoiceException('Sei uscito dalla stanza.');
+    }
   }
+
+  // Il biglietto sta per scadere (o è scaduto): se ne chiede uno nuovo e si rinnova
+  // senza uscire. Se non arriva (non si è più nella stanza, rete assente) la chiamata
+  // finisce con il motivo, invece di cadere in silenzio alla scadenza.
+  Future<void> _renew() async {
+    final refresh = _refreshToken;
+    if (refresh == null) return;
+    try {
+      final token = await refresh();
+      await _engine?.renewToken(token);
+    } catch (e) {
+      _fail(
+        e is VoiceException
+            ? e
+            : const VoiceException(
+                'Biglietto della stanza non rinnovato: controlla la rete e rientra.',
+              ),
+      );
+    }
+  }
+
+  void _fail(VoiceException e) {
+    if (!_failures.isClosed) _failures.add(e);
+  }
+
+  static String _lostMessage(ConnectionChangedReasonType reason) =>
+      switch (reason) {
+        ConnectionChangedReasonType.connectionChangedTokenExpired ||
+        ConnectionChangedReasonType.connectionChangedInvalidToken =>
+          'Il biglietto della stanza non è più valido: rientra.',
+        ConnectionChangedReasonType.connectionChangedBannedByServer ||
+        ConnectionChangedReasonType.connectionChangedRejectedByServer =>
+          'La stanza ti ha fatto uscire: rientra.',
+        ConnectionChangedReasonType.connectionChangedSameUidLogin =>
+          'Sei entrato nella stanza da un altro telefono.',
+        _ => 'Connessione con la stanza persa: controlla la rete e rientra.',
+      };
 
   // Agora avvisa due volte: una per il proprio microfono (uid 0) e una per gli altri.
   void _onVolumes(List<AudioVolumeInfo> speakers) {
@@ -146,26 +214,54 @@ class AgoraVoiceEngine implements VoiceEngine {
       _engine?.setEnableSpeakerphone(on);
 
   @override
-  Future<void> dispose() async {
+  Future<void> dispose() => _disposed ??= _release();
+
+  Future<void> _release() async {
+    // Una join in attesa della risposta si ferma subito.
+    if (!_joined.isCompleted) {
+      _joined.completeError(const VoiceException('Sei uscito dalla stanza.'));
+    }
+    unawaited(_speaking.close());
+    unawaited(_failures.close());
+    // Prima finiscono le chiamate della join già partite (inizializzazione compresa):
+    // liberare il motore a metà potrebbe bloccarle.
+    final setup = _setup;
+    if (setup != null) await setup;
     final engine = _engine;
     _engine = null;
-    await _speaking.close();
     if (engine == null) return;
     try {
       await engine.leaveChannel();
     } catch (_) {}
-    await engine.release();
+    try {
+      await engine.release();
+    } catch (_) {}
   }
 }
 
 /// Motore finto: nessun audio, ma [speakingUid] risulta sempre "sta parlando".
+///
+/// Nei test: [connecting] tiene la join in sospeso finché non si completa (rete
+/// lenta), [fail] fa cadere la chiamata; [joined], [muted], [speakerphone] e
+/// [disposed] dicono che cosa ha ricevuto il motore.
 class DemoVoiceEngine implements VoiceEngine {
-  DemoVoiceEngine({this.speakingUid});
+  DemoVoiceEngine({this.speakingUid, this.connecting});
   final int? speakingUid;
+  final Future<void>? connecting;
   final _speaking = StreamController<Set<int>>.broadcast();
+  final _failures = StreamController<VoiceException>.broadcast();
+  final _released = Completer<void>();
+
+  bool joined = false;
+  bool muted = false;
+  bool speakerphone = false;
+  bool get disposed => _released.isCompleted;
 
   @override
   Stream<Set<int>> get speaking => _speaking.stream;
+
+  @override
+  Stream<VoiceException> get failures => _failures.stream;
 
   @override
   Future<void> join(
@@ -173,15 +269,33 @@ class DemoVoiceEngine implements VoiceEngine {
     int uid, {
     Future<String> Function()? refreshToken,
   }) async {
+    final wait = connecting;
+    if (wait != null) await Future.any([wait, _released.future]);
+    if (disposed) throw const VoiceException('Sei uscito dalla stanza.');
+    joined = true;
     _speaking.add({?speakingUid});
   }
 
-  @override
-  Future<void> setMuted(bool muted) async {}
+  /// La connessione cade dopo l'ingresso (come Agora che smette di riprovare).
+  void fail(String message) {
+    if (!_failures.isClosed) _failures.add(VoiceException(message));
+  }
 
   @override
-  Future<void> setSpeakerphone(bool on) async {}
+  Future<void> setMuted(bool muted) async {
+    this.muted = muted;
+  }
 
   @override
-  Future<void> dispose() => _speaking.close();
+  Future<void> setSpeakerphone(bool on) async {
+    speakerphone = on;
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (disposed) return;
+    _released.complete();
+    unawaited(_speaking.close());
+    unawaited(_failures.close());
+  }
 }
