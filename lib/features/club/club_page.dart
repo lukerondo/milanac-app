@@ -48,20 +48,29 @@ class ClubPage extends ConsumerWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+              // Un titolo lungo ("Regolamento e Storia") si stringe un poco invece di
+              // essere tagliato; la descrizione va su due righe come nella tavola.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               Text(
                 subtitle,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: p.textMuted, fontSize: 14),
+                style: TextStyle(
+                  color: p.textMuted,
+                  fontSize: 14,
+                  height: 1.25,
+                ),
               ),
             ],
           ),
@@ -118,7 +127,7 @@ class ClubPage extends ConsumerWidget {
             mainAxisSpacing: 10,
             crossAxisSpacing: 10,
             // Altezza fissa che cresce con la dimensione del testo scelta sul telefono.
-            mainAxisExtent: 72 + MediaQuery.textScalerOf(context).scale(40),
+            mainAxisExtent: 76 + MediaQuery.textScalerOf(context).scale(56),
           ),
           children: [
             for (final s in clubSections)
