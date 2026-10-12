@@ -72,7 +72,7 @@ class VoiceRoomService : Service() {
             Notification.Builder(this)
         }
         builder
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(R.drawable.ic_notifica_club)
             .setContentTitle(title)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
