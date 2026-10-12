@@ -249,66 +249,75 @@ class ReplayView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       AspectRatio(
         aspectRatio: boardAspect,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          // Si ridisegna da sola a ogni mossa; sotto si ricostruiscono solo i controlli.
+        // Si ridisegna da sola a ogni mossa; sotto si ricostruiscono solo i controlli.
+        child: PitchFrame(
           child: BoardCanvas(board: player, showNames: showNames),
         ),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: 10),
       ListenableBuilder(
         listenable: player,
-        builder: (context, _) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                IconButton.filled(
-                  tooltip: player.playing ? 'Pausa' : 'Play',
-                  style: IconButton.styleFrom(
-                    backgroundColor: MilanacColors.red,
+        builder: (context, _) {
+          final p = context.pal;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  // Ascoltare è l'azione principale della pagina: in oro pieno.
+                  IconButton.filled(
+                    tooltip: player.playing ? 'Pausa' : 'Play',
+                    style: IconButton.styleFrom(
+                      backgroundColor: p.accent,
+                      foregroundColor: p.onAccent,
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: player.toggle,
+                    icon: Icon(
+                      player.playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      size: 28,
+                    ),
                   ),
-                  onPressed: player.toggle,
-                  icon: Icon(
-                    player.playing
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    color: Colors.white,
+                  Expanded(
+                    child: Slider(
+                      value: player.positionMs
+                          .clamp(0, player.durationMs)
+                          .toDouble(),
+                      max: player.durationMs.toDouble().clamp(
+                        1,
+                        double.infinity,
+                      ),
+                      onChanged: (v) => player.seek(v.round()),
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: Slider(
-                    value: player.positionMs
-                        .clamp(0, player.durationMs)
-                        .toDouble(),
-                    max: player.durationMs.toDouble().clamp(1, double.infinity),
-                    onChanged: (v) => player.seek(v.round()),
+                  Text(
+                    '${formatSeconds(player.positionMs ~/ 1000)} / '
+                    '${formatSeconds(player.durationMs ~/ 1000)}',
+                    style: TextStyle(
+                      fontFamily: sportFont,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: .4,
+                      color: p.textSecondary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
-                ),
-                Text(
-                  '${formatSeconds(player.positionMs ~/ 1000)} / '
-                  '${formatSeconds(player.durationMs ~/ 1000)}',
-                  style: const TextStyle(
-                    fontFamily: sportFont,
-                    fontSize: 14,
-                    color: Colors.white70,
-                  ),
-                ),
-              ],
-            ),
-            if (!player.hasAudio)
-              const Padding(
-                padding: EdgeInsets.only(top: 2),
-                child: Text(
-                  'Senza audio',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
-                ),
+                ],
               ),
-          ],
-        ),
+              if (!player.hasAudio)
+                Text(
+                  'Senza audio',
+                  style: TextStyle(fontSize: 12, color: p.textMuted),
+                ),
+            ],
+          );
+        },
       ),
     ],
   );

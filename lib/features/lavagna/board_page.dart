@@ -15,6 +15,7 @@ import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
 import '../../shared/member_photo.dart';
+import '../../shared/ui.dart';
 import '../chat/chat_repository.dart' show maxReplaySeconds;
 import '../chat/voice_player.dart' show formatSeconds;
 import '../chat/voice_recorder.dart';
@@ -25,12 +26,13 @@ import '../rosa/rosa_repository.dart';
 import '../tattiche/tactics_repository.dart';
 import 'board_model.dart';
 import 'board_painter.dart';
+import 'full_page.dart';
 import 'replay_pages.dart';
 import 'replay_player.dart';
 
-/// Strumenti della lavagna (colonna a sinistra).
+/// Strumenti della lavagna (barra in basso).
 enum BoardTool {
-  giocatore('Giocatore', Icons.person_add_alt_1_rounded),
+  giocatore('Gettoni', Icons.adjust_rounded),
   fuoco('Fuoco', Icons.local_fire_department_rounded),
   freccia('Freccia', Icons.north_east_rounded);
 
@@ -40,12 +42,16 @@ enum BoardTool {
 
   String get hint => switch (this) {
     giocatore =>
-      'Tocca il campo per aggiungere un giocatore, trascina i gettoni, tieni premuto per toglierne uno.',
+      'Trascina i gettoni. Oro: noi · nero: avversari.\n'
+          'Tocca per aggiungere, tieni premuto per togliere.',
     fuoco => 'Tieni premuto e muovi il dito: la heatmap si accumula dove insisti.',
     freccia =>
-      'Trascina da un punto all\'altro. Doppio tocco per passare alle frecce tratteggiate.',
+      'Trascina da un punto all\'altro. Doppio tocco per le frecce tratteggiate.',
   };
 }
+
+/// Nome breve della squadra sulla lavagna.
+String _teamName(Team team) => team == Team.milanac ? 'Milan AC' : 'Futuro';
 
 /// Apre la lavagna a schermo intero (nuova o da uno schema salvato).
 Future<void> openBoard(
@@ -84,19 +90,19 @@ class TacticNotFound extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.search_off_rounded, size: 40, color: Colors.white54),
-          const SizedBox(height: 12),
+          const IconTile(Icons.search_off_rounded, size: 56),
+          const SizedBox(height: 14),
           const Text(
             'Schema non trovato',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Forse è stato eliminato.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white54),
+            style: TextStyle(fontSize: 14, color: context.pal.textMuted),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           OutlinedButton.icon(
             onPressed: () => _leave(context),
             icon: const Icon(Icons.arrow_back_rounded),
@@ -131,7 +137,11 @@ class _SavedBoardPageState extends ConsumerState<SavedBoardPage> {
         _tactic;
     if (t != null) return BoardPage(tactic: t, readOnly: !isDirettivo);
     return Scaffold(
-      appBar: AppBar(title: const Text('LAVAGNA')),
+      appBar: fullPageBar(
+        context,
+        title: 'LAVAGNA',
+        onBack: () => _leave(context),
+      ),
       body: AsyncView(
         value: tactics,
         onRetry: () => ref.invalidate(tacticsProvider),
@@ -213,8 +223,12 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   int _seq = 0;
   bool _saving = false;
 
-  /// "Annulla" com'era all'ultima costruzione della pagina.
-  bool _shownCanUndo = false;
+  /// Quello che la pagina mostra della lavagna ("Annulla", modulo e squadra in
+  /// alto) com'era all'ultima costruzione.
+  (bool, String, String)? _shown;
+
+  (bool, String, String) get _visible =>
+      (_editor.canUndo, _editor.state.module, _editor.state.team);
 
   // Registrazione del replay.
   late final VoiceRecorder _mic;
@@ -251,9 +265,9 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   }
 
   /// La lavagna si ridisegna da sola ([BoardCanvas]): la pagina si ricostruisce solo
-  /// quando "Annulla" si accende o si spegne.
+  /// quando "Annulla" si accende o si spegne, o cambiano modulo e squadra.
   void _onChanged() {
-    if (mounted && _editor.canUndo != _shownCanUndo) setState(() {});
+    if (mounted && _visible != _shown) setState(() {});
   }
 
   @override
@@ -325,7 +339,8 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   (double, double) _field(Offset local) => BoardPainter.toField(_size, local);
 
   BoardToken? _hit(Offset local) {
-    var best = BoardPainter.tokenRadius(_size) * 1.4;
+    // Il gettone si prende anche toccando poco fuori (bersaglio di almeno 44 px).
+    var best = BoardPainter.tokenRadius(_size) * 1.6;
     BoardToken? found;
     for (final t in _editor.state.tokens) {
       final d = (BoardPainter.toPixel(_size, t.x, t.y) - local).distance;
@@ -456,11 +471,25 @@ class _BoardPageState extends ConsumerState<BoardPage> {
 
   // ---------------------------------------------------------------- azioni
 
+  /// Il primo numero libero tra i gettoni degli avversari (1, 2, 3...).
+  String _nextOpponentNumber() {
+    final used = {
+      for (final t in _editor.state.tokens)
+        if (t.side == 'avversari') t.label,
+    };
+    var n = 1;
+    while (used.contains('$n')) {
+      n++;
+    }
+    return '$n';
+  }
+
   Future<void> _addPlayer(double x, double y) async {
     final onBoard = {
       for (final t in _editor.state.tokens)
         if (t.playerId != null) t.playerId!,
     };
+    final opponent = _nextOpponentNumber();
     final picked = await showModalBottomSheet<BoardToken>(
       context: context,
       showDragHandle: true,
@@ -468,6 +497,7 @@ class _BoardPageState extends ConsumerState<BoardPage> {
       builder: (_) => _PlayerSheet(
         onBoard: onBoard,
         team: Team.parse(_editor.state.team) ?? Team.milanac,
+        opponentNumber: opponent,
       ),
     );
     if (picked == null || !mounted) return;
@@ -507,47 +537,54 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     if (ok == true) _editor.apply(const Clear());
   }
 
+  /// Modulo e squadra in alto: una lavagna nuova dal modulo, con i giocatori della
+  /// formazione della squadra (si può annullare).
   Future<void> _pickModule() async {
     var team = Team.parse(_editor.state.team) ?? Team.milanac;
+    final current = _editor.state.module;
     final module = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      // Alto quanto serve (con il testo grande scorre invece di traboccare).
+      isScrollControlled: true,
       builder: (c) => StatefulBuilder(
         builder: (c, setSheet) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  'Nuova lavagna dal modulo (con la formazione della squadra)',
-                  style: TextStyle(color: Colors.white70),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionLabel('Nuova lavagna dal modulo'),
+                const SizedBox(height: 4),
+                Text(
+                  'I gettoni partono dalla formazione della squadra.',
+                  style: TextStyle(fontSize: 14, color: c.pal.textMuted),
                 ),
-              ),
-              SegmentedButton<Team>(
-                segments: [
-                  for (final t in Team.values)
-                    ButtonSegment(value: t, label: Text(t.short)),
-                ],
-                selected: {team},
-                showSelectedIcon: false,
-                onSelectionChanged: (s) => setSheet(() => team = s.first),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  for (final m in formationModules.keys)
-                    ActionChip(
-                      label: Text(m),
-                      onPressed: () => Navigator.pop(c, m),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
+                const SizedBox(height: 14),
+                SegmentedTabs(
+                  labels: [for (final t in Team.values) _teamName(t)],
+                  selected: team.index,
+                  onSelected: (i) => setSheet(() => team = Team.values[i]),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final m in formationModules.keys)
+                      // Larga quanto il suo testo (in una Wrap si allargherebbe).
+                      IntrinsicWidth(
+                        child: FilterPill(
+                          label: m,
+                          selected: m == current,
+                          onTap: () => Navigator.pop(c, m),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -738,6 +775,7 @@ class _BoardPageState extends ConsumerState<BoardPage> {
             child: const Text('Continua'),
           ),
           FilledButton(
+            style: dangerButtonStyle(c),
             onPressed: () => Navigator.pop(c, true),
             child: const Text('Esci'),
           ),
@@ -750,6 +788,13 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   }
 
   // ---------------------------------------------------------------- vista
+
+  /// Indietro: con la conferma se si sta registrando; aperta da un link (niente
+  /// sotto), si torna alle tattiche.
+  Future<void> _back() async {
+    if (await Navigator.of(context).maybePop()) return;
+    if (mounted) context.go('/tattiche');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -765,114 +810,227 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     ref.watch(rosaProvider);
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final readOnly = widget.readOnly || !isDirettivo;
-    final canUndo = _shownCanUndo = _editor.canUndo;
+    final shown = _shown = _visible;
+    final (canUndo, module, teamName) = shown;
+    final p = context.pal;
     return PopScope(
       canPop: !_recording && !_micBusy,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _recording) _confirmExit();
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.tactic?.title.toUpperCase() ?? 'LAVAGNA'),
+        appBar: fullPageBar(
+          context,
+          title: 'LAVAGNA',
+          onBack: _back,
           actions: [
-            if (!readOnly) ...[
-              if (_recording)
-                _RecordingBadge(seconds: _seconds, onStop: _stopRecording)
-              else
-                IconButton(
-                  tooltip: 'Registra il replay',
-                  icon: const Icon(
-                    Icons.mic_rounded,
-                    color: MilanacColors.gold,
-                  ),
-                  onPressed: _saving || _micBusy ? null : _startRecording,
-                ),
-              IconButton(
-                tooltip: 'Salva lo schema',
-                icon: const Icon(Icons.save_rounded),
-                onPressed: _saving || _recording || _micBusy ? null : _save,
-              ),
-              PopupMenuButton<String>(
-                tooltip: 'Altro',
-                onSelected: (v) {
-                  if (v == 'modulo') _pickModule();
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: 'modulo',
-                    child: Text('Nuova lavagna dal modulo…'),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-        body: Column(
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  if (!readOnly)
-                    _ToolBar(
-                      tool: _tool,
-                      dashed: _dashed,
-                      canUndo: canUndo,
-                      onTool: (t) => setState(() => _tool = t),
-                      onUndo: () => _editor.apply(const Undo()),
-                      onClear: _clear,
+            if (!readOnly)
+              AlwaysDark(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_recording)
+                      _RecordingButton(
+                        seconds: _seconds,
+                        onStop: _stopRecording,
+                      )
+                    else
+                      _RecordButton(
+                        onPressed: _saving || _micBusy ? null : _startRecording,
+                      ),
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: 'Salva lo schema',
+                      child: FilledButton(
+                        onPressed: _saving || _recording || _micBusy
+                            ? null
+                            : _save,
+                        style: _headerButtonStyle(FilledButton.styleFrom()),
+                        child: const Text('Salva'),
+                      ),
                     ),
-                  Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: AspectRatio(
-                          aspectRatio: boardAspect,
-                          child: LayoutBuilder(
-                            builder: (context, c) {
-                              _size = c.biggest;
-                              final board = BoardCanvas(
-                                key: const ValueKey('lavagna'),
-                                board: _editor,
-                                pendingArrow: _pending,
-                                selectedId: _selectedId,
-                              );
-                              if (readOnly) return board;
-                              return GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTapUp: _onTapUp,
-                                onDoubleTap: _tool == BoardTool.freccia
-                                    ? _onDoubleTap
-                                    : null,
-                                onLongPressStart: _onLongPressStart,
-                                onPanStart: _onPanStart,
-                                onPanUpdate: _onPanUpdate,
-                                onPanEnd: _onPanEnd,
-                                child: board,
-                              );
-                            },
-                          ),
-                        ),
+                  ],
+                ),
+              ),
+            const SizedBox(width: 12),
+          ],
+          bottom: _BoardInfoBar(
+            module: module,
+            team: Team.parse(teamName) ?? Team.milanac,
+            title: widget.tactic?.title,
+            onTap: readOnly ? null : _pickModule,
+          ),
+        ),
+        // Come nella tavola: il campo subito sotto la barra in alto e il suggerimento
+        // sotto il campo; lo spazio che avanza resta in fondo.
+        body: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Column(
+              children: [
+                Flexible(
+                  child: AspectRatio(
+                    aspectRatio: boardAspect,
+                    child: PitchFrame(
+                      child: LayoutBuilder(
+                        builder: (context, c) {
+                          _size = c.biggest;
+                          final board = BoardCanvas(
+                            key: const ValueKey('lavagna'),
+                            board: _editor,
+                            pendingArrow: _pending,
+                            selectedId: _selectedId,
+                          );
+                          if (readOnly) return board;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTapUp: _onTapUp,
+                            onDoubleTap: _tool == BoardTool.freccia
+                                ? _onDoubleTap
+                                : null,
+                            onLongPressStart: _onLongPressStart,
+                            onPanStart: _onPanStart,
+                            onPanUpdate: _onPanUpdate,
+                            onPanEnd: _onPanEnd,
+                            child: board,
+                          );
+                        },
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                child: Text(
+                ),
+                const SizedBox(height: 10),
+                Text(
                   readOnly
-                      ? 'Solo il Direttivo disegna sulla lavagna.'
+                      ? 'Oro: noi · nero: avversari.\n'
+                            'Solo il Direttivo disegna sulla lavagna.'
                       : _recording
                       ? 'Registrazione in corso: parla e muovi i gettoni, poi ferma.'
                       : _tool.hint,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.3,
+                    color: p.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // In basso come una barra: gli avvisi compaiono sopra, non coprono gli
+        // strumenti.
+        bottomNavigationBar: readOnly
+            ? null
+            : _ToolBar(
+                tool: _tool,
+                dashed: _dashed,
+                canUndo: canUndo,
+                onTool: (t) => setState(() => _tool = t),
+                onUndo: () => _editor.apply(const Undo()),
+                onClear: _clear,
+              ),
+      ),
+    );
+  }
+}
+
+/// I pulsanti della barra in alto: alti 40, angoli da 10, testo 14 in grassetto.
+ButtonStyle _headerButtonStyle(ButtonStyle base) => base.copyWith(
+  minimumSize: const WidgetStatePropertyAll(Size(0, 40)),
+  padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 14)),
+  shape: WidgetStatePropertyAll(
+    RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  ),
+  textStyle: const WidgetStatePropertyAll(
+    TextStyle(fontFamily: bodyFont, fontSize: 14, fontWeight: FontWeight.w700),
+  ),
+);
+
+/// "Registra": bordo oro, il cerchio con il punto rosso.
+class _RecordButton extends StatelessWidget {
+  const _RecordButton({required this.onPressed});
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Tooltip(
+      message: 'Registra il replay',
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        style: _headerButtonStyle(
+          OutlinedButton.styleFrom(
+            foregroundColor: p.accentText,
+            disabledForegroundColor: p.textDisabled,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            side: BorderSide(
+              color: onPressed == null ? p.border : p.chipBorder,
+              width: 1.5,
+            ),
+          ),
+        ),
+        icon: SizedBox.square(
+          dimension: 16,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              const Icon(Icons.circle_outlined, size: 16),
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: p.danger,
+                  shape: BoxShape.circle,
                 ),
               ),
+            ],
+          ),
+        ),
+        label: const Text('Registra'),
+      ),
+    );
+  }
+}
+
+/// Durante la registrazione, al posto di "Registra": punto rosso, durata e stop.
+class _RecordingButton extends StatelessWidget {
+  const _RecordingButton({required this.seconds, required this.onStop});
+  final int seconds;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Tooltip(
+      message: 'Ferma la registrazione',
+      child: OutlinedButton(
+        onPressed: onStop,
+        style: _headerButtonStyle(
+          OutlinedButton.styleFrom(
+            foregroundColor: p.text,
+            backgroundColor: p.dangerBg,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            side: BorderSide(color: p.danger, width: 1.5),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.circle, size: 10, color: p.danger),
+            const SizedBox(width: 6),
+            Text(
+              formatSeconds(seconds),
+              style: const TextStyle(
+                fontFamily: sportFont,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
             ),
+            const SizedBox(width: 8),
+            Icon(Icons.stop_rounded, size: 20, color: p.danger),
           ],
         ),
       ),
@@ -880,7 +1038,105 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   }
 }
 
-/// Colonna degli strumenti: Giocatore, Fuoco, Freccia, poi Annulla e Pulisci.
+/// Sotto il titolo: modulo, squadra e nome dello schema (sempre su fondo scuro).
+class _BoardInfoBar extends StatelessWidget implements PreferredSizeWidget {
+  const _BoardInfoBar({
+    required this.module,
+    required this.team,
+    this.title,
+    this.onTap,
+  });
+  final String module;
+  final Team team;
+  final String? title;
+
+  /// Apre la scelta di modulo e squadra (null = solo da guardare).
+  final VoidCallback? onTap;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(47);
+
+  @override
+  Widget build(BuildContext context) => AlwaysDark(
+    child: Builder(
+      builder: (context) {
+        final p = context.pal;
+        return Container(
+          height: preferredSize.height,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: p.border)),
+          ),
+          child: Row(
+            children: [
+              _InfoPill(label: module, onTap: onTap, dropdown: onTap != null),
+              const SizedBox(width: 8),
+              _InfoPill(label: _teamName(team), onTap: onTap),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 14, color: p.textMuted),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+}
+
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({required this.label, this.onTap, this.dropdown = false});
+  final String label;
+  final VoidCallback? onTap;
+  final bool dropdown;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    const shape = StadiumBorder();
+    final pill = Container(
+      height: 36,
+      padding: EdgeInsets.only(left: 12, right: dropdown ? 8 : 12),
+      decoration: ShapeDecoration(
+        shape: StadiumBorder(side: BorderSide(color: p.borderStrong)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: p.text,
+            ),
+          ),
+          if (dropdown) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.expand_more_rounded, size: 18, color: p.text),
+          ],
+        ],
+      ),
+    );
+    if (onTap == null) return pill;
+    return Tooltip(
+      message: 'Nuova lavagna dal modulo',
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(customBorder: shape, onTap: onTap, child: pill),
+      ),
+    );
+  }
+}
+
+/// Barra degli strumenti in basso (sempre scura): Gettoni, Fuoco, Freccia, poi
+/// Annulla e Pulisci; lo strumento attivo in oro.
 class _ToolBar extends StatelessWidget {
   const _ToolBar({
     required this.tool,
@@ -898,13 +1154,11 @@ class _ToolBar extends StatelessWidget {
   final VoidCallback onClear;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 68,
-    color: MilanacColors.surface,
-    child: SingleChildScrollView(
-      child: Column(
-        children: [
-          const SizedBox(height: 6),
+  Widget build(BuildContext context) => AlwaysDark(
+    child: Builder(
+      builder: (context) {
+        final p = context.pal;
+        final buttons = [
           for (final t in BoardTool.values)
             _ToolButton(
               icon: t.icon,
@@ -912,7 +1166,6 @@ class _ToolBar extends StatelessWidget {
               selected: t == tool,
               onTap: () => onTool(t),
             ),
-          const Divider(height: 12, indent: 12, endIndent: 12),
           _ToolButton(
             icon: Icons.undo_rounded,
             label: 'Annulla',
@@ -920,12 +1173,35 @@ class _ToolBar extends StatelessWidget {
             onTap: onUndo,
           ),
           _ToolButton(
-            icon: Icons.cleaning_services_rounded,
+            icon: Icons.delete_outline_rounded,
             label: 'Pulisci',
             onTap: onClear,
           ),
-        ],
-      ),
+        ];
+        return Material(
+          color: p.surface,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: p.border)),
+            ),
+            child: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.only(bottom: 10),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  children: [
+                    for (final (i, b) in buttons.indexed) ...[
+                      if (i > 0) const SizedBox(width: 4),
+                      Expanded(child: b),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     ),
   );
 }
@@ -945,82 +1221,95 @@ class _ToolButton extends StatelessWidget {
   final bool enabled;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: label,
-    child: InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? MilanacColors.red : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: !enabled
-                  ? Colors.white24
-                  : selected
-                  ? Colors.white
-                  : Colors.white70,
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final color = !enabled
+        ? p.textDisabled
+        : selected
+        ? p.accentText
+        : p.textSecondary;
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(14),
+      side: BorderSide(
+        color: selected ? p.accentTintBorder : Colors.transparent,
+      ),
+    );
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: enabled,
+      child: Material(
+        color: selected ? p.accentTint : Colors.transparent,
+        shape: shape,
+        child: InkWell(
+          customBorder: shape,
+          onTap: enabled ? onTap : null,
+          child: SizedBox(
+            height: 60,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 22, color: color),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: !enabled
-                    ? Colors.white24
-                    : selected
-                    ? Colors.white
-                    : Colors.white70,
-              ),
-            ),
-          ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// Un gettone piccolo come sulla lavagna (nella scelta del giocatore).
+class _TokenAvatar extends StatelessWidget {
+  const _TokenAvatar({required this.label, required this.side});
+  final String label;
+  final String side;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 36,
+    height: 36,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: tokenColor(side),
+      shape: BoxShape.circle,
+      border: Border.all(color: MilanacColors.ivory, width: 2),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        fontFamily: sportFont,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: tokenTextColor(side),
       ),
     ),
   );
 }
 
-/// In alto durante la registrazione: punto rosso, durata e stop.
-class _RecordingBadge extends StatelessWidget {
-  const _RecordingBadge({required this.seconds, required this.onStop});
-  final int seconds;
-  final VoidCallback onStop;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      const Icon(Icons.circle, size: 10, color: MilanacColors.red),
-      const SizedBox(width: 4),
-      Text(
-        formatSeconds(seconds),
-        style: const TextStyle(fontFamily: sportFont, fontSize: 16),
-      ),
-      IconButton(
-        tooltip: 'Ferma la registrazione',
-        icon: const Icon(Icons.stop_circle_rounded, color: MilanacColors.red),
-        onPressed: onStop,
-      ),
-    ],
-  );
-}
-
 /// Scelta del giocatore da mettere sul campo (o un avversario, o un gettone vuoto).
 class _PlayerSheet extends ConsumerStatefulWidget {
-  const _PlayerSheet({required this.onBoard, required this.team});
+  const _PlayerSheet({
+    required this.onBoard,
+    required this.team,
+    required this.opponentNumber,
+  });
   final Set<String> onBoard;
   final Team team;
+
+  /// Numero del prossimo avversario.
+  final String opponentNumber;
 
   @override
   ConsumerState<_PlayerSheet> createState() => _PlayerSheetState();
@@ -1031,6 +1320,7 @@ class _PlayerSheetState extends ConsumerState<_PlayerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.pal;
     final members =
         (ref.watch(rosaProvider).value ?? const <Member>[])
             .where(
@@ -1049,17 +1339,23 @@ class _PlayerSheetState extends ConsumerState<_PlayerSheet> {
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SegmentedButton<Team>(
-              segments: [
-                for (final t in Team.values)
-                  ButtonSegment(value: t, label: Text(t.short)),
-              ],
-              selected: {_team},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => setState(() => _team = s.first),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SectionLabel('Aggiungi un gettone'),
+                  const SizedBox(height: 10),
+                  SegmentedTabs(
+                    labels: [for (final t in Team.values) _teamName(t)],
+                    selected: _team.index,
+                    onSelected: (i) => setState(() => _team = Team.values[i]),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 4),
             Flexible(
               child: ListView(
                 shrinkWrap: true,
@@ -1081,7 +1377,8 @@ class _PlayerSheetState extends ConsumerState<_PlayerSheet> {
                           x: 0,
                           y: 0,
                           playerId: m.id,
-                          label: m.shirtNumber?.toString() ??
+                          label:
+                              m.shirtNumber?.toString() ??
                               (m.fieldPosition ?? '?'),
                           name: m.displayName,
                           side: _team.name,
@@ -1089,43 +1386,34 @@ class _PlayerSheetState extends ConsumerState<_PlayerSheet> {
                       ),
                     ),
                   if (members.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(16),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
                       child: Text(
                         'Tutti i giocatori della squadra sono già in campo.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(fontSize: 14, color: p.textMuted),
                       ),
                     ),
                   const Divider(),
                   ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Color(0xFFF5F5F5),
-                      child: Text(
-                        'A',
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
+                    leading: _TokenAvatar(
+                      label: widget.opponentNumber,
+                      side: 'avversari',
                     ),
                     title: const Text('Avversario'),
                     onTap: () => Navigator.pop(
                       context,
-                      const BoardToken(
+                      BoardToken(
                         id: '',
                         x: 0,
                         y: 0,
-                        label: 'A',
+                        label: widget.opponentNumber,
                         side: 'avversari',
                       ),
                     ),
                   ),
                   ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: MilanacColors.red,
-                      child: Text('?', style: TextStyle(fontWeight: FontWeight.w900)),
-                    ),
+                    leading: _TokenAvatar(label: '?', side: _team.name),
                     title: const Text('Gettone senza nome'),
                     onTap: () => Navigator.pop(
                       context,
