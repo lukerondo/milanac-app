@@ -86,10 +86,24 @@ class PasswordRecovery extends Notifier<bool> {
   void done() => state = false;
 }
 
+/// In demo il profilo vive in memoria: quello che si cambia (es. le notifiche) resta,
+/// come farebbe il tempo reale con il profilo vero.
+final demoProfileProvider = NotifierProvider<DemoProfile, Profile>(
+  DemoProfile.new,
+);
+
+class DemoProfile extends Notifier<Profile> {
+  @override
+  Profile build() => Profile.demo;
+
+  void update(Profile Function(Profile current) change) =>
+      state = change(state);
+}
+
 /// Profilo del club dell'utente loggato, aggiornato in tempo reale
 /// (registrazione completata, regolamento accettato, ruolo assegnato).
 final profileProvider = StreamProvider<Profile?>((ref) {
-  if (AppConfig.isDemo) return Stream.value(Profile.demo);
+  if (AppConfig.isDemo) return Stream.value(ref.watch(demoProfileProvider));
   final userId = ref.watch(currentUserIdProvider);
   if (userId == null) return Stream.value(null);
   return ref
