@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,6 +16,29 @@ import 'walkout_page.dart';
 
 /// Chiave dell'ultimo overall per cui il giocatore ha visto il walkout su questo telefono.
 String walkoutKey(String memberId) => 'walkout.overall.$memberId';
+
+/// La carta speciale [cardId] si festeggia (prima volta su questo telefono)? Se sì, la
+/// segna come festeggiata. Si ricordano tutte le carte festeggiate, non solo l'ultima:
+/// se la più recente sparisce (partita eliminata, blu che cade) o cambia reparto, quella
+/// di prima non si festeggia di nuovo. La chiave delle versioni precedenti (solo l'ultima
+/// carta vista) vale ancora per chi aggiorna l'app.
+Future<bool> firstTimeSpecialCard(
+  LocalFlags flags,
+  String memberId,
+  String cardId,
+) async {
+  final key = 'special.celebrated.$memberId';
+  final celebrated = (await flags.getList(key)).toList();
+  final legacy = await flags.getString('special.seen.$memberId');
+  if (legacy != null && !celebrated.contains(legacy)) celebrated.add(legacy);
+  if (celebrated.contains(cardId)) return false;
+  await flags.setList(key, [
+    // Le ultime 50 bastano (una carta vale 7 giorni).
+    ...celebrated.skip(math.max(0, celebrated.length - 49)),
+    cardId,
+  ]);
+  return true;
+}
 
 /// Fa partire, una volta sola per telefono:
 /// - il walkout quando il giocatore entra nel club (prima apertura dopo l'approvazione)
@@ -76,9 +101,7 @@ class _CelebrationsState extends ConsumerState<Celebrations> {
       // Carta speciale ricevuta (nero/oro o blu elettrico): walkout dedicato.
       final special = ref.read(activeSpecialCardProvider(me.id));
       if (special != null && mounted) {
-        final specialKey = 'special.seen.${me.id}';
-        if (await flags.getString(specialKey) != special.id) {
-          await flags.setString(specialKey, special.id);
+        if (await firstTimeSpecialCard(flags, me.id, special.id)) {
           final match = ref
               .read(matchesProvider)
               .value

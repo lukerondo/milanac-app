@@ -456,6 +456,25 @@ void main() {
     expect(find.text('La tua risposta, entro le 18:30'), findsOneWidget);
   });
 
+  testWidgets(
+    'statistiche aperte prima di mezzanotte: tornando al calendario il '
+    'giorno dopo si vede oggi',
+    (tester) async {
+      var now = italyAt(2026, 10, 12, 23, 50);
+      await startAppAt(tester, now, clock: () => now);
+      await goToSection(tester, 'Presenze');
+      await tester.tap(find.text('Statistiche'));
+      await tester.pumpAndSettle();
+
+      now = italyAt(2026, 10, 13, 9);
+      await tester.pump(const Duration(minutes: 1));
+      await tester.tap(find.text('Calendario'));
+      await tester.pumpAndSettle();
+      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+      expect(find.text('LUNEDÌ 12 OTTOBRE · MILAN AC'), findsNothing);
+    },
+  );
+
   testWidgets('giorno chiesto fuori dal calendario: si apre il più vicino', (
     tester,
   ) async {

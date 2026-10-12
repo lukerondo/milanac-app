@@ -142,12 +142,16 @@ class _PresenzePageState extends ConsumerState<PresenzePage> {
   /// segue (con la scelta tenuta solo nella pagina, una rotta uguale non la toccava).
   void _goTo({int? tab, DateTime? day}) {
     final t = tab ?? _tab;
+    // Cambiando solo scheda, una pagina che segue oggi continua a seguirlo (il giorno
+    // non si fissa nella rotta: dopo la mezzanotte resterebbe "ieri").
+    final fixed = day ?? (widget.initialDay == null ? null : _day);
     context.go(
       Uri(
         path: '/presenze',
         queryParameters: {
           if (t == 1) 'scheda': 'statistiche',
-          'giorno': DateFormat('yyyy-MM-dd').format(dayOnly(day ?? _day)),
+          if (fixed != null)
+            'giorno': DateFormat('yyyy-MM-dd').format(dayOnly(fixed)),
         },
       ).toString(),
     );

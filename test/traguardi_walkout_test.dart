@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/auth/profile.dart';
+import 'package:milanac/core/local_flags.dart';
 import 'package:milanac/features/carta/card_stats.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/rosa/member.dart';
 import 'package:milanac/features/traguardi/achievements.dart';
 import 'package:milanac/features/traguardi/player_stats.dart';
+import 'package:milanac/features/walkout/celebrations.dart';
 import 'package:milanac/main.dart';
 
 import 'helpers.dart';
@@ -59,6 +61,23 @@ void main() {
     expect(topBadges(list).first.id, 'fuoriclasse');
     expect(topBadges(list), hasLength(3));
   });
+
+  test(
+    'carte speciali: ognuna si festeggia una volta sola, anche quando la più '
+    'recente sparisce o cambia reparto',
+    () async {
+      final flags = MemoryFlags();
+      expect(await firstTimeSpecialCard(flags, 'p1', 'a'), isTrue);
+      expect(await firstTimeSpecialCard(flags, 'p1', 'b'), isTrue);
+      // La carta b sparisce: torna valida la a, già festeggiata.
+      expect(await firstTimeSpecialCard(flags, 'p1', 'a'), isFalse);
+      expect(await firstTimeSpecialCard(flags, 'p1', 'b'), isFalse);
+      // Chi aggiorna l'app: la carta vista con la versione di prima non si rifesteggia.
+      await flags.setString('special.seen.p2', 'c');
+      expect(await firstTimeSpecialCard(flags, 'p2', 'c'), isFalse);
+      expect(await firstTimeSpecialCard(flags, 'p2', 'd'), isTrue);
+    },
+  );
 
   testWidgets('Carta: traguardi e walkout', (tester) async {
     await startApp(tester);
