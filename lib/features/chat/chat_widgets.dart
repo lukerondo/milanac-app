@@ -90,3 +90,39 @@ List<TextSpan> highlightMatches(
   if (from < text.length) spans.add(TextSpan(text: text.substring(from)));
   return spans;
 }
+
+/// Un carattere emoji (faccine, simboli, bandiere, toni della pelle...).
+bool _isEmojiRune(int r) =>
+    (r >= 0x1F000 && r <= 0x1FAFF) ||
+    (r >= 0x2600 && r <= 0x27BF) ||
+    (r >= 0x2300 && r <= 0x23FF) ||
+    (r >= 0x2B00 && r <= 0x2BFF) ||
+    (r >= 0x2190 && r <= 0x21FF) ||
+    (r >= 0x25A0 && r <= 0x25FF) ||
+    const {
+      0x00A9, 0x00AE, 0x203C, 0x2049, 0x2122, 0x2139, //
+      0x24C2, 0x2934, 0x2935, 0x3030, 0x303D, 0x3297, 0x3299,
+    }.contains(r);
+
+/// Ciò che unisce o varia le emoji (giunzioni, varianti, tasti, bandiere regionali).
+bool _isEmojiJoiner(int r) =>
+    r == 0x200D ||
+    r == 0xFE0E ||
+    r == 0xFE0F ||
+    r == 0x20E3 ||
+    (r >= 0xE0020 && r <= 0xE007F);
+
+/// Un messaggio fatto solo di una, due o tre emoji (si mostra grande, senza bolla).
+bool isEmojiOnly(String? text) {
+  final t = text?.trim() ?? '';
+  if (t.isEmpty || t.characters.length > 3) return false;
+  var emoji = 0;
+  for (final r in t.runes) {
+    if (_isEmojiRune(r)) {
+      emoji++;
+    } else if (!_isEmojiJoiner(r) && r != 0x20) {
+      return false;
+    }
+  }
+  return emoji > 0;
+}

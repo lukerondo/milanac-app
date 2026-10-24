@@ -123,6 +123,10 @@ class _ChannelView extends ConsumerStatefulWidget {
 
 class _ChannelViewState extends ConsumerState<_ChannelView> {
   final _text = TextEditingController();
+
+  /// La barra di scrittura: dopo una menzione scelta o "Rispondi" si continua a
+  /// scrivere senza toccarla di nuovo.
+  final _focus = FocusNode(debugLabel: 'chat-scrivi');
   final _scroll = ScrollController();
 
   /// Quando compare la striscia "Connessione persa" la lista cambia posto tra i widget:
@@ -227,6 +231,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     }
     _recorder.dispose();
     _text.dispose();
+    _focus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -368,6 +373,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
       text: text.replaceRange(mention.start, cursor, insert),
       selection: TextSelection.collapsed(offset: mention.start + insert.length),
     );
+    _focus.requestFocus();
   }
 
   /// La propria reazione: la stessa emoji di nuovo la toglie.
@@ -824,7 +830,10 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                               !m.isLocal &&
                               (mine || (me?.isDirettivo ?? false)),
                           onReply: canWrite
-                              ? () => setState(() => _replyTo = m)
+                              ? () {
+                                  setState(() => _replyTo = m);
+                                  _focus.requestFocus();
+                                }
                               : null,
                           onDelete: () => _confirmDelete(m),
                           onRetry: () => _retry(m),
@@ -974,6 +983,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                             label: 'Messaggio',
                             child: TextField(
                               controller: _text,
+                              focusNode: _focus,
                               minLines: 1,
                               maxLines: 5,
                               maxLength: 2000,
@@ -1721,13 +1731,27 @@ class _Bubble extends ConsumerWidget {
       ContentWidth.maxWidth,
     );
     final maxWidth = screen * (mine ? .70 : .67);
+    // Solo una, due o tre emoji: grandi e senza bolla, come su WhatsApp.
+    final big =
+        isEmojiOnly(message.body) &&
+        !message.hasImage &&
+        !message.hasAudio &&
+        !message.isReplay &&
+        !message.isAnnouncement &&
+        quote == null;
     final bubble = Container(
       constraints: BoxConstraints(maxWidth: maxWidth),
       padding: EdgeInsets.fromLTRB(12, mine ? 9 : 8, 12, mine ? 7 : 6),
       decoration: BoxDecoration(
-        color: mine ? p.accentTint : p.surfaceHigh,
+        color: big
+            ? Colors.transparent
+            : mine
+            ? p.accentTint
+            : p.surfaceHigh,
         border: Border.all(
-          color: message.isAnnouncement || mentionsMe
+          color: big
+              ? Colors.transparent
+              : message.isAnnouncement || mentionsMe
               ? p.importantBorder
               : mine
               ? p.accentTintBorder
@@ -1810,7 +1834,11 @@ class _Bubble extends ConsumerWidget {
             if (message.hasText)
               LinkText(
                 message.body!,
-                style: TextStyle(fontSize: 16, color: p.text, height: 1.3),
+                style: TextStyle(
+                  fontSize: big ? 44 : 16,
+                  color: p.text,
+                  height: big ? 1.15 : 1.3,
+                ),
                 linkColor: p.accentText,
                 highlights: highlights,
                 highlightStyle: TextStyle(color: p.accentText),
@@ -1854,7 +1882,11 @@ class _Bubble extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!mine) ...[
-            SizedBox(width: 32, child: face),
+            // Con le reazioni sotto, il volto resta all'altezza della bolla.
+            Padding(
+              padding: EdgeInsets.only(bottom: reactions.isEmpty ? 0 : 32),
+              child: SizedBox(width: 32, child: face),
+            ),
             const SizedBox(width: 8),
           ],
           Flexible(
@@ -1864,10 +1896,13 @@ class _Bubble extends ConsumerWidget {
                   : CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                GestureDetector(
-                  onTap: message.failed || message.waiting ? onRetry : null,
-                  onLongPress: () => _actions(context),
-                  child: bubble,
+                _SwipeToReply(
+                  onReply: message.isLocal ? null : onReply,
+                  child: GestureDetector(
+                    onTap: message.failed || message.waiting ? onRetry : null,
+                    onLongPress: () => _actions(context),
+                    child: bubble,
+                  ),
                 ),
                 if (reactions.isNotEmpty)
                   Padding(
@@ -1883,6 +1918,95 @@ class _Bubble extends ConsumerWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Trascinando la bolla verso destra si risponde, come su WhatsApp: la freccia compare
+/// man mano, oltre la soglia il telefono vibra e al rilascio parte la risposta.
+class _SwipeToReply extends StatefulWidget {
+  const _SwipeToReply({required this.onReply, required this.child});
+
+  /// null: niente risposta (canale in sola lettura, messaggio non ancora partito).
+  final VoidCallback? onReply;
+  final Widget child;
+
+  @override
+  State<_SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<_SwipeToReply>
+    with SingleTickerProviderStateMixin {
+  static const _max = 72.0;
+  static const _trigger = 56.0;
+  double _dx = 0;
+  double _from = 0;
+  bool _armed = false;
+  late final AnimationController _back =
+      AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 180),
+      )..addListener(() {
+        setState(
+          () => _dx = _from * (1 - Curves.easeOut.transform(_back.value)),
+        );
+      });
+
+  @override
+  void dispose() {
+    _back.dispose();
+    super.dispose();
+  }
+
+  void _update(DragUpdateDetails d) {
+    _back.stop();
+    final dx = (_dx + d.delta.dx).clamp(0.0, _max);
+    final armed = dx >= _trigger;
+    if (armed && !_armed) HapticFeedback.selectionClick();
+    setState(() {
+      _dx = dx;
+      _armed = armed;
+    });
+  }
+
+  void _end() {
+    if (_armed) widget.onReply?.call();
+    _armed = false;
+    _from = _dx;
+    _back.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.onReply == null) return widget.child;
+    final p = context.pal;
+    return GestureDetector(
+      onHorizontalDragUpdate: _update,
+      onHorizontalDragEnd: (_) => _end(),
+      onHorizontalDragCancel: _end,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.centerLeft,
+        children: [
+          if (_dx > 0)
+            Positioned(
+              left: _dx / 2 - 18,
+              child: Opacity(
+                opacity: (_dx / _trigger).clamp(0.0, 1.0),
+                child: CircleAvatar(
+                  radius: 15,
+                  backgroundColor: _armed ? p.accent : p.surfaceHigher,
+                  child: Icon(
+                    Icons.reply_rounded,
+                    size: 18,
+                    color: _armed ? p.onAccent : p.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          Transform.translate(offset: Offset(_dx, 0), child: widget.child),
         ],
       ),
     );

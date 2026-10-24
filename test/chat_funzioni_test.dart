@@ -7,6 +7,7 @@ import 'package:milanac/features/chat/chat_reactions.dart';
 import 'package:milanac/features/chat/chat_reads.dart';
 import 'package:milanac/features/chat/chat_repository.dart';
 import 'package:milanac/features/chat/chat_typing.dart';
+import 'package:milanac/features/chat/chat_widgets.dart';
 import 'package:milanac/features/rosa/member.dart';
 import 'package:milanac/shared/link_text.dart';
 
@@ -292,5 +293,33 @@ void main() {
     await tester.pumpAndSettle();
     final sent = (await repo.searchMessages('Stasera @Marco')).single;
     expect(sent.meta['mentions'], ['p2']);
+  });
+
+  test('emoji da sole: fino a tre, anche con tono della pelle o bandiere', () {
+    expect(isEmojiOnly('🔥'), isTrue);
+    expect(isEmojiOnly('👍🏻'), isTrue);
+    expect(isEmojiOnly('🇮🇹'), isTrue);
+    expect(isEmojiOnly('⚽ ⚽'), isTrue);
+    expect(isEmojiOnly('❤️'), isTrue);
+    expect(isEmojiOnly('🔥🔥🔥🔥'), isFalse);
+    expect(isEmojiOnly('ok 👍'), isFalse);
+    expect(isEmojiOnly('12'), isFalse);
+    expect(isEmojiOnly(''), isFalse);
+  });
+
+  testWidgets('Scorrere la bolla verso destra: si risponde a quel messaggio', (
+    tester,
+  ) async {
+    await startChat(tester);
+    await openChannel(tester, 'Generale');
+    await tester.drag(find.text('Ci sono 💪'), const Offset(90, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Rispondi a Luca Bianchi'), findsOneWidget);
+    // Poco: niente risposta, la bolla torna al suo posto.
+    await tester.tap(find.byTooltip('Annulla risposta'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.text('Ci sono 💪'), const Offset(30, 0));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Rispondi a'), findsNothing);
   });
 }
