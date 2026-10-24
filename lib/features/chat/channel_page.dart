@@ -28,7 +28,11 @@ import '../lavagna/replay_pages.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'channel_messages.dart';
+import 'chat_mentions.dart';
+import 'chat_reactions.dart';
+import 'chat_reads.dart';
 import 'chat_repository.dart';
+import 'chat_typing.dart';
 import 'chat_widgets.dart';
 import 'voice_player.dart';
 import '../voce/voice_room_sheet.dart';
@@ -132,6 +136,11 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
   bool _showJump = false;
   DateTime? _readUpTo;
 
+  /// Menzioni scelte dai suggerimenti (id → nome sulla carta) e quella che si sta
+  /// scrivendo (la "@" prima del cursore).
+  final _picked = <String, String>{};
+  ({int start, String query})? _mention;
+
   /// Ultima lettura prima di aprire il canale: sopra il primo messaggio arrivato dopo
   /// va il separatore "Nuovi messaggi".
   DateTime? _readBefore;
@@ -163,6 +172,11 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
   ChannelMessages get _conversation =>
       ref.read(messagesProvider(_channel.id).notifier);
 
+  /// "Sta scrivendo" del canale: resta aperto finché si guarda la conversazione (lo
+  /// tiene vivo la barra in alto, che mostra chi scrive).
+  TypingChannel? get _typing =>
+      mounted ? ref.read(typingChannelProvider(_channel.id)) : null;
+
   @override
   void initState() {
     super.initState();
@@ -172,6 +186,14 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     _text.addListener(() {
       final has = _text.text.trim().isNotEmpty;
       if (has != _hasText) setState(() => _hasText = has);
+      // Gli altri vedono "sta scrivendo" finché c'è testo.
+      if (has) {
+        _typing?.ping(TypingKind.testo);
+      } else {
+        _typing?.stop();
+      }
+      final mention = mentionAt(_text.text, _text.selection.baseOffset);
+      if (mention != _mention) setState(() => _mention = mention);
     });
     _scroll.addListener(() {
       final show = _scroll.hasClients && _scroll.offset > 400;
@@ -305,9 +327,17 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     final reply = _replyTo;
     final conversation = _conversation;
     final channel = _channel;
+    // Le menzioni scelte e ancora scritte nel testo.
+    final mentions = audio == null
+        ? mentionsIn(body, _picked)
+        : const <String>[];
     if (audio == null) _text.clear();
     setState(() {
-      if (audio == null) _image = null;
+      if (audio == null) {
+        _image = null;
+        _picked.clear();
+        _mention = null;
+      }
       _replyTo = null;
     });
     HapticFeedback.lightImpact();
@@ -319,9 +349,43 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
         audio: audio,
         durationS: seconds,
         replyTo: reply?.id,
+        meta: mentions.isEmpty ? null : {'mentions': mentions},
       ),
       channel,
     );
+  }
+
+  /// La menzione scelta dai suggerimenti prende il posto di quello che si era
+  /// scritto dopo la "@".
+  void _pickMention(Member m) {
+    final mention = _mention;
+    if (mention == null) return;
+    final text = _text.text;
+    final cursor = _text.selection.baseOffset.clamp(0, text.length);
+    final insert = '@${m.displayName} ';
+    _picked[m.id] = m.displayName;
+    _text.value = TextEditingValue(
+      text: text.replaceRange(mention.start, cursor, insert),
+      selection: TextSelection.collapsed(offset: mention.start + insert.length),
+    );
+  }
+
+  /// La propria reazione: la stessa emoji di nuovo la toglie.
+  Future<void> _react(ChatMessage m, String emoji) async {
+    final me = ref.read(currentUserIdProvider);
+    final current =
+        (ref.read(reactionsProvider(_channel.id)).value?[m.id] ??
+                const <MessageReaction>[])
+            .where((r) => r.userId == me)
+            .firstOrNull;
+    HapticFeedback.selectionClick();
+    try {
+      await ref
+          .read(chatRepositoryProvider)
+          .react(m, current?.emoji == emoji ? null : emoji);
+    } catch (e) {
+      _notice(friendlyError(e, action: 'Reazione non salvata'));
+    }
   }
 
   Future<void> _retry(ChatMessage m) async {
@@ -406,9 +470,11 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
       _recCancel = false;
       _recSeconds = 0;
     });
+    _typing?.ping(TypingKind.vocale);
     _recTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() => _recSeconds++);
+      _typing?.ping(TypingKind.vocale);
       if (_recSeconds >= maxVoiceSeconds) _finishRecording(send: true);
     });
   }
@@ -419,6 +485,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     _recTimer?.cancel();
     setState(() => _recording = false);
     _audioFocus.release(AudioUse.registrazioneVocale);
+    _typing?.stop();
     final keep = send && !_recCancel;
     ({Uint8List bytes, int seconds, String path})? result;
     _stopping = true;
@@ -513,6 +580,13 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     final p = context.pal;
     // La barra in alto è sempre scura: colori fissi della tavola 13.
     const bar = AppPalette.dark;
+    final typing = typingLabel(
+      ref.watch(typistsProvider(channel.id)).value ?? const {},
+      {
+        for (final m in ref.watch(rosaProvider).value ?? const <Member>[])
+          m.id: m,
+      },
+    );
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -551,18 +625,30 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                       color: MilanacColors.ivory,
                     ),
                   ),
-                  Text(
-                    channel.audience,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: bodyFont,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                      letterSpacing: 0,
-                      color: bar.textMuted,
+                  if (typing != null)
+                    TypingText(
+                      typing,
+                      style: const TextStyle(
+                        fontFamily: bodyFont,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                        color: MilanacColors.goldLight,
+                      ),
+                    )
+                  else
+                    Text(
+                      channel.audience,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: bodyFont,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0,
+                        color: bar.textMuted,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -630,6 +716,13 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
         m.id: m,
     };
     final provider = messagesProvider(c.id);
+    // Spunte e reazioni in tempo reale (senza: la conversazione resta com'era).
+    final reads =
+        ref.watch(channelReadsProvider(c.id)).value ??
+        const <String, DateTime>{};
+    final reactions =
+        ref.watch(reactionsProvider(c.id)).value ??
+        const <String, List<MessageReaction>>{};
     // Anche se il tempo reale cade per un momento la conversazione resta (con la
     // striscia "Connessione persa"), senza perdere il punto in cui si era.
     return AsyncView<ChannelHistory>(
@@ -706,6 +799,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                   m.createdAt.difference(older.createdAt).inMinutes < 5;
               final mine = m.authorId == me?.id;
               final replyTo = m.replyTo;
+              final mentioned = mentionIdsOf(m);
               return Column(
                 children: [
                   if (newDay) _DaySeparator(m.createdAt),
@@ -736,6 +830,32 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                           onRetry: () => _retry(m),
                           onDiscard: () =>
                               ref.read(provider.notifier).discard(m.id),
+                          readBy: mine && !m.isLocal
+                              ? readersOf(m, reads).length
+                              : 0,
+                          reactions: reactions[m.id] ?? const [],
+                          me: me?.id,
+                          onReact: (emoji) => _react(m, emoji),
+                          onShowReactions: () => showReactionsSheet(
+                            context,
+                            reactions: reactions[m.id] ?? const [],
+                            members: members,
+                            me: me?.id,
+                          ),
+                          onInfo: mine && !m.isLocal
+                              ? () => showMessageInfo(
+                                  context,
+                                  message: m,
+                                  readers: readersOf(m, reads),
+                                  audience: channelAudience(c, members.values),
+                                )
+                              : null,
+                          highlights: [
+                            for (final id in mentioned)
+                              if (members[id] != null)
+                                '@${members[id]!.displayName}',
+                          ],
+                          mentionsMe: me != null && mentioned.contains(me.id),
                         ),
                 ],
               );
@@ -771,6 +891,20 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (_mention case final mention?)
+                if (mentionCandidates(
+                      mention.query,
+                      channelAudience(
+                        _channel,
+                        ref.watch(rosaProvider).value ?? const <Member>[],
+                      ),
+                      me: ref.watch(currentUserIdProvider),
+                    )
+                    case final candidates when candidates.isNotEmpty)
+                  MentionSuggestions(
+                    candidates: candidates,
+                    onPick: _pickMention,
+                  ),
               if (_replyTo != null)
                 _ReplyStrip(
                   message: _replyTo!,
@@ -1369,6 +1503,14 @@ class _Bubble extends ConsumerWidget {
     required this.onRetry,
     required this.onDiscard,
     this.quote,
+    this.readBy = 0,
+    this.reactions = const [],
+    this.me,
+    this.onReact,
+    this.onShowReactions,
+    this.onInfo,
+    this.highlights = const [],
+    this.mentionsMe = false,
   });
   final ChatMessage message;
   final Member? author;
@@ -1389,6 +1531,24 @@ class _Bubble extends ConsumerWidget {
   /// Il messaggio citato (se risponde a un altro).
   final Widget? quote;
 
+  /// Quanti l'hanno letto (solo i propri messaggi): una spunta se nessuno, due dorate
+  /// se almeno uno.
+  final int readBy;
+
+  /// Le reazioni al messaggio e chi guarda (per riconoscere la propria).
+  final List<MessageReaction> reactions;
+  final String? me;
+  final ValueChanged<String>? onReact;
+  final VoidCallback? onShowReactions;
+
+  /// "Info" (chi l'ha letto): solo per i propri messaggi già salvati.
+  final VoidCallback? onInfo;
+
+  /// Le menzioni da evidenziare nel testo ("@ROSSI"); [mentionsMe] se c'è anche la
+  /// propria (la bolla ha il bordo dorato).
+  final List<String> highlights;
+  final bool mentionsMe;
+
   Future<void> _actions(BuildContext context) async {
     // Non partito, o fermo per la rete: si rimanda subito o si toglie.
     final failed = message.failed || message.waiting;
@@ -1396,13 +1556,26 @@ class _Bubble extends ConsumerWidget {
     final canReply = reply != null && !message.isLocal;
     final canCopy = message.hasText;
     final canRemove = failed || canDelete;
-    if (!failed && !canReply && !canCopy && !canRemove) return;
+    final canReact = !message.isLocal && onReact != null;
+    if (!failed && !canReply && !canCopy && !canRemove && !canReact) return;
+    HapticFeedback.mediumImpact();
+    final myReaction = reactions
+        .where((r) => r.userId == me)
+        .firstOrNull
+        ?.emoji;
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (c) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (canReact) ...[
+              ReactionPicker(
+                current: myReaction,
+                onPick: (emoji) => Navigator.pop(c, 'react:$emoji'),
+              ),
+              const Divider(height: 12),
+            ],
             if (failed)
               ListTile(
                 leading: const Icon(Icons.refresh_rounded),
@@ -1420,6 +1593,12 @@ class _Bubble extends ConsumerWidget {
                 leading: const Icon(Icons.copy_rounded),
                 title: const Text('Copia testo'),
                 onTap: () => Navigator.pop(c, 'copy'),
+              ),
+            if (onInfo != null)
+              ListTile(
+                leading: const Icon(Icons.done_all_rounded),
+                title: const Text('Info: chi l\'ha letto'),
+                onTap: () => Navigator.pop(c, 'info'),
               ),
             if (canRemove)
               ListTile(
@@ -1447,6 +1626,10 @@ class _Bubble extends ConsumerWidget {
       case 'delete':
         // Un messaggio non partito c'è solo qui: si toglie senza chiedere.
         failed ? onDiscard() : onDelete();
+      case 'info':
+        onInfo?.call();
+      case final picked? when picked.startsWith('react:'):
+        onReact?.call(picked.substring('react:'.length));
     }
   }
 
@@ -1508,6 +1691,19 @@ class _Bubble extends ConsumerWidget {
               color: color,
               semanticLabel: 'in invio',
             ),
+          )
+        else if (mine)
+          // Una spunta: arrivato. Due dorate: letto da almeno uno.
+          Padding(
+            padding: const EdgeInsets.only(left: 3),
+            child: Icon(
+              readBy > 0 ? Icons.done_all_rounded : Icons.done_rounded,
+              size: 15,
+              color: readBy > 0 ? p.accentText : color,
+              semanticLabel: readBy > 0
+                  ? 'letto da $readBy'
+                  : 'inviato, non ancora letto',
+            ),
           ),
       ],
     );
@@ -1531,12 +1727,12 @@ class _Bubble extends ConsumerWidget {
       decoration: BoxDecoration(
         color: mine ? p.accentTint : p.surfaceHigh,
         border: Border.all(
-          color: message.isAnnouncement
+          color: message.isAnnouncement || mentionsMe
               ? p.importantBorder
               : mine
               ? p.accentTintBorder
               : p.border,
-          width: message.isAnnouncement ? 1.5 : 1,
+          width: message.isAnnouncement || mentionsMe ? 1.5 : 1,
         ),
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(16),
@@ -1616,6 +1812,8 @@ class _Bubble extends ConsumerWidget {
                 message.body!,
                 style: TextStyle(fontSize: 16, color: p.text, height: 1.3),
                 linkColor: p.accentText,
+                highlights: highlights,
+                highlightStyle: TextStyle(color: p.accentText),
               ),
             Align(
               alignment: Alignment.centerRight,
@@ -1660,10 +1858,29 @@ class _Bubble extends ConsumerWidget {
             const SizedBox(width: 8),
           ],
           Flexible(
-            child: GestureDetector(
-              onTap: message.failed || message.waiting ? onRetry : null,
-              onLongPress: () => _actions(context),
-              child: bubble,
+            child: Column(
+              crossAxisAlignment: mine
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: message.failed || message.waiting ? onRetry : null,
+                  onLongPress: () => _actions(context),
+                  child: bubble,
+                ),
+                if (reactions.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: ReactionChips(
+                      reactions: reactions,
+                      me: me,
+                      alignEnd: mine,
+                      onToggle: (emoji) => onReact?.call(emoji),
+                      onShowWho: () => onShowReactions?.call(),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],

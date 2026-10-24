@@ -460,6 +460,7 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
     Uint8List? audio,
     int? durationS,
     String? replyTo,
+    Map<String, dynamic>? meta,
   }) {
     final m = ChatMessage(
       id: newMessageId(),
@@ -470,6 +471,7 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       localAudio: audio,
       durationS: audio == null ? null : durationS,
       replyTo: replyTo,
+      meta: meta ?? const {},
       createdAt: DateTime.now(),
       sending: true,
     );
@@ -598,6 +600,7 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
           audio: message.localAudio,
           durationS: message.durationS,
           replyTo: message.replyTo,
+          meta: message.meta.isEmpty ? null : message.meta,
         );
         _sent(message, saved);
         return (error: null, quoteDropped: quoteDropped, waiting: false);

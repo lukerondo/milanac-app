@@ -9,6 +9,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import 'chat_reactions.dart';
+import 'chat_typing.dart';
 import '../../core/teams.dart';
 import '../lavagna/board_model.dart';
 
@@ -358,6 +360,19 @@ abstract class ChatRepository {
   /// minuscole non contano), dal più recente: solo nei canali che si vedono.
   Future<List<ChatMessage>> searchMessages(String query);
 
+  /// Fin dove hanno letto il canale gli altri (id del profilo → ora del server
+  /// dell'ultimo messaggio letto), in tempo reale: le spunte dei propri messaggi.
+  Stream<Map<String, DateTime>> watchReads(String channelId);
+
+  /// Le reazioni ai messaggi del canale (le ultime 1000), in tempo reale.
+  Stream<List<MessageReaction>> watchReactions(String channelId);
+
+  /// La propria reazione a [message]; [emoji] null la toglie.
+  Future<void> react(ChatMessage message, String? emoji);
+
+  /// "Sta scrivendo" nel canale (si chiude con [TypingChannel.dispose]).
+  TypingChannel typing(String channelId);
+
   /// Id dei messaggi eliminati da chiunque, in tempo reale (quelli eliminati da qui
   /// subito): una sola sottoscrizione per tutta l'app.
   Stream<String> watchDeletions();
@@ -580,6 +595,46 @@ class _SupabaseChatRepository extends ChatRepository {
   /// Gli stream filtrati per canale non ricevono le eliminazioni (il tempo reale non
   /// può filtrarle): un solo abbonamento senza filtro per tutta l'app, che dei
   /// messaggi eliminati riceve solo l'id.
+  @override
+  Stream<Map<String, DateTime>> watchReads(String channelId) => _client
+      .from('channel_reads')
+      .stream(primaryKey: ['channel_id', 'user_id'])
+      .eq('channel_id', channelId)
+      .map(
+        (rows) => {
+          for (final r in rows)
+            if (DateTime.tryParse('${r['last_read_at']}') case final at?)
+              r['user_id'] as String: at.toLocal(),
+        },
+      );
+
+  /// Una reazione tolta resta come riga vuota (emoji null): le eliminazioni non
+  /// arriverebbero allo stream filtrato per canale.
+  @override
+  Stream<List<MessageReaction>> watchReactions(String channelId) => _client
+      .from('message_reactions')
+      .stream(primaryKey: ['message_id', 'user_id'])
+      .eq('channel_id', channelId)
+      .order('updated_at', ascending: false)
+      .limit(1000)
+      .map((rows) => [for (final r in rows) ?MessageReaction.tryFromMap(r)]);
+
+  @override
+  Future<void> react(ChatMessage m, String? emoji) =>
+      _client.from('message_reactions').upsert({
+        'message_id': m.id,
+        'user_id': _client.auth.currentUser!.id,
+        'channel_id': m.channelId,
+        'emoji': emoji,
+      }, onConflict: 'message_id,user_id');
+
+  @override
+  TypingChannel typing(String channelId) => RealtimeTypingChannel(
+    _client,
+    channelId,
+    _client.auth.currentUser?.id ?? '',
+  );
+
   void _listenDeletions() {
     _deletionsChannel = _client
         .channel('chat-eliminati-${_deletionsTopic++}')
@@ -939,6 +994,26 @@ class DemoChatRepository extends ChatRepository {
     ]);
     // Generale letto fino a 2 ore e mezza fa: gli ultimi due messaggi sono nuovi.
     _reads['c-main'] = now.subtract(const Duration(hours: 2, minutes: 30));
+    // Gli altri: Marco ha letto tutto Tattiche (spunte dorate sui propri messaggi).
+    _othersReads['c-tattiche'] = {
+      'p2': now,
+      'p3': now.subtract(const Duration(hours: 6)),
+    };
+    _othersReads['c-main'] = {'p2': now, 'p3': now};
+    for (final (message, user, emoji) in [
+      ('m1', 'p3', '👍'),
+      ('m1', 'p4', '👍'),
+      ('m1', 'demo', '🔥'),
+      ('m2', 'p2', '❤️'),
+      ('m6', 'p2', '🔥'),
+    ]) {
+      _reactions['$message|$user'] = MessageReaction(
+        messageId: message,
+        userId: user,
+        emoji: emoji,
+        at: now.subtract(const Duration(minutes: 30)),
+      );
+    }
   }
 
   static const _channels = [
@@ -994,6 +1069,15 @@ class DemoChatRepository extends ChatRepository {
   final _messages = <ChatMessage>[];
   final _reads = <String, DateTime>{};
   final _muted = <String>{};
+
+  /// Fin dove hanno letto gli altri, per canale (id del canale → id → ora).
+  final _othersReads = <String, Map<String, DateTime>>{};
+  final _readsChanged = StreamController<String>.broadcast();
+
+  /// Le reazioni ("id messaggio|id utente" → reazione).
+  final _reactions = <String, MessageReaction>{};
+  final _reactionsChanged = StreamController<String>.broadcast();
+  final _typing = <String, DemoTypingChannel>{};
 
   /// Messaggi inseriti o modificati (come gli eventi del tempo reale).
   final _rows = StreamController<ChatMessage>.broadcast();
@@ -1088,6 +1172,74 @@ class DemoChatRepository extends ChatRepository {
   Stream<List<Channel>> watchChannels() async* {
     yield _channels;
   }
+
+  @override
+  Stream<Map<String, DateTime>> watchReads(String channelId) async* {
+    yield Map.of(_othersReads[channelId] ?? const {});
+    yield* _readsChanged.stream
+        .where((c) => c == channelId)
+        .map((_) => Map.of(_othersReads[channelId] ?? const {}));
+  }
+
+  /// Solo demo e test: [userId] ha letto il canale fino a [until].
+  void readElsewhere(String channelId, String userId, DateTime until) {
+    (_othersReads[channelId] ??= {})[userId] = until;
+    if (!_readsChanged.isClosed) _readsChanged.add(channelId);
+  }
+
+  List<MessageReaction> _reactionsOf(String channelId) {
+    final ids = {
+      for (final m in _messages)
+        if (m.channelId == channelId) m.id,
+    };
+    return [
+      for (final r in _reactions.values)
+        if (ids.contains(r.messageId)) r,
+    ];
+  }
+
+  @override
+  Stream<List<MessageReaction>> watchReactions(String channelId) async* {
+    yield _reactionsOf(channelId);
+    yield* _reactionsChanged.stream
+        .where((c) => c == channelId)
+        .map((_) => _reactionsOf(channelId));
+  }
+
+  @override
+  Future<void> react(ChatMessage message, String? emoji) async =>
+      reactElsewhere(message.id, 'demo', emoji);
+
+  /// Solo demo e test: [userId] reagisce a [messageId] ([emoji] null: la toglie).
+  void reactElsewhere(String messageId, String userId, String? emoji) {
+    final m = _messages.where((x) => x.id == messageId).firstOrNull;
+    if (m == null) {
+      throw const PostgrestException(
+        message: 'Messaggio non più disponibile',
+        code: 'P0001',
+      );
+    }
+    final key = '$messageId|$userId';
+    if (emoji == null) {
+      _reactions.remove(key);
+    } else {
+      _reactions[key] = MessageReaction(
+        messageId: messageId,
+        userId: userId,
+        emoji: emoji,
+        at: DateTime.now(),
+      );
+    }
+    if (!_reactionsChanged.isClosed) _reactionsChanged.add(m.channelId);
+  }
+
+  /// Uno per canale, sempre lo stesso (demo e test lo comandano con [typingOf]).
+  @override
+  TypingChannel typing(String channelId) => typingOf(channelId);
+
+  /// Solo demo e test: il "sta scrivendo" del canale.
+  DemoTypingChannel typingOf(String channelId) =>
+      _typing[channelId] ??= DemoTypingChannel();
 
   @override
   Stream<List<ChatMessage>> watchMessages(String channelId) {
@@ -1237,5 +1389,10 @@ class DemoChatRepository extends ChatRepository {
     _rows.close();
     _deletions.close();
     _changes.close();
+    _readsChanged.close();
+    _reactionsChanged.close();
+    for (final t in _typing.values) {
+      t.close();
+    }
   }
 }

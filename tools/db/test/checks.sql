@@ -1605,3 +1605,130 @@ do $$ begin
   assert (select goalkeeper_id from matches where id = '00000000-0000-0000-0000-0000000000f9') is null,
     'risultato salvato senza portiere';
 end $$;
+
+-- ---------------------------------------------------------------- chat: spunte, reazioni,
+-- menzioni e "sta scrivendo". Rossi gioca nel Milan AC, Neri nel Futuro, Bianchi è del
+-- Direttivo: il canale Milan AC lo vedono Rossi e Bianchi.
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000c1', 'rossi@example.com'),
+  ('00000000-0000-0000-0000-0000000000c2', 'neri@example.com'),
+  ('00000000-0000-0000-0000-0000000000c3', 'bianchi@example.com');
+update profiles set club_role = 'giocatore', teams = array['milanac'], display_name = 'ROSSI'
+  where id = '00000000-0000-0000-0000-0000000000c1';
+update profiles set club_role = 'giocatore', teams = array['futuro'], display_name = 'NERI'
+  where id = '00000000-0000-0000-0000-0000000000c2';
+update profiles set club_role = 'direttivo', teams = array['milanac', 'futuro'], display_name = 'BIANCHI'
+  where id = '00000000-0000-0000-0000-0000000000c3';
+select set_config('test.canale_milan', (select id::text from channels where slug = 'milanac'), false);
+
+-- Menzioni: restano solo i membri che vedono il canale (non l'autore, niente doppioni).
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c1');
+insert into messages (id, channel_id, body, meta) values (
+  '00000000-0000-0000-0000-0000000000d1', current_setting('test.canale_milan')::uuid,
+  '@BIANCHI @NERI ci siete stasera?',
+  jsonb_build_object('mentions', jsonb_build_array(
+    '00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000c2',
+    '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000c3', 'non-un-id', 42)));
+insert into messages (id, channel_id, body, meta) values (
+  '00000000-0000-0000-0000-0000000000d2', current_setting('test.canale_milan')::uuid, 'a tutti',
+  '{"mentions": "tutti", "type": "altro"}');
+do $$ begin
+  assert (select meta->'mentions' from messages where id = '00000000-0000-0000-0000-0000000000d1')
+    = '["00000000-0000-0000-0000-0000000000c3"]'::jsonb,
+    'menzioni: solo Bianchi (Neri non vede il canale; autore e doppioni no)';
+  assert (select meta from messages where id = '00000000-0000-0000-0000-0000000000d2')
+    = '{"type": "altro"}'::jsonb, 'menzioni non valide: tolte, il resto resta';
+end $$;
+
+-- Spunte: chi vede il canale vede fin dove l'hanno letto gli altri; nessuno scrive per altri.
+select mark_channel_read(current_setting('test.canale_milan')::uuid);
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c3');
+select mark_channel_read(current_setting('test.canale_milan')::uuid);
+do $$ begin
+  assert (select count(*) from channel_reads
+          where channel_id = current_setting('test.canale_milan')::uuid) = 2,
+    'Bianchi vede anche la lettura di Rossi';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c2');
+do $$ begin
+  assert (select count(*) from channel_reads
+          where channel_id = current_setting('test.canale_milan')::uuid) = 0,
+    'chi non vede il canale non vede le letture';
+end $$;
+select pg_temp.expect_error(
+  $q$insert into channel_reads (channel_id, user_id)
+     values (current_setting('test.canale_milan')::uuid, '00000000-0000-0000-0000-0000000000c1')$q$,
+  'row-level security');
+
+-- Reazioni: la propria, tra le emoji previste, sui messaggi dei canali che si vedono.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c1');
+insert into message_reactions (message_id, emoji)
+  values ('00000000-0000-0000-0000-0000000000d1', '👍');
+update message_reactions set emoji = null where message_id = '00000000-0000-0000-0000-0000000000d1';
+update message_reactions set emoji = '🔥' where message_id = '00000000-0000-0000-0000-0000000000d1';
+do $$ begin
+  assert (select channel_id from message_reactions
+          where message_id = '00000000-0000-0000-0000-0000000000d1') = current_setting('test.canale_milan')::uuid,
+    'il canale della reazione viene dal messaggio';
+end $$;
+select pg_temp.expect_error(
+  $q$update message_reactions set emoji = '💩' where message_id = '00000000-0000-0000-0000-0000000000d1'$q$,
+  'check');
+select pg_temp.expect_error(
+  $q$insert into message_reactions (message_id, user_id, emoji)
+     values ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000c3', '👍')$q$,
+  'row-level security');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c2');
+select pg_temp.expect_error(
+  $q$insert into message_reactions (message_id, emoji) values ('00000000-0000-0000-0000-0000000000d1', '😂')$q$,
+  'row-level security');
+do $$ begin
+  assert (select count(*) from message_reactions
+          where message_id = '00000000-0000-0000-0000-0000000000d1') = 0,
+    'Neri non vede le reazioni del Milan AC';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c3');
+update message_reactions set emoji = '😢' where user_id = '00000000-0000-0000-0000-0000000000c1';
+do $$ begin
+  assert (select emoji from message_reactions
+          where message_id = '00000000-0000-0000-0000-0000000000d1') = '🔥',
+    'la reazione di Rossi la vede Bianchi, ma la cambia solo Rossi';
+end $$;
+select pg_temp.expect_error(
+  $q$select member_sees_channel('00000000-0000-0000-0000-0000000000c1', current_setting('test.canale_milan')::uuid)$q$,
+  'permission denied');
+
+-- "Sta scrivendo": il canale privato Realtime di una chat lo usa solo chi la vede.
+select set_config('realtime.topic', 'chat:' || current_setting('test.canale_milan'), false);
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c1');
+insert into realtime.messages (topic, extension, event, payload)
+  values (realtime.topic(), 'broadcast', 'scrive', '{}');
+do $$ begin
+  assert (select count(*) from realtime.messages where topic = realtime.topic()) = 1,
+    'Rossi scrive e ascolta sul canale del Milan AC';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c2');
+select pg_temp.expect_error(
+  $q$insert into realtime.messages (topic, extension, event) values (realtime.topic(), 'broadcast', 'scrive')$q$,
+  'row-level security');
+do $$ begin
+  assert (select count(*) from realtime.messages where topic = realtime.topic()) = 0,
+    'Neri non ascolta il canale del Milan AC';
+end $$;
+select set_config('realtime.topic', 'chat:non-un-canale', false);
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c1');
+select pg_temp.expect_error(
+  $q$insert into realtime.messages (topic, extension, event) values (realtime.topic(), 'broadcast', 'scrive')$q$,
+  'row-level security');
+select set_config('realtime.topic', '', false);
+
+-- Il messaggio eliminato si porta via le sue reazioni.
+delete from messages where id = '00000000-0000-0000-0000-0000000000d1';
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert not exists (select 1 from message_reactions
+                     where message_id = '00000000-0000-0000-0000-0000000000d1'),
+    'reazioni eliminate con il messaggio';
+end $$;

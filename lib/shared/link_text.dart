@@ -42,12 +42,46 @@ List<TextPiece> splitLinks(String text) {
   return pieces;
 }
 
-/// Testo con i link cliccabili (si aprono fuori dall'app).
+/// Divide [text] nei pezzi uguali a uno di [marks] (true) e nel resto (false). Vince
+/// il più lungo: "@ROSSI" non spezza "@ROSSI JR".
+List<(String, bool)> splitMarks(String text, Iterable<String> marks) {
+  final sorted = marks.where((m) => m.isNotEmpty).toSet().toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  if (sorted.isEmpty) return [(text, false)];
+  final pieces = <(String, bool)>[];
+  var last = 0;
+  var i = 0;
+  while (i < text.length) {
+    final hit = sorted.where((m) => text.startsWith(m, i)).firstOrNull;
+    if (hit == null) {
+      i++;
+      continue;
+    }
+    if (i > last) pieces.add((text.substring(last, i), false));
+    pieces.add((hit, true));
+    i += hit.length;
+    last = i;
+  }
+  if (last < text.length) pieces.add((text.substring(last), false));
+  return pieces;
+}
+
+/// Testo con i link cliccabili (si aprono fuori dall'app) e, se ci sono, le parti in
+/// [highlights] evidenziate (le menzioni "@nome").
 class LinkText extends StatefulWidget {
-  const LinkText(this.text, {super.key, this.style, this.linkColor});
+  const LinkText(
+    this.text, {
+    super.key,
+    this.style,
+    this.linkColor,
+    this.highlights = const [],
+    this.highlightStyle,
+  });
   final String text;
   final TextStyle? style;
   final Color? linkColor;
+  final List<String> highlights;
+  final TextStyle? highlightStyle;
 
   @override
   State<LinkText> createState() => _LinkTextState();
@@ -79,9 +113,14 @@ class _LinkTextState extends State<LinkText> {
     }
     _recognizers.clear();
     final pieces = splitLinks(widget.text);
-    if (pieces.length == 1 && !pieces.first.isLink) {
+    if (pieces.length == 1 &&
+        !pieces.first.isLink &&
+        widget.highlights.isEmpty) {
       return Text(widget.text, style: widget.style);
     }
+    final marked = (widget.style ?? const TextStyle())
+        .copyWith(fontWeight: FontWeight.w700)
+        .merge(widget.highlightStyle);
     final linkStyle = (widget.style ?? const TextStyle()).copyWith(
       color: widget.linkColor ?? MilanacColors.gold,
       decoration: TextDecoration.underline,
@@ -103,7 +142,8 @@ class _LinkTextState extends State<LinkText> {
                 }(),
               )
             else
-              TextSpan(text: p.text),
+              for (final (text, mark) in splitMarks(p.text, widget.highlights))
+                TextSpan(text: text, style: mark ? marked : null),
         ],
       ),
     );

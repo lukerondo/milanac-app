@@ -52,6 +52,26 @@ grant all on all tables in schema storage to anon, authenticated, service_role;
 
 create publication supabase_realtime;
 
+-- Realtime: la tabella su cui stanno le regole dei canali privati e il nome del canale a cui
+-- ci si collega (qui: impostazione di sessione).
+create schema realtime;
+create table realtime.messages (
+  id bigserial primary key,
+  topic text not null,
+  extension text not null,
+  payload jsonb,
+  event text,
+  private boolean default true,
+  inserted_at timestamptz not null default now()
+);
+alter table realtime.messages enable row level security;
+create function realtime.topic() returns text language sql stable as $$
+  select nullif(current_setting('realtime.topic', true), '')
+$$;
+grant usage on schema realtime to anon, authenticated, service_role;
+grant all on all tables in schema realtime to anon, authenticated, service_role;
+grant all on all sequences in schema realtime to anon, authenticated, service_role;
+
 -- pg_net finto: registra le chiamate invece di farle.
 create schema extensions;
 create schema net;

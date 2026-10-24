@@ -307,16 +307,23 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
   // Gli avvisi ufficiali arrivano anche a chi ha spento le notifiche della chat
   // (il silenzio esplicito del singolo canale invece vale sempre).
   const official = msg.meta?.type === "announcement" || msg.meta?.type === "new_member";
+  // Chi è menzionato (@nome) lo sa anche se ha silenziato il canale. Il database ha già
+  // tenuto solo chi vede il canale.
+  const mentioned = new Set<string>(
+    Array.isArray(msg.meta?.mentions) ? msg.meta.mentions.map(String) : [],
+  );
   const text = msg.meta?.type === "replay"
     ? `🎬 Nuovo schema con audio${msg.meta?.title ? `: ${msg.meta.title}` : ""}`
     : msg.body?.trim() || (msg.image_path ? "📷 Foto" : msg.audio_path ? "🎤 Messaggio vocale" : "");
   return (members ?? [])
-    .filter((m) => m.id !== msg.author_id && !muted.has(m.id))
+    .filter((m) => m.id !== msg.author_id && (!muted.has(m.id) || mentioned.has(m.id)))
     .map((m) => ({
       userId: m.id,
       // I messaggi automatici contengono già il nome.
       title: msg.meta?.type === "announcement"
         ? `📣 Avviso del Direttivo · ${author}`
+        : mentioned.has(m.id)
+        ? `${author} ti ha menzionato in #${channel?.name ?? "chat"}`
         : msg.kind === "system" ? `#${channel?.name ?? "chat"}` : `#${channel?.name ?? "chat"} · ${author}`,
       body: text.length > 140 ? text.slice(0, 137) + "…" : text,
       route: `/chat/${channel?.slug ?? ""}`,
@@ -444,7 +451,15 @@ async function sendAll(db: SupabaseClient, account: ServiceAccount, pushes: Push
                 Object.entries({ route: p.route, ...(p.data ?? {}) }).map(([k, v]) => [k, String(v)]),
               ),
               android: { priority: "high", notification: { color: "#D6B354" } },
-              apns: { payload: { aps: { sound: "default" } } },
+              // Su iPhone le notifiche della stessa chat stanno in un gruppo.
+              apns: {
+                payload: {
+                  aps: {
+                    sound: "default",
+                    ...(p.data?.channel ? { "thread-id": `chat-${p.data.channel}` } : {}),
+                  },
+                },
+              },
             },
           }),
         },
