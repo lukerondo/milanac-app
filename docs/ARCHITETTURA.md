@@ -137,11 +137,21 @@ accettano al primo accesso successivo.
     la pubblica, poi ogni giocatore della squadra riceve la notifica personale (titolare con
     ruolo o panchina), l'annuncio compare in *Comunicazioni* e chiunque può scaricare il
     **PDF con le mini carte** (campo, volto, nome, ruolo, overall, panchina).
-13. **Carta FUT** – "La mia carta" e carte in Rosa: overall deciso dal Direttivo (livelli bronzo,
-    argento, oro, rossonera 85+), statistiche dal club (presenze, puntualità, serate, gol dai
-    marcatori, mesi nel club, % vittorie), condivisione come immagine. Se il giocatore ha una
-    carta speciale in corso, la carta mostrata è quella (colori nero/oro o blu elettrico,
-    overall con il bonus) ovunque: carta, Rosa, mini carte del PDF, anello sul volto in chat.
+13. **Carta FUT** – "La mia carta" e carte in Rosa, disegnate come le carte di FC (sagoma con
+    gli angoli intagliati, fondo metallico; `lib/features/carta/card_design.dart`): overall e
+    ruolo, bandiera e stemma a sinistra, foto a destra, nome e **sei statistiche** sotto
+    (VEL TIR PAS DRI DIF FIS; per i portieri TUF PRE RIN RIF VEL PIA). Overall e statistiche
+    li decide il Direttivo ("Modifica carta", con l'overall suggerito dalle statistiche e dal
+    ruolo). Livelli bronzo, argento, oro, rossonera 85+ (a strisce). **Foto della carta**: il
+    giocatore la sceglie o la scatta, l'app toglie lo sfondo sul telefono (Google ML Kit,
+    senza server; un PNG già scontornato resta com'è), la si sposta e ingrandisce con le dita
+    e si salva come PNG in `avatars` (`profiles.avatar_path`). Sulle carte (grande, mini, PDF,
+    walkout) va la foto; nel resto dell'app il volto disegnato; senza foto la carta mostra il
+    volto. Stile di gioco, numero, piattaforma e squadra stanno nei dati sotto la carta; le
+    statistiche del club (presenze, puntualità, gol...) più sotto. Se il giocatore ha una
+    carta speciale in corso, la carta mostrata è quella (nero/oro con bagliore dorato o blu
+    elettrico con fulmini, overall e statistiche con il bonus) ovunque, anche nell'anello sul
+    volto in chat.
 14. **Tattiche & Build** – schemi del club con immagine e spiegazione (Direttivo) e la
     **lavagna tattica**: campo con i gettoni dei giocatori (dalla formazione della squadra,
     con numero e nome sulla carta; anche avversari e gettoni vuoti), pennello *Fuoco* (la
@@ -172,6 +182,20 @@ accettano al primo accesso successivo.
     microfono ed esci sempre a portata di dito (un tocco riapre la stanza; si può cambiare
     pagina senza uscire). La stanza si chiude quando esce l'ultimo o dopo 3 minuti
     senza segni di vita dell'app. Sul web la stanza non è disponibile.
+    **Affidabilità e dettagli** (ottobre 2026): i messaggi non ancora salvati dal server
+    restano sul telefono (`chat_outbox.dart`, foto e vocali compresi) e ripartono da soli
+    quando torna la rete o alla riapertura dell'app, nell'ordine in cui sono stati scritti
+    (id scelto da chi scrive: niente doppioni); senza rete il messaggio è "In attesa di
+    rete · parte da solo", "Non inviato" solo se il server lo rifiuta. **Spunte**: una
+    quando è arrivato, due dorate quando qualcuno l'ha letto ("Info: chi l'ha letto").
+    **Reazioni** (👍 ❤️ 😂 😮 😢 🔥 ⚽, una a testa) dal menu a pressione lunga, pillole sotto
+    la bolla. **Menzioni** @nome con i suggerimenti: il nome è evidenziato, la bolla di chi
+    è menzionato ha il bordo d'oro e la notifica arriva anche a canale silenziato.
+    **"Sta scrivendo…"** (e "registra un vocale…") sotto il nome del canale, sul canale
+    privato Realtime della chat. Si risponde anche trascinando la bolla verso destra; una,
+    due o tre emoji da sole si vedono grandi. Nella stanza vocale: **filtro rumore** con
+    l'AI di Agora (forte o normale, gratis entro i 10.000 minuti), avviso di rete instabile,
+    consiglio sugli auricolari quando si è in vivavoce, rete debole segnata sul volto.
 16. **Tornei** – foto o logo (caricati dal Direttivo), link al sito, squadra, stato,
     classifica facoltativa compilata dal Direttivo, partite collegate.
 17. **Colonna sonora** – ognuno sceglie un file audio dal proprio telefono (es. compilation
@@ -253,6 +277,13 @@ messages      + replay_path (JSON delle azioni con i tempi; l'audio in audio_pat
               un replay scade dopo 3 giorni
 -- dalla migrazione 0024
 profiles      + notify_prefs (jsonb: presenze|chat|notizie = false per spegnerle)
+-- dalla migrazione 0026
+channel_reads le vede chi vede il canale (spunte di lettura, in tempo reale)
+message_reactions message_id, user_id, channel_id (dal messaggio), emoji (null = tolta), updated_at
+messages      meta.mentions ripulito dal database (solo membri che vedono il canale, max 20)
+realtime.messages  regole del canale privato "chat:<id>" ("sta scrivendo")
+-- dalla migrazione 0027
+profiles      + card_stats (smallint[6], 1–99: le sei statistiche della carta, solo il Direttivo)
 -- dalla migrazione 0025
 profile_private id(→ profiles), first_name, last_name, birth_year, birth_date, updated_at
               (RLS: solo l'interessato e il Direttivo leggono e scrivono)
