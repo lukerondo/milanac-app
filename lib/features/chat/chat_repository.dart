@@ -123,6 +123,7 @@ class ChatMessage {
     this.localReplay,
     this.sending = false,
     this.failed = false,
+    this.waiting = false,
   });
 
   final String id;
@@ -159,11 +160,15 @@ class ChatMessage {
   /// Solo sul telefono di chi scrive: il messaggio compare subito, mentre parte...
   final bool sending;
 
-  /// ...oppure non è partito (si riprova toccandolo).
+  /// ...oppure non è partito (si riprova toccandolo)...
   final bool failed;
 
+  /// ...oppure aspetta la rete: riparte da solo appena torna (anche dopo aver
+  /// chiuso l'app), o subito toccandolo.
+  final bool waiting;
+
   /// Non ancora salvato dal server.
-  bool get isLocal => sending || failed;
+  bool get isLocal => sending || failed || waiting;
 
   bool get hasImage => imagePath != null || localImage != null;
   bool get hasAudio => audioPath != null || localAudio != null;
@@ -247,6 +252,7 @@ class ChatMessage {
     Uint8List? localAudio,
     bool? sending,
     bool? failed,
+    bool? waiting,
   }) => ChatMessage(
     id: id,
     channelId: channelId,
@@ -267,6 +273,7 @@ class ChatMessage {
     localReplay: localReplay,
     sending: sending ?? this.sending,
     failed: failed ?? this.failed,
+    waiting: waiting ?? this.waiting,
   );
 }
 
@@ -672,15 +679,28 @@ class _SupabaseChatRepository extends ChatRepository {
     Map<String, dynamic>? meta,
   }) async {
     final uid = _client.auth.currentUser!.id;
-    final stamp = DateTime.now().microsecondsSinceEpoch;
+    // I file prendono il nome dall'id del messaggio: un nuovo tentativo ritrova
+    // quelli già caricati invece di caricarne una seconda copia.
+    final name = id ?? '${DateTime.now().microsecondsSinceEpoch}';
     final storage = _client.storage.from(chatBucket);
     final uploaded = <String>[];
     Future<String> upload(String path, Uint8List bytes, String type) async {
-      await storage.uploadBinary(
-        path,
-        bytes,
-        fileOptions: FileOptions(contentType: type),
-      );
+      try {
+        await storage.uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: type),
+        );
+      } on StorageException catch (e) {
+        // Caricato da un tentativo precedente (nella propria cartella, con il
+        // nome di questo messaggio): è lui, va bene così.
+        final text = e.message.toLowerCase();
+        if (e.statusCode != '409' &&
+            !text.contains('already exists') &&
+            !text.contains('duplicate')) {
+          rethrow;
+        }
+      }
       uploaded.add(path);
       return path;
     }
@@ -700,16 +720,16 @@ class _SupabaseChatRepository extends ChatRepository {
     try {
       if (replay != null) {
         replayPath = await upload(
-          '$uid/$stamp.replay.json',
+          '$uid/$name.replay.json',
           replay,
           'application/json',
         );
       }
       if (image != null) {
-        imagePath = await upload('$uid/$stamp.jpg', image, 'image/jpeg');
+        imagePath = await upload('$uid/$name.jpg', image, 'image/jpeg');
       }
       if (audio != null) {
-        audioPath = await upload('$uid/$stamp.m4a', audio, 'audio/mp4');
+        audioPath = await upload('$uid/$name.m4a', audio, 'audio/mp4');
       }
     } catch (_) {
       // Il messaggio non parte: i file già caricati non servono più.

@@ -29,6 +29,24 @@ bool isNetworkError(Object e) {
       s.contains('xmlhttprequest error');
 }
 
+/// Errore che passa da solo: rete assente o lenta, server momentaneamente giù o
+/// occupato, sessione da rinnovare. Riprovare più tardi ha senso; gli altri errori
+/// (rifiutato dal database, file troppo grande...) restano uguali.
+bool isTransientError(Object e) {
+  if (isNetworkError(e) || e is AuthRetryableFetchException) return true;
+  bool busy(String? status) {
+    final code = int.tryParse(status ?? '');
+    return code != null && (code >= 500 || code == 408 || code == 429);
+  }
+
+  if (e is StorageException) return busy(e.statusCode);
+  if (e is PostgrestException) {
+    // Senza risposta del database PostgREST mette nel codice lo stato HTTP.
+    return busy(e.code) || e.code == 'PGRST301' || e.code == 'PGRST303';
+  }
+  return false;
+}
+
 /// Testo comprensibile per un errore: niente eccezioni grezze sullo schermo.
 /// [action] dice cosa non è riuscito ("Salvataggio non riuscito", ...).
 String friendlyError(Object e, {String action = 'Operazione non riuscita'}) {

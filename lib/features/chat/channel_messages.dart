@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
+import 'chat_outbox.dart';
 import 'chat_repository.dart';
 
 /// La conversazione caricata di un canale.
@@ -39,10 +40,39 @@ class ChannelHistory {
   final bool gap;
 }
 
-/// Com'è andato un invio: [error] se il messaggio non è partito (resta "non inviato"
-/// nella conversazione e si riprova toccandolo); [quoteDropped] se è partito senza
+/// Com'è andato un invio: [error] se il messaggio non è partito e aspetta l'utente
+/// (resta "non inviato" nella conversazione e si riprova toccandolo); [waiting] se
+/// non è partito per la rete e ripartirà da solo; [quoteDropped] se è partito senza
 /// citazione perché il messaggio citato è stato eliminato nel frattempo.
-typedef SendReport = ({Object? error, bool quoteDropped});
+typedef SendReport = ({Object? error, bool quoteDropped, bool waiting});
+
+const SendReport _nothingToReport = (
+  error: null,
+  quoteDropped: false,
+  waiting: false,
+);
+
+/// All'avvio (e a ogni cambio di account) i canali con messaggi rimasti in uscita sul
+/// telefono si aprono in sottofondo: ripartono senza entrare nella conversazione.
+final chatOutboxResumerProvider = Provider<void>((ref) {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return;
+  final outbox = ref.watch(chatOutboxProvider);
+  var alive = true;
+  ref.onDispose(() => alive = false);
+  unawaited(() async {
+    try {
+      final pending = await outbox.pending(userId);
+      if (!alive) return;
+      for (final channelId in {for (final m in pending) m.channelId}) {
+        // La conversazione si tiene in vita da sola finché ha messaggi in uscita.
+        ref.read(messagesProvider(channelId));
+      }
+    } catch (_) {
+      // Cartella illeggibile: si recupera aprendo le conversazioni.
+    }
+  }());
+});
 
 /// I messaggi di un canale: i più recenti in tempo reale, i precedenti a pagine
 /// scorrendo in cima, quelli appena scritti subito (prima che il server li salvi) e
@@ -111,10 +141,32 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
   /// Gli invii partono uno alla volta, nell'ordine in cui sono stati scritti.
   Future<void> _queue = Future.value();
 
+  /// I messaggi in uscita salvati sul telefono: ripartono anche dopo aver chiuso
+  /// l'app (o se il telefono si spegne).
+  late ChatOutbox _outbox;
+
+  /// L'account di cui si sono già riletti i messaggi in uscita dal telefono.
+  String? _restoredFor;
+
+  /// La rilettura è in corso: intanto la conversazione resta in memoria.
+  var _restoring = false;
+
+  /// Nuovi tentativi da soli dei messaggi fermi per la rete: dopo 2, 5, 15, 30
+  /// secondi (poi ogni 30), e subito quando dal server arriva qualcosa.
+  static const autoRetryDelays = [
+    Duration(seconds: 2),
+    Duration(seconds: 5),
+    Duration(seconds: 15),
+    Duration(seconds: 30),
+  ];
+  Timer? _autoRetry;
+  var _autoRetryFailures = 0;
+
   @override
   Stream<ChannelHistory> build() {
     final userId = ref.watch(currentUserIdProvider);
     final repo = ref.watch(chatRepositoryProvider);
+    _outbox = ref.watch(chatOutboxProvider);
     // Ricostruendo (nuovo tentativo del tempo reale) Riverpod lascia cadere i
     // "tieni in memoria" di prima: si riprende qui sotto, se serve.
     _hold = null;
@@ -131,9 +183,20 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       _stuckAt = null;
       _gapAfter = null;
       _generation++;
+      _autoRetry?.cancel();
+      _autoRetry = null;
+      _autoRetryFailures = 0;
+      _restoredFor = null;
+      _restoring = false;
+    }
+    final restore = userId != null && _restoredFor != userId;
+    if (restore) {
+      _restoredFor = userId;
+      _restoring = true;
     }
     _holdWhilePending();
     if (userId == null) return Stream.value(const ChannelHistory());
+    if (restore) unawaited(_restore(userId));
     // Senza nessuno che guarda (pagina chiusa con un messaggio in sospeso) Riverpod
     // mette lo stream in pausa: niente copie accumulate, l'ultima arriva alla ripresa.
     final out = _out = StreamController<ChannelHistory>(onResume: _emit);
@@ -165,6 +228,8 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       }
       _catchUpRetry?.cancel();
       _catchUpRetry = null;
+      _autoRetry?.cancel();
+      _autoRetry = null;
       out.close();
     });
     return out.stream;
@@ -188,7 +253,7 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
 
   void _holdWhilePending() {
     if (!ref.mounted) return;
-    if (_known.values.any((m) => m.isLocal)) {
+    if (_restoring || _known.values.any((m) => m.isLocal)) {
       _hold ??= ref.keepAlive();
     } else {
       _hold?.close();
@@ -219,6 +284,9 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
             m.createdAt.isAfter(oldest),
       );
       for (final m in fresh) {
+        // Arrivato dal server prima della risposta all'invio: sul telefono non
+        // serve più.
+        if (_known[m.id]?.isLocal ?? false) _forget(m.id);
         _known[m.id] = _merge(_known[m.id], m);
         _unconfirmed.remove(m.id);
       }
@@ -230,6 +298,8 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
     if (recover) _loadMoreFailed = false;
     _emit();
     if (recover) unawaited(_catchUp());
+    // Per lo stesso motivo ripartono subito i messaggi fermi per la rete.
+    _retryWaiting();
   }
 
   /// Una pagina intera di più recenti senza nessuno di quelli già visti: dopo una
@@ -405,27 +475,98 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
     );
     _known[m.id] = m;
     _emit();
+    // Sul telefono finché il server non lo salva: riparte anche dopo aver chiuso
+    // l'app.
+    final user = _userId;
+    if (user != null) unawaited(_outbox.put(user, m).catchError((Object _) {}));
     return _enqueue(m);
   }
 
-  /// Riprova un messaggio non partito (con lo stesso id: se in realtà era arrivato,
-  /// non si duplica).
+  /// Riprova subito un messaggio non partito o fermo per la rete (con lo stesso id:
+  /// se in realtà era arrivato, non si duplica).
   Future<SendReport> retry(String id) {
     final m = _known[id];
-    if (m == null || !m.failed) {
-      return Future.value((error: null, quoteDropped: false));
+    if (m == null || !(m.failed || m.waiting)) {
+      return Future.value(_nothingToReport);
     }
-    final again = m.copyWith(sending: true, failed: false);
+    final again = m.copyWith(sending: true, failed: false, waiting: false);
     _known[id] = again;
     _emit();
     return _enqueue(again);
   }
 
-  /// Toglie dalla conversazione un messaggio non partito.
+  /// Toglie dalla conversazione (e dal telefono) un messaggio non partito.
   void discard(String id) {
-    if (!(_known[id]?.failed ?? false)) return;
+    final m = _known[id];
+    if (m == null || !(m.failed || m.waiting)) return;
     _known.remove(id);
+    _forget(id);
+    _stopAutoRetryIfIdle();
     _emit();
+  }
+
+  /// I messaggi rimasti in uscita sul telefono (app chiusa mentre partivano):
+  /// ricompaiono nella conversazione e ripartono da soli.
+  Future<void> _restore(String userId) async {
+    try {
+      final saved = await _outbox.pending(userId, channelId: channelId);
+      if (!ref.mounted || _userId != userId) return;
+      var found = false;
+      for (final m in saved) {
+        final known = _known[m.id];
+        if (known != null || _deleted.contains(m.id)) {
+          // Già arrivato dal server (la risposta si era persa): non serve più.
+          if (known == null || !known.isLocal) _forget(m.id);
+          continue;
+        }
+        _known[m.id] = m.copyWith(sending: false, failed: false, waiting: true);
+        found = true;
+      }
+      // Prima dei più recenti dal server la conversazione non si mostra (sembrerebbe
+      // vuota): i recuperati arrivano con loro.
+      if (found) _retryWaiting(show: _hasMore != null);
+    } catch (_) {
+      // Cartella illeggibile: non c'è niente da recuperare.
+    } finally {
+      if (ref.mounted && _userId == userId) {
+        _restoring = false;
+        _holdWhilePending();
+      }
+    }
+  }
+
+  void _forget(String id) {
+    final user = _userId;
+    if (user != null) {
+      unawaited(_outbox.remove(user, id).catchError((Object _) {}));
+    }
+  }
+
+  /// Rimanda subito, in ordine, i messaggi fermi per la rete.
+  void _retryWaiting({bool show = true}) {
+    final waiting = _known.values.where((m) => m.waiting).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    if (waiting.isEmpty) return;
+    _autoRetry?.cancel();
+    _autoRetry = null;
+    for (final m in waiting) {
+      final again = m.copyWith(sending: true, waiting: false);
+      _known[m.id] = again;
+      unawaited(_enqueue(again));
+    }
+    if (show) _emit();
+  }
+
+  /// Il prossimo tentativo da solo, sempre più distanziato finché la rete manca.
+  void _scheduleAutoRetry() {
+    if (_autoRetry != null || !ref.mounted) return;
+    final delays = autoRetryDelays;
+    final delay = delays[math.min(_autoRetryFailures, delays.length - 1)];
+    _autoRetryFailures++;
+    _autoRetry = Timer(delay, () {
+      _autoRetry = null;
+      if (ref.mounted) _retryWaiting();
+    });
   }
 
   Future<SendReport> _enqueue(ChatMessage m) {
@@ -436,6 +577,15 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
   }
 
   Future<SendReport> _deliver(ChatRepository repo, ChatMessage m) async {
+    // Uno scritto prima aspetta la rete: si aspetta con lui, così i messaggi
+    // arrivano nell'ordine in cui sono stati scritti.
+    if (_known.values.any(
+      (o) => o.waiting && o.id != m.id && o.createdAt.isBefore(m.createdAt),
+    )) {
+      _put(m.copyWith(sending: false, waiting: true));
+      _scheduleAutoRetry();
+      return (error: null, quoteDropped: false, waiting: true);
+    }
     var message = m;
     var quoteDropped = false;
     while (true) {
@@ -450,12 +600,12 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
           replyTo: message.replyTo,
         );
         _sent(message, saved);
-        return (error: null, quoteDropped: quoteDropped);
+        return (error: null, quoteDropped: quoteDropped, waiting: false);
       } catch (e) {
         if (e is PostgrestException && e.code == '23505') {
           // Era già arrivato (si era persa la risposta): niente doppione.
           _sent(message, null);
-          return (error: null, quoteDropped: quoteDropped);
+          return (error: null, quoteDropped: quoteDropped, waiting: false);
         }
         final quote = message.replyTo;
         if (quote != null && !await _exists(repo, quote)) {
@@ -466,8 +616,15 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
           _put(message);
           continue;
         }
+        if (isTransientError(e)) {
+          // Rete assente o server occupato: riparte da solo (anche dopo aver
+          // chiuso l'app), senza chiedere niente a nessuno.
+          _put(message.copyWith(sending: false, waiting: true));
+          _scheduleAutoRetry();
+          return (error: null, quoteDropped: quoteDropped, waiting: true);
+        }
         _put(message.copyWith(sending: false, failed: true));
-        return (error: e, quoteDropped: quoteDropped);
+        return (error: e, quoteDropped: quoteDropped, waiting: false);
       }
     }
   }
@@ -486,10 +643,21 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
     // Tolto nel frattempo (cambio di account) o già arrivato dallo stream.
     if (current == null || !current.isLocal) return;
     _known[local.id] = saved == null
-        ? local.copyWith(sending: false, failed: false)
+        ? local.copyWith(sending: false, failed: false, waiting: false)
         : _merge(local, saved);
     _unconfirmed.add(local.id);
+    _forget(local.id);
+    // La rete c'è: i prossimi tentativi ripartono dal primo intervallo.
+    _autoRetryFailures = 0;
+    _stopAutoRetryIfIdle();
     _emit();
+  }
+
+  /// Nessun messaggio aspetta più la rete: il prossimo tentativo non serve.
+  void _stopAutoRetryIfIdle() {
+    if (_known.values.any((m) => m.waiting)) return;
+    _autoRetry?.cancel();
+    _autoRetry = null;
   }
 
   /// Aggiorna un messaggio ancora locale (non se nel frattempo è arrivato dal server:

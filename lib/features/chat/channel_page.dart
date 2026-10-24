@@ -268,7 +268,10 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
 
   void _notice(String text) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      // Un avviso alla volta: più messaggi scritti senza rete non ne accodano tanti.
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(text)));
     }
   }
 
@@ -343,6 +346,12 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     if (report.quoteDropped) {
       _notice(
         'Il messaggio citato è stato eliminato: inviato senza citazione.',
+      );
+    }
+    if (report.waiting) {
+      _notice(
+        'Senza rete: il messaggio partirà da solo appena torna, anche se '
+        "chiudi l'app.",
       );
     }
     if (error != null) {
@@ -1381,7 +1390,8 @@ class _Bubble extends ConsumerWidget {
   final Widget? quote;
 
   Future<void> _actions(BuildContext context) async {
-    final failed = message.failed;
+    // Non partito, o fermo per la rete: si rimanda subito o si toglie.
+    final failed = message.failed || message.waiting;
     final reply = onReply;
     final canReply = reply != null && !message.isLocal;
     final canCopy = message.hasText;
@@ -1396,7 +1406,7 @@ class _Bubble extends ConsumerWidget {
             if (failed)
               ListTile(
                 leading: const Icon(Icons.refresh_rounded),
-                title: const Text('Riprova'),
+                title: Text(message.waiting ? 'Invia adesso' : 'Riprova'),
                 onTap: () => Navigator.pop(c, 'retry'),
               ),
             if (canReply)
@@ -1440,8 +1450,28 @@ class _Bubble extends ConsumerWidget {
     }
   }
 
-  /// Ora (con l'orologio finché è in invio) oppure "Non inviato".
+  /// Ora (con l'orologio finché è in invio), "In attesa di rete" oppure "Non
+  /// inviato".
   Widget _status(AppPalette p) {
+    if (message.waiting) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.cloud_off_rounded, size: 14, color: p.warning),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              'In attesa di rete · parte da solo',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: p.warning,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     if (message.failed) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -1631,7 +1661,7 @@ class _Bubble extends ConsumerWidget {
           ],
           Flexible(
             child: GestureDetector(
-              onTap: message.failed ? onRetry : null,
+              onTap: message.failed || message.waiting ? onRetry : null,
               onLongPress: () => _actions(context),
               child: bubble,
             ),

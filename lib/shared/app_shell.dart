@@ -7,6 +7,7 @@ import '../core/auth/profile.dart';
 import '../core/auth/providers.dart';
 import '../core/teams.dart';
 import '../core/theme.dart';
+import '../features/chat/channel_messages.dart' show chatOutboxResumerProvider;
 import '../features/chat/chat_repository.dart';
 import '../features/musica/musica_page.dart';
 import '../features/musica/soundtrack.dart';
@@ -33,6 +34,8 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unread = ref.watch(chatUnreadProvider);
+    // I messaggi rimasti in uscita sul telefono ripartono subito dopo l'accesso.
+    ref.watch(chatOutboxResumerProvider);
     Widget icon(MainTab t, IconData data) => t == MainTab.chat && unread > 0
         ? Badge(label: Text(unread > 99 ? '99+' : '$unread'), child: Icon(data))
         : Icon(data);
