@@ -78,6 +78,11 @@ class VoiceRoomBanner extends ConsumerWidget {
           title: 'Sei nella stanza vocale',
           subtitle: connecting || call.since == null
               ? const Text('Entro nella stanza…')
+              : call.reconnecting
+              ? const Text(
+                  'Rete instabile: mi ricollego…',
+                  style: TextStyle(color: MilanacColors.goldLight),
+                )
               : VoiceCallTimer(
                   since: call.since!,
                   prefix: '#${channel.name} · ',

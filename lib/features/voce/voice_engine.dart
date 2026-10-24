@@ -16,6 +16,16 @@ abstract class VoiceEngine {
   /// rinnovato): il messaggio è già pronto per l'utente.
   Stream<VoiceException> get failures;
 
+  /// La rete è caduta e la stanza si sta ricollegando da sola (true), oppure è
+  /// tornata (false).
+  Stream<bool> get reconnecting;
+
+  /// Dove esce l'audio, a ogni cambio (cuffie collegate, vivavoce...).
+  Stream<VoiceRoute> get route;
+
+  /// I numeri utente Agora con la rete debole in questo momento (il proprio compreso).
+  Stream<Set<int>> get weakNetwork;
+
   /// Entra nella stanza con il proprio numero utente; [refreshToken] fornisce
   /// un biglietto nuovo quando quello in uso sta per scadere (dopo un'ora).
   /// Se nel frattempo arriva [dispose], si interrompe con un errore.
@@ -23,6 +33,7 @@ abstract class VoiceEngine {
     VoiceTicket ticket,
     int uid, {
     Future<String> Function()? refreshToken,
+    NoiseFilter noiseFilter = NoiseFilter.forte,
   });
 
   /// Solo dopo [join].
@@ -30,6 +41,9 @@ abstract class VoiceEngine {
 
   /// Solo dopo [join].
   Future<void> setSpeakerphone(bool on);
+
+  /// Solo dopo [join].
+  Future<void> setNoiseFilter(NoiseFilter filter);
 
   /// Esce dalla stanza e libera il motore (anche a join in corso; chiamarlo più
   /// volte non fa danni).
@@ -86,6 +100,9 @@ class AgoraVoiceEngine implements VoiceEngine {
   RtcEngine? _engine;
   final _speaking = StreamController<Set<int>>.broadcast();
   final _failures = StreamController<VoiceException>.broadcast();
+  final _reconnecting = StreamController<bool>.broadcast();
+  final _route = StreamController<VoiceRoute>.broadcast();
+  final _weakNetwork = StreamController<Set<int>>.broadcast();
   // L'esito può arrivare (anche come errore) prima che qualcuno lo aspetti.
   final _joined = Completer<void>()..future.ignore();
   Future<void>? _setup;
@@ -96,7 +113,9 @@ class AgoraVoiceEngine implements VoiceEngine {
   var _renewing = false;
   var _local = const <int>{};
   var _remote = const <int>{};
+  final _weak = <int>{};
   int _uid = 0;
+  var _filter = NoiseFilter.forte;
 
   @override
   Stream<Set<int>> get speaking => _speaking.stream;
@@ -105,13 +124,24 @@ class AgoraVoiceEngine implements VoiceEngine {
   Stream<VoiceException> get failures => _failures.stream;
 
   @override
+  Stream<bool> get reconnecting => _reconnecting.stream;
+
+  @override
+  Stream<VoiceRoute> get route => _route.stream;
+
+  @override
+  Stream<Set<int>> get weakNetwork => _weakNetwork.stream;
+
+  @override
   Future<void> join(
     VoiceTicket ticket,
     int uid, {
     Future<String> Function()? refreshToken,
+    NoiseFilter noiseFilter = NoiseFilter.forte,
   }) async {
     _uid = uid;
     _refreshToken = refreshToken;
+    _filter = noiseFilter;
     final setup = Completer<void>();
     _setup = setup.future;
     try {
@@ -121,7 +151,10 @@ class AgoraVoiceEngine implements VoiceEngine {
         RtcEngineContext(
           appId: ticket.appId,
           channelProfile: ChannelProfileType.channelProfileCommunication,
-          audioScenario: AudioScenarioType.audioScenarioDefault,
+          // Scenario "chat di gruppo": volume di chiamata sempre attivo, così la
+          // cancellazione dell'eco del telefono lavora anche quando si accende e
+          // spegne il microfono (con lo scenario normale il volume cambiava tipo).
+          audioScenario: AudioScenarioType.audioScenarioChatroom,
         ),
       );
       _checkOpen();
@@ -140,6 +173,16 @@ class AgoraVoiceEngine implements VoiceEngine {
             }
           },
           onConnectionStateChanged: (_, state, reason) {
+            // Rete caduta: Agora riprova da solo (anche per minuti). Lo si dice
+            // subito, invece di lasciar credere che gli altri tacciano.
+            if (state == ConnectionStateType.connectionStateReconnecting) {
+              _add(_reconnecting, true);
+              return;
+            }
+            if (state == ConnectionStateType.connectionStateConnected) {
+              _add(_reconnecting, false);
+              return;
+            }
             if (state != ConnectionStateType.connectionStateFailed) return;
             if (_joined.isCompleted) {
               // Agora ha smesso di riprovare (rete assente da 20 minuti,
@@ -154,6 +197,15 @@ class AgoraVoiceEngine implements VoiceEngine {
             }
           },
           onAudioVolumeIndication: (_, speakers, _, _) => _onVolumes(speakers),
+          onAudioRoutingChanged: (routing) {
+            final route = _routeOf(routing);
+            if (route != null) _add(_route, route);
+          },
+          onNetworkQuality: (_, remoteUid, tx, rx) =>
+              _onQuality(remoteUid, tx, rx),
+          onUserOffline: (_, remoteUid, _) {
+            if (_weak.remove(remoteUid)) _add(_weakNetwork, Set.of(_weak));
+          },
           // Agora avvisa 30 secondi prima della scadenza; se il biglietto è già
           // scaduto lo chiede di nuovo: si prova ancora per qualche secondo.
           onTokenPrivilegeWillExpire: (_, _) =>
@@ -162,6 +214,9 @@ class AgoraVoiceEngine implements VoiceEngine {
         ),
       );
       await engine.enableAudio();
+      _checkOpen();
+      // Il filtro del rumore va acceso prima di entrare.
+      await _applyNoiseFilter();
       _checkOpen();
       await engine.enableAudioVolumeIndication(
         interval: 300,
@@ -257,6 +312,50 @@ class AgoraVoiceEngine implements VoiceEngine {
     if (!_speaking.isClosed) _speaking.add({..._local, ..._remote});
   }
 
+  /// Rete debole: Agora dà un voto ogni 2 secondi per sé (uid 0) e per gli altri.
+  /// Conta l'invio (come gli altri ci sentono); per chi non invia (in muto) la
+  /// ricezione.
+  void _onQuality(int uid, QualityType tx, QualityType rx) {
+    final who = uid == 0 ? _uid : uid;
+    final quality = tx == QualityType.qualityUnknown ? rx : tx;
+    final weak = switch (quality) {
+      QualityType.qualityBad ||
+      QualityType.qualityVbad ||
+      QualityType.qualityDown => true,
+      _ => false,
+    };
+    final changed = weak ? _weak.add(who) : _weak.remove(who);
+    if (changed) _add(_weakNetwork, Set.of(_weak));
+  }
+
+  static VoiceRoute? _routeOf(int routing) => switch (routing) {
+    3 || 4 => VoiceRoute.vivavoce, // vivavoce, altoparlante esterno
+    1 => VoiceRoute.auricolare,
+    0 || 2 || 6 => VoiceRoute.cuffie, // con o senza microfono, USB
+    5 || 10 => VoiceRoute.bluetooth,
+    _ => null, // predefinito, HDMI, AirPlay...: niente da dire
+  };
+
+  void _add<T>(StreamController<T> controller, T value) {
+    if (!controller.isClosed) controller.add(value);
+  }
+
+  Future<void> _applyNoiseFilter() async {
+    final engine = _engine;
+    if (engine == null) return;
+    try {
+      await engine.setAINSMode(
+        enabled: true,
+        mode: _filter == NoiseFilter.forte
+            ? AudioAinsMode.ainsModeAggressive
+            : AudioAinsMode.ainsModeBalanced,
+      );
+    } catch (_) {
+      // Libreria del filtro assente o telefono troppo vecchio: resta la riduzione
+      // del rumore di base del motore.
+    }
+  }
+
   @override
   Future<void> setMuted(bool muted) async =>
       _engine?.muteLocalAudioStream(muted);
@@ -264,6 +363,12 @@ class AgoraVoiceEngine implements VoiceEngine {
   @override
   Future<void> setSpeakerphone(bool on) async =>
       _engine?.setEnableSpeakerphone(on);
+
+  @override
+  Future<void> setNoiseFilter(NoiseFilter filter) async {
+    _filter = filter;
+    await _applyNoiseFilter();
+  }
 
   @override
   Future<void> dispose() => _disposed ??= _release();
@@ -275,6 +380,9 @@ class AgoraVoiceEngine implements VoiceEngine {
     }
     unawaited(_speaking.close());
     unawaited(_failures.close());
+    unawaited(_reconnecting.close());
+    unawaited(_route.close());
+    unawaited(_weakNetwork.close());
     // Prima finiscono le chiamate della join già partite (inizializzazione compresa):
     // liberare il motore a metà potrebbe bloccarle.
     final setup = _setup;
@@ -294,19 +402,24 @@ class AgoraVoiceEngine implements VoiceEngine {
 /// Motore finto: nessun audio, ma [speakingUid] risulta sempre "sta parlando".
 ///
 /// Nei test: [connecting] tiene la join in sospeso finché non si completa (rete
-/// lenta), [fail] fa cadere la chiamata; [joined], [muted], [speakerphone] e
-/// [disposed] dicono che cosa ha ricevuto il motore.
+/// lenta), [fail] fa cadere la chiamata, [reconnect], [routeTo] e [weak] simulano
+/// la rete che va e viene, le cuffie e la rete debole; [joined], [muted],
+/// [speakerphone], [noiseFilter] e [disposed] dicono che cosa ha ricevuto il motore.
 class DemoVoiceEngine implements VoiceEngine {
   DemoVoiceEngine({this.speakingUid, this.connecting});
   final int? speakingUid;
   final Future<void>? connecting;
   final _speaking = StreamController<Set<int>>.broadcast();
   final _failures = StreamController<VoiceException>.broadcast();
+  final _reconnecting = StreamController<bool>.broadcast();
+  final _route = StreamController<VoiceRoute>.broadcast();
+  final _weakNetwork = StreamController<Set<int>>.broadcast();
   final _released = Completer<void>();
 
   bool joined = false;
   bool muted = false;
   bool speakerphone = false;
+  NoiseFilter? noiseFilter;
   bool get disposed => _released.isCompleted;
 
   @override
@@ -316,21 +429,45 @@ class DemoVoiceEngine implements VoiceEngine {
   Stream<VoiceException> get failures => _failures.stream;
 
   @override
+  Stream<bool> get reconnecting => _reconnecting.stream;
+
+  @override
+  Stream<VoiceRoute> get route => _route.stream;
+
+  @override
+  Stream<Set<int>> get weakNetwork => _weakNetwork.stream;
+
+  @override
   Future<void> join(
     VoiceTicket ticket,
     int uid, {
     Future<String> Function()? refreshToken,
+    NoiseFilter noiseFilter = NoiseFilter.forte,
   }) async {
     final wait = connecting;
     if (wait != null) await Future.any([wait, _released.future]);
     if (disposed) throw const VoiceException('Sei uscito dalla stanza.');
     joined = true;
+    this.noiseFilter = noiseFilter;
     _speaking.add({?speakingUid});
   }
 
   /// La connessione cade dopo l'ingresso (come Agora che smette di riprovare).
   void fail(String message) {
     if (!_failures.isClosed) _failures.add(VoiceException(message));
+  }
+
+  /// La rete cade (true) e torna (false), come Agora che si ricollega da solo.
+  void reconnect(bool on) {
+    if (!_reconnecting.isClosed) _reconnecting.add(on);
+  }
+
+  void routeTo(VoiceRoute route) {
+    if (!_route.isClosed) _route.add(route);
+  }
+
+  void weak(Set<int> uids) {
+    if (!_weakNetwork.isClosed) _weakNetwork.add(uids);
   }
 
   @override
@@ -344,10 +481,18 @@ class DemoVoiceEngine implements VoiceEngine {
   }
 
   @override
+  Future<void> setNoiseFilter(NoiseFilter filter) async {
+    noiseFilter = filter;
+  }
+
+  @override
   Future<void> dispose() async {
     if (disposed) return;
     _released.complete();
     unawaited(_speaking.close());
     unawaited(_failures.close());
+    unawaited(_reconnecting.close());
+    unawaited(_route.close());
+    unawaited(_weakNetwork.close());
   }
 }

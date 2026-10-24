@@ -87,6 +87,14 @@ class VoiceTicket {
   final String channel;
 }
 
+/// Dove esce l'audio della stanza: dal vivavoce gli altri possono sentire l'eco.
+enum VoiceRoute { vivavoce, auricolare, cuffie, bluetooth }
+
+/// Filtro del rumore (riduzione con l'AI di Agora, gratis fino a 10.000 minuti al
+/// mese come la voce): forte toglie la TV e il gioco in sottofondo, normale lascia la
+/// voce più naturale.
+enum NoiseFilter { forte, normale }
+
 /// Qualcosa è andato storto nella stanza: [message] è già pronto per l'utente.
 class VoiceException implements Exception {
   const VoiceException(this.message);

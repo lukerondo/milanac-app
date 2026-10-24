@@ -752,6 +752,136 @@ void main() {
     });
   });
 
+  testWidgets('Filtro rumore: forte di serie, cambia subito nel motore e resta '
+      'per la volta dopo', (tester) async {
+    final c = _Call();
+    await c.notifier.enter(_generale);
+    final first = c.engines.single;
+    expect(c.state.noiseFilter, NoiseFilter.forte);
+    expect(first.noiseFilter, NoiseFilter.forte);
+
+    await c.notifier.setNoiseFilter(NoiseFilter.normale);
+    expect(c.state.noiseFilter, NoiseFilter.normale);
+    expect(first.noiseFilter, NoiseFilter.normale);
+
+    // Il motore nuovo parte già con la scelta salvata sul telefono.
+    await c.notifier.leave();
+    await c.notifier.enter(_tattiche);
+    final second = c.engines.last;
+    expect(second, isNot(same(first)));
+    expect(second.noiseFilter, NoiseFilter.normale);
+    expect(c.state.noiseFilter, NoiseFilter.normale);
+    await c.notifier.leave();
+    c.container.dispose();
+  });
+
+  testWidgets('Rete che cade e torna, uscita dell\'audio e rete debole '
+      'arrivano alla chiamata; uscendo non resta niente', (tester) async {
+    final c = _Call();
+    await c.notifier.enter(_generale);
+    final engine = c.engines.single;
+
+    engine.reconnect(true);
+    await tester.pump();
+    expect(c.state.reconnecting, isTrue);
+    engine.reconnect(false);
+    await tester.pump();
+    expect(c.state.reconnecting, isFalse);
+
+    engine
+      ..routeTo(VoiceRoute.cuffie)
+      ..weak({agoraUidFor('demo')});
+    await tester.pump();
+    expect(c.state.route, VoiceRoute.cuffie);
+    expect(c.state.weak, {agoraUidFor('demo')});
+
+    engine.reconnect(true);
+    await tester.pump();
+    await c.notifier.leave();
+    expect(c.state.reconnecting, isFalse);
+    expect(c.state.route, isNull);
+    expect(c.state.weak, isEmpty);
+    // Il motore chiuso non cambia più niente.
+    engine.reconnect(true);
+    await tester.pump();
+    expect(c.state.reconnecting, isFalse);
+    c.container.dispose();
+  });
+
+  testWidgets('Stanza: filtro rumore, avviso di rete instabile (anche nella '
+      'striscia), consiglio sul vivavoce e rete debole', (tester) async {
+    final engines = <DemoVoiceEngine>[];
+    final container = await startAppAt(
+      tester,
+      todayAt(17),
+      overrides: [
+        voiceEngineFactoryProvider.overrideWithValue(() {
+          final engine = DemoVoiceEngine(speakingUid: agoraUidFor('p2'));
+          engines.add(engine);
+          return engine;
+        }),
+      ],
+    );
+    await goToPath(tester, '/chat/milanac');
+    await tester.tap(find.text('Entra'));
+    await tester.pumpAndSettle();
+    final room = find.byType(VoiceRoomPage);
+    Finder inRoom(Finder f) => find.descendant(of: room, matching: f);
+    final engine = engines.single;
+
+    // Filtro rumore: forte di serie; "Normale" vale subito.
+    expect(inRoom(find.text('Filtro rumore')), findsOneWidget);
+    expect(inRoom(find.textContaining('Toglie la TV')), findsOneWidget);
+    await tester.ensureVisible(inRoom(find.text('Normale')));
+    await tester.pumpAndSettle();
+    await tester.tap(inRoom(find.text('Normale')));
+    await tester.pumpAndSettle();
+    expect(container.read(voiceCallProvider).noiseFilter, NoiseFilter.normale);
+    expect(engine.noiseFilter, NoiseFilter.normale);
+    expect(inRoom(find.textContaining('Voce più naturale')), findsOneWidget);
+
+    // Vivavoce con altri dentro: il consiglio sugli auricolari; con le cuffie no.
+    final tip = inRoom(find.textContaining('Sei in vivavoce'));
+    expect(tip, findsNothing);
+    engine.routeTo(VoiceRoute.vivavoce);
+    await tester.pumpAndSettle();
+    expect(tip, findsOneWidget);
+    engine.routeTo(VoiceRoute.cuffie);
+    await tester.pumpAndSettle();
+    expect(tip, findsNothing);
+
+    // Rete debole di Luca (in muto): lo dice al posto di "Microfono spento".
+    engine.weak({agoraUidFor('p3')});
+    await tester.pumpAndSettle();
+    expect(inRoom(find.text('Rete debole')), findsOneWidget);
+    expect(inRoom(find.byIcon(Icons.signal_wifi_bad_rounded)), findsOneWidget);
+    engine.weak({});
+    await tester.pumpAndSettle();
+    expect(inRoom(find.text('Rete debole')), findsNothing);
+
+    // Rete che cade: l'avviso nella stanza e nella striscia; poi torna il tempo.
+    // La rotellina gira sempre: niente pumpAndSettle finché si vede (l'avviso del
+    // motore arriva dopo il disegno: lo mostra il fotogramma dopo).
+    engine.reconnect(true);
+    await tester.pump();
+    await tester.pump();
+    expect(inRoom(find.textContaining('mi sto ricollegando')), findsOneWidget);
+    await tester.tap(
+      find.byTooltip('Riduci la stanza a una striscia e torna alla chat'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Rete instabile: mi ricollego…'), findsOneWidget);
+    engine.reconnect(false);
+    await tester.pumpAndSettle();
+    expect(find.text('Rete instabile: mi ricollego…'), findsNothing);
+    expect(find.text('#Milan AC · 0:00'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Esci dalla stanza'));
+    await tester.pumpAndSettle();
+    expect(engine.disposed, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   test('Stanze aperte: con un altro account si ricaricano, senza account '
       'nessuna', () async {
     final repo = _TestRepo();

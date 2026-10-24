@@ -77,6 +77,8 @@ class _VoiceRoomView extends ConsumerWidget {
         isMe: isMe,
         speaking: s.agoraUid != null && call.speaking.contains(s.agoraUid),
         muted: isMe && inThis ? call.muted : s.muted,
+        // La qualità della rete si conosce solo da dentro la stanza.
+        weak: inThis && s.agoraUid != null && call.weak.contains(s.agoraUid),
       );
     }
 
@@ -144,6 +146,17 @@ class _VoiceRoomView extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  // Fuori dall'elenco: si vede anche dopo aver scorso in basso.
+                  if (inThis && call.reconnecting)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(24, 16, 24, 0),
+                      child: _Notice(
+                        busy: true,
+                        warning: true,
+                        text:
+                            'Rete instabile: mi sto ricollegando alla stanza…',
+                      ),
+                    ),
                   Expanded(
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
@@ -177,6 +190,26 @@ class _VoiceRoomView extends ConsumerWidget {
                                 fontSize: 15,
                                 color: p.textMuted,
                               ),
+                            ),
+                          ],
+                        ],
+                        if (inThis && call.phase == VoicePhase.inRoom) ...[
+                          const SizedBox(height: 28),
+                          _NoiseFilterPicker(
+                            value: call.noiseFilter,
+                            onChanged: notifier.setNoiseFilter,
+                          ),
+                          // Dal vivavoce la voce degli altri rientra nel microfono:
+                          // con più persone dentro lo si ricorda.
+                          if (call.route == VoiceRoute.vivavoce &&
+                              sessions.length > 1) ...[
+                            const SizedBox(height: 12),
+                            const _Notice(
+                              icon: Icons.headset_mic_rounded,
+                              text:
+                                  'Sei in vivavoce: se gli altri sentono '
+                                  'l\'eco, usa gli auricolari o abbassa il '
+                                  'volume.',
                             ),
                           ],
                         ],
@@ -342,11 +375,15 @@ class _Participant extends StatelessWidget {
     required this.isMe,
     required this.speaking,
     required this.muted,
+    this.weak = false,
   });
   final Member? member;
   final bool isMe;
   final bool speaking;
   final bool muted;
+
+  /// Rete debole: la sua voce può arrivare a scatti (o non sentire bene gli altri).
+  final bool weak;
 
   @override
   Widget build(BuildContext context) {
@@ -359,6 +396,8 @@ class _Participant extends StatelessWidget {
         : (m.firstName ?? m.displayName.split(' ').first);
     final status = speaking
         ? 'Sta parlando'
+        : weak
+        ? 'Rete debole'
         : muted
         ? 'Microfono spento'
         : 'In ascolto';
@@ -420,6 +459,25 @@ class _Participant extends StatelessWidget {
                     ),
                   ),
                 ),
+              if (weak)
+                Positioned(
+                  right: 2,
+                  top: 2,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: p.warningBg,
+                      border: Border.all(color: p.bg, width: 2),
+                    ),
+                    child: Icon(
+                      Icons.signal_wifi_bad_rounded,
+                      size: 18,
+                      color: p.warning,
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 10),
@@ -439,7 +497,11 @@ class _Participant extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: speaking ? p.accentText : p.textMuted,
+              color: speaking
+                  ? p.accentText
+                  : weak
+                  ? p.warning
+                  : p.textMuted,
             ),
           ),
         ],
@@ -521,6 +583,108 @@ class _RoundAction extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Avviso dentro la stanza: rete instabile (con la rotellina) o un consiglio.
+class _Notice extends StatelessWidget {
+  const _Notice({
+    required this.text,
+    this.icon,
+    this.busy = false,
+    this.warning = false,
+  });
+  final String text;
+  final IconData? icon;
+  final bool busy;
+  final bool warning;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final color = warning ? p.warning : p.accentText;
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: warning ? p.warningBg : p.surfaceHigh,
+          borderRadius: BorderRadius.circular(14),
+          border: warning ? null : Border.all(color: p.border),
+        ),
+        child: Row(
+          children: [
+            if (busy)
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: color,
+                ),
+              )
+            else
+              Icon(icon, size: 22, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(fontSize: 15, height: 1.3, color: p.text),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Filtro del rumore: forte (TV e gioco in sottofondo) o normale (voce più
+/// naturale). La scelta vale subito e resta sul telefono.
+class _NoiseFilterPicker extends StatelessWidget {
+  const _NoiseFilterPicker({required this.value, required this.onChanged});
+  final NoiseFilter value;
+  final ValueChanged<NoiseFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final forte = value == NoiseFilter.forte;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.noise_aware_rounded, size: 22, color: p.accentText),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Filtro rumore',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: p.text,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          forte
+              ? 'Toglie la TV e il gioco in sottofondo dalla tua voce.'
+              : 'Voce più naturale, ma passa più rumore di fondo.',
+          style: TextStyle(fontSize: 14, height: 1.3, color: p.textMuted),
+        ),
+        const SizedBox(height: 10),
+        SegmentedTabs(
+          labels: const ['Normale', 'Forte'],
+          selected: forte ? 1 : 0,
+          onSelected: (i) =>
+              onChanged(i == 1 ? NoiseFilter.forte : NoiseFilter.normale),
+        ),
+      ],
     );
   }
 }

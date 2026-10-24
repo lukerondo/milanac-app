@@ -58,10 +58,17 @@ android {
 
     // La stanza vocale è solo audio: le estensioni facoltative di Agora (codec video, lip sync,
     // audio spaziale, riconoscimento del volto, effetti...) restano fuori dall'APK, circa 40 MB
-    // in meno per architettura. Il nucleo audio (libagora-rtc-sdk) resta.
+    // in meno per architettura. Restano il nucleo audio (libagora-rtc-sdk) e il filtro del
+    // rumore con l'AI (libagora_ai_noise_suppression_extension.so, circa 3 MB), che toglie la
+    // TV e il gioco in sottofondo. I modelli sono "glob": [!x] vuol dire "non x".
     packaging {
         jniLibs {
-            excludes += setOf("**/libagora_*_extension.so")
+            excludes += setOf(
+                "**/libagora_[!a]*_extension.so", // video, volto, lip sync, spaziale...
+                "**/libagora_a[!i]*_extension.so", // audio_beauty
+                "**/libagora_ai_[!n]*_extension.so", // ai_echo_cancellation (solo su richiesta ad Agora)
+                "**/libagora_ai_noise_suppression_?*_extension.so", // varianti (bassa latenza)
+            )
             // Con -Pmilanac.compressLibs=true le librerie native si comprimono nell'APK:
             // si scarica in metà spazio (lo usa l'APK universale a 32 e 64 bit). L'APK
             // arm64 le tiene non compresse: pesa di più da scaricare ma meno da installato.

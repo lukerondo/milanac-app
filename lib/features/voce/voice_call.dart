@@ -10,6 +10,7 @@ import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import '../../core/local_flags.dart';
 import '../../core/push/push_service.dart' show messengerKey;
 import '../chat/chat_repository.dart';
 import 'voice_engine.dart';
@@ -32,6 +33,10 @@ class VoiceCallState {
     this.speaking = const {},
     this.error,
     this.since,
+    this.reconnecting = false,
+    this.route,
+    this.weak = const {},
+    this.noiseFilter = NoiseFilter.forte,
   });
 
   final VoicePhase phase;
@@ -49,6 +54,18 @@ class VoiceCallState {
   final String? error;
   final DateTime? since;
 
+  /// La rete è caduta e la stanza si sta ricollegando da sola.
+  final bool reconnecting;
+
+  /// Dove esce l'audio (null finché il telefono non lo dice).
+  final VoiceRoute? route;
+
+  /// Numeri utente Agora con la rete debole (il proprio compreso).
+  final Set<int> weak;
+
+  /// Il filtro del rumore scelto (salvato sul telefono).
+  final NoiseFilter noiseFilter;
+
   bool get isActive =>
       phase == VoicePhase.connecting || phase == VoicePhase.inRoom;
 
@@ -62,6 +79,10 @@ class VoiceCallState {
     bool? speakerphone,
     Set<int>? speaking,
     DateTime? since,
+    bool? reconnecting,
+    VoiceRoute? route,
+    Set<int>? weak,
+    NoiseFilter? noiseFilter,
   }) => VoiceCallState(
     phase: phase ?? this.phase,
     channel: channel,
@@ -72,14 +93,22 @@ class VoiceCallState {
     speaking: speaking ?? this.speaking,
     error: error,
     since: since ?? this.since,
+    reconnecting: reconnecting ?? this.reconnecting,
+    route: route ?? this.route,
+    weak: weak ?? this.weak,
+    noiseFilter: noiseFilter ?? this.noiseFilter,
   );
 }
+
+/// Dove si ricorda il filtro del rumore scelto (sul telefono).
+const noiseFilterKey = 'voce.filtro_rumore';
 
 class VoiceCall extends Notifier<VoiceCallState> {
   VoiceEngine? _engine;
   Timer? _heartbeat;
-  StreamSubscription<Set<int>>? _speakSub;
-  StreamSubscription<VoiceException>? _failSub;
+
+  /// Gli ascolti del motore: chi parla, cadute, rete, uscita dell'audio.
+  final _engineSubs = <StreamSubscription<Object?>>[];
   _OnResume? _onResume;
   late VoiceForeground _foreground;
   var _foregroundOn = false;
@@ -182,18 +211,29 @@ class VoiceCall extends Notifier<VoiceCallState> {
       if (stale()) return;
       final ticket = await repo.ticket(roomId);
       if (stale()) return;
+      final filter = await _savedNoiseFilter();
+      if (stale()) return;
+      state = state.copyWith(noiseFilter: filter);
       final joining = engine = newEngine();
       _engine = joining;
-      _speakSub = joining.speaking.listen((s) {
-        if (attempt == _attempt && state.isActive) {
-          state = state.copyWith(speaking: s);
-        }
-      });
-      _failSub = joining.failures.listen((e) => _drop(attempt, e.message));
+      void update(VoiceCallState Function(VoiceCallState now) change) {
+        if (attempt == _attempt && state.isActive) state = change(state);
+      }
+
+      _engineSubs.addAll([
+        joining.speaking.listen((s) => update((c) => c.copyWith(speaking: s))),
+        joining.failures.listen((e) => _drop(attempt, e.message)),
+        joining.reconnecting.listen(
+          (on) => update((c) => c.copyWith(reconnecting: on)),
+        ),
+        joining.route.listen((r) => update((c) => c.copyWith(route: r))),
+        joining.weakNetwork.listen((w) => update((c) => c.copyWith(weak: w))),
+      ]);
       await joining.join(
         ticket,
         uid,
         refreshToken: () async => (await repo.ticket(roomId)).token,
+        noiseFilter: filter,
       );
       if (stale()) return;
       // Dentro: da qui sessione e motore sono della chiamata (li chiude [leave]).
@@ -205,9 +245,11 @@ class VoiceCall extends Notifier<VoiceCallState> {
       );
       sessionId = null;
       engine = null;
-      // Muto e vivavoce toccati durante la connessione arrivano ora al motore.
+      // Muto, vivavoce e filtro toccati durante la connessione arrivano ora al
+      // motore.
       unawaited(_applyMute());
       unawaited(_applySpeaker());
+      if (state.noiseFilter != filter) unawaited(_applyNoiseFilter());
       if (state.muted) unawaited(_beat(attempt));
       _missedBeats = 0;
       _heartbeat = Timer.periodic(
@@ -261,6 +303,19 @@ class VoiceCall extends Notifier<VoiceCallState> {
   Future<void> toggleSpeakerphone() async {
     state = state.copyWith(speakerphone: !state.speakerphone);
     await _applySpeaker();
+  }
+
+  /// Filtro del rumore forte o normale: vale subito e resta per le prossime volte.
+  Future<void> setNoiseFilter(NoiseFilter filter) async {
+    if (filter == state.noiseFilter) return;
+    state = state.copyWith(noiseFilter: filter);
+    unawaited(
+      ref
+          .read(localFlagsProvider)
+          .setString(noiseFilterKey, filter.name)
+          .catchError((Object _) {}),
+    );
+    await _applyNoiseFilter();
   }
 
   /// Chiude la chiamata attuale: subito motore, segno di vita e avviso; poi,
@@ -368,6 +423,29 @@ class VoiceCall extends Notifier<VoiceCallState> {
     } catch (_) {}
   }
 
+  Future<void> _applyNoiseFilter() async {
+    final engine = _engine;
+    if (engine == null || state.phase != VoicePhase.inRoom) return;
+    try {
+      await engine.setNoiseFilter(state.noiseFilter);
+    } catch (_) {}
+  }
+
+  /// Il filtro scelto l'ultima volta; forte se non è mai stato cambiato.
+  Future<NoiseFilter> _savedNoiseFilter() async {
+    try {
+      final saved = await ref
+          .read(localFlagsProvider)
+          .getString(noiseFilterKey);
+      return NoiseFilter.values.firstWhere(
+        (f) => f.name == saved,
+        orElse: () => NoiseFilter.forte,
+      );
+    } catch (_) {
+      return NoiseFilter.forte;
+    }
+  }
+
   void _leaveIfActive() {
     if (ref.mounted && state.phase != VoicePhase.idle) leave();
   }
@@ -393,10 +471,10 @@ class VoiceCall extends Notifier<VoiceCallState> {
     _onResume = null;
     // Senza await: il future di cancel() vive nella zona radice e nei test con
     // il tempo finto non si completerebbe mai.
-    _speakSub?.cancel();
-    _speakSub = null;
-    _failSub?.cancel();
-    _failSub = null;
+    for (final sub in _engineSubs) {
+      sub.cancel();
+    }
+    _engineSubs.clear();
     if (_foregroundOn) {
       _foregroundOn = false;
       unawaited(_foreground.stop());

@@ -119,6 +119,20 @@ jobs:
             echo "$f: $(du -m "$f" | cut -f1) MB"
             echo "- $f: $(du -m "$f" | cut -f1) MB" >> "$GITHUB_STEP_SUMMARY"
           done
+      # Controllo: delle estensioni di Agora nell'APK resta solo il filtro del rumore (la
+      # stanza vocale lo usa contro TV e gioco in sottofondo), per ogni processore.
+      - name: Verifica le librerie di Agora
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          for apk in ("MILANAC.apk", "MILANAC-arm64.apk"):
+              libs = [n for n in zipfile.ZipFile(apk).namelist() if n.startswith("lib/")]
+              abis = {n.split("/")[1] for n in libs}
+              ext = sorted({n for n in libs if "/libagora_" in n and n.endswith("_extension.so")})
+              attese = sorted(f"lib/{abi}/libagora_ai_noise_suppression_extension.so" for abi in abis)
+              assert ext == attese, f"{apk}: estensioni di Agora {ext}, attese {attese}"
+          print("Librerie di Agora corrette.")
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: milanac-apk
