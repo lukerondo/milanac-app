@@ -1,249 +1,257 @@
+import 'package:country_flags/country_flags.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/teams.dart';
 import '../../core/theme.dart';
-import '../../shared/member_photo.dart' show flagEmoji;
+import '../../shared/member_photo.dart' show memberCardPhoto, nationalities;
 import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
-import '../risultati/result_ui.dart' show ClubCrest;
-import 'card_colors.dart';
-import 'card_stats.dart';
-import 'mini_card.dart' show CardPortrait;
+import '../volto/face_view.dart';
+import 'card_attributes.dart';
+import 'card_design.dart';
 
 export '../carte/special_cards_repository.dart' show CardSpecial;
 
-/// Colori di una carta grande: sfumatura, bordo, scritte, riga dei dati.
-class _Look {
-  const _Look(this.top, this.bottom, this.border, this.text, this.info);
-  final Color top, bottom, border, text, info;
-
-  static _Look of(CardSpecial? special, int? overall) => switch (special) {
-    CardSpecial.neroOro => const _Look(
-      CardColors.neroOroLight,
-      MilanacColors.black,
-      CardColors.gold,
-      CardColors.goldText,
-      CardColors.neroOroInfo,
-    ),
-    CardSpecial.blu => const _Look(
-      CardColors.blue,
-      CardColors.blueDeep,
-      CardColors.blueRing,
-      CardColors.onBlue,
-      CardColors.onBlueMuted,
-    ),
-    null => _Look(
-      CardColors.surfaceHigh,
-      MilanacColors.black,
-      CardColors.tier(tierOf(overall)),
-      CardColors.text,
-      CardColors.textMuted,
-    ),
-  };
-}
-
-/// Sigla breve della piattaforma sulla carta.
-String _platform(GamePlatform p) => switch (p) {
-  GamePlatform.ps5 => 'PS5',
-  GamePlatform.xbox => 'XBOX',
-  GamePlatform.pc => 'PC',
-};
-
-/// La carta del giocatore come nelle tavole del profilo e del walkout: overall con il
-/// bonus, ruolo, stemma, volto, nome, stile di gioco e dati (piattaforma, numero,
-/// squadre). Nero/oro, blu elettrico o normale con il colore del livello sul bordo.
-/// Disegnata a 210×300 e scalata alla larghezza disponibile; colori fissi (oggetto
-/// di gioco, uguale nei due temi).
-class FutCard extends StatelessWidget {
+/// La carta del giocatore come quelle di FC: overall (con il bonus della carta speciale),
+/// ruolo, bandiera e stemma a sinistra; la foto scontornata (o il volto disegnato) a
+/// destra; il nome e le sei statistiche sotto. Bronzo, argento, oro, rossonera (85+),
+/// nero/oro della settimana o blu elettrico. Disegnata a 300×420 e scalata alla
+/// larghezza disponibile; colori fissi (oggetto di gioco, uguale nei due temi) e testo
+/// che non si ingrandisce con le impostazioni del telefono (la carta resta intera).
+class FutCard extends ConsumerWidget {
   const FutCard({
     super.key,
     required this.member,
     this.special,
     this.bonus = 0,
     this.glow = true,
+    this.previewPhoto,
   });
   final Member member;
+
+  /// Anteprima di una foto non ancora salvata (pagina della foto della carta).
+  final ImageProvider? previewPhoto;
 
   /// Carta speciale (nero/oro della settimana, blu elettrico) al posto di quella base.
   final CardSpecial? special;
 
-  /// Bonus della carta speciale sull'overall (+1…+5).
+  /// Bonus della carta speciale sull'overall e sulle statistiche (+1…+5).
   final int bonus;
 
-  /// Alone sottile attorno alla carta.
+  /// Bagliore attorno alle carte speciali.
   final bool glow;
 
-  static const width = 210.0, height = 300.0;
+  static const width = 300.0, height = 420.0;
 
   @override
-  Widget build(BuildContext context) {
-    final look = _Look.of(special, member.overall);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final design = CardDesign.of(special, member.overall);
     final overall = member.overall == null
         ? null
         : (member.overall! + bonus).clamp(40, 99);
-    final info = [
-      if (member.platform != null) _platform(member.platform!),
-      if (member.shirtNumber != null) 'N. ${member.shirtNumber}',
-      for (final t in Team.values)
-        if (member.teams.contains(t)) t.short,
-    ].join(' · ');
-    final style = member.playStyle?.trim() ?? '';
+    final stats = statsWithBonus(member.cardStats, bonus);
+    final labels = cardStatLabels(member.fieldPosition);
+    final nation = member.nationality;
+    final flag = nation != null && nationalities.containsKey(nation);
     final kind = switch (special) {
-      CardSpecial.neroOro => 'carta nero e oro',
-      CardSpecial.blu => 'carta blu elettrico',
-      null => 'carta',
+      CardSpecial.neroOro => 'Carta nero e oro',
+      CardSpecial.blu => 'Carta blu elettrico',
+      null => 'Carta',
     };
     // Una sola etichetta per chi usa il lettore di schermo.
     return Semantics(
       label: [
-        '${kind[0].toUpperCase()}${kind.substring(1)}: ${member.displayName}',
+        '$kind: ${member.displayName}',
         ?overall?.toString(),
         ?member.fieldPosition,
-        if (style.isNotEmpty) style,
-        if (info.isNotEmpty) info,
+        if (flag) nationalities[nation],
+        if (stats != null)
+          for (var i = 0; i < 6; i++) '${labels[i]} ${stats[i]}',
       ].join(', '),
       excludeSemantics: true,
-      child: AspectRatio(
-        aspectRatio: width / height,
-        child: FittedBox(
-          child: Container(
-            width: width,
-            height: height,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: look.border, width: 2),
-              gradient: LinearGradient(
-                begin: const Alignment(-.35, -1),
-                end: const Alignment(.35, 1),
-                colors: [look.top, look.bottom],
-                stops: const [0, .7],
-              ),
-              boxShadow: glow
-                  ? [
-                      BoxShadow(
-                        color: look.border.withValues(alpha: .12),
-                        spreadRadius: 6,
+      child: MediaQuery.withNoTextScaling(
+        child: AspectRatio(
+          aspectRatio: width / height,
+          child: FittedBox(
+            child: SizedBox(
+              width: width,
+              height: height,
+              child: DefaultTextStyle(
+                style: TextStyle(fontFamily: sportFont, color: design.text),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: CardFacePainter(design, glow: glow),
                       ),
-                    ]
-                  : null,
-            ),
-            child: DefaultTextStyle(
-              style: TextStyle(fontFamily: sportFont, color: look.text),
-              child: Stack(
-                children: [
-                  // Overall, bonus e ruolo in alto a sinistra.
-                  Positioned(
-                    left: 16,
-                    top: 14,
-                    child: Column(
-                      children: [
-                        Text(
-                          overall?.toString() ?? '??',
-                          style: const TextStyle(
-                            fontSize: 44,
-                            fontWeight: FontWeight.w700,
-                            height: 1,
-                          ),
+                    ),
+                    // Foto o volto, ritagliati con la sagoma della carta.
+                    Positioned.fill(
+                      child: ClipPath(
+                        clipper: const CardOutlineClipper(),
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: 92,
+                              top: 24,
+                              width: 196,
+                              height: 226,
+                              child: CardPortraitArt(
+                                member: member,
+                                design: design,
+                                photoOverride: previewPhoto,
+                              ),
+                            ),
+                          ],
                         ),
-                        if (bonus > 0 && overall != null)
-                          Text(
-                            '+$bonus',
-                            style: const TextStyle(
-                              fontFamily: bodyFont,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              height: 1.1,
+                      ),
+                    ),
+                    // Overall, ruolo, bandiera e stemma.
+                    Positioned(
+                      left: 22,
+                      top: 30,
+                      width: 76,
+                      child: Column(
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              overall?.toString() ?? '??',
+                              maxLines: 1,
+                              style: const TextStyle(
+                                fontSize: 60,
+                                fontWeight: FontWeight.w700,
+                                height: 1,
+                              ),
                             ),
                           ),
-                        const SizedBox(height: 4),
-                        Text(
-                          member.fieldPosition ?? '–',
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            height: 1,
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              member.fieldPosition ?? '–',
+                              maxLines: 1,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w500,
+                                height: 1.15,
+                              ),
+                            ),
                           ),
-                        ),
-                        // La bandiera, se il giocatore ha indicato la nazionalità.
-                        if (member.nationality != null) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            flagEmoji(member.nationality!),
-                            style: const TextStyle(fontSize: 20, height: 1),
+                          if (bonus > 0 && overall != null)
+                            Container(
+                              margin: const EdgeInsets.only(top: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: design.text.withValues(alpha: .16),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '+$bonus',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          CardRule(color: design.line),
+                          if (flag) ...[
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(2),
+                              child: CountryFlag.fromCountryCode(
+                                nation,
+                                theme: const ImageTheme(width: 38, height: 26),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            CardRule(color: design.line),
+                          ],
+                          const SizedBox(height: 8),
+                          Image.asset(
+                            'assets/images/stemma_256.png',
+                            width: 40,
+                            height: 40,
                           ),
                         ],
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    right: 16,
-                    top: 16,
-                    child: const ClubCrest(size: 40),
-                  ),
-                  // Volto.
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 88,
-                    child: Center(
-                      child: CardPortrait(
-                        member: member,
-                        size: 112,
-                        special: special,
                       ),
                     ),
-                  ),
-                  // Nome, stile di gioco e dati.
-                  Positioned(
-                    left: 14,
-                    right: 14,
-                    top: 206,
-                    child: Column(
-                      children: [
-                        FittedBox(
+                    // Nome sulla carta.
+                    Positioned(
+                      left: 22,
+                      right: 22,
+                      top: 250,
+                      height: 38,
+                      child: Center(
+                        child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
                             member.displayName.trim().toUpperCase(),
                             maxLines: 1,
                             style: const TextStyle(
-                              fontSize: 20,
+                              fontSize: 30,
                               fontWeight: FontWeight.w600,
-                              letterSpacing: 1,
-                              height: 1.2,
+                              letterSpacing: .6,
                             ),
                           ),
                         ),
-                        if (style.isNotEmpty)
-                          Text(
-                            style.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.6,
-                              height: 1.3,
-                            ),
-                          ),
-                        const SizedBox(height: 4),
-                        if (info.isNotEmpty)
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              info,
-                              maxLines: 1,
-                              style: TextStyle(
-                                fontFamily: bodyFont,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: look.info,
-                              ),
-                            ),
-                          ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      left: 46,
+                      right: 46,
+                      top: 292,
+                      child: Container(
+                        height: 1.4,
+                        color: design.line.withValues(alpha: .7),
+                      ),
+                    ),
+                    // Le sei statistiche, in due colonne.
+                    Positioned(
+                      left: 44,
+                      right: 44,
+                      top: 300,
+                      height: 90,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _StatColumn(
+                              values: stats?.sublist(0, 3),
+                              labels: labels.sublist(0, 3),
+                            ),
+                          ),
+                          Container(
+                            width: 1.4,
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            color: design.line.withValues(alpha: .7),
+                          ),
+                          Expanded(
+                            child: _StatColumn(
+                              values: stats?.sublist(3),
+                              labels: labels.sublist(3),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 392,
+                      child: Icon(
+                        special == null
+                            ? Icons.sports_soccer_rounded
+                            : Icons.star_rounded,
+                        size: 18,
+                        color: design.line,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -253,6 +261,122 @@ class FutCard extends StatelessWidget {
   }
 }
 
+/// Tre statistiche una sotto l'altra: "88 TIR" (numero in grassetto, sigla leggera).
+class _StatColumn extends StatelessWidget {
+  const _StatColumn({required this.values, required this.labels});
+  final List<int>? values;
+  final List<String> labels;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    children: [
+      for (var i = 0; i < 3; i++)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            // Se un font è più largo il testo si rimpicciolisce, non va a capo.
+            SizedBox(
+              width: 34,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  values?[i].toString() ?? '--',
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.w700,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 7),
+            SizedBox(
+              width: 40,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  labels[i],
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w400,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+    ],
+  );
+}
+
+/// Il ritratto sulla carta: la foto caricata dal giocatore (meglio se scontornata),
+/// sfumata in basso nel fondo della carta; senza foto il volto disegnato; senza volto
+/// la sagoma, come le carte di FC ancora da completare.
+class CardPortraitArt extends ConsumerWidget {
+  const CardPortraitArt({
+    super.key,
+    required this.member,
+    required this.design,
+    this.photoOverride,
+  });
+  final Member member;
+  final CardDesign design;
+
+  /// Una foto da mostrare al posto di quella salvata (anteprima).
+  final ImageProvider? photoOverride;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final photo = photoOverride ?? memberCardPhoto(ref, member);
+    final face = member.face;
+    final Widget art;
+    if (photo != null) {
+      art = Image(
+        image: photo,
+        fit: BoxFit.contain,
+        alignment: Alignment.bottomCenter,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => _fallback(face),
+      );
+    } else {
+      art = _fallback(face);
+    }
+    // In basso la foto sfuma nel fondo, come le carte vere.
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (rect) => const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.white, Colors.white, Colors.transparent],
+        stops: [0, .80, 1],
+      ).createShader(rect),
+      child: art,
+    );
+  }
+
+  Widget _fallback(Object? face) => face == null
+      ? Align(
+          alignment: Alignment.bottomCenter,
+          child: Icon(
+            Icons.person_rounded,
+            size: 210,
+            color: Colors.black.withValues(alpha: .22),
+          ),
+        )
+      : Align(
+          alignment: Alignment.bottomCenter,
+          child: FaceView(face: member.face!, size: 206),
+        );
+}
+
 /// Retro della carta (nel walkout, mentre gira): nero e oro con lo stemma.
 class FutCardBack extends StatelessWidget {
   const FutCardBack({super.key});
@@ -260,17 +384,8 @@ class FutCardBack extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AspectRatio(
     aspectRatio: FutCard.width / FutCard.height,
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22 * 260 / FutCard.width),
-        border: Border.all(color: CardColors.gold, width: 2),
-        gradient: const LinearGradient(
-          begin: Alignment(-.35, -1),
-          end: Alignment(.35, 1),
-          colors: [CardColors.neroOroLight, MilanacColors.black],
-          stops: [0, .7],
-        ),
-      ),
+    child: CustomPaint(
+      painter: const CardFacePainter(CardDesign.neroOro, glow: false),
       child: Center(
         child: FractionallySizedBox(
           widthFactor: .45,

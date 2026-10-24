@@ -54,6 +54,8 @@ dependencies:
   pdf: ^3.13.1
   record: ^7.1.2
   agora_rtc_engine: ^6.6.4
+  country_flags: ^4.1.2
+  google_mlkit_selfie_segmentation: ^0.12.1
 
 dev_dependencies:
   flutter_test:

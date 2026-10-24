@@ -11,7 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/errors.dart';
 import '../../core/italian_time.dart';
 import '../../core/theme.dart';
-import '../carta/mini_card.dart';
+import '../carta/card_design.dart';
 import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
 import '../volto/face_view.dart';
@@ -22,13 +22,16 @@ import 'pitch_painter.dart';
 const _logicalWidth = 360.0;
 const _pitchAspect = 0.68;
 
-/// Immagine della formazione: il campo con una mini carta per ogni titolare
-/// (volto, nome sulla carta, ruolo e overall). Disegnata fuori schermo.
+/// Immagine della formazione: il campo con una mini carta per ogni titolare, come
+/// quelle dell'app (sagoma e colori della carta, foto o volto, overall, ruolo e nome
+/// sulla carta). Disegnata fuori schermo; [photos] sono le foto delle carte (id del
+/// membro → immagine) già caricate.
 Future<Uint8List> renderFormationImage(
   Formation formation,
   Map<String, Member> members, {
   double width = 1080,
   Map<String, SpecialCard> specials = const {},
+  Map<String, ui.Image> photos = const {},
 }) async {
   final scale = width / _logicalWidth;
   final logical = Size(_logicalWidth, _logicalWidth / _pitchAspect);
@@ -46,7 +49,14 @@ Future<Uint8List> renderFormationImage(
     if (member == null) {
       _paintEmptySlot(canvas, center, slot.label);
     } else {
-      _paintMiniCard(canvas, center, member, slot.label, specials[member.id]);
+      _paintMiniCard(
+        canvas,
+        center,
+        member,
+        slot.label,
+        specials[member.id],
+        photos[member.id],
+      );
     }
   }
 
@@ -60,7 +70,7 @@ Future<Uint8List> renderFormationImage(
   return bytes!.buffer.asUint8List();
 }
 
-const _cardW = 60.0, _cardH = 78.0;
+const _cardW = 60.0, _cardH = 84.0;
 
 void _paintEmptySlot(Canvas canvas, Offset center, String label) {
   canvas.drawCircle(
@@ -87,91 +97,83 @@ void _paintMiniCard(
   Member m,
   String label,
   SpecialCard? special,
+  ui.Image? photo,
 ) {
   final rect = Rect.fromCenter(center: center, width: _cardW, height: _cardH);
-  final (top, bottom, text) = miniCardColors(m.overall, special);
-  final rr = RRect.fromRectAndRadius(rect, const Radius.circular(9));
-  canvas.drawRRect(
-    rr.shift(const Offset(0, 2)),
-    Paint()..color = MilanacColors.black.withValues(alpha: .35),
-  );
-  canvas.drawRRect(
-    rr,
-    Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [top, bottom],
-      ).createShader(rect),
-  );
-  canvas.drawRRect(
-    rr.deflate(1.5),
-    Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = text.withValues(alpha: .55),
-  );
-
-  // Volto (testa) in un cerchio.
-  final faceCenter = Offset(center.dx, rect.top + 22);
-  const faceR = 16.0;
-  final face = m.face;
+  const size = Size(_cardW, _cardH);
+  final design = CardDesign.of(special?.kind, m.overall);
   canvas.save();
-  canvas.clipPath(
-    Path()..addOval(Rect.fromCircle(center: faceCenter, radius: faceR)),
+  canvas.translate(rect.left, rect.top);
+  canvas.drawPath(
+    cardOutline(size).shift(const Offset(0, 2)),
+    Paint()
+      ..color = MilanacColors.black.withValues(alpha: .35)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
   );
-  if (face != null) {
+  CardFacePainter(design, glow: false).paint(canvas, size);
+
+  // La foto della carta (o il volto) a destra, ritagliata con la sagoma.
+  canvas.save();
+  canvas.clipPath(cardOutline(size));
+  final area = Rect.fromLTWH(
+    _cardW * .30,
+    _cardH * .05,
+    _cardW * .66,
+    _cardH * .55,
+  );
+  if (photo != null) {
+    final src = Size(photo.width.toDouble(), photo.height.toDouble());
+    final fit = applyBoxFit(BoxFit.contain, src, area.size);
+    final dst = Alignment.bottomCenter.inscribe(fit.destination, area);
+    canvas.drawImageRect(
+      photo,
+      Offset.zero & src,
+      dst,
+      Paint()..filterQuality = FilterQuality.high,
+    );
+  } else if (m.face case final face?) {
+    final side = area.height;
     canvas.save();
-    canvas.translate(faceCenter.dx - faceR, faceCenter.dy - faceR);
-    FacePainter(
-      face,
-      crop: FaceCrop.head,
-      background: MilanacColors.ivory.withValues(alpha: .18),
-    ).paint(canvas, const Size(faceR * 2, faceR * 2));
+    canvas.translate(area.center.dx - side / 2, area.bottom - side);
+    FacePainter(face).paint(canvas, Size(side, side));
     canvas.restore();
-  } else {
-    canvas.drawCircle(
-      faceCenter,
-      faceR,
-      Paint()..color = MilanacColors.ivory.withValues(alpha: .18),
-    );
-    _text(
-      canvas,
-      m.displayName.isEmpty ? '?' : m.displayName[0].toUpperCase(),
-      faceCenter,
-      14,
-      FontWeight.w800,
-      text,
-    );
   }
   canvas.restore();
-  canvas.drawCircle(
-    faceCenter,
-    faceR,
-    Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = text.withValues(alpha: .7),
-  );
 
-  // Overall e ruolo, poi il nome sulla carta.
+  // Overall (con il bonus) e ruolo in alto a sinistra, nome sulla carta in basso.
   _text(
     canvas,
-    '${overallWith(m.overall, special)?.toString() ?? '–'} $label',
-    Offset(center.dx, rect.top + 47),
-    11,
-    FontWeight.w800,
-    text,
+    overallWith(m.overall, special)?.toString() ?? '–',
+    const Offset(_cardW * .19, _cardH * .17),
+    15,
+    FontWeight.w700,
+    design.text,
+  );
+  _text(
+    canvas,
+    label,
+    const Offset(_cardW * .19, _cardH * .32),
+    8,
+    FontWeight.w600,
+    design.text,
   );
   _text(
     canvas,
     m.displayName.toUpperCase(),
-    Offset(center.dx, rect.top + 63),
-    9,
+    const Offset(_cardW / 2, _cardH * .68),
+    8.5,
     FontWeight.w600,
-    text,
-    maxWidth: _cardW - 8,
+    design.text,
+    maxWidth: _cardW - 10,
   );
+  canvas.drawLine(
+    const Offset(_cardW * .25, _cardH * .76),
+    const Offset(_cardW * .75, _cardH * .76),
+    Paint()
+      ..strokeWidth = .7
+      ..color = design.line.withValues(alpha: .7),
+  );
+  canvas.restore();
 }
 
 void _text(
@@ -302,20 +304,32 @@ Future<Uint8List> buildFormationPdf({
   return doc.save();
 }
 
-/// Disegna, impagina e condivide il PDF della formazione.
+/// Disegna, impagina e condivide il PDF della formazione. [photoOf] carica la foto
+/// della carta di un titolare (null se non c'è: si disegna il volto).
 Future<void> shareFormationPdf(
   BuildContext context, {
   required Formation formation,
   required Map<String, Member> members,
   required List<Member> bench,
   Map<String, SpecialCard> specials = const {},
+  Future<ui.Image?> Function(Member member)? photoOf,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
+  final photos = <String, ui.Image>{};
   try {
+    if (photoOf != null) {
+      for (final id in formation.players.values) {
+        final m = members[id];
+        if (m == null || m.avatarPath == null) continue;
+        final photo = await photoOf(m);
+        if (photo != null) photos[m.id] = photo;
+      }
+    }
     final image = await renderFormationImage(
       formation,
       members,
       specials: specials,
+      photos: photos,
     );
     final bytes = await buildFormationPdf(
       formation: formation,
@@ -345,5 +359,9 @@ Future<void> shareFormationPdf(
     messenger.showSnackBar(
       SnackBar(content: Text(friendlyError(e, action: 'PDF non creato'))),
     );
+  } finally {
+    for (final photo in photos.values) {
+      photo.dispose();
+    }
   }
 }

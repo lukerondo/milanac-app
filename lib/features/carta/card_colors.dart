@@ -60,42 +60,4 @@ abstract final class CardColors {
     CardTier.oro => goldTier,
     CardTier.rossonera => rossonera,
   };
-
-  /// Mini carte disegnate nel PDF della formazione: sfumature metalliche per livello
-  /// (sopra, sotto, scritte), come prima del restyling.
-  static const pdfNeroOro = (
-    Color(0xFF2B2B2E),
-    Color(0xFF050505),
-    Color(0xFFF3D27A),
-  );
-  static const pdfBlu = (
-    Color(0xFF2F7BFF),
-    Color(0xFF061A5C),
-    Color(0xFFEAF2FF),
-  );
-  static const pdfVuota = (
-    Color(0xFF34343C),
-    Color(0xFF17171B),
-    Color(0xFFFFFFFF),
-  );
-  static const pdfBronzo = (
-    Color(0xFFD9A273),
-    Color(0xFF8A5530),
-    Color(0xFF3B2414),
-  );
-  static const pdfArgento = (
-    Color(0xFFF1F3F6),
-    Color(0xFF9AA1AB),
-    Color(0xFF23272E),
-  );
-  static const pdfOro = (
-    Color(0xFFFBE3A0),
-    Color(0xFFC99A2E),
-    Color(0xFF3A2A08),
-  );
-  static const pdfRossonera = (
-    Color(0xFFC8102E),
-    Color(0xFF0B0B0D),
-    Color(0xFFF6D77F),
-  );
 }

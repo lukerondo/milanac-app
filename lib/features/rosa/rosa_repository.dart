@@ -24,8 +24,16 @@ abstract class RosaRepository {
   /// Aggiorna i dati personali dalle Impostazioni (nome, gamertag, nascita...).
   Future<void> saveProfile(Member member);
 
-  /// Carica la nuova foto del profilo (JPEG) e la imposta; restituisce il percorso.
-  Future<String> uploadPhoto(Member member, Uint8List jpeg);
+  /// Carica la foto della carta (JPEG o PNG scontornato) al posto di quella di prima;
+  /// restituisce il percorso.
+  Future<String> uploadPhoto(
+    Member member,
+    Uint8List bytes, {
+    String contentType = 'image/jpeg',
+  });
+
+  /// Toglie la foto della carta: torna il volto disegnato.
+  Future<void> removePhoto(Member member);
 }
 
 final rosaRepositoryProvider = Provider<RosaRepository>((ref) {
@@ -109,21 +117,39 @@ class _SupabaseRosaRepository implements RosaRepository {
   }
 
   @override
-  Future<String> uploadPhoto(Member m, Uint8List jpeg) async {
+  Future<String> uploadPhoto(
+    Member m,
+    Uint8List bytes, {
+    String contentType = 'image/jpeg',
+  }) async {
     final client = _ref.read(supabaseProvider);
-    final path = '${m.id}/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final ext = contentType == 'image/png' ? 'png' : 'jpg';
+    final path = '${m.id}/foto_${DateTime.now().millisecondsSinceEpoch}.$ext';
     await client.storage
         .from(avatarsBucket)
         .uploadBinary(
           path,
-          jpeg,
-          fileOptions: const FileOptions(contentType: 'image/jpeg'),
+          bytes,
+          fileOptions: FileOptions(contentType: contentType),
         );
     await client.from('profiles').update({'avatar_path': path}).eq('id', m.id);
     if (m.avatarPath != null) {
       await client.storage.from(avatarsBucket).remove([m.avatarPath!]);
     }
     return path;
+  }
+
+  @override
+  Future<void> removePhoto(Member m) async {
+    final client = _ref.read(supabaseProvider);
+    await client.from('profiles').update({'avatar_path': null}).eq('id', m.id);
+    final old = m.avatarPath;
+    if (old == null) return;
+    try {
+      await client.storage.from(avatarsBucket).remove([old]);
+    } catch (_) {
+      // Il file rimasto non si vede più da nessuna parte.
+    }
   }
 
   /// Rifiuta una richiesta di accesso: il profilo viene disattivato (resta in attesa).
@@ -344,9 +370,14 @@ class DemoRosaRepository implements RosaRepository {
   }
 
   @override
-  Future<String> uploadPhoto(Member m, Uint8List jpeg) async {
-    final path = '${m.id}/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    demoPhotos[path] = jpeg;
+  Future<String> uploadPhoto(
+    Member m,
+    Uint8List bytes, {
+    String contentType = 'image/jpeg',
+  }) async {
+    final ext = contentType == 'image/png' ? 'png' : 'jpg';
+    final path = '${m.id}/foto_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    demoPhotos[path] = bytes;
     final i = _members.indexWhere((x) => x.id == m.id);
     if (i >= 0) {
       final old = _members[i];
@@ -362,5 +393,14 @@ class DemoRosaRepository implements RosaRepository {
     }
     _emit();
     return path;
+  }
+
+  @override
+  Future<void> removePhoto(Member m) async {
+    final i = _members.indexWhere((x) => x.id == m.id);
+    if (i >= 0) _members[i] = _members[i].withoutPhoto();
+    final old = m.avatarPath;
+    if (old != null) demoPhotos.remove(old);
+    _emit();
   }
 }

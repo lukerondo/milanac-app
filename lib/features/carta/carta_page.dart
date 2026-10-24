@@ -25,7 +25,9 @@ import '../rosa/rosa_repository.dart';
 import '../traguardi/achievements_view.dart';
 import '../walkout/celebrations.dart';
 import '../walkout/walkout_page.dart';
+import 'card_attributes.dart';
 import 'card_colors.dart';
+import 'card_photo.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
 
@@ -192,8 +194,11 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
             child: Column(
               children: [
                 Center(
-                  child: SizedBox(
-                    width: FutCard.width + 16,
+                  // Grande come la carta, ma più stretta sui telefoni piccoli.
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: FutCard.width + 16,
+                    ),
                     child: RepaintBoundary(
                       key: _cardKey,
                       child: Padding(
@@ -262,11 +267,22 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
               const SizedBox(height: 14),
               _ActionsCard(
                 actions: [
+                  if (isMine)
+                    (
+                      Icons.add_a_photo_rounded,
+                      member.avatarPath == null
+                          ? 'Metti la tua foto'
+                          : 'Cambia la foto',
+                      'Scontornata sulla carta, come quelle di FC',
+                      () => showCardPhotoEditor(context, member),
+                    ),
                   if (isMine || isDirettivo)
                     (
                       Icons.edit_rounded,
                       isMine ? 'Modifica la mia carta' : 'Modifica carta',
-                      'Ruolo, numero e stile di gioco',
+                      isDirettivo
+                          ? 'Ruolo, numero, stile, overall e statistiche'
+                          : 'Ruolo, numero e stile di gioco',
                       () => showCardEditor(context, member),
                     ),
                   (
@@ -340,7 +356,14 @@ class _InfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.pal;
     final direttivo = member.direttivoLabel;
+    final style = member.playStyle?.trim() ?? '';
     final rows = [
+      // Sulla carta, come quelle di FC, ci sono solo ruolo e statistiche: il resto
+      // della carta (stile, numero, piattaforma, squadre) sta qui.
+      if (style.isNotEmpty) ('Stile di gioco', style),
+      if (member.shirtNumber != null) ('Numero', '${member.shirtNumber}'),
+      if (member.platform != null) ('Piattaforma', member.platform!.label),
+      ('Squadra', [for (final t in member.teams) t.label].join(' e ')),
       ('Gamertag', member.gamertag ?? '–'),
       (
         'Ruolo nel club',
@@ -529,6 +552,83 @@ const playStyleSuggestions = [
   'Saracinesca',
 ];
 
+/// Le sei statistiche della carta (Direttivo): sigla e nome per esteso, cursore da 1
+/// a 99 e valore. Per i portieri le sigle sono quelle dei portieri.
+class _StatsEditor extends StatelessWidget {
+  const _StatsEditor({
+    required this.position,
+    required this.stats,
+    required this.onChanged,
+  });
+  final String? position;
+  final List<int> stats;
+  final void Function(int index, int value) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final labels = cardStatLabels(position);
+    final names = cardStatNames(position);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          isGoalkeeper(position)
+              ? 'STATISTICHE DA PORTIERE'
+              : 'STATISTICHE DELLA CARTA',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.3,
+            color: p.textMuted,
+          ),
+        ),
+        for (var i = 0; i < 6; i++)
+          Row(
+            children: [
+              SizedBox(
+                width: 44,
+                child: Text(
+                  labels[i],
+                  style: TextStyle(
+                    fontFamily: sportFont,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: p.text,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Slider(
+                  value: stats[i].toDouble(),
+                  min: 1,
+                  max: 99,
+                  divisions: 98,
+                  label: '${names[i]} ${stats[i]}',
+                  semanticFormatterCallback: (v) => '${names[i]} ${v.round()}',
+                  onChanged: (v) => onChanged(i, v.round()),
+                ),
+              ),
+              SizedBox(
+                width: 32,
+                child: Text(
+                  '${stats[i]}',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontFamily: sportFont,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: p.text,
+                  ),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
 Future<void> showCardEditor(BuildContext context, Member member) =>
     showModalBottomSheet(
       context: context,
@@ -547,6 +647,13 @@ class _CardEditor extends ConsumerStatefulWidget {
 
 class _CardEditorState extends ConsumerState<_CardEditor> {
   late int _overall = widget.member.overall ?? 70;
+
+  /// Le sei statistiche (le cambia solo il Direttivo): finché non le tocca restano
+  /// quelle salvate (anche nessuna).
+  late final List<int> _stats = List.of(
+    widget.member.cardStats ?? List.filled(6, widget.member.overall ?? 70),
+  );
+  bool _statsTouched = false;
   late final _style = TextEditingController(text: widget.member.playStyle);
   late final _number = TextEditingController(
     text: widget.member.shirtNumber?.toString(),
@@ -570,6 +677,7 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       fieldPosition: _position,
       shirtNumber: int.tryParse(_number.text.trim()),
       overall: _overall,
+      cardStats: _statsTouched ? List<int>.of(_stats) : widget.member.cardStats,
       playStyle: style.isEmpty ? null : style,
       platform: _platform,
     );
@@ -577,9 +685,9 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       final rootContext = Navigator.of(context, rootNavigator: true).context;
       final before = widget.member.overall;
       final repo = ref.read(rosaRepositoryProvider);
-      // L'overall lo decide il Direttivo: solo lui lo salva.
+      // Overall e statistiche li decide il Direttivo: solo lui li salva.
       if ((ref.read(profileProvider).value?.isDirettivo ?? false) &&
-          _overall != before) {
+          (_overall != before || _statsTouched)) {
         await repo.save(updated);
       } else {
         await repo.saveCard(updated);
@@ -635,7 +743,7 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'L\'overall lo assegna il Direttivo.',
+                  'Overall e statistiche li assegna il Direttivo.',
                   style: TextStyle(fontSize: 14, color: p.textMuted),
                 ),
               ),
@@ -683,6 +791,30 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
                   ),
                 ],
               ),
+            if (isDirettivo) ...[
+              const SizedBox(height: 8),
+              _StatsEditor(
+                position: _position,
+                stats: _stats,
+                onChanged: (i, v) => setState(() {
+                  _stats[i] = v;
+                  _statsTouched = true;
+                }),
+              ),
+              // L'overall che corrisponde alle statistiche per il ruolo: il Direttivo
+              // lo usa con un tocco (o tiene il suo).
+              if (_statsTouched || widget.member.cardStats != null)
+                if (suggestedOverall(_stats, _position) case final suggested?
+                    when suggested != _overall)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => setState(() => _overall = suggested),
+                      icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                      label: Text('Usa l\'overall suggerito: $suggested'),
+                    ),
+                  ),
+            ],
             const SizedBox(height: 8),
             Row(
               children: [

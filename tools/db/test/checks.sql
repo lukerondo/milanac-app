@@ -1732,3 +1732,32 @@ do $$ begin
                      where message_id = '00000000-0000-0000-0000-0000000000d1'),
     'reazioni eliminate con il messaggio';
 end $$;
+
+-- ---------------------------------------------------------------- carte FUT: le sei statistiche
+-- Le decide il Direttivo (come l'overall); il giocatore no, nemmeno le proprie.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c1');
+select pg_temp.expect_error(
+  $q$update profiles set card_stats = '{90,80,70,85,40,75}' where id = '00000000-0000-0000-0000-0000000000c1'$q$,
+  'Solo il Direttivo');
+-- Il resto della propria carta (stile di gioco) si cambia come prima.
+update profiles set play_style = 'Regista' where id = '00000000-0000-0000-0000-0000000000c1';
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000c3');
+update profiles set card_stats = '{90,80,70,85,40,75}' where id = '00000000-0000-0000-0000-0000000000c1';
+select pg_temp.expect_error(
+  $q$update profiles set card_stats = '{90,80,70,85,40}' where id = '00000000-0000-0000-0000-0000000000c1'$q$,
+  'profiles_card_stats_check');
+select pg_temp.expect_error(
+  $q$update profiles set card_stats = '{90,80,70,85,40,100}' where id = '00000000-0000-0000-0000-0000000000c1'$q$,
+  'profiles_card_stats_check');
+select pg_temp.expect_error(
+  $q$update profiles set card_stats = '{90,80,70,85,null,75}' where id = '00000000-0000-0000-0000-0000000000c1'$q$,
+  'profiles_card_stats_check');
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert (select card_stats from profiles where id = '00000000-0000-0000-0000-0000000000c1')
+    = '{90,80,70,85,40,75}'::smallint[], 'il Direttivo imposta le statistiche';
+  assert (select play_style from profiles where id = '00000000-0000-0000-0000-0000000000c1') = 'Regista',
+    'lo stile di gioco resta del giocatore';
+end $$;

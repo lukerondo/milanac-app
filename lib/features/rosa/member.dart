@@ -24,6 +24,7 @@ class Member {
     this.requestedRole = ClubRole.giocatore,
     this.teams = const {Team.milanac},
     this.overall,
+    this.cardStats,
     this.playStyle,
     this.platform,
     this.avatarPath,
@@ -60,6 +61,11 @@ class Member {
 
   /// Carta FUT: overall (40–99) deciso dal Direttivo, stile di gioco e piattaforma.
   final int? overall;
+
+  /// Le sei statistiche della carta (1–99), decise dal Direttivo: VEL TIR PAS DRI DIF
+  /// FIS, per i portieri TUF PRE RIN RIF VEL PIA (vedi [cardStatLabels]). null finché
+  /// non le ha assegnate.
+  final List<int>? cardStats;
   final String? playStyle;
   final GamePlatform? platform;
 
@@ -128,6 +134,8 @@ class Member {
     bool? active,
     Set<Team>? teams,
     int? overall,
+    Object? cardStats = _same,
+    Object? avatarPath = _same,
     Object? playStyle = _same,
     Object? platform = _same,
     Face? face,
@@ -153,13 +161,18 @@ class Member {
     requestedRole: requestedRole,
     teams: teams ?? this.teams,
     overall: overall ?? this.overall,
+    cardStats: identical(cardStats, _same)
+        ? this.cardStats
+        : cardStats as List<int>?,
     playStyle: identical(playStyle, _same)
         ? this.playStyle
         : playStyle as String?,
     platform: identical(platform, _same)
         ? this.platform
         : platform as GamePlatform?,
-    avatarPath: avatarPath,
+    avatarPath: identical(avatarPath, _same)
+        ? this.avatarPath
+        : avatarPath as String?,
     birthDate: identical(birthDate, _same)
         ? this.birthDate
         : birthDate as DateTime?,
@@ -176,6 +189,9 @@ class Member {
     face: face ?? this.face,
     registrationCompleted: registrationCompleted,
   );
+
+  /// Lo stesso membro senza la foto della carta (torna il volto disegnato).
+  Member withoutPhoto() => copyWith(avatarPath: null);
 
   /// Lo stesso membro senza dati anagrafici: come lo riceve chi non è del Direttivo.
   Member withoutPrivateData() => copyWith(
@@ -198,6 +214,7 @@ class Member {
     requestedRole: parseRole(m['requested_role'], ClubRole.giocatore),
     teams: Team.parseSet(m['teams']),
     overall: (m['overall'] as num?)?.toInt(),
+    cardStats: parseCardStats(m['card_stats']),
     playStyle: m['play_style'] as String?,
     platform: GamePlatform.values.asNameMap()[m['platform']],
     avatarPath: m['avatar_path'] as String?,
@@ -243,6 +260,7 @@ class Member {
     requestedRole: requestedRole,
     teams: teams,
     overall: overall,
+    cardStats: cardStats,
     playStyle: playStyle,
     platform: platform,
     avatarPath: avatarPath ?? this.avatarPath,
@@ -290,6 +308,7 @@ class Member {
     'active': active,
     'teams': teamsToJson(teams),
     'overall': overall,
+    'card_stats': cardStats,
     ...cardMap(),
   };
 
@@ -318,6 +337,17 @@ enum GamePlatform {
 
   const GamePlatform(this.label);
   final String label;
+}
+
+/// Le sei statistiche della carta da una colonna `card_stats` (null se mancano o non
+/// sono sei numeri).
+List<int>? parseCardStats(Object? value) {
+  if (value is! List || value.length != 6) return null;
+  final stats = [
+    for (final v in value)
+      if (v is num) v.toInt().clamp(1, 99),
+  ];
+  return stats.length == 6 ? stats : null;
 }
 
 /// Posizioni in campo disponibili nel menu di modifica.

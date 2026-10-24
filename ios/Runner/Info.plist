@@ -14,9 +14,9 @@
 			<string>remote-notification</string>
 		</array>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Serve per caricare foto e clip delle partite.</string>
+		<string>Serve per caricare la foto della tua carta, le foto della chat e le clip delle partite.</string>
 		<key>NSCameraUsageDescription</key>
-		<string>Serve per registrare le clip degli highlights.</string>
+		<string>Serve per scattare la foto della tua carta e registrare le clip degli highlights.</string>
 		<key>NSMicrophoneUsageDescription</key>
 		<string>Serve per i messaggi vocali, i replay della lavagna e la stanza vocale.</string>
 		<key>CFBundleURLTypes</key>

@@ -171,6 +171,7 @@ void _sharePdf(
     members: members,
     bench: _benchOf(formation, members.values),
     specials: ref.read(activeSpecialCardsProvider),
+    photoOf: (m) => loadCardPhotoImage(ref, m),
   );
 }
 

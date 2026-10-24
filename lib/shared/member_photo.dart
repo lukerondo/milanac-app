@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,6 +49,54 @@ ImageProvider? memberPhoto(WidgetRef ref, Member m) {
   }
   final social = m.avatarUrl;
   return social == null || social.isEmpty ? null : NetworkImage(social);
+}
+
+/// La foto della carta: quella caricata dal giocatore (di solito scontornata), mai
+/// quella dell'account social, che non è fatta per la carta. Sulle carte va la foto,
+/// nel resto dell'app (chat, stanza vocale, elenchi) il volto disegnato.
+ImageProvider? memberCardPhoto(WidgetRef ref, Member m) {
+  final path = m.avatarPath;
+  if (path == null) return null;
+  final local = demoPhotos[path];
+  if (local != null) return MemoryImage(local);
+  final url = ref.watch(photoUrlProvider(path)).value;
+  return url == null ? null : NetworkImage(url);
+}
+
+/// La foto della carta di [m] come immagine da disegnare fuori schermo (il PDF della
+/// formazione); null se non c'è o non arriva (si disegna il volto).
+Future<ui.Image?> loadCardPhotoImage(WidgetRef ref, Member m) async {
+  final path = m.avatarPath;
+  if (path == null) return null;
+  try {
+    final local = demoPhotos[path];
+    final ImageProvider provider;
+    if (local != null) {
+      provider = MemoryImage(local);
+    } else {
+      final url = await ref.read(photoUrlProvider(path).future);
+      if (url == null) return null;
+      provider = NetworkImage(url);
+    }
+    final done = Completer<ui.Image>();
+    final stream = provider.resolve(ImageConfiguration.empty);
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (info, _) {
+        if (!done.isCompleted) done.complete(info.image.clone());
+        info.dispose();
+        stream.removeListener(listener);
+      },
+      onError: (error, stack) {
+        if (!done.isCompleted) done.completeError(error, stack);
+        stream.removeListener(listener);
+      },
+    );
+    stream.addListener(listener);
+    return await done.future.timeout(const Duration(seconds: 15));
+  } catch (_) {
+    return null;
+  }
 }
 
 /// Avatar tondo: foto se c'è, altrimenti numero di maglia o iniziale. Senza foto

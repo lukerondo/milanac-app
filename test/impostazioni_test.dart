@@ -1,3 +1,5 @@
+import 'package:country_flags/country_flags.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -87,7 +89,12 @@ void main() {
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
       await tester.pumpAndSettle();
       await goToSection(tester, 'La mia carta');
-      expect(find.text('🇮🇹'), findsOneWidget);
+      // Sulla carta la bandiera è disegnata (non un'emoji), come le carte di FC.
+      expect(find.byType(CountryFlag), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Carta.*: Demo Direttivo, .*Italia')),
+        findsOneWidget,
+      );
     },
   );
 

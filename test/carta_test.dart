@@ -376,14 +376,14 @@ void main() {
     await tester.tap(find.text('Salva la carta'));
     await tester.pumpAndSettle();
 
-    // Lo stile scelto compare sulla carta, in cima al profilo.
+    // Lo stile scelto compare nei dati della carta, sotto la carta (che come quelle
+    // di FC mostra solo ruolo e statistiche).
     await tester.scrollUntilVisible(
-      find.text('REGISTA'),
-      -200,
+      find.text('Regista'),
+      200,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('87'), findsOneWidget);
-    expect(find.text('REGISTA'), findsOneWidget);
+    expect(find.text('Regista'), findsOneWidget);
   });
 
   testWidgets('Carta e dati del membro: i campi lasciati vuoti si cancellano', (
@@ -460,7 +460,11 @@ void main() {
     // Prima la carta con l'overall più alto (Rossi, 86 e il +5 della nero/oro).
     final first = tester.widgetList<MiniCard>(find.byType(MiniCard)).first;
     expect(first.member.displayName, 'Marco Rossi');
+    // Sulla mini carta l'overall è già con il bonus, come le carte di FC.
     expect(find.text('91'), findsOneWidget);
-    expect(find.text('+5'), findsWidgets);
+    expect(
+      find.bySemanticsLabel(RegExp('Marco Rossi, 91, carta nero e oro')),
+      findsOneWidget,
+    );
   });
 }
