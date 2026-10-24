@@ -1,0 +1,20 @@
+# Fine riga LF ovunque, anche su Windows: con core.autocrlf=true i file di testo
+# arriverebbero con CRLF e l'app leggerebbe male quelli che interpreta (per esempio
+# assets/legal/privacy.md, dove il titolo non verrebbe più riconosciuto).
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binari: mai toccati.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.mp4 binary
+*.mp3 binary
+*.m4a binary
+*.jar binary
+*.keystore binary
+*.jks binary
