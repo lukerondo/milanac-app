@@ -11,6 +11,7 @@ import 'core/push/push_service.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 import 'features/musica/soundtrack.dart';
+import 'shared/system_bars_guard.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +53,7 @@ class MilanacApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       routerConfig: router,
+      builder: (_, child) => SystemBarsGuard(child: child!),
       scaffoldMessengerKey: messengerKey,
       locale: const Locale('it'),
       supportedLocales: const [Locale('it'), Locale('en')],
