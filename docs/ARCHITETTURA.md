@@ -204,9 +204,13 @@ accettano al primo accesso successivo.
     storico per giornata.
 19. **Traguardi** – 11 badge (bronzo, argento, oro, leggenda): presenze, gol, un mese senza
     ritardi, un anno nel club, overall 85+, carta della settimana, blu elettrico.
-20. **Walkout** – animazione stile pacchetti FUT (luci, bandiera, ruolo, stemma, giro della
-    carta) alla prima apertura dopo l'approvazione, quando l'overall sale e quando arriva una
-    carta speciale (con i suoi colori); rivedibile dalla carta.
+20. **Walkout** – apertura del pacchetto come in FUT: la bustina nero oro si apre con un
+    tocco (o tirandola in su) e dallo strappo esce la luce del colore della carta; poi lampo,
+    San Siro che si accende, fuochi d'artificio (carte speciali e dall'oro in su), bandiera,
+    ruolo, stemma, giro della carta e overall che sale punto per punto (o il bonus della
+    speciale che si somma), con vibrazioni a tempo; a carta ferma la carta è viva. Parte alla
+    prima apertura dopo l'approvazione, quando l'overall sale e quando arriva una carta
+    speciale (con i suoi colori); rivedibile dalla carta.
 21. **Sala Direttivo** – contatori (senza risposta stasera, formazioni da pubblicare, video
     proposti, minuti voce del mese su 10.000) e azioni: presenze di stasera (correzioni anche dopo le 18:30), formazioni,
     nuovo evento, avviso a tutti (in Comunicazioni), nuovo risultato, rosa e squadre,

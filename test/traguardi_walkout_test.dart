@@ -103,8 +103,11 @@ void main() {
     );
     await tester.tap(find.text('Guarda il walkout'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 800));
+    // Prima il pacchetto da aprire.
+    expect(find.text('SPECIALE'), findsOneWidget);
+    await tester.tap(find.text('Tocca per aprire'));
+    await tester.pump();
     await tester.pump(const Duration(seconds: 3));
     expect(find.text('ATT'), findsOneWidget); // ruolo rivelato
     await tester.pump(const Duration(seconds: 5));

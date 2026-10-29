@@ -91,6 +91,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rivedi il walkout'));
     await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text('Tocca per aprire'));
+    await tester.pump();
     await tester.pump(const Duration(seconds: 8));
     expect(find.text('CARTA DELLA SETTIMANA'), findsOneWidget);
     expect(

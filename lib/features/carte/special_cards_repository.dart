@@ -191,7 +191,7 @@ abstract class SpecialCardsRepository {
 
 final specialCardsRepositoryProvider = Provider<SpecialCardsRepository>((ref) {
   final repo = AppConfig.isDemo
-      ? DemoSpecialCardsRepository()
+      ? DemoSpecialCardsRepository(clock: ref.read(clockProvider))
       : _SupabaseSpecialCardsRepository(ref);
   ref.onDispose(repo.dispose);
   return repo;
@@ -258,10 +258,11 @@ class _SupabaseSpecialCardsRepository extends SpecialCardsRepository {
   }
 }
 
-/// Carte in memoria per la demo e i test.
+/// Carte in memoria per la demo e i test, con le date prese da [clock] (l'orologio
+/// dell'app: nei test un orario fisso, così le scadenze non dipendono dall'ora vera).
 class DemoSpecialCardsRepository extends SpecialCardsRepository {
-  DemoSpecialCardsRepository() {
-    final now = DateTime.now();
+  DemoSpecialCardsRepository({this.clock = DateTime.now}) {
+    final now = clock();
     SpecialCard card(
       String id,
       String player,
@@ -320,6 +321,7 @@ class DemoSpecialCardsRepository extends SpecialCardsRepository {
     ]);
   }
 
+  final DateTime Function() clock;
   final _cards = <SpecialCard>[];
   final _changes = StreamController<void>.broadcast();
   var _next = 100;
@@ -354,7 +356,7 @@ class DemoSpecialCardsRepository extends SpecialCardsRepository {
           c.kind == CardSpecial.neroOro &&
           !players.contains(c.playerId),
     );
-    final now = DateTime.now();
+    final now = clock();
     var added = 0;
     for (final a in awards) {
       bool same(SpecialCard c) =>
