@@ -28,6 +28,7 @@ import '../walkout/walkout_page.dart';
 import 'card_colors.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
+import 'live_card.dart';
 
 /// Statistiche della carta di un membro (presenze degli ultimi 60 giorni e partite).
 final cardStatsProvider = Provider.family<CardStats?, String>((ref, id) {
@@ -194,15 +195,22 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                 Center(
                   child: SizedBox(
                     width: FutCard.width + 16,
-                    child: RepaintBoundary(
-                      key: _cardKey,
-                      child: Padding(
-                        // Margine per l'alone nell'immagine condivisa.
-                        padding: const EdgeInsets.all(8),
-                        child: FutCard(
-                          member: member,
-                          special: special?.kind,
-                          bonus: special?.bonus ?? 0,
+                    // Carta viva (riflessi, inclinazione, brillii): i riflessi stanno
+                    // fuori dall'immagine condivisa, che resta la carta pulita.
+                    child: LiveCard(
+                      special: special?.kind,
+                      padding: const EdgeInsets.all(8),
+                      cardWidth: FutCard.width,
+                      child: RepaintBoundary(
+                        key: _cardKey,
+                        child: Padding(
+                          // Margine per l'alone nell'immagine condivisa.
+                          padding: const EdgeInsets.all(8),
+                          child: FutCard(
+                            member: member,
+                            special: special?.kind,
+                            bonus: special?.bonus ?? 0,
+                          ),
                         ),
                       ),
                     ),
