@@ -130,7 +130,12 @@ accettano al primo accesso successivo.
    *Allenamento*, *Riunione*, *Altro*. Solo il Direttivo crea eventi (notifica alla squadra
    o a tutti). Ogni giorno compare l'allenamento automatico delle 21:30 per la squadra che
    non ha altro in programma.
-7. **Risultati** – partite (torneo/amichevole, avversario, punteggio, marcatori).
+7. **Risultati** – partite (torneo/amichevole, avversario, punteggio, marcatori e, se il
+   Direttivo li scrive, i minuti dei gol). La pagina della partita è come una diretta TV:
+   tabellone con le caselle del punteggio e i marcatori con i minuti sotto ogni squadra,
+   cronaca dal calcio d'inizio al fischio finale (linea del tempo, gol con il volto del
+   marcatore e il punteggio dopo ogni gol), foto, clip e video di YouTube in grande da
+   scorrere, che si aprono a tutto schermo una dopo l'altra.
    Per ogni partita il Direttivo allega media in **due modi**:
    - **Link** (YouTube, Twitch, Instagram, TikTok…) → riprodotto/aperto nell'app
    - **Clip caricata**: video **max 15 secondi** (tagliato nell'app) o foto, compressi prima dell'upload
@@ -275,6 +280,9 @@ profiles      + notify_prefs (jsonb: presenze|chat|notizie = false per spegnerle
 -- dalla migrazione 0025
 profile_private id(→ profiles), first_name, last_name, birth_year, birth_date, updated_at
               (RLS: solo l'interessato e il Direttivo leggono e scrivono)
+-- dalla migrazione 0027
+matches       + timeline (jsonb: [{minute 1-130, side us|them, scorer?}], mai più gol del
+              risultato; l'app salva senza se il server non è ancora aggiornato)
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),

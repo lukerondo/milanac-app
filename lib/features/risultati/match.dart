@@ -30,10 +30,15 @@ class ClubMatch {
     this.tournamentId,
     this.goalkeeperId,
     this.createdAt,
+    this.timeline = const [],
   });
 
   final String id;
   final MatchKind kind;
+
+  /// I gol con il minuto (facoltativi, in ordine di minuto): tabellone, timeline e
+  /// cronaca come in una diretta TV. Non più dei gol del risultato.
+  final List<MatchGoal> timeline;
 
   /// Portiere della partita (dalla formazione pubblicata, correggibile dal Direttivo):
   /// serve per la carta blu elettrico delle tre partite senza subire gol.
@@ -86,6 +91,11 @@ class ClubMatch {
       final String v => DateTime.parse(v),
       _ => null,
     },
+    // Prima della migrazione 0027 la colonna non c'è: nessun minuto.
+    timeline: sortedGoals([
+      for (final g in (m['timeline'] as List?) ?? const [])
+        ?MatchGoal.tryParse(g),
+    ]),
   );
 
   Map<String, dynamic> toMap() => {
@@ -101,7 +111,68 @@ class ClubMatch {
     'team': team.name,
     'tournament_id': kind == MatchKind.torneo ? tournamentId : null,
     'goalkeeper_id': goalkeeperId,
+    'timeline': [for (final g in timeline) g.toJson()],
   };
+}
+
+/// Un gol con il minuto: del club ([ours], con il marcatore scritto come nei marcatori)
+/// o degli avversari.
+class MatchGoal {
+  const MatchGoal({required this.minute, required this.ours, this.scorer});
+  final int minute;
+  final bool ours;
+  final String? scorer;
+
+  /// Minuti possibili: dal primo ai supplementari con recupero.
+  static const maxMinute = 130;
+
+  static MatchGoal? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final minute = json['minute'];
+    final side = json['side'];
+    if (minute is! num || minute < 1 || minute > maxMinute) return null;
+    if (side != 'us' && side != 'them') return null;
+    final scorer = json['scorer'];
+    return MatchGoal(
+      minute: minute.toInt(),
+      ours: side == 'us',
+      scorer: side == 'us' && scorer is String && scorer.trim().isNotEmpty
+          ? scorer.trim()
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'minute': minute,
+    'side': ours ? 'us' : 'them',
+    if (ours && scorer != null) 'scorer': scorer,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is MatchGoal &&
+      other.minute == minute &&
+      other.ours == ours &&
+      other.scorer == scorer;
+
+  @override
+  int get hashCode => Object.hash(minute, ours, scorer);
+}
+
+/// I gol in ordine di minuto (a pari minuto, come sono stati scritti).
+List<MatchGoal> sortedGoals(Iterable<MatchGoal> goals) {
+  final indexed = goals.indexed.toList()
+    ..sort((a, b) {
+      final byMinute = a.$2.minute.compareTo(b.$2.minute);
+      return byMinute != 0 ? byMinute : a.$1.compareTo(b.$1);
+    });
+  return [for (final (_, g) in indexed) g];
+}
+
+/// Il punteggio dopo ogni gol della [timeline] (club, avversari): 1–0, 1–1, 2–1...
+List<(int, int)> runningScore(List<MatchGoal> timeline) {
+  var us = 0, them = 0;
+  return [for (final g in timeline) g.ours ? (++us, them) : (us, ++them)];
 }
 
 final _neverCreated = DateTime.utc(1970);

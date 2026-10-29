@@ -17,6 +17,10 @@ abstract class MatchesRepository {
 
   /// Crea la partita se [ClubMatch.id] è vuoto, altrimenti la aggiorna. Restituisce l'id.
   Future<String> save(ClubMatch match);
+
+  /// Il server non ha ancora i minuti dei gol (migrazione 0027): le partite si salvano
+  /// senza. Diventa vero al primo salvataggio rifiutato per questo.
+  bool get timelineMissing;
   Future<void> delete(String id);
 
   /// Foto, clip e link di tutte le partite.
@@ -68,6 +72,23 @@ final matchMediaProvider =
           ),
     );
 
+/// Scrive la partita con [write]. Un database prima della 0027 non ha la colonna dei
+/// minuti dei gol (PostgREST risponde PGRST204): si riscrive senza, e da lì in poi non
+/// la si manda più. Restituisce l'id e se la colonna manca.
+Future<(String, bool)> writeMatch(
+  Map<String, dynamic> map,
+  Future<String> Function(Map<String, dynamic> map) write, {
+  bool timelineMissing = false,
+}) async {
+  if (timelineMissing) return (await write(map..remove('timeline')), true);
+  try {
+    return (await write(map), false);
+  } on PostgrestException catch (e) {
+    if (e.code != 'PGRST204') rethrow;
+    return (await write(map..remove('timeline')), true);
+  }
+}
+
 class SupabaseMatchesRepository implements MatchesRepository {
   SupabaseMatchesRepository(this._ref);
   final Ref _ref;
@@ -86,17 +107,30 @@ class SupabaseMatchesRepository implements MatchesRepository {
       );
 
   @override
+  bool timelineMissing = false;
+
+  @override
   Future<String> save(ClubMatch m) async {
-    if (m.id.isEmpty) {
+    final (id, missing) = await writeMatch(
+      m.toMap(),
+      (map) => _write(m.id, map),
+      timelineMissing: timelineMissing,
+    );
+    timelineMissing = missing;
+    return id;
+  }
+
+  Future<String> _write(String id, Map<String, dynamic> map) async {
+    if (id.isEmpty) {
       final row = await _client
           .from('matches')
-          .insert(m.toMap())
+          .insert(map)
           .select('id')
           .single();
       return row['id'] as String;
     }
-    await _client.from('matches').update(m.toMap()).eq('id', m.id);
-    return m.id;
+    await _client.from('matches').update(map).eq('id', id);
+    return id;
   }
 
   @override
@@ -215,6 +249,12 @@ class DemoMatchesRepository implements MatchesRepository {
         scorers: 'Rossi (2), Bianchi',
         notes: 'Rimonta nel secondo tempo!',
         goalkeeperId: 'p4',
+        timeline: const [
+          MatchGoal(minute: 18, ours: false),
+          MatchGoal(minute: 52, ours: true, scorer: 'Rossi'),
+          MatchGoal(minute: 67, ours: true, scorer: 'Rossi'),
+          MatchGoal(minute: 88, ours: true, scorer: 'Bianchi'),
+        ],
       ),
       ClubMatch(
         id: 'm2',
@@ -276,6 +316,9 @@ class DemoMatchesRepository implements MatchesRepository {
   }
 
   @override
+  bool get timelineMissing => false;
+
+  @override
   Future<String> save(ClubMatch m) async {
     final id = m.id.isEmpty ? 'm${_nextId++}' : m.id;
     final old = _matches.where((x) => x.id == id).firstOrNull;
@@ -296,6 +339,7 @@ class DemoMatchesRepository implements MatchesRepository {
         team: m.team,
         tournamentId: m.tournamentId,
         goalkeeperId: m.goalkeeperId,
+        timeline: sortedGoals(m.timeline),
       ),
     );
     _matchesCtrl.add(_sorted);

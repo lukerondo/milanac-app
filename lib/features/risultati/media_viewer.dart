@@ -72,16 +72,79 @@ class _MediaImageState extends ConsumerState<MediaImage> {
   }
 }
 
-/// Visualizzatore a schermo intero per foto e clip.
-class MediaViewer extends ConsumerStatefulWidget {
-  const MediaViewer({super.key, required this.media});
+/// Foto e clip della partita a tutto schermo, una dopo l'altra scorrendo di lato: la
+/// clip parte da sola e si ferma uscendo dalla sua pagina.
+class MediaGallery extends StatefulWidget {
+  const MediaGallery({super.key, required this.items, this.initial = 0});
+  final List<MatchMedia> items;
+  final int initial;
+
+  @override
+  State<MediaGallery> createState() => _MediaGalleryState();
+}
+
+class _MediaGalleryState extends State<MediaGallery> {
+  late final _pages = PageController(initialPage: widget.initial);
+  late int _index = widget.initial;
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = widget.items[_index];
+    final count = widget.items.length;
+    // Foto e clip si guardano su fondo nero, anche con il tema chiaro.
+    return Theme(
+      data: mediaTheme,
+      child: Scaffold(
+        backgroundColor: MilanacColors.black,
+        appBar: AppBar(
+          backgroundColor: MilanacColors.black,
+          title: Text(
+            media.caption ?? (media.type == MediaType.video ? 'CLIP' : 'FOTO'),
+          ),
+          actions: [
+            if (count > 1)
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Center(
+                  child: Text(
+                    '${_index + 1} / $count',
+                    style: const TextStyle(
+                      fontFamily: sportFont,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        body: PageView.builder(
+          controller: _pages,
+          itemCount: count,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (_, i) => _MediaPage(media: widget.items[i]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Una foto (da ingrandire con due dita) o una clip (tocco = pausa / riprendi).
+class _MediaPage extends ConsumerStatefulWidget {
+  const _MediaPage({required this.media});
   final MatchMedia media;
 
   @override
-  ConsumerState<MediaViewer> createState() => _MediaViewerState();
+  ConsumerState<_MediaPage> createState() => _MediaPageState();
 }
 
-class _MediaViewerState extends ConsumerState<MediaViewer> {
+class _MediaPageState extends ConsumerState<_MediaPage> {
   VideoPlayerController? _video;
   String? _error;
   bool _canRetry = false;
@@ -148,42 +211,24 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
   @override
   Widget build(BuildContext context) {
     final video = _video;
-    Widget body;
     if (widget.media.type == MediaType.photo) {
-      body = InteractiveViewer(
+      return InteractiveViewer(
         child: Center(child: MediaImage(media: widget.media)),
       );
-    } else if (_error != null) {
-      body = ErrorRetry(message: _error!, onRetry: _canRetry ? _retry : null);
-    } else if (video == null) {
-      body = const Center(child: CircularProgressIndicator());
-    } else {
-      // Il lettore si ridisegna da solo quando parte o si ferma: niente setState
-      // (che non accetta una funzione che restituisce un Future).
-      body = GestureDetector(
-        onTap: () => video.value.isPlaying ? video.pause() : video.play(),
-        child: Center(
-          child: AspectRatio(
-            aspectRatio: video.value.aspectRatio,
-            child: VideoPlayer(video),
-          ),
-        ),
-      );
     }
-
-    // Foto e clip si guardano su fondo nero, anche con il tema chiaro.
-    return Theme(
-      data: mediaTheme,
-      child: Scaffold(
-        backgroundColor: MilanacColors.black,
-        appBar: AppBar(
-          backgroundColor: MilanacColors.black,
-          title: Text(
-            widget.media.caption ??
-                (widget.media.type == MediaType.video ? 'CLIP' : 'FOTO'),
-          ),
+    if (_error != null) {
+      return ErrorRetry(message: _error!, onRetry: _canRetry ? _retry : null);
+    }
+    if (video == null) return const Center(child: CircularProgressIndicator());
+    // Il lettore si ridisegna da solo quando parte o si ferma: niente setState
+    // (che non accetta una funzione che restituisce un Future).
+    return GestureDetector(
+      onTap: () => video.value.isPlaying ? video.pause() : video.play(),
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: video.value.aspectRatio,
+          child: VideoPlayer(video),
         ),
-        body: body,
       ),
     );
   }

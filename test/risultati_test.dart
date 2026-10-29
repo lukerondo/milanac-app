@@ -148,6 +148,7 @@ void main() {
         find.widgetWithText(TextField, 'Avversari'),
         goalsAgainst,
       );
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Salva partita'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Salva partita'));
@@ -239,7 +240,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'PARTITA'), findsOneWidget);
     expect(find.text('ATLETICO JOYSTICK'), findsOneWidget);
-    expect(find.text('2 – 1'), findsOneWidget);
+    // Il tabellone: il punteggio nelle caselle, con FINALE sotto.
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('FINALE'), findsOneWidget);
   });
 
   testWidgets('Risultati: un solo stream dei media per tutte le schede, '
@@ -321,6 +325,7 @@ void main() {
       'Atletico Joystick',
     );
     await tester.enterText(find.widgetWithText(TextField, 'MILAN AC'), '2');
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Salva partita'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Salva partita'));
@@ -339,6 +344,7 @@ void main() {
 
     // Con tutti e due i punteggi la partita si salva (giocata).
     await tester.enterText(find.widgetWithText(TextField, 'Avversari'), '0');
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Salva partita'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Salva partita'));

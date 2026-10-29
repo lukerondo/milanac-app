@@ -9,6 +9,7 @@ import '../../core/errors.dart';
 import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../carta/card_stats.dart' show scorerPerGoal;
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import '../tornei/tournaments_repository.dart';
@@ -61,7 +62,60 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
   );
   late final _scorers = TextEditingController(text: widget.match?.scorers);
   late final _notes = TextEditingController(text: widget.match?.notes);
+
+  /// Minuti dei gol (facoltativi): uno per gol del risultato, i nostri nell'ordine dei
+  /// marcatori, poi quelli subiti. Crescono con il risultato e non si accorciano, così
+  /// un punteggio corretto per sbaglio non fa perdere i minuti già scritti.
+  final _ourMinutes = <TextEditingController>[];
+  final _theirMinutes = <TextEditingController>[];
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final m = widget.match;
+    if (m != null) {
+      // Ogni minuto salvato torna sulla riga del suo marcatore (poi i rimasti in ordine).
+      final ours = [
+        for (final g in m.timeline)
+          if (g.ours) g,
+      ];
+      final names = scorerPerGoal(m.scorers);
+      final rows = List<int?>.filled(m.goalsFor ?? 0, null);
+      final taken = List<bool>.filled(ours.length, false);
+      for (var i = 0; i < rows.length; i++) {
+        final name = i < names.length ? names[i].toLowerCase() : null;
+        final j = ours.indexed
+            .where((e) => !taken[e.$1] && e.$2.scorer?.toLowerCase() == name)
+            .firstOrNull
+            ?.$1;
+        if (name != null && j != null) {
+          taken[j] = true;
+          rows[i] = ours[j].minute;
+        }
+      }
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i] != null) continue;
+        final j = taken.indexWhere((t) => !t);
+        if (j < 0) break;
+        taken[j] = true;
+        rows[i] = ours[j].minute;
+      }
+      _ourMinutes.addAll([
+        for (final r in rows) TextEditingController(text: r?.toString()),
+      ]);
+      _theirMinutes.addAll([
+        for (final g in m.timeline)
+          if (!g.ours) TextEditingController(text: '${g.minute}'),
+      ]);
+    }
+    for (final c in [_for, _against, _scorers]) {
+      c.addListener(_refresh);
+    }
+  }
+
+  /// Le righe dei minuti seguono il risultato e i marcatori mentre si scrivono.
+  void _refresh() => setState(() {});
 
   @override
   void dispose() {
@@ -72,10 +126,58 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
       _against,
       _scorers,
       _notes,
+      ..._ourMinutes,
+      ..._theirMinutes,
     ]) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// I primi [count] campi dei minuti, aggiungendo quelli che mancano.
+  List<TextEditingController> _minutes(
+    List<TextEditingController> list,
+    int count,
+  ) {
+    while (list.length < count) {
+      list.add(TextEditingController());
+    }
+    return list.sublist(0, count);
+  }
+
+  /// Minuto scritto in un campo: null se vuoto, -1 se fuori misura.
+  static int? _minuteIn(TextEditingController c) {
+    final text = c.text.trim();
+    if (text.isEmpty) return null;
+    final m = int.tryParse(text);
+    return m == null || m < 1 || m > MatchGoal.maxMinute ? -1 : m;
+  }
+
+  /// I gol con il minuto da salvare (null = un minuto non valido).
+  List<MatchGoal>? _timeline(int goalsFor, int goalsAgainst) {
+    final names = scorerPerGoal(_scorers.text);
+    final goals = <MatchGoal>[];
+    for (final (i, c) in _minutes(_ourMinutes, goalsFor).indexed) {
+      final minute = _minuteIn(c);
+      if (minute == -1) return null;
+      if (minute == null) continue;
+      final name = i < names.length ? names[i] : null;
+      goals.add(
+        MatchGoal(
+          minute: minute,
+          ours: true,
+          scorer: name == null || name.length <= 60
+              ? name
+              : name.substring(0, 60),
+        ),
+      );
+    }
+    for (final c in _minutes(_theirMinutes, goalsAgainst)) {
+      final minute = _minuteIn(c);
+      if (minute == -1) return null;
+      if (minute != null) goals.add(MatchGoal(minute: minute, ours: false));
+    }
+    return sortedGoals(goals);
   }
 
   String? _text(TextEditingController c) =>
@@ -84,9 +186,14 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
   Future<void> _save() async {
     final goalsFor = int.tryParse(_for.text.trim());
     final goalsAgainst = int.tryParse(_against.text.trim());
+    final timeline = _timeline(goalsFor ?? 0, goalsAgainst ?? 0);
     final error = _opponent.text.trim().isEmpty
         ? "Inserisci il nome dell'avversario."
-        : resultError(goalsFor, goalsAgainst);
+        : resultError(goalsFor, goalsAgainst) ??
+              (timeline == null
+                  ? 'Minuto non valido: scrivi un numero da 1 a '
+                        '${MatchGoal.maxMinute}.'
+                  : null);
     if (error != null) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error)));
@@ -108,10 +215,23 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
       team: _team,
       tournamentId: _tournamentId,
       goalkeeperId: _goalkeeperId,
+      timeline: timeline!,
     );
+    final repo = ref.read(matchesRepositoryProvider);
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(matchesRepositoryProvider).save(m);
+      await repo.save(m);
       if (mounted) Navigator.of(context).pop();
+      if (m.timeline.isNotEmpty && repo.timelineMissing) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Partita salvata. I minuti dei gol si vedranno quando il server '
+              'del club sarà aggiornato.',
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
@@ -257,6 +377,7 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
                 hintText: 'es. Rossi (2), Bianchi',
               ),
             ),
+            ..._minuteRows(context),
             const SizedBox(height: 8),
             _GoalkeeperPicker(
               team: _team,
@@ -281,6 +402,80 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
         ),
       ),
     );
+  }
+}
+
+extension on _MatchEditorState {
+  /// Un campo per il minuto di ogni gol del risultato: i nostri con il nome del
+  /// marcatore (dall'elenco), poi quelli subiti.
+  List<Widget> _minuteRows(BuildContext context) {
+    final p = context.pal;
+    final goalsFor = int.tryParse(_for.text.trim()) ?? 0;
+    final goalsAgainst = int.tryParse(_against.text.trim()) ?? 0;
+    if (goalsFor + goalsAgainst == 0) return const [];
+    final names = scorerPerGoal(_scorers.text);
+    Widget row(String label, TextEditingController c, Key key, bool ours) =>
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              Icon(
+                Icons.sports_soccer_rounded,
+                size: 20,
+                color: ours ? p.accentText : p.textMuted,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+              SizedBox(
+                width: 84,
+                child: TextField(
+                  key: key,
+                  controller: c,
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(3),
+                  ],
+                  decoration: const InputDecoration(
+                    hintText: 'min',
+                    suffixText: "'",
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+    return [
+      const SizedBox(height: 14),
+      Text('Minuti dei gol', style: Theme.of(context).textTheme.titleSmall),
+      Text(
+        'Facoltativi: servono per il tabellone e la cronaca della partita.',
+        style: TextStyle(fontSize: 13, color: p.textMuted),
+      ),
+      for (final (i, c) in _minutes(_ourMinutes, goalsFor).indexed)
+        row(
+          i < names.length ? names[i] : 'Gol ${i + 1} del ${_team.short}',
+          c,
+          Key('minuto-noi-$i'),
+          true,
+        ),
+      for (final (i, c) in _minutes(_theirMinutes, goalsAgainst).indexed)
+        row(
+          goalsAgainst == 1 ? 'Gol subito' : 'Gol subito ${i + 1}',
+          c,
+          Key('minuto-loro-$i'),
+          false,
+        ),
+    ];
   }
 }
 

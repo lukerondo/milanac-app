@@ -133,6 +133,17 @@ List<(String, int, Member?)> scorerLines(
   return lines;
 }
 
+/// Il giocatore di un nome scritto nei marcatori (come per i gol della carta), o null.
+Member? scorerMember(String written, Iterable<Member> players) =>
+    _scorerItems(written, players).firstOrNull?.$3;
+
+/// Un nome per ogni gol, nell'ordine dei marcatori ("Rossi (2), Bianchi" → Rossi, Rossi,
+/// Bianchi): le righe dei minuti nell'editor della partita.
+List<String> scorerPerGoal(String? scorers) => [
+  for (final (name, count, _) in _scorerItems(scorers, const <Member>[]))
+    for (var i = 0; i < count.clamp(0, 40); i++) name,
+];
+
 /// Ogni voce dell'elenco marcatori: nome come è scritto, gol, giocatore riconosciuto.
 Iterable<(String, int, Member?)> _scorerItems(
   String? scorers,

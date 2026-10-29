@@ -71,7 +71,8 @@ void main() {
 
     await tester.tap(find.text('Dinamo Pixel'));
     await tester.pumpAndSettle();
-    expectLight(tester, find.text('MARCATORI'));
+    expectLight(tester, find.text('FINALE'));
+    expectLight(tester, find.text('CRONACA'));
     expectLight(tester, find.text('CARTE SPECIALI DELLA GIORNATA'));
     await scrollToEnd(tester);
     expectLight(tester, find.text('Highlights completi'));

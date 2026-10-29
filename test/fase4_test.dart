@@ -94,6 +94,8 @@ void main() {
     );
     await tester.enterText(find.widgetWithText(TextField, 'MILAN AC'), '4');
     await tester.enterText(find.widgetWithText(TextField, 'Avversari'), '0');
+    // Con il risultato compaiono le righe dei minuti: il tasto scende.
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Salva partita'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Salva partita'));

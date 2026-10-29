@@ -1742,3 +1742,45 @@ do $$ begin
   assert (select count(*) from voice_sessions where room_id = current_setting('test.stanza_c')::uuid
           and left_at is null) = 0, 'nessuno resta dentro';
 end $$;
+
+-- ================================================================ diretta TV (0027)
+-- I minuti dei gol: facoltativi, validi e mai più dei gol del risultato.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into matches (id, kind, opponent, played_at, team, goals_for, goals_against, scorers, timeline)
+values ('00000000-0000-0000-0000-0000000000bd', 'amichevole', 'Diretta', now(), 'milanac', 2, 1, 'Rossi (2)',
+        '[{"minute": 18, "side": "them"}, {"minute": 52, "side": "us", "scorer": "Rossi"}]');
+select pg_temp.expect_error(format(
+  $q$update matches set timeline = %L where id = '00000000-0000-0000-0000-0000000000bd'$q$, t),
+  'matches_timeline_valid')
+from unnest(array[
+  '{}',                                                -- non è un elenco
+  '[{"minute": 0, "side": "us"}]',                     -- minuto fuori misura
+  '[{"minute": 131, "side": "us"}]',
+  '[{"minute": 12.5, "side": "us"}]',                  -- minuto non intero
+  '[{"minute": "12", "side": "us"}]',                  -- minuto scritto come testo
+  '[{"minute": 12}]',                                  -- di chi è il gol?
+  '[{"minute": 12, "side": "noi"}]',
+  '[{"minute": 12, "side": "us", "scorer": 5}]',
+  '[{"minute": 12, "side": "us", "scorer": "' || repeat('x', 61) || '"}]',
+  '[{"minute": 1, "side": "us"}, {"minute": 2, "side": "us"}, {"minute": 3, "side": "us"}]',
+  '[{"minute": 5, "side": "them"}, {"minute": 6, "side": "them"}]'
+]) t;
+-- Il risultato non scende sotto i gol con il minuto.
+select pg_temp.expect_error(
+  $q$update matches set goals_for = 0 where id = '00000000-0000-0000-0000-0000000000bd'$q$,
+  'matches_timeline_valid');
+update matches set timeline = '[{"minute": 18, "side": "them"}, {"minute": 52, "side": "us", "scorer": "Rossi"},
+                                {"minute": 90, "side": "us", "scorer": null}]'
+  where id = '00000000-0000-0000-0000-0000000000bd';
+-- Un giocatore non li cambia.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+update matches set timeline = '[]' where id = '00000000-0000-0000-0000-0000000000bd';
+reset role;
+do $$ begin
+  assert (select jsonb_array_length(timeline) from matches
+          where id = '00000000-0000-0000-0000-0000000000bd') = 3, 'minuti salvati dal Direttivo';
+  assert not exists (select 1 from matches
+                     where id <> '00000000-0000-0000-0000-0000000000bd' and timeline <> '[]'::jsonb),
+    'le partite di prima restano senza minuti';
+end $$;

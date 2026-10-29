@@ -2,14 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
-import '../../core/clock.dart';
 import '../../core/errors.dart';
-import '../../core/italian_time.dart';
 import '../../core/push/push_service.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
@@ -27,6 +24,7 @@ import 'clip_service.dart';
 import 'clip_trim_page.dart';
 import 'match.dart';
 import 'match_editor.dart';
+import 'match_tv.dart';
 import 'matches_repository.dart';
 import 'media_viewer.dart';
 import 'result_ui.dart';
@@ -127,16 +125,25 @@ class _MatchScaffold extends ConsumerWidget {
     }
   }
 
-  /// Condivide il risultato come testo (WhatsApp, Telegram...).
-  Future<void> _share() async {
+  /// Condivide il risultato come testo (WhatsApp, Telegram...), con i minuti dei gol
+  /// se ci sono.
+  Future<void> _share(List<Member> roster) async {
     final played = match.outcome != MatchOutcome.daGiocare;
+    final scorers = played
+        ? scorerTicker(match, matchPlayers(roster, match))
+        : const <String>[];
+    final against = [
+      for (final g in match.timeline)
+        if (!g.ours) "${g.minute}'",
+    ];
     final text = [
       played
           ? '${match.team.label} ${scoreText(match)} ${match.opponent}'
           : '${match.team.label} – ${match.opponent}',
       matchSubtitle(match),
-      if (played && (match.scorers?.trim().isNotEmpty ?? false))
-        'Marcatori: ${match.scorers!.trim()}',
+      if (scorers.isNotEmpty) 'Marcatori: ${scorers.join(', ')}',
+      if (played && against.isNotEmpty)
+        'Gol ${match.opponent}: ${against.join(' ')}',
       'MILANAC Pro Club',
     ].join('\n');
     try {
@@ -156,7 +163,8 @@ class _MatchScaffold extends ConsumerWidget {
           IconButton(
             tooltip: 'Condividi',
             icon: const Icon(Icons.ios_share_rounded),
-            onPressed: _share,
+            onPressed: () =>
+                _share(ref.read(rosaProvider).value ?? const <Member>[]),
           ),
           if (isDirettivo)
             PopupMenuButton<String>(
@@ -176,14 +184,17 @@ class _MatchScaffold extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
-          _ScoreHeader(match: match),
+          TvScoreHeader(match: match),
           const GoldFadeLine(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _ScorersCard(match: match),
+                if (match.timeline.isEmpty)
+                  _ScorersCard(match: match)
+                else
+                  MatchTimelineCard(match: match),
                 _SpecialCardsCard(match: match, isDirettivo: isDirettivo),
                 _MediaSection(match: match, isDirettivo: isDirettivo),
                 if (isDirettivo) _DirettivoActions(match: match),
@@ -194,135 +205,6 @@ class _MatchScaffold extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// Testata scura: competizione, stemma e avversario con il punteggio grande in oro,
-/// esito e quando si è giocata.
-class _ScoreHeader extends ConsumerWidget {
-  const _ScoreHeader({required this.match});
-  final ClubMatch match;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // La testata è sempre scura: stati con la tavolozza scura anche nel tema chiaro.
-    const dark = AppPalette.dark;
-    final now = ref.watch(clockProvider)();
-    final played = match.outcome != MatchOutcome.daGiocare;
-    final (fg, bg) = outcomeColors(dark, match.outcome);
-    final label = [
-      competitionLabel(match),
-      if (!match.home) 'in trasferta',
-    ].join(' · ');
-    // L'orario della partita è già in ora italiana; relativeDay vuole l'istante.
-    final when = played
-        ? '${outcomeLabel(match.outcome)} · '
-              '${relativeDay(fromItalianClock(match.playedAt), now)}'
-        : 'Da giocare · ${DateFormat("EEEE d MMMM, HH:mm", 'it').format(match.playedAt)}';
-    return ColoredBox(
-      color: context.pal.hero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
-        child: Column(
-          children: [
-            Text(
-              label.toUpperCase(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.3,
-                color: HeroText.secondary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _Side(
-                    name: match.team.label,
-                    badge: const ClubCrest(),
-                  ),
-                ),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 170),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        played ? scoreText(match) : 'VS',
-                        style: const TextStyle(
-                          fontFamily: sportFont,
-                          fontSize: 52,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2.6,
-                          height: 1.1,
-                          color: HeroText.accent,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: _Side(
-                    name: match.opponent,
-                    badge: Container(
-                      width: 60,
-                      height: 60,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: CardColors.portrait,
-                      ),
-                      child: Text(
-                        initialsOf(match.opponent),
-                        style: const TextStyle(
-                          fontFamily: sportFont,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: HeroText.secondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            StatusPill(when, color: fg, background: bg, fontSize: 14),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Side extends StatelessWidget {
-  const _Side({required this.name, required this.badge});
-  final String name;
-  final Widget badge;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      badge,
-      const SizedBox(height: 6),
-      Text(
-        name.toUpperCase(),
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          fontFamily: sportFont,
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          letterSpacing: .5,
-          height: 1.2,
-          color: HeroText.primary,
-        ),
-      ),
-    ],
-  );
 }
 
 /// Marcatori (con foto e gol) e la nota della partita.
@@ -573,7 +455,8 @@ class _CardWinner extends StatelessWidget {
   }
 }
 
-/// Video, clip, foto e link della partita, una riga ciascuno.
+/// Gol e highlights: foto, clip e video di YouTube in grande, da scorrere di lato (foto
+/// e clip si aprono a tutto schermo, una dopo l'altra); gli altri link in riga sotto.
 class _MediaSection extends ConsumerWidget {
   const _MediaSection({required this.match, required this.isDirettivo});
   final ClubMatch match;
@@ -596,28 +479,215 @@ class _MediaSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: 12),
             child: LinearProgressIndicator(),
           ),
-          data: (items) => items.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    'Nessun video o foto per questa partita.',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: context.pal.textMuted,
+          data: (items) {
+            if (items.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Nessun video o foto per questa partita.',
+                  style: TextStyle(fontSize: 15, color: context.pal.textMuted),
+                ),
+              );
+            }
+            final big = [
+              for (final m in items)
+                if (m.type != MediaType.link || youtubeId(m.url ?? '') != null)
+                  m,
+            ];
+            final gallery = [
+              for (final m in big)
+                if (m.type != MediaType.link) m,
+            ];
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (big.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: LayoutBuilder(
+                      builder: (context, box) {
+                        // Con più contenuti si intravede il successivo.
+                        final width = big.length == 1
+                            ? box.maxWidth
+                            : box.maxWidth * .84;
+                        return SizedBox(
+                          height: width * 9 / 16,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: big.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(width: 10),
+                            itemBuilder: (context, i) => SizedBox(
+                              width: width,
+                              child: _MediaTile(
+                                media: big[i],
+                                canDelete: isDirettivo,
+                                onOpen: () => openMedia(
+                                  context,
+                                  big[i],
+                                  gallery: gallery,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                )
-              : Column(
-                  children: [
-                    for (final m in items)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _MediaRow(media: m, canDelete: isDirettivo),
-                      ),
-                  ],
-                ),
+                for (final m in items)
+                  if (!big.contains(m))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _MediaRow(media: m, canDelete: isDirettivo),
+                    ),
+              ],
+            );
+          },
         ),
       ],
+    );
+  }
+}
+
+/// Il Direttivo toglie un contenuto (tenendolo premuto), dopo la conferma.
+Future<void> _deleteMedia(
+  BuildContext context,
+  WidgetRef ref,
+  MatchMedia media,
+) async {
+  final ok = await _confirm(context, 'Eliminare questo contenuto?');
+  if (ok != true || !context.mounted) return;
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await ref.read(matchesRepositoryProvider).deleteMedia(media);
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(friendlyError(e, action: 'Eliminazione non riuscita')),
+      ),
+    );
+  }
+}
+
+/// Foto, clip o video di YouTube in grande, come un replay in TV: l'immagine (o
+/// l'anteprima di YouTube), il tasto play e, nel sottopancia, il tipo e la didascalia.
+class _MediaTile extends ConsumerWidget {
+  const _MediaTile({
+    required this.media,
+    required this.canDelete,
+    required this.onOpen,
+  });
+  final MatchMedia media;
+  final bool canDelete;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = media.type == MediaType.link ? youtubeId(media.url ?? '') : null;
+    const blank = ColoredBox(color: MilanacColors.surfaceHigh);
+    final picture = switch (media.type) {
+      MediaType.photo => MediaImage(media: media, fit: BoxFit.cover),
+      MediaType.video => blank,
+      MediaType.link => Image.network(
+        'https://img.youtube.com/vi/$id/mqdefault.jpg',
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => blank,
+      ),
+    };
+    final (tag, title) = switch (media.type) {
+      MediaType.photo => ('FOTO', media.caption ?? 'Foto'),
+      MediaType.video => (
+        media.durationS == null ? 'CLIP' : 'CLIP · ${media.durationS}"',
+        media.caption ?? 'Clip',
+      ),
+      MediaType.link => ('YOUTUBE', media.caption ?? 'Video'),
+    };
+    return Material(
+      color: MilanacColors.black,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: onOpen,
+        onLongPress: canDelete ? () => _deleteMedia(context, ref, media) : null,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            picture,
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x00000000), Color(0xCC000000)],
+                  stops: [.45, 1],
+                ),
+              ),
+            ),
+            if (media.type != MediaType.photo)
+              Center(
+                child: Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: MilanacColors.black.withValues(alpha: .55),
+                    border: Border.all(
+                      color: MilanacColors.goldLight,
+                      width: 2,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    size: 34,
+                    color: MilanacColors.ivory,
+                  ),
+                ),
+              ),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 10,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: MilanacColors.gold,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      tag,
+                      style: const TextStyle(
+                        fontFamily: sportFont,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
+                        color: MilanacColors.ink,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: MilanacColors.ivory,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -683,8 +753,8 @@ Future<bool?> _confirm(BuildContext context, String text) => showDialog<bool>(
   ),
 );
 
-/// Riga di un contenuto: riquadro (anteprima della foto o icona), titolo, tipo e
-/// freccia. Il Direttivo lo toglie tenendolo premuto.
+/// Riga di un link (non di YouTube): icona, titolo, sito e freccia. Il Direttivo lo
+/// toglie tenendolo premuto.
 class _MediaRow extends ConsumerWidget {
   const _MediaRow({required this.media, required this.canDelete});
   final MatchMedia media;
@@ -694,23 +764,6 @@ class _MediaRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = context.pal;
     final url = media.url ?? '';
-    final isYoutube = media.type == MediaType.link && youtubeId(url) != null;
-    final (title, subtitle) = switch (media.type) {
-      MediaType.link => (
-        media.caption ?? 'Video',
-        isYoutube
-            ? 'Video su YouTube'
-            : (Uri.tryParse(url)?.host.replaceFirst('www.', '') ?? 'Link'),
-      ),
-      MediaType.video => (
-        media.caption ?? 'Clip',
-        media.durationS == null ? 'Clip' : 'Clip di ${media.durationS} secondi',
-      ),
-      MediaType.photo => (
-        media.caption ?? 'Foto',
-        'Foto · tocca per ingrandire',
-      ),
-    };
     final radius = BorderRadius.circular(18);
     return Material(
       color: p.surface,
@@ -721,27 +774,7 @@ class _MediaRow extends ConsumerWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => openMedia(context, media),
-        onLongPress: canDelete
-            ? () async {
-                final ok = await _confirm(
-                  context,
-                  'Eliminare questo contenuto?',
-                );
-                if (ok != true || !context.mounted) return;
-                final messenger = ScaffoldMessenger.of(context);
-                try {
-                  await ref.read(matchesRepositoryProvider).deleteMedia(media);
-                } catch (e) {
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        friendlyError(e, action: 'Eliminazione non riuscita'),
-                      ),
-                    ),
-                  );
-                }
-              }
-            : null,
+        onLongPress: canDelete ? () => _deleteMedia(context, ref, media) : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -752,15 +785,11 @@ class _MediaRow extends ConsumerWidget {
                   width: 40,
                   height: 40,
                   color: p.surfaceHigh,
-                  child: media.type == MediaType.photo
-                      ? MediaImage(media: media, fit: BoxFit.cover)
-                      : Icon(
-                          media.type == MediaType.link && !isYoutube
-                              ? Icons.link_rounded
-                              : Icons.play_arrow_rounded,
-                          size: 24,
-                          color: p.accentText,
-                        ),
+                  child: Icon(
+                    Icons.link_rounded,
+                    size: 24,
+                    color: p.accentText,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -769,7 +798,7 @@ class _MediaRow extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
+                      media.caption ?? 'Video',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -778,7 +807,8 @@ class _MediaRow extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      subtitle,
+                      Uri.tryParse(url)?.host.replaceFirst('www.', '') ??
+                          'Link',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 14, color: p.textMuted),
@@ -787,13 +817,7 @@ class _MediaRow extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(
-                media.type == MediaType.link
-                    ? Icons.open_in_new_rounded
-                    : Icons.chevron_right_rounded,
-                size: 20,
-                color: p.textMuted,
-              ),
+              Icon(Icons.open_in_new_rounded, size: 20, color: p.textMuted),
             ],
           ),
         ),
@@ -802,15 +826,23 @@ class _MediaRow extends ConsumerWidget {
   }
 }
 
-Future<void> openMedia(BuildContext context, MatchMedia media) async {
+/// Apre un contenuto: i link fuori dall'app, foto e clip a tutto schermo (con le altre
+/// di [gallery] da scorrere di lato).
+Future<void> openMedia(
+  BuildContext context,
+  MatchMedia media, {
+  List<MatchMedia> gallery = const [],
+}) async {
   if (media.type == MediaType.link) {
     await openExternalLink(media.url ?? '');
     return;
   }
-  await Navigator.of(
-    context,
-    rootNavigator: true,
-  ).push(MaterialPageRoute(builder: (_) => MediaViewer(media: media)));
+  final items = gallery.contains(media) ? gallery : [media];
+  await Navigator.of(context, rootNavigator: true).push(
+    MaterialPageRoute(
+      builder: (_) => MediaGallery(items: items, initial: items.indexOf(media)),
+    ),
+  );
 }
 
 /// Scelta del tipo di contenuto da allegare: link, foto o clip da max 15 secondi.
