@@ -535,6 +535,12 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
     }
   }
 
+  /// Eliminazione definitiva dell'account (doppia conferma).
+  Future<void> _deleteAccount(Member m) async {
+    if (!await confirmDeleteAccount(context, m) || !mounted) return;
+    await deleteMemberAccount(context, ref, m);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -556,6 +562,10 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
           ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final removed = all.where((m) => !m.active).toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    // Registrati ma non ancora entrati nel club (li vede solo il Direttivo).
+    final pending =
+        all.where((m) => m.active && m.role == ClubRole.pending).toList()
+          ..sort((a, b) => a.displayName.compareTo(b.displayName));
     final shown = members.where((m) => m.inTeam(_team)).toList();
     return Column(
       children: [
@@ -610,7 +620,8 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
                 const SectionLabel('Rimossi'),
                 const SizedBox(height: 4),
                 Text(
-                  'Non possono entrare nell\'app finché non vengono riattivati.',
+                  'Non possono entrare nell\'app finché non vengono riattivati. '
+                  'Tocca un nome per eliminarne definitivamente l\'account.',
                   style: TextStyle(fontSize: 14, color: p.textMuted),
                 ),
                 const SizedBox(height: 8),
@@ -625,6 +636,8 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
                           detail: m.fullName == m.displayName
                               ? m.roleLabel
                               : m.fullName,
+                          // Toccando il nome si elimina definitivamente l'account.
+                          onTap: () => _deleteAccount(m),
                           trailing: OutlinedButton(
                             onPressed: () => _reactivate(m),
                             style: OutlinedButton.styleFrom(
@@ -634,6 +647,43 @@ class _RosaManagementPageState extends ConsumerState<RosaManagementPage> {
                               ),
                             ),
                             child: const Text('Riattiva'),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              if (pending.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const SectionLabel('In attesa di entrare'),
+                const SizedBox(height: 4),
+                Text(
+                  'Si sono registrati ma non sono ancora entrati nel club. Se non '
+                  'li conosci, elimina il loro account.',
+                  style: TextStyle(fontSize: 14, color: p.textMuted),
+                ),
+                const SizedBox(height: 8),
+                AppCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      for (final (i, m) in pending.indexed) ...[
+                        if (i > 0) const Divider(),
+                        AttendanceMemberRow(
+                          member: m,
+                          detail: !m.registrationCompleted
+                              ? 'Registrazione non completata'
+                              : m.fullName != m.displayName
+                              ? '${m.fullName} · deve accettare il regolamento'
+                              : 'Deve accettare il regolamento',
+                          trailing: IconButton(
+                            tooltip: 'Elimina l\'account di ${m.displayName}',
+                            icon: Icon(
+                              Icons.delete_forever_rounded,
+                              color: p.danger,
+                            ),
+                            onPressed: () => _deleteAccount(m),
                           ),
                         ),
                       ],

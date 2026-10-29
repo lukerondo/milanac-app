@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
@@ -41,6 +42,50 @@ class _VoiceRoomView extends ConsumerWidget {
   const _VoiceRoomView({required this.channel});
   final Channel channel;
 
+  /// Il Direttivo chiude la stanza per tutti: chi è dentro esce subito.
+  Future<void> _closeForEveryone(
+    BuildContext context,
+    WidgetRef ref,
+    String roomId,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Chiudere la stanza per tutti?'),
+        content: const Text(
+          'Chi è dentro esce subito. La stanza si potrà riaprire quando '
+          'serve.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Chiudi per tutti'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(voiceRepositoryProvider).closeRoom(roomId);
+      if (ref.read(voiceCallProvider).isIn(channel.id)) {
+        unawaited(ref.read(voiceCallProvider.notifier).leave());
+      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Stanza chiusa per tutti.')),
+      );
+      if (context.mounted) unawaited(Navigator.of(context).maybePop());
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(friendlyError(e, action: 'Stanza non chiusa'))),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = context.pal;
@@ -51,6 +96,7 @@ class _VoiceRoomView extends ConsumerWidget {
         : ref.watch(voiceParticipantsProvider(room.id));
     final members = ref.watch(rosaProvider).value ?? const <Member>[];
     final me = ref.watch(currentUserIdProvider);
+    final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final notifier = ref.read(voiceCallProvider.notifier);
     final inThis = call.isIn(channel.id);
     final error =
@@ -140,7 +186,16 @@ class _VoiceRoomView extends ConsumerWidget {
                           ),
                         ),
                         // Stessa larghezza della freccia: il titolo resta al centro.
-                        const SizedBox(width: 48),
+                        if (isDirettivo && room != null)
+                          IconButton(
+                            tooltip: 'Chiudi la stanza per tutti',
+                            icon: const Icon(Icons.power_settings_new_rounded),
+                            color: p.danger,
+                            onPressed: () =>
+                                _closeForEveryone(context, ref, room.id),
+                          )
+                        else
+                          const SizedBox(width: 48),
                       ],
                     ),
                   ),

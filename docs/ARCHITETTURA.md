@@ -58,6 +58,21 @@ notifica) e il Direttivo può togliere dalla Rosa chi non conosce (`active = fal
 
 - **Direttivo**: crea/modifica rosa, formazione, calendario, risultati e media, albo d'oro,
   regolamento (bozza + pubblicazione) e storia, contatti social; assegna l'**overall** delle carte.
+  Tutti i membri del Direttivo hanno gli stessi poteri, anche gli uni sugli altri (migrazione
+  `0026`), dalla scheda del membro (Sala Direttivo → Rosa e squadre, o "Dati del membro" sulla
+  sua carta):
+  - **promuove** un giocatore nel Direttivo con le etichette (Capitano, Reclutatore,
+    Organizzatore, Gestore) o lo **retrocede** (le etichette si azzerano); promozioni e
+    retrocessioni compaiono nella Sala Direttivo con chi le ha decise;
+  - **elimina definitivamente l'account** di un altro membro (`delete_member_account`, doppia
+    conferma), anche di chi si è registrato ma non è mai entrato ("In attesa di entrare");
+  - **toglie la foto del profilo** di un membro e **chiude una stanza vocale** per tutti
+    (`close_voice_room`);
+  - elimina i messaggi di chiunque, corregge le presenze di tutti, pubblica o toglie i video.
+
+  Il club non resta mai senza Direttivo: il database rifiuta la retrocessione, la rimozione o
+  l'eliminazione dell'account dell'ultimo membro attivo (trigger `direttivo_guard` e controllo
+  in `delete_my_account`).
 - **Giocatore**: legge tutto, gestisce **solo le proprie** presenze, i propri dati e il proprio
   volto, la propria carta (ruolo, numero, stile, piattaforma, non l'overall), scrive in chat e
   aggiunge link. Non può cambiarsi ruolo, squadra, stato, overall o data d'ingresso (trigger).

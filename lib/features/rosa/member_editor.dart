@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/profile.dart';
+import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
@@ -37,7 +38,13 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
   late String? _position = widget.member.fieldPosition;
   late DateTime _joinedAt = widget.member.joinedAt;
   late Set<Team> _teams = widget.member.teams;
+
+  /// Etichette nel Direttivo (Capitano, Reclutatore...): almeno una per il Direttivo.
+  late final Set<DirettivoRole> _labels = widget.member.direttivoRoles.toSet();
+  bool _labelsMissing = false;
   bool _saving = false;
+
+  bool get _wasDirettivo => widget.member.role == ClubRole.direttivo;
 
   @override
   void dispose() {
@@ -48,6 +55,10 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
   }
 
   Future<void> _save({bool active = true}) async {
+    if (_role == ClubRole.direttivo && _labels.isEmpty) {
+      setState(() => _labelsMissing = true);
+      return;
+    }
     setState(() => _saving = true);
     final gamertag = _gamertag.text.trim();
     // Gamertag e numero lasciati vuoti si cancellano davvero.
@@ -62,6 +73,11 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
       joinedAt: _joinedAt,
       active: active,
       teams: _teams,
+      direttivoRoles: [
+        if (_role == ClubRole.direttivo)
+          for (final r in DirettivoRole.values)
+            if (_labels.contains(r)) r,
+      ],
     );
     try {
       await ref.read(rosaRepositoryProvider).save(updated);
@@ -80,6 +96,10 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.pal;
+    final isMe = ref.watch(currentUserIdProvider) == widget.member.id;
+    final promoting = !_wasDirettivo && _role == ClubRole.direttivo;
+    final demoting = _wasDirettivo && _role != ClubRole.direttivo;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -157,8 +177,53 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
               selected: {
                 _role == ClubRole.pending ? ClubRole.giocatore : _role,
               },
-              onSelectionChanged: (s) => setState(() => _role = s.first),
+              onSelectionChanged: (s) => setState(() {
+                _role = s.first;
+                _labelsMissing = false;
+              }),
             ),
+            if (_role == ClubRole.direttivo) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Ruoli nel Direttivo (almeno uno)',
+                style: TextStyle(fontSize: 14, color: p.textMuted),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final r in DirettivoRole.values)
+                    FilterChip(
+                      label: Text(r.label),
+                      selected: _labels.contains(r),
+                      onSelected: (on) => setState(() {
+                        on ? _labels.add(r) : _labels.remove(r);
+                        _labelsMissing = false;
+                      }),
+                    ),
+                ],
+              ),
+              if (_labelsMissing)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Scegli almeno un ruolo nel Direttivo.',
+                    style: TextStyle(fontSize: 14, color: p.danger),
+                  ),
+                ),
+            ],
+            if (promoting || demoting) ...[
+              const SizedBox(height: 8),
+              Text(
+                promoting
+                    ? 'Con la promozione avrà tutti i poteri del Direttivo: rosa, '
+                          'formazione, risultati, presenze di tutti, regolamento e '
+                          'Sala Direttivo. Lo saprà dalla Sala Direttivo.'
+                    : 'Tornerà giocatore e perderà i poteri del Direttivo.',
+                style: TextStyle(fontSize: 14, color: p.textMuted),
+              ),
+            ],
             const SizedBox(height: 16),
             const Text('Squadra (una o entrambe)'),
             const SizedBox(height: 8),
@@ -190,13 +255,27 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
                 child: Text('Salva'),
               ),
             ),
-            TextButton(
-              onPressed: _saving ? null : () => _confirmRemove(context),
-              child: Text(
-                'Rimuovi dalla rosa',
-                style: TextStyle(color: context.pal.danger),
+            if (widget.member.avatarPath != null && !isMe)
+              TextButton(
+                onPressed: _saving ? null : _confirmRemovePhoto,
+                child: const Text('Togli la foto del profilo'),
               ),
-            ),
+            if (!isMe) ...[
+              TextButton(
+                onPressed: _saving ? null : () => _confirmRemove(context),
+                child: Text(
+                  'Rimuovi dalla rosa',
+                  style: TextStyle(color: p.danger),
+                ),
+              ),
+              TextButton(
+                onPressed: _saving ? null : _delete,
+                child: Text(
+                  'Elimina l\'account',
+                  style: TextStyle(color: p.danger),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -224,5 +303,146 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
       ),
     );
     if (ok == true) await _save(active: false);
+  }
+
+  /// Moderazione: la foto sparisce dal profilo (e dallo Storage).
+  Future<void> _confirmRemovePhoto() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Togliere la foto del profilo?'),
+        content: Text(
+          'Al posto della foto di ${widget.member.displayName} tornerà il suo '
+          'volto disegnato. Potrà caricarne un\'altra dalle Impostazioni.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Togli la foto'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _saving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(rosaRepositoryProvider).removePhoto(widget.member);
+      if (mounted) Navigator.of(context).pop();
+      messenger.showSnackBar(const SnackBar(content: Text('Foto tolta.')));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      messenger.showSnackBar(
+        SnackBar(content: Text(friendlyError(e, action: 'Foto non tolta'))),
+      );
+    }
+  }
+
+  Future<void> _delete() async {
+    if (!await confirmDeleteAccount(context, widget.member) || !mounted) return;
+    setState(() => _saving = true);
+    final deleted = await deleteMemberAccount(context, ref, widget.member);
+    if (!mounted) return;
+    if (deleted) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() => _saving = false);
+    }
+  }
+}
+
+/// Doppia conferma prima di eliminare l'account di un membro: si spiega cosa sparisce
+/// e si spunta "Ho capito" prima del pulsante.
+Future<bool> confirmDeleteAccount(BuildContext context, Member member) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => _DeleteAccountDialog(member: member),
+  );
+  return ok ?? false;
+}
+
+/// Elimina l'account (solo Direttivo) e lo dice; false se non è riuscito.
+Future<bool> deleteMemberAccount(
+  BuildContext context,
+  WidgetRef ref,
+  Member member,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await ref.read(rosaRepositoryProvider).deleteAccount(member.id);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Account di ${member.displayName} eliminato.')),
+    );
+    return true;
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(friendlyError(e, action: 'Account non eliminato')),
+      ),
+    );
+    return false;
+  }
+}
+
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog({required this.member});
+  final Member member;
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  bool _understood = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final name = widget.member.displayName;
+    return AlertDialog(
+      // Testo lungo: sui telefoni piccoli il contenuto scorre.
+      scrollable: true,
+      title: Text('Eliminare l\'account di $name?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'È definitivo: spariscono profilo, carta, foto, presenze e carte '
+            'speciali di $name; i suoi messaggi restano senza nome. Per tornare '
+            'nel club dovrà registrarsi di nuovo.\n\nSe vuoi solo tenerlo fuori '
+            'per un po\', usa "Rimuovi dalla rosa".',
+          ),
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            value: _understood,
+            onChanged: (v) => setState(() => _understood = v ?? false),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('Ho capito, è definitivo'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Annulla'),
+        ),
+        FilledButton(
+          // Rosso del tema con il testo del colore di fondo: leggibile nei due temi.
+          style: FilledButton.styleFrom(
+            backgroundColor: p.danger,
+            foregroundColor: p.bg,
+          ),
+          onPressed: _understood ? () => Navigator.pop(context, true) : null,
+          child: const Text('Elimina l\'account'),
+        ),
+      ],
+    );
   }
 }

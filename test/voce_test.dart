@@ -24,6 +24,10 @@ import 'home_test.dart';
 const _cardMilan = 'Stanza vocale aperta · Milan AC';
 
 const _generale = Channel(id: 'c-main', slug: 'main', name: 'Generale');
+
+/// Canale con la stanza della demo già aperta, con dentro altri due giocatori:
+/// la propria sessione può finire mentre la stanza resta aperta.
+const _milanac = Channel(id: 'c-milanac', slug: 'milanac', name: 'Milan AC');
 const _tattiche = Channel(
   id: 'c-tattiche',
   slug: 'tattiche',
@@ -241,6 +245,31 @@ void main() {
     expect(find.textContaining('Stanza vocale aperta'), findsNothing);
   });
 
+  testWidgets('Il Direttivo chiude la stanza per tutti dalla stanza a schermo '
+      'intero', (tester) async {
+    final container = await startAppAt(tester, todayAt(17));
+    await goToPath(tester, '/chat/milanac');
+    await tester.tap(find.text('Entra'));
+    await tester.pumpAndSettle();
+    expect(find.byType(VoiceRoomPage), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Chiudi la stanza per tutti'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chiudere la stanza per tutti?'), findsOneWidget);
+    await tester.tap(find.text('Chiudi per tutti'));
+    await tester.pumpAndSettle();
+    expect(find.text('Stanza chiusa per tutti.'), findsOneWidget);
+    expect(find.byType(VoiceRoomPage), findsNothing);
+    expect(container.read(voiceCallProvider).phase, VoicePhase.idle);
+    final repo = container.read(voiceRepositoryProvider) as DemoVoiceRepository;
+    expect(repo.sessions.where((s) => s.isActive), isEmpty);
+    expect(
+      find.text(_cardMilan),
+      findsNothing,
+      reason: 'nessuna stanza aperta',
+    );
+  });
+
   testWidgets('Tema chiaro: card, pulsante, stanza e striscia senza errori', (
     tester,
   ) async {
@@ -388,7 +417,7 @@ void main() {
   testWidgets('Sessione chiusa dal server: al segno di vita la chiamata '
       'finisce con il motivo e libera tutto', (tester) async {
     final c = _Call();
-    await c.notifier.enter(_generale);
+    await c.notifier.enter(_milanac);
     final engine = c.engines.single;
     expect(c.state.phase, VoicePhase.inRoom);
     expect(engine.joined, isTrue);
@@ -401,7 +430,7 @@ void main() {
     await tester.pump(const Duration(minutes: 1));
     expect(c.state.phase, VoicePhase.error);
     expect(c.state.error, voiceLeftMessage);
-    expect(c.state.channel?.id, _generale.id, reason: 'il foglio dà Riprova');
+    expect(c.state.channel?.id, _milanac.id, reason: 'il foglio dà Riprova');
     expect(engine.disposed, isTrue);
     expect(c.foreground.running, isFalse);
     expect(c.focus, isEmpty);
@@ -410,10 +439,32 @@ void main() {
     c.container.dispose();
   });
 
+  testWidgets(
+    'Stanza chiusa dal Direttivo per tutti: chi è dentro esce subito, '
+    'senza aspettare il segno di vita del minuto',
+    (tester) async {
+      final c = _Call();
+      await c.notifier.enter(_milanac);
+      expect(c.state.phase, VoicePhase.inRoom);
+      expect(c.state.roomId, 'vr-milanac', reason: 'la stanza già aperta');
+      final beats = c.repo.beats;
+
+      await c.repo.closeRoom('vr-milanac');
+      await tester.pump();
+      await tester.pump();
+      expect(c.repo.beats, beats + 1, reason: 'un segno di vita subito');
+      expect(c.state.phase, VoicePhase.error);
+      expect(c.state.error, voiceClosedMessage);
+      expect(c.engines.single.disposed, isTrue);
+      expect(c.repo.sessions.where((s) => s.isActive), isEmpty);
+      c.container.dispose();
+    },
+  );
+
   testWidgets('Ritorno nell\'app: subito un segno di vita, e se il server ha '
       'chiuso la sessione la chiamata finisce', (tester) async {
     final c = _Call();
-    await c.notifier.enter(_generale);
+    await c.notifier.enter(_milanac);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await c.repo.leave(c.state.sessionId!);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);

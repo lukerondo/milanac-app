@@ -8,6 +8,7 @@ import '../../core/auth/private_data.dart';
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../shared/member_photo.dart';
 import '../volto/face.dart';
@@ -26,7 +27,21 @@ abstract class RosaRepository {
 
   /// Carica la nuova foto del profilo (JPEG) e la imposta; restituisce il percorso.
   Future<String> uploadPhoto(Member member, Uint8List jpeg);
+
+  /// Elimina definitivamente l'account di un altro membro (solo Direttivo).
+  Future<void> deleteAccount(String id);
+
+  /// Toglie la foto del profilo di un membro (moderazione del Direttivo).
+  Future<void> removePhoto(Member member);
 }
+
+/// Una funzione nuova del database non c'è ancora (migrazione non applicata).
+const serverNotUpdated =
+    'Per ora non si può: il server del club non è ancora aggiornato.';
+
+/// Il club ha sempre almeno un membro del Direttivo attivo (come sul server).
+const lastDirettivoMessage =
+    'Il club deve avere almeno un membro del Direttivo: nominane prima un altro';
 
 final rosaRepositoryProvider = Provider<RosaRepository>((ref) {
   if (AppConfig.isDemo) {
@@ -124,6 +139,32 @@ class _SupabaseRosaRepository implements RosaRepository {
       await client.storage.from(avatarsBucket).remove([m.avatarPath!]);
     }
     return path;
+  }
+
+  /// Elimina l'account di un membro con `delete_member_account` (migrazione 0026).
+  @override
+  Future<void> deleteAccount(String id) async {
+    try {
+      await _ref
+          .read(supabaseProvider)
+          .rpc('delete_member_account', params: {'p_member': id});
+    } catch (e) {
+      if (isMissingFunction(e)) throw const AppError(serverNotUpdated);
+      rethrow;
+    }
+  }
+
+  /// Prima il riferimento nel profilo, poi il file: se lo Storage non lo permette
+  /// ancora (migrazione 0026 non applicata) il file resta, ma non si vede più.
+  @override
+  Future<void> removePhoto(Member m) async {
+    final client = _ref.read(supabaseProvider);
+    final path = m.avatarPath;
+    await client.from('profiles').update({'avatar_path': null}).eq('id', m.id);
+    if (path == null) return;
+    try {
+      await client.storage.from(avatarsBucket).remove([path]);
+    } catch (_) {}
   }
 
   /// Rifiuta una richiesta di accesso: il profilo viene disattivato (resta in attesa).
@@ -284,6 +325,12 @@ class DemoRosaRepository implements RosaRepository {
   /// Chi guarda è cambiato: la rosa si rilegge con i suoi permessi.
   void refresh() => _emit();
 
+  /// Aggiunge un membro (per i test: per esempio chi si è appena registrato).
+  void add(Member m) {
+    _members.add(m);
+    _emit();
+  }
+
   /// La rosa come la riceve chi guarda: i dati anagrafici solo i propri, tutti per il
   /// Direttivo (nessuno se non si sa ancora chi è).
   List<Member> _visible() {
@@ -301,19 +348,54 @@ class DemoRosaRepository implements RosaRepository {
   }
 
   /// Come l'update di `profiles`: i dati anagrafici (in `profile_private`) restano
-  /// quelli salvati, anche se [m] arriva senza (vista di un giocatore).
+  /// quelli salvati, anche se [m] arriva senza (vista di un giocatore); come il
+  /// trigger `direttivo_guard`, retrocedendo le etichette si azzerano e l'ultimo
+  /// membro attivo del Direttivo non si retrocede né si rimuove.
   @override
   Future<void> save(Member m) async {
     final i = _members.indexWhere((x) => x.id == m.id);
     if (i >= 0) {
       final old = _members[i];
+      bool leading(Member x) => x.role == ClubRole.direttivo && x.active;
+      if (leading(old) &&
+          !leading(m) &&
+          !_members.any((x) => x.id != m.id && leading(x))) {
+        throw const AppError(lastDirettivoMessage);
+      }
       _members[i] = m.copyWith(
         firstName: old.firstName,
         lastName: old.lastName,
         birthYear: old.birthYear,
         birthDate: old.birthDate,
+        direttivoRoles: m.role == ClubRole.direttivo ? null : const [],
       );
     }
+    _emit();
+  }
+
+  @override
+  Future<void> deleteAccount(String id) async {
+    final me = _viewer?.call();
+    if (me?.id == id) {
+      throw const AppError(
+        'Il tuo account si elimina da Impostazioni → Account',
+      );
+    }
+    if (me != null && !me.isDirettivo) {
+      throw const AppError(
+        'Solo il Direttivo può eliminare l\'account di un membro',
+      );
+    }
+    _members.removeWhere((m) => m.id == id);
+    _emit();
+  }
+
+  @override
+  Future<void> removePhoto(Member m) async {
+    final i = _members.indexWhere((x) => x.id == m.id);
+    if (i < 0) return;
+    demoPhotos.remove(_members[i].avatarPath);
+    _members[i] = _members[i].copyWith(avatarPath: null);
     _emit();
   }
 

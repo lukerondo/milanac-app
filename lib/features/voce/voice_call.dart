@@ -80,6 +80,13 @@ class VoiceCall extends Notifier<VoiceCallState> {
   Timer? _heartbeat;
   StreamSubscription<Set<int>>? _speakSub;
   StreamSubscription<VoiceException>? _failSub;
+
+  /// Le stanze aperte, seguite direttamente dalla chiamata (non da un provider, che
+  /// Riverpod mette in pausa quando la chat non si vede): se la propria sparisce
+  /// (chiusa dal Direttivo per tutti) si chiede subito al server se si è ancora
+  /// dentro, senza aspettare il segno di vita del minuto. Solo la sua risposta fa
+  /// uscire (un elenco momentaneamente senza la stanza no).
+  StreamSubscription<List<VoiceRoom>>? _roomsSub;
   _OnResume? _onResume;
   late VoiceForeground _foreground;
   var _foregroundOn = false;
@@ -215,6 +222,13 @@ class VoiceCall extends Notifier<VoiceCallState> {
         (_) => _beat(attempt, periodic: true),
       );
       _onResume = _OnResume(() => _resumed(attempt));
+      _roomsSub = repo.watchOpenRooms().listen((rooms) {
+        if (attempt == _attempt &&
+            state.phase == VoicePhase.inRoom &&
+            rooms.every((r) => r.id != roomId)) {
+          unawaited(_beat(attempt, endedMessage: voiceClosedMessage));
+        }
+      }, onError: (Object _) {});
     } catch (e) {
       if (!stale()) {
         final teardown = _teardown();
@@ -300,7 +314,11 @@ class VoiceCall extends Notifier<VoiceCallState> {
 
   /// Segno di vita: se il server ha già chiuso la sessione, o la rete manca da
   /// 3 minuti (il server l'avrà chiusa), la chiamata finisce con il motivo.
-  Future<void> _beat(int attempt, {bool periodic = false}) async {
+  Future<void> _beat(
+    int attempt, {
+    bool periodic = false,
+    String endedMessage = voiceLeftMessage,
+  }) async {
     if (attempt != _attempt) return;
     final sessionId = state.sessionId;
     if (sessionId == null) return;
@@ -320,7 +338,7 @@ class VoiceCall extends Notifier<VoiceCallState> {
     }
     if (attempt != _attempt) return;
     _missedBeats = 0;
-    if (!alive) _drop(attempt, voiceLeftMessage);
+    if (!alive) _drop(attempt, endedMessage);
   }
 
   // Ritorno nell'app: subito un segno di vita (se il server ci ha fatto uscire
@@ -397,6 +415,8 @@ class VoiceCall extends Notifier<VoiceCallState> {
     _speakSub = null;
     _failSub?.cancel();
     _failSub = null;
+    _roomsSub?.cancel();
+    _roomsSub = null;
     if (_foregroundOn) {
       _foregroundOn = false;
       unawaited(_foreground.stop());

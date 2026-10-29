@@ -98,6 +98,9 @@ class VoiceException implements Exception {
 
 /// Il server ci ha fatto uscire dalla stanza (3 minuti senza segni di vita): lo dicono
 /// il segno di vita (false) e la funzione `voice-token` (409).
+/// La stanza è stata chiusa mentre si era dentro (di solito dal Direttivo, per tutti).
+const voiceClosedMessage = 'La stanza è stata chiusa.';
+
 const voiceLeftMessage =
     'Sei uscito dalla stanza (nessun segnale per qualche minuto): rientra.';
 

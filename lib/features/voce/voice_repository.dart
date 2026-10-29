@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import 'voice_models.dart';
 
 abstract class VoiceRepository {
@@ -25,6 +26,9 @@ abstract class VoiceRepository {
   Future<bool> heartbeat(String sessionId, {required bool muted});
 
   Future<void> leave(String sessionId);
+
+  /// Il Direttivo chiude la stanza per tutti (chi è dentro esce).
+  Future<void> closeRoom(String roomId);
 
   /// Biglietto Agora per la stanza.
   Future<VoiceTicket> ticket(String roomId);
@@ -119,6 +123,20 @@ class _SupabaseVoiceRepository implements VoiceRepository {
     );
     // Prima della migrazione 0023 la funzione non restituiva niente: ancora dentro.
     return alive != false;
+  }
+
+  @override
+  Future<void> closeRoom(String roomId) async {
+    try {
+      await _client.rpc('close_voice_room', params: {'p_room': roomId});
+    } catch (e) {
+      if (isMissingFunction(e)) {
+        throw const AppError(
+          'Per ora non si può: il server del club non è ancora aggiornato.',
+        );
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -294,6 +312,15 @@ class DemoVoiceRepository implements VoiceRepository {
   @override
   Future<void> leave(String sessionId) async {
     _close(sessionId);
+    _emit();
+  }
+
+  /// Come `close_voice_room`: tutte le sessioni aperte finiscono, la stanza si chiude.
+  @override
+  Future<void> closeRoom(String roomId) async {
+    for (final s in _sessions.toList()) {
+      if (s.roomId == roomId && s.isActive) _close(s.id);
+    }
     _emit();
   }
 

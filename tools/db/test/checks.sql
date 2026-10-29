@@ -1605,3 +1605,140 @@ do $$ begin
   assert (select goalkeeper_id from matches where id = '00000000-0000-0000-0000-0000000000f9') is null,
     'risultato salvato senza portiere';
 end $$;
+
+-- ================================================================ poteri del Direttivo (0026)
+-- Partenza: un solo Direttivo attivo (0d).
+reset role;
+select pg_temp.as_user(null);
+update profiles set club_role = 'giocatore'
+  where club_role = 'direttivo' and id <> '00000000-0000-0000-0000-00000000000d';
+do $$ begin
+  assert (select count(*) from profiles where club_role = 'direttivo' and active) = 1, 'un solo Direttivo';
+end $$;
+delete from messages where meta->>'type' = 'direttivo';
+
+-- Promozione con le etichette: messaggio nella Sala Direttivo con chi l'ha decisa.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+-- Un giocatore non promuove nessuno (la riga degli altri non la può toccare) né sé stesso.
+update profiles set club_role = 'direttivo' where id = '00000000-0000-0000-0000-0000000000e2';
+select pg_temp.expect_error(
+  $q$update profiles set club_role = 'direttivo' where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'Solo il Direttivo');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000e2') = 'giocatore',
+    'un giocatore non promuove gli altri';
+end $$;
+update profiles set club_role = 'direttivo', direttivo_roles = array['capitano', 'gestore']
+  where id = '00000000-0000-0000-0000-0000000000e1';
+reset role;
+do $$ begin
+  assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000e1') = 'direttivo',
+    'promosso nel Direttivo';
+  assert (select body from messages where meta->>'type' = 'direttivo'
+          and meta->>'member' = '00000000-0000-0000-0000-0000000000e1')
+         like '% è entrato nel Direttivo (Capitano, Gestore) · nominato da %.', 'avviso della promozione';
+end $$;
+-- Retrocessione: le etichette si azzerano e resta traccia.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update profiles set club_role = 'giocatore' where id = '00000000-0000-0000-0000-0000000000e1';
+reset role;
+do $$ begin
+  assert (select direttivo_roles from profiles where id = '00000000-0000-0000-0000-0000000000e1') = '{}',
+    'etichette azzerate';
+  assert (select count(*) from messages where meta->>'type' = 'direttivo'
+          and body like '% non fa più parte del Direttivo · deciso da %') = 1, 'avviso della retrocessione';
+end $$;
+
+-- L'ultimo del Direttivo non si può retrocedere, rimuovere né eliminare da solo.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select pg_temp.expect_error(
+  $q$update profiles set club_role = 'giocatore' where id = '00000000-0000-0000-0000-00000000000d'$q$,
+  'almeno un membro del Direttivo');
+select pg_temp.expect_error(
+  $q$update profiles set active = false where id = '00000000-0000-0000-0000-00000000000d'$q$,
+  'almeno un membro del Direttivo');
+select pg_temp.expect_error($q$select delete_my_account()$q$, 'ultimo membro del Direttivo');
+-- Con un altro Direttivo sì (tutti hanno gli stessi poteri, anche su sé stessi).
+update profiles set club_role = 'direttivo', direttivo_roles = array['organizzatore']
+  where id = '00000000-0000-0000-0000-0000000000e2';
+update profiles set club_role = 'giocatore' where id = '00000000-0000-0000-0000-00000000000d';
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
+update profiles set club_role = 'direttivo', direttivo_roles = array['capitano']
+  where id = '00000000-0000-0000-0000-00000000000d';
+reset role;
+do $$ begin
+  assert (select count(*) from profiles where club_role = 'direttivo' and active) = 2, 'due Direttivo';
+end $$;
+
+-- Eliminazione dell'account di un altro membro: solo il Direttivo, non il proprio.
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ad', 'estraneo@example.com');
+insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-0000000000ad/foto.jpg');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$select delete_member_account('00000000-0000-0000-0000-0000000000ad')$q$, 'Solo il Direttivo');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select pg_temp.expect_error(
+  $q$select delete_member_account('00000000-0000-0000-0000-00000000000d')$q$, 'Impostazioni');
+do $$ begin
+  assert (select count(*) from profiles where id = '00000000-0000-0000-0000-0000000000ad'
+          and club_role = 'pending') = 1, 'il Direttivo vede chi è registrato ma non è entrato';
+end $$;
+select delete_member_account('00000000-0000-0000-0000-0000000000ad');
+reset role;
+do $$ begin
+  assert not exists (select 1 from auth.users where id = '00000000-0000-0000-0000-0000000000ad'), 'account eliminato';
+  assert not exists (select 1 from profiles where id = '00000000-0000-0000-0000-0000000000ad'), 'profilo eliminato';
+  assert (select count(*) from storage_cleanup
+          where path = '00000000-0000-0000-0000-0000000000ad/foto.jpg') = 1, 'foto in coda per lo Storage';
+  assert (select count(*) from messages where meta->>'type' = 'account_deleted'
+          and body like 'Account di estraneo eliminato da %.') = 1, 'traccia nella Sala Direttivo';
+end $$;
+
+-- Foto del profilo: il Direttivo può toglierla, un giocatore no.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a9');
+delete from storage.objects where bucket_id = 'avatars' and name = '00000000-0000-0000-0000-0000000000e1/foto.jpg';
+reset role;
+do $$ begin
+  assert (select count(*) from storage.objects where bucket_id = 'avatars'
+          and name = '00000000-0000-0000-0000-0000000000e1/foto.jpg') = 1, 'un giocatore non toglie la foto altrui';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+delete from storage.objects where bucket_id = 'avatars' and name = '00000000-0000-0000-0000-0000000000e1/foto.jpg';
+update profiles set avatar_path = null where id = '00000000-0000-0000-0000-0000000000e1';
+reset role;
+do $$ begin
+  assert (select count(*) from storage.objects where bucket_id = 'avatars'
+          and name = '00000000-0000-0000-0000-0000000000e1/foto.jpg') = 0, 'il Direttivo toglie la foto';
+  assert (select avatar_path from profiles where id = '00000000-0000-0000-0000-0000000000e1') is null,
+    'e il riferimento nel profilo';
+end $$;
+
+-- Stanza vocale chiusa dal Direttivo per tutti.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select set_config('test.stanza_c', open_voice_room((select id from channels where slug = 'main'))::text, false);
+select set_config('test.sessione_c', (select id from voice_sessions
+  where room_id = current_setting('test.stanza_c')::uuid and left_at is null)::text, false);
+select pg_temp.expect_error(
+  $q$select close_voice_room(current_setting('test.stanza_c')::uuid)$q$, 'Solo il Direttivo');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select close_voice_room(current_setting('test.stanza_c')::uuid);
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert voice_heartbeat(current_setting('test.sessione_c')::uuid) = false,
+    'il telefono di chi era dentro scopre che la stanza è chiusa';
+end $$;
+reset role;
+do $$ begin
+  assert (select closed_at is not null from voice_rooms where id = current_setting('test.stanza_c')::uuid),
+    'stanza chiusa';
+  assert (select count(*) from voice_sessions where room_id = current_setting('test.stanza_c')::uuid
+          and left_at is null) = 0, 'nessuno resta dentro';
+end $$;

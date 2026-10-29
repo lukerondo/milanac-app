@@ -136,6 +136,8 @@ class Member {
     Object? lastName = _same,
     Object? birthYear = _same,
     Object? birthDate = _same,
+    List<DirettivoRole>? direttivoRoles,
+    Object? avatarPath = _same,
   }) => Member(
     id: id,
     displayName: displayName ?? this.displayName,
@@ -159,7 +161,9 @@ class Member {
     platform: identical(platform, _same)
         ? this.platform
         : platform as GamePlatform?,
-    avatarPath: avatarPath,
+    avatarPath: identical(avatarPath, _same)
+        ? this.avatarPath
+        : avatarPath as String?,
     birthDate: identical(birthDate, _same)
         ? this.birthDate
         : birthDate as DateTime?,
@@ -172,7 +176,7 @@ class Member {
     lastName: identical(lastName, _same) ? this.lastName : lastName as String?,
     birthYear: identical(birthYear, _same) ? this.birthYear : birthYear as int?,
     motto: motto ?? this.motto,
-    direttivoRoles: direttivoRoles,
+    direttivoRoles: direttivoRoles ?? this.direttivoRoles,
     face: face ?? this.face,
     registrationCompleted: registrationCompleted,
   );
@@ -286,6 +290,11 @@ class Member {
     'display_name': displayName,
     'gamertag': gamertag,
     'club_role': role.name,
+    // Le etichette valgono solo nel Direttivo (il database le azzera anche da sé).
+    'direttivo_roles': [
+      if (role == ClubRole.direttivo)
+        for (final r in direttivoRoles) r.name,
+    ],
     'joined_at': joinedAt.toIso8601String().substring(0, 10),
     'active': active,
     'teams': teamsToJson(teams),
