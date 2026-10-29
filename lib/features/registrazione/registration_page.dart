@@ -7,10 +7,12 @@ import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/push/device_tokens.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/ui.dart';
 import '../auth/gate_ui.dart';
 import '../rosa/member.dart';
@@ -202,7 +204,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-    HapticFeedback.mediumImpact();
+    Haptics.medium();
     if (!mounted) return;
     // Il router porta al regolamento appena il profilo riletto risulta completo, senza
     // aspettare il tempo reale; in demo andiamo noi.
@@ -225,7 +227,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
       );
     }
     if (state.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: GoldLoader());
     }
     return ErrorRetry(
       message: 'Profilo non trovato: riprova, oppure esci e rientra.',

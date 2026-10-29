@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../risultati/match.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
@@ -112,6 +114,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
       final n = await ref
           .read(specialCardsRepositoryProvider)
           .assign(widget.match, awards);
+      Haptics.confirm();
       if (!mounted) return;
       Navigator.of(context).pop();
       messenger.showSnackBar(
@@ -154,7 +157,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                   ..invalidate(specialCardsProvider)
                   ..invalidate(rosaProvider),
               )
-            : const Center(child: CircularProgressIndicator()),
+            : const Center(child: GoldLoader()),
       );
     }
     final cards = cardsValue.requireValue;

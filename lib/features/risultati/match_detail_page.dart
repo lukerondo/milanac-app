@@ -10,6 +10,7 @@ import '../../core/errors.dart';
 import '../../core/push/push_service.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/shared_links.dart';
 import '../../shared/ui.dart';
@@ -76,7 +77,7 @@ class MatchDetailPage extends ConsumerWidget {
                 onRetry: () => ref.invalidate(matchesProvider),
               )
             : matches.isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: GoldLoader())
             : ErrorRetry(
                 message: 'Partita non trovata.',
                 onRetry: () => ref.invalidate(matchesProvider),
@@ -477,7 +478,7 @@ class _MediaSection extends ConsumerWidget {
           onRetry: () => ref.invalidate(allMatchMediaProvider),
           loading: const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
-            child: LinearProgressIndicator(),
+            child: GoldBar(),
           ),
           data: (items) {
             if (items.isEmpty) {

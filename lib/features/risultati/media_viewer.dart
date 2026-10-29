@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import 'match.dart';
 import 'matches_repository.dart';
 
@@ -52,8 +53,7 @@ class _MediaImageState extends ConsumerState<MediaImage> {
     const broken = Center(child: Icon(Icons.broken_image_rounded));
     final url = ref.watch(mediaUrlProvider(media));
     return url.when(
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      loading: () => const Center(child: GoldLoader(size: 24)),
       error: (_, _) => broken,
       data: (u) => Image.network(
         u,
@@ -219,7 +219,7 @@ class _MediaPageState extends ConsumerState<_MediaPage> {
     if (_error != null) {
       return ErrorRetry(message: _error!, onRetry: _canRetry ? _retry : null);
     }
-    if (video == null) return const Center(child: CircularProgressIndicator());
+    if (video == null) return const Center(child: GoldLoader());
     // Il lettore si ridisegna da solo quando parte o si ferma: niente setState
     // (che non accetta una funzione che restituisce un Future).
     return GestureDetector(

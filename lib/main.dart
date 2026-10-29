@@ -8,6 +8,7 @@ import 'core/appearance.dart';
 import 'core/auth/providers.dart';
 import 'core/config.dart';
 import 'core/errors.dart';
+import 'core/haptics.dart';
 import 'core/push/device_tokens.dart';
 import 'core/push/push_service.dart';
 import 'core/router.dart';
@@ -49,6 +50,8 @@ class MilanacApp extends ConsumerWidget {
 
     // Musica di sottofondo: resta attiva per tutta la vita dell'app.
     ref.listen(soundtrackProvider, (_, _) {});
+    // Vibrazioni accese o spente (scelta salvata sul telefono).
+    ref.listen(vibrationsProvider, (_, _) {});
 
     return MaterialApp.router(
       title: 'MILANAC Pro Club',

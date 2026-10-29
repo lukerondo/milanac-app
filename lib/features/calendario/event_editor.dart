@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/clock.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
@@ -261,6 +262,7 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
     );
     try {
       await ref.read(eventsRepositoryProvider).save(e);
+      Haptics.confirm();
       if (mounted) Navigator.of(context).pop();
     } catch (err) {
       if (mounted) {

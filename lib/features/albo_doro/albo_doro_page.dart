@@ -5,6 +5,7 @@ import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/ui.dart';
 import '../carta/card_colors.dart';
 import '../risultati/result_ui.dart' show ClubCrest;
@@ -161,7 +162,7 @@ class _SeasonTrophies extends ConsumerWidget {
       );
     }
     final list = trophies.value;
-    if (list == null) return const LinearProgressIndicator();
+    if (list == null) return const GoldBar();
     if (list.isEmpty) {
       return _Empty(
         text:

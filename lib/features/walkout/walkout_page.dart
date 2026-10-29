@@ -1,8 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../../core/haptics.dart';
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
 import '../carta/card_colors.dart';
@@ -129,21 +129,21 @@ class _WalkoutPageState extends State<WalkoutPage>
   /// Vibrazioni: colpetti mentre il pacchetto trema, forte allo strappo, una per ogni
   /// rivelazione e la più forte quando la carta si ferma.
   static const _beats = [
-    (.018, HapticFeedback.selectionClick),
-    (.034, HapticFeedback.selectionClick),
-    (.048, HapticFeedback.selectionClick),
-    (_tearAt, HapticFeedback.heavyImpact),
-    (_flagAt, HapticFeedback.mediumImpact),
-    (_positionAt, HapticFeedback.mediumImpact),
-    (_crestAt, HapticFeedback.mediumImpact),
-    (_flipAt, HapticFeedback.lightImpact),
-    (_flipEnd, HapticFeedback.heavyImpact),
+    (.018, Haptics.tap),
+    (.034, Haptics.tap),
+    (.048, Haptics.tap),
+    (_tearAt, Haptics.heavy),
+    (_flagAt, Haptics.medium),
+    (_positionAt, Haptics.medium),
+    (_crestAt, Haptics.medium),
+    (_flipAt, Haptics.light),
+    (_flipEnd, Haptics.heavy),
   ];
 
   @override
   void initState() {
     super.initState();
-    HapticFeedback.lightImpact();
+    Haptics.light();
     _enter.forward();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Con "riduci animazioni" del telefono il pacchetto aspetta fermo.
@@ -172,7 +172,7 @@ class _WalkoutPageState extends State<WalkoutPage>
     final counted = _counting(_c.value);
     if (counted != _counted) {
       _counted = counted;
-      HapticFeedback.selectionClick();
+      Haptics.tap();
     }
   }
 
@@ -209,7 +209,7 @@ class _WalkoutPageState extends State<WalkoutPage>
     _pull.value = (before - d.delta.dy / 180).clamp(0.0, 1.0);
     // Un tic quando basta lasciarlo per aprirlo.
     if (before < _pullToOpen && _pull.value >= _pullToOpen) {
-      HapticFeedback.selectionClick();
+      Haptics.tap();
     }
   }
 

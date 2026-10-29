@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/errors.dart';
 import '../core/theme.dart';
+import 'gold_loader.dart';
 
 /// Mostra un [AsyncValue] senza far sparire i dati:
 /// - appena ci sono dati li mostra, anche mentre si ricarica o se l'ultimo
@@ -53,7 +54,7 @@ class AsyncView<T> extends StatelessWidget {
         onRetry: onRetry,
       );
     }
-    return loading ?? const Center(child: CircularProgressIndicator());
+    return loading ?? const Center(child: GoldLoader());
   }
 }
 

@@ -10,6 +10,7 @@ import 'package:milanac/features/carte/assign_cards_sheet.dart';
 import 'package:milanac/features/carte/special_cards_repository.dart';
 import 'package:milanac/features/risultati/match.dart';
 import 'package:milanac/features/rosa/rosa_repository.dart';
+import 'package:milanac/shared/gold_loader.dart';
 
 /// L'amichevole del Futuro della demo (Real Brianza 2–2).
 final _brianza = ClubMatch(
@@ -185,7 +186,7 @@ void main() {
     final repo = _SlowCards();
     await _openSheet(tester, _brianza, repo: repo);
     // Carte non ancora arrivate: niente modulo, niente salvataggio.
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(GoldLoader), findsOneWidget);
     expect(find.text('Assegna le carte'), findsNothing);
 
     final now = DateTime.now();

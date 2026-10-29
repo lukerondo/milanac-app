@@ -14,6 +14,7 @@ import 'package:milanac/core/theme.dart';
 import 'package:milanac/features/impostazioni/impostazioni_page.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
+import 'package:milanac/shared/gold_loader.dart';
 import 'package:milanac/shared/member_photo.dart';
 
 import 'helpers.dart';
@@ -217,7 +218,7 @@ void main() {
       // La pagina resta aperta con l'attesa sul pulsante; un secondo tocco non conta.
       await tester.tap(find.text('Esci dall\'account'));
       await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(GoldLoader), findsOneWidget);
       await tester.tap(find.byType(LogoutTile));
       await tester.pump(const Duration(seconds: 1));
       expect(auth.calls, 1);

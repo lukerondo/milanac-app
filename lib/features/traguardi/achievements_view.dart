@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/haptics.dart';
 import '../../core/theme.dart';
+import '../../shared/gold_loader.dart';
 import '../carta/card_colors.dart';
 import 'achievements.dart';
 
@@ -91,10 +92,7 @@ class AchievementsGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final list = ref.watch(achievementsProvider(memberId));
     if (list == null) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: LinearProgressIndicator(),
-      );
+      return const Padding(padding: EdgeInsets.all(16), child: GoldBar());
     }
     final unlocked = list.where((p) => p.unlocked).length;
     return Column(
@@ -211,7 +209,7 @@ Future<void> showUnlockCelebration(
   BuildContext context,
   List<Achievement> unlocked,
 ) {
-  HapticFeedback.heavyImpact();
+  Haptics.heavy();
   return showGeneralDialog(
     context: context,
     barrierDismissible: true,

@@ -12,11 +12,13 @@ import 'package:intl/intl.dart';
 import '../../core/audio_focus.dart';
 import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/push/push_service.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/link_text.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
@@ -27,11 +29,11 @@ import '../lavagna/board_painter.dart';
 import '../lavagna/replay_pages.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
+import '../voce/voice_room_sheet.dart';
 import 'channel_messages.dart';
 import 'chat_repository.dart';
 import 'chat_widgets.dart';
 import 'voice_player.dart';
-import '../voce/voice_room_sheet.dart';
 import 'voice_recorder.dart';
 
 /// Conversazione di un canale, in stile Telegram (aperta anche dalle notifiche: `/chat/<slug>`).
@@ -307,7 +309,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
       if (audio == null) _image = null;
       _replyTo = null;
     });
-    HapticFeedback.lightImpact();
+    Haptics.light();
     _jumpToBottom();
     _report(
       await conversation.send(
@@ -391,7 +393,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
       return;
     }
     _audioFocus.claim(AudioUse.registrazioneVocale);
-    HapticFeedback.mediumImpact();
+    Haptics.medium();
     setState(() {
       _recording = true;
       _recCancel = false;
@@ -964,11 +966,7 @@ class _LoadMoreRow extends StatelessWidget {
               label: const Text('Messaggi precedenti non caricati · Riprova'),
             )
           : loading
-          ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+          ? const SizedBox(width: 22, height: 22, child: GoldLoader(size: 22))
           : null,
     ),
   );
@@ -1911,10 +1909,7 @@ class _VoiceBubble extends ConsumerWidget {
                 ? SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      color: p.onAccent,
-                    ),
+                    child: GoldLoader(size: 18, color: p.onAccent),
                   )
                 : Icon(
                     playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
@@ -2058,10 +2053,7 @@ class _ChatImageState extends ConsumerState<_ChatImage> {
       } else {
         full = image = link.hasError
             ? _unavailable(path)
-            : const SizedBox(
-                height: 160,
-                child: Center(child: CircularProgressIndicator()),
-              );
+            : const SizedBox(height: 160, child: Center(child: GoldLoader()));
       }
     }
     return GestureDetector(

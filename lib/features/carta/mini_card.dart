@@ -38,6 +38,9 @@ double miniCardHeight(BuildContext context) =>
 /// Mini carta del giocatore (Rosa), come la tavola: nero/oro, blu elettrico o
 /// normale (scura, con il colore del livello in alto). Overall con il bonus, ruolo,
 /// volto, nome e tipo di carta. Colori fissi: è un oggetto di gioco.
+/// Etichetta del volo della carta dalla Rosa (mini carta) alla carta grande.
+Object cardHeroTag(String memberId) => 'carta-$memberId';
+
 class MiniCard extends ConsumerWidget {
   const MiniCard({super.key, required this.member, this.onTap});
   final Member member;
@@ -84,122 +87,130 @@ class MiniCard extends ConsumerWidget {
       label: description,
       onTap: onTap,
       excludeSemantics: true,
-      child: Material(
-        color: bg,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: switch (kind) {
-            CardSpecial.neroOro => const BorderSide(color: CardColors.gold),
-            CardSpecial.blu => BorderSide.none,
-            null => const BorderSide(color: CardColors.border),
-          },
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (kind == null)
-                Container(
-                  height: 5,
-                  color: CardColors.tier(tierOf(member.overall)),
-                ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(8, kind == null ? 6 : 8, 8, 8),
-                child: Column(
-                  children: [
-                    // Overall (con il bonus) a sinistra, ruolo a destra: si
-                    // rimpiccioliscono se lo spazio non basta.
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      // Aprendola, la carta vola fino a quella grande. Non dalle schede nascoste: la
+      // Rosa lasciata aperta in un'altra scheda non fa partire carte da fuori schermo.
+      child: HeroMode(
+        enabled: TickerMode.valuesOf(context).enabled,
+        child: Hero(
+          tag: cardHeroTag(member.id),
+          child: Material(
+            color: bg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: switch (kind) {
+                CardSpecial.neroOro => const BorderSide(color: CardColors.gold),
+                CardSpecial.blu => BorderSide.none,
+                null => const BorderSide(color: CardColors.border),
+              },
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (kind == null)
+                    Container(
+                      height: 5,
+                      color: CardColors.tier(tierOf(member.overall)),
+                    ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(8, kind == null ? 6 : 8, 8, 8),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.topLeft,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  overall?.toString() ?? '–',
+                        // Overall (con il bonus) a sinistra, ruolo a destra: si
+                        // rimpiccioliscono se lo spazio non basta.
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.topLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      overall?.toString() ?? '–',
+                                      style: TextStyle(
+                                        fontFamily: sportFont,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1,
+                                        color: fg,
+                                      ),
+                                    ),
+                                    if (special != null)
+                                      Text(
+                                        '+${special.bonus}',
+                                        style: TextStyle(
+                                          fontFamily: sportFont,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          height: 1,
+                                          color: fg,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 38),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.topRight,
+                                child: Text(
+                                  member.fieldPosition ?? '–',
                                   style: TextStyle(
                                     fontFamily: sportFont,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1,
-                                    color: fg,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: roleColor,
                                   ),
                                 ),
-                                if (special != null)
-                                  Text(
-                                    '+${special.bonus}',
-                                    style: TextStyle(
-                                      fontFamily: sportFont,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      height: 1,
-                                      color: fg,
-                                    ),
-                                  ),
-                              ],
+                              ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        CardPortrait(member: member, size: 58, special: kind),
+                        const SizedBox(height: 4),
+                        Text(
+                          member.displayName.toUpperCase(),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: sportFont,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            height: 1.15,
+                            color: fg,
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 38),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.topRight,
-                            child: Text(
-                              member.fieldPosition ?? '–',
-                              style: TextStyle(
-                                fontFamily: sportFont,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: roleColor,
-                              ),
+                        const SizedBox(height: 2),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: .7,
+                              color: labelColor,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    CardPortrait(member: member, size: 58, special: kind),
-                    const SizedBox(height: 4),
-                    Text(
-                      member.displayName.toUpperCase(),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: sportFont,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        height: 1.15,
-                        color: fg,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: .7,
-                          color: labelColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

@@ -13,6 +13,7 @@ import '../../core/errors.dart';
 import '../../core/local_flags.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/ui.dart';
 import '../carte/carte_speciali_page.dart' show openSpecialCards;
 import '../carte/special_cards_repository.dart';
@@ -29,6 +30,7 @@ import 'card_colors.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
 import 'live_card.dart';
+import 'mini_card.dart' show cardHeroTag;
 
 /// Statistiche della carta di un membro (presenze degli ultimi 60 giorni e partite).
 final cardStatsProvider = Provider.family<CardStats?, String>((ref, id) {
@@ -52,7 +54,7 @@ class MyCardPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(profileProvider).value;
-    if (me == null) return const Center(child: CircularProgressIndicator());
+    if (me == null) return const Center(child: GoldLoader());
     return PlayerCardView(memberId: me.id);
   }
 }
@@ -168,7 +170,7 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
         );
       }
       if (rosa.isLoading) {
-        return const Center(child: CircularProgressIndicator());
+        return const Center(child: GoldLoader());
       }
       return ErrorRetry(
         message: 'Giocatore non trovato.',
@@ -206,10 +208,17 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                         child: Padding(
                           // Margine per l'alone nell'immagine condivisa.
                           padding: const EdgeInsets.all(8),
-                          child: FutCard(
-                            member: member,
-                            special: special?.kind,
-                            bonus: special?.bonus ?? 0,
+                          // Dalla Rosa arriva in volo la mini carta.
+                          child: Hero(
+                            tag: cardHeroTag(member.id),
+                            child: Material(
+                              type: MaterialType.transparency,
+                              child: FutCard(
+                                member: member,
+                                special: special?.kind,
+                                bonus: special?.bonus ?? 0,
+                              ),
+                            ),
                           ),
                         ),
                       ),

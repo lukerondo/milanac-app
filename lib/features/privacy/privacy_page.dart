@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/config.dart';
 import '../../shared/app_shell.dart';
+import '../../shared/gold_loader.dart';
 import '../auth/gate_ui.dart';
 import '../regolamento/regolamento_page.dart';
 
@@ -24,7 +25,7 @@ class PrivacyPage extends StatelessWidget {
           future: rootBundle.loadString('assets/legal/privacy.md'),
           builder: (context, snap) {
             if (!snap.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: GoldLoader());
             }
             return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),

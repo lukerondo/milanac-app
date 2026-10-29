@@ -10,6 +10,7 @@ import '../../core/errors.dart';
 import '../../core/theme.dart';
 import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/ui.dart';
 import '../chat/chat_repository.dart';
 import '../rosa/member.dart';
@@ -314,7 +315,7 @@ class _ReplayPageState extends ConsumerState<ReplayPage> {
             else if (_player == null)
               const Padding(
                 padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: GoldLoader()),
               )
             else
               ReplayView(player: _player!),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../../core/haptics.dart';
 import '../../core/theme.dart';
 import '../auth/gate_ui.dart';
 import 'face.dart';
@@ -44,7 +44,7 @@ class FaceEditor extends StatelessWidget {
         Center(
           child: OutlinedButton.icon(
             onPressed: () {
-              HapticFeedback.selectionClick();
+              Haptics.tap();
               onChanged(Face.random());
             },
             style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
@@ -122,7 +122,7 @@ class _PartRow extends StatelessWidget {
               itemBuilder: (context, i) {
                 final selected = i == current;
                 void pick() {
-                  HapticFeedback.selectionClick();
+                  Haptics.tap();
                   onChanged(face.withPart(part, i));
                 }
 

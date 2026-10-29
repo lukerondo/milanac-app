@@ -8,6 +8,7 @@ import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/shared_links.dart';
 import '../../shared/ui.dart';
 import 'soundtrack.dart';
@@ -344,7 +345,7 @@ class _PlayerCardState extends ConsumerState<_PlayerCard> {
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: GoldLoader(size: 16),
                     )
                   : const Icon(Icons.library_music_rounded),
               label: const Text('Scegli il file audio'),

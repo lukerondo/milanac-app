@@ -11,6 +11,7 @@ import '../../core/audio_focus.dart';
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
@@ -465,7 +466,7 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     if (_tool != BoardTool.giocatore) return;
     final hit = _hit(d.localPosition);
     if (hit == null) return;
-    HapticFeedback.mediumImpact();
+    Haptics.medium();
     _editor.apply(RemoveToken(hit.id));
   }
 
@@ -671,7 +672,7 @@ class _BoardPageState extends ConsumerState<BoardPage> {
       );
       return;
     }
-    HapticFeedback.mediumImpact();
+    Haptics.medium();
     final recorder = _editor.startRecording();
     setState(() {
       _micBusy = false;

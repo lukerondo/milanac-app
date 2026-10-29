@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -10,11 +9,13 @@ import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/app_shell.dart';
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
 import '../calendario/club_event.dart';
@@ -353,7 +354,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
                 (mounted ? ref.read(formationProvider(team)).value : null);
       if (f == null) return;
       final published = await repository.publish(f);
-      HapticFeedback.heavyImpact();
+      Haptics.heavy();
       _lastSaved[team] = published;
       if (mounted && _team == team) setState(() => _draft = published);
       container.invalidate(formationProvider);
@@ -605,7 +606,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
               icon: _pendingSaves > 0 || _publishing
                   ? const SizedBox.square(
                       dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: GoldLoader(size: 18),
                     )
                   : const Icon(Icons.campaign_rounded),
               label: Text(

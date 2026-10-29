@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/gold_loader.dart';
 import 'clip_service.dart';
 import 'media_viewer.dart' show mediaTheme;
 
@@ -109,7 +110,7 @@ class _ClipTrimPageState extends State<ClipTrimPage> {
           title: const Text('SCEGLI LA CLIP'),
         ),
         body: !ready
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: GoldLoader())
             : Column(
                 children: [
                   Expanded(
@@ -153,9 +154,7 @@ class _ClipTrimPageState extends State<ClipTrimPage> {
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
+                                  child: GoldLoader(size: 18),
                                 )
                               : const Icon(Icons.content_cut_rounded),
                           label: Text(

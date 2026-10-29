@@ -12,6 +12,7 @@ import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
@@ -956,6 +957,7 @@ class AttendanceAnswer {
           note: input.note,
         ),
       );
+      Haptics.confirm();
     } catch (e) {
       _messenger.showSnackBar(
         SnackBar(content: Text(answerErrorText(e, mine: playerId == _myId))),

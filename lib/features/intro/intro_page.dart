@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/config.dart';
 import '../../core/theme.dart';
+import '../../shared/gold_loader.dart';
 import 'intro_state.dart';
 
 /// Intro: video del club (assets/video/intro.mp4; se manca, sfondo nero), stemma del
@@ -216,10 +217,7 @@ class _SkipButton extends StatelessWidget {
           const SizedBox(
             width: 16,
             height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: MilanacColors.goldLight,
-            ),
+            child: GoldLoader(size: 16, color: MilanacColors.goldLight),
           ),
           const SizedBox(width: 10),
         ],

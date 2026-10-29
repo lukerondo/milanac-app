@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/profile.dart';
 import '../../core/clock.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
@@ -221,6 +222,10 @@ class _MatchEditorState extends ConsumerState<_MatchEditor> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await repo.save(m);
+      // Una vittoria si sente come un gol; il resto come una conferma.
+      (goalsFor ?? 0) > (goalsAgainst ?? 0)
+          ? Haptics.goal()
+          : Haptics.confirm();
       if (mounted) Navigator.of(context).pop();
       if (m.timeline.isNotEmpty && repo.timelineMissing) {
         messenger.showSnackBar(

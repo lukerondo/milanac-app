@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,6 +8,7 @@ import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/push/device_tokens.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
@@ -135,7 +135,7 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
   Future<void> _accept(RulesVersion version) async {
     final messenger = ScaffoldMessenger.of(context);
     if (!_timeOk) {
-      HapticFeedback.heavyImpact();
+      Haptics.heavy();
       final p = context.pal;
       messenger.hideCurrentMaterialBanner();
       _bannerMessenger = messenger;
@@ -188,7 +188,7 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-    HapticFeedback.mediumImpact();
+    Haptics.medium();
     messenger.hideCurrentMaterialBanner();
     if (!mounted) return;
     // Il router apre la Home appena il profilo riletto ha la versione accettata, senza

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/ui.dart';
 
 /// Pezzi comuni delle pagine a schermo intero di accesso, registrazione, regolamento
@@ -172,10 +173,7 @@ class PrimaryButton extends StatelessWidget {
           ? SizedBox(
               width: 20,
               height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: p.textDisabled,
-              ),
+              child: GoldLoader(size: 20, color: p.textDisabled),
             )
           // Un'etichetta lunga si stringe un poco invece di andare a capo.
           : FittedBox(

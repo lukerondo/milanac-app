@@ -9,6 +9,7 @@ import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/shared_links.dart';
 import '../../shared/ui.dart';
 import '../risultati/matches_repository.dart';
@@ -430,7 +431,7 @@ class _TournamentPageState extends ConsumerState<TournamentPage> {
                     onRetry: () => ref.invalidate(tournamentsProvider),
                   )
                 : tournaments.isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: GoldLoader())
                 : ErrorRetry(
                     message: 'Torneo non trovato.',
                     onRetry: () => ref.invalidate(tournamentsProvider),
@@ -541,7 +542,7 @@ class _TournamentPageState extends ConsumerState<TournamentPage> {
                 AsyncView(
                   value: standings,
                   onRetry: () => ref.invalidate(standingsProvider(t.id)),
-                  loading: const LinearProgressIndicator(),
+                  loading: const GoldBar(),
                   data: (rows) => rows.isNotEmpty
                       ? AppCard(
                           padding: EdgeInsets.zero,

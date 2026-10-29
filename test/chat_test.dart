@@ -27,6 +27,7 @@ import 'package:milanac/features/chat/voice_recorder.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/main.dart';
 import 'package:milanac/shared/async_view.dart';
+import 'package:milanac/shared/gold_loader.dart';
 import 'package:milanac/shared/link_text.dart';
 
 import 'helpers.dart';
@@ -735,7 +736,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('Connessione persa: riprovo…'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(GoldLoader), findsNothing);
       expect(find.text(shown), findsOneWidget);
       expect(offset(), before);
 
@@ -948,7 +949,7 @@ void main() {
     router.go('/chat/inesistente');
     await tester.pumpAndSettle();
     expect(find.text('Canale non disponibile'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(GoldLoader), findsNothing);
     expect(PushService.instance.shouldShowInApp, isNull);
     await tester.tap(find.text('Torna alla chat'));
     await tester.pumpAndSettle();

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../../core/haptics.dart';
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
 import '../rosa/member.dart';
@@ -70,7 +70,7 @@ class AttendanceStatusButton extends StatelessWidget {
     return OutlinedButton(
       onPressed: enabled
           ? () {
-              HapticFeedback.selectionClick();
+              Haptics.tap();
               onPressed!();
             }
           : null,

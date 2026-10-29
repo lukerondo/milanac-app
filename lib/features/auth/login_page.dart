@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/providers.dart';
 import '../../core/theme.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/ui.dart';
 import 'gate_ui.dart';
 
@@ -443,11 +444,7 @@ class _SocialButton extends StatelessWidget {
         ),
       ),
       child: busy
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+          ? const SizedBox(width: 18, height: 18, child: GoldLoader(size: 18))
           : Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }

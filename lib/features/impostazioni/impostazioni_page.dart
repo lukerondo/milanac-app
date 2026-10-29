@@ -9,9 +9,11 @@ import '../../core/auth/notify_prefs.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/push/device_tokens.dart';
 import '../../core/theme.dart';
 import '../../shared/app_shell.dart';
+import '../../shared/gold_loader.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
 import '../auth/gate_ui.dart';
@@ -93,7 +95,7 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
               face: face,
             ),
           );
-      HapticFeedback.lightImpact();
+      Haptics.light();
       if (mounted) _toast('Volto aggiornato: lo vedi anche sulla carta.');
     } catch (e) {
       if (mounted) _toast(friendlyError(e, action: 'Salvataggio non riuscito'));
@@ -295,6 +297,20 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
                     style: TextStyle(color: p.textMuted, fontSize: 14),
                   ),
                 ),
+                const SizedBox(height: 8),
+                _Group(
+                  children: [
+                    SwitchListTile(
+                      title: const Text('Vibrazioni'),
+                      subtitle: const Text(
+                        'Ai tocchi, ai gol, alle presenze e alle conferme.',
+                      ),
+                      value: ref.watch(vibrationsProvider),
+                      onChanged: (on) =>
+                          ref.read(vibrationsProvider.notifier).set(on),
+                    ),
+                  ],
+                ),
                 const _GroupLabel('Account'),
                 _Group(
                   children: [
@@ -327,7 +343,7 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: GoldLoader(size: 18),
                             )
                           : const Text('Elimina il mio account'),
                     ),
@@ -477,11 +493,7 @@ class _ProfileLoading extends StatelessWidget {
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Impossibile caricare il profilo. Riprova'),
             )
-          : const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+          : const SizedBox(width: 22, height: 22, child: GoldLoader(size: 22)),
     ),
   );
 }
@@ -786,10 +798,7 @@ class _LogoutTileState extends ConsumerState<LogoutTile> {
                 ? SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: p.danger,
-                    ),
+                    child: GoldLoader(size: 20, color: p.danger),
                   )
                 : Text(
                     'Esci dall\'account',

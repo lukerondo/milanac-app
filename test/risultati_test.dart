@@ -14,6 +14,7 @@ import 'package:milanac/features/risultati/match_editor.dart';
 import 'package:milanac/features/risultati/matches_repository.dart';
 import 'package:milanac/features/risultati/risultati_page.dart';
 import 'package:milanac/main.dart';
+import 'package:milanac/shared/gold_loader.dart';
 
 import 'helpers.dart';
 import 'home_test.dart' show startAppAt, todayInItalyAt;
@@ -211,13 +212,13 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(GoldLoader), findsOneWidget);
     expect(find.text('Partita non trovata.'), findsNothing);
 
     // L'elenco arriva senza quella partita (eliminata): ora lo si dice, con Riprova.
     repo.streams.last.add(const []);
     await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(GoldLoader), findsNothing);
     expect(find.text('Partita non trovata.'), findsOneWidget);
     expect(find.text('Riprova'), findsOneWidget);
 
@@ -225,7 +226,7 @@ void main() {
     await tester.tap(find.text('Riprova'));
     await tester.pump();
     expect(repo.streams, hasLength(2));
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(GoldLoader), findsOneWidget);
     expect(find.text('Partita non trovata.'), findsNothing);
     repo.streams.last.add([
       ClubMatch(
