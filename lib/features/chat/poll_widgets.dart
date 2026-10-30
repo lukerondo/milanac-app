@@ -9,6 +9,7 @@ import '../../shared/gold_loader.dart';
 import '../../shared/member_photo.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
+import 'channel_messages.dart';
 import 'chat_repository.dart';
 import 'poll.dart';
 
@@ -189,8 +190,10 @@ class _PollComposerState extends State<_PollComposer> {
 }
 
 /// Il sondaggio dentro la bolla. Si vota toccando una risposta (con più risposte, ogni
-/// tocco la aggiunge o la toglie); i risultati compaiono dopo aver votato o a sondaggio
-/// chiuso, con le barre e le percentuali. "N voti" apre chi ha votato.
+/// tocco la aggiunge o la toglie) appena si conosce il proprio voto; i risultati
+/// compaiono dopo aver votato o a sondaggio chiuso, con le barre e le percentuali.
+/// "N voti" apre chi ha votato. Va creato con la chiave del messaggio: lo stato del voto
+/// appena dato non deve passare a un altro sondaggio quando la conversazione scorre.
 class PollCard extends ConsumerStatefulWidget {
   const PollCard({
     super.key,
@@ -215,29 +218,67 @@ class _PollCardState extends ConsumerState<PollCard> {
   /// La risposta toccata, mentre il voto parte.
   int? _sending;
 
-  ChatPoll get _poll => widget.poll;
+  @override
+  void didUpdateWidget(PollCard old) {
+    super.didUpdateWidget(old);
+    // Un altro sondaggio al posto di questo: niente stato del voto di prima.
+    if (old.message.id != widget.message.id) {
+      _saved = null;
+      _sending = null;
+    }
+  }
+
+  static bool _same(Set<int> a, Set<int> b) =>
+      a.length == b.length && a.containsAll(b);
+
+  /// Il proprio voto nell'elenco [votes] (vuoto se non c'è).
+  static Set<int> _mineIn(Iterable<PollVote> votes, String? me) =>
+      votes.where((v) => v.userId == me).firstOrNull?.options ?? const {};
 
   Future<void> _vote(Set<int> options, int touched) async {
     if (_sending != null) return;
     final repo = ref.read(chatRepositoryProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final message = widget.message;
+    final me = ref.read(currentUserIdProvider);
     setState(() => _sending = touched);
     Haptics.light();
     try {
-      await repo.votePoll(widget.message.id, options);
-      if (mounted) setState(() => _saved = Set.of(options));
+      await repo.votePoll(message.id, options);
+      if (!mounted || widget.message.id != message.id) return;
+      // Se il tempo reale ha già riportato il voto (può arrivare prima della risposta),
+      // vale quello: un voto "in attesa" non resterebbe più nascosto sotto.
+      final now = ref.read(pollVotesProvider(message.id)).value;
+      final echoed = now != null && _same(_mineIn(now, me), options);
+      setState(() => _saved = echoed ? null : Set.of(options));
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text(friendlyError(e, action: 'Voto non salvato'))),
       );
+      // Magari è stato chiuso intanto: si ricarica per mostrarlo com'è.
+      await _refresh(repo, message);
     } finally {
       if (mounted) setState(() => _sending = null);
     }
   }
 
-  void _tap(int option, PollTally tally) {
+  /// Il messaggio com'è ora sul server, nella conversazione (sondaggio chiuso).
+  Future<void> _refresh(ChatRepository repo, ChatMessage message) async {
+    try {
+      final fresh = await repo.message(message.id);
+      if (fresh == null || !mounted) return;
+      if (ChatPoll.of(fresh)?.closed ?? false) _closed(fresh);
+    } catch (_) {
+      // Senza rete resta com'era: il prossimo tocco riprova.
+    }
+  }
+
+  void _closed(ChatMessage fresh) =>
+      ref.read(messagesProvider(fresh.channelId).notifier).updated(fresh);
+
+  void _tap(ChatPoll poll, int option, PollTally tally) {
     final mine = tally.mine;
-    if (!_poll.multiple) {
+    if (!poll.multiple) {
       if (mine.length == 1 && mine.contains(option)) return;
       _vote({option}, option);
       return;
@@ -253,36 +294,49 @@ class _PollCardState extends ConsumerState<PollCard> {
     final local = widget.message.isLocal;
     final me = ref.watch(currentUserIdProvider);
     final provider = pollVotesProvider(widget.message.id);
+    var poll = widget.poll;
+    AsyncValue<List<PollVote>>? votesAsync;
     if (!local) {
       // Quando il tempo reale riporta il voto salvato da qui, vale di nuovo il suo.
       ref.listen(provider, (_, next) {
         final saved = _saved;
         final votes = next.value;
         if (saved == null || votes == null) return;
-        final mine =
-            votes.where((v) => v.userId == me).firstOrNull?.options ?? {};
-        if (mine.length == saved.length && mine.containsAll(saved)) {
-          setState(() => _saved = null);
+        if (_same(_mineIn(votes, me), saved)) setState(() => _saved = null);
+      });
+      // La chiusura arriva anche per i sondaggi fuori dagli ultimi messaggi del
+      // canale: si mostra subito e passa alla conversazione (menu, altre bolle).
+      ref.listen(pollMessageProvider(widget.message.id), (_, next) {
+        final m = next.value;
+        if (m != null && (ChatPoll.of(m)?.closed ?? false) && !poll.closed) {
+          _closed(m);
         }
       });
+      final live = ref.watch(pollMessageProvider(widget.message.id)).value;
+      final livePoll = live == null ? null : ChatPoll.of(live);
+      if (livePoll != null && livePoll.closed && !poll.closed) poll = livePoll;
+      votesAsync = ref.watch(provider);
     }
-    final votes = local
-        ? const <PollVote>[]
-        : ref.watch(provider).value ?? const <PollVote>[];
+    final votes = votesAsync?.value ?? const <PollVote>[];
+    // Finché non si conosce il proprio voto non si vota: con più risposte il voto
+    // nuovo si calcola da quello di prima, e lo cancellerebbe.
+    final loaded = votesAsync?.hasValue ?? false;
+    final unavailable =
+        votesAsync != null && votesAsync.hasError && !votesAsync.hasValue;
     final saved = _saved;
-    final tally = PollTally(_poll, [
+    final tally = PollTally(poll, [
       for (final v in votes)
         if (saved == null || v.userId != me) v,
       if (saved != null && me != null)
         PollVote(messageId: widget.message.id, userId: me, options: saved),
     ], me: me);
-    final closed = _poll.closed;
+    final closed = poll.closed;
     final results = tally.voted || closed;
     final leaders = closed ? tally.leaders : const <int>{};
-    final canVote = !local && !closed && me != null;
+    final canVote = !local && !closed && me != null && loaded;
     final label = [
       closed ? 'SONDAGGIO CHIUSO' : 'SONDAGGIO',
-      if (_poll.multiple) 'PIÙ RISPOSTE',
+      if (poll.multiple) 'PIÙ RISPOSTE',
     ].join(' · ');
     return SizedBox(
       width: widget.width,
@@ -315,7 +369,7 @@ class _PollCardState extends ConsumerState<PollCard> {
           ),
           const SizedBox(height: 6),
           Text(
-            _poll.question,
+            poll.question,
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
@@ -324,17 +378,19 @@ class _PollCardState extends ConsumerState<PollCard> {
             ),
           ),
           const SizedBox(height: 8),
-          for (final (i, option) in _poll.options.indexed)
+          for (final (i, option) in poll.options.indexed)
             _OptionRow(
               key: ValueKey('sondaggio-${widget.message.id}-$i'),
               text: option,
               chosen: tally.mine.contains(i),
-              multiple: _poll.multiple,
+              multiple: poll.multiple,
               share: results ? tally.share(i) : null,
               count: tally.count(i),
               leader: leaders.contains(i),
               sending: _sending == i,
-              onTap: canVote && _sending == null ? () => _tap(i, tally) : null,
+              onTap: canVote && _sending == null
+                  ? () => _tap(poll, i, tally)
+                  : null,
             ),
           const SizedBox(height: 2),
           Row(
@@ -347,10 +403,10 @@ class _PollCardState extends ConsumerState<PollCard> {
                     foregroundColor: p.textSecondary,
                   ),
                   onPressed: results && tally.total > 0
-                      ? () => showPollVoters(context, _poll, tally)
+                      ? () => showPollVoters(context, poll, tally)
                       : null,
                   child: Text(
-                    tally.totalLabel,
+                    unavailable ? 'Voti non disponibili' : tally.totalLabel,
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),

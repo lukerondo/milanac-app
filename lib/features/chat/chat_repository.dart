@@ -357,6 +357,11 @@ abstract class ChatRepository {
   /// Un messaggio (null se non c'è più): per le citazioni di messaggi non caricati.
   Future<ChatMessage?> message(String id);
 
+  /// Un messaggio in tempo reale (null se non c'è più): i sondaggi seguono così la
+  /// chiusura anche quando sono più vecchi degli ultimi [chatRecentLimit] (lo stream del
+  /// canale non riporta le modifiche dei messaggi fuori dalla sua finestra).
+  Stream<ChatMessage?> watchMessage(String id);
+
   /// Gli ultimi [chatSearchLimit] messaggi che contengono [query] (maiuscole e
   /// minuscole non contano), dal più recente: solo nei canali che si vedono.
   Future<List<ChatMessage>> searchMessages(String query);
@@ -497,6 +502,13 @@ final chatAudioUrlProvider = FutureProvider.autoDispose.family<String, String>((
   return url;
 });
 
+/// Il messaggio di un sondaggio in tempo reale, finché si vede (per la chiusura).
+final pollMessageProvider = StreamProvider.autoDispose
+    .family<ChatMessage?, String>((ref, messageId) {
+      ref.watch(currentUserIdProvider);
+      return ref.watch(chatRepositoryProvider).watchMessage(messageId);
+    });
+
 /// I voti di un sondaggio, in tempo reale finché il sondaggio si vede.
 final pollVotesProvider = StreamProvider.autoDispose
     .family<List<PollVote>, String>((ref, messageId) {
@@ -587,6 +599,13 @@ class _SupabaseChatRepository extends ChatRepository {
         .maybeSingle();
     return row == null ? null : ChatMessage.tryFromMap(row);
   }
+
+  @override
+  Stream<ChatMessage?> watchMessage(String id) => _client
+      .from('messages')
+      .stream(primaryKey: ['id'])
+      .eq('id', id)
+      .map((rows) => rows.isEmpty ? null : ChatMessage.tryFromMap(rows.first));
 
   /// Le regole del database restituiscono solo i messaggi dei canali visibili.
   @override
@@ -1080,6 +1099,10 @@ class DemoChatRepository extends ChatRepository {
   /// Id del sondaggio con i voti cambiati.
   final _voteChanges = StreamController<String>.broadcast();
 
+  /// Modifiche che arrivano solo a chi segue il singolo messaggio (vedi
+  /// [closePollElsewhere]).
+  final _messageOnly = StreamController<ChatMessage>.broadcast();
+
   /// Messaggi inseriti o modificati (come gli eventi del tempo reale).
   final _rows = StreamController<ChatMessage>.broadcast();
 
@@ -1223,6 +1246,52 @@ class DemoChatRepository extends ChatRepository {
   @override
   Future<ChatMessage?> message(String id) async =>
       _messages.where((m) => m.id == id).firstOrNull;
+
+  /// Come lo stream di Supabase su un solo messaggio: riceve modifiche ed eliminazioni.
+  @override
+  Stream<ChatMessage?> watchMessage(String id) {
+    late final StreamController<ChatMessage?> out;
+    final subs = <StreamSubscription<Object?>>[];
+    out = StreamController(
+      onListen: () {
+        out.add(_messages.where((m) => m.id == id).firstOrNull);
+        subs
+          ..add(_rows.stream.where((m) => m.id == id).listen(out.add))
+          ..add(_messageOnly.stream.where((m) => m.id == id).listen(out.add))
+          ..add(
+            _deletions.stream
+                .where((d) => d == id)
+                .listen((_) => out.add(null)),
+          );
+      },
+      onCancel: () {
+        for (final s in subs) {
+          s.cancel();
+        }
+      },
+    );
+    return out.stream;
+  }
+
+  /// Solo demo e test: un altro (o un altro telefono) chiude il sondaggio [id]. Con
+  /// [inChannel] false la modifica non arriva allo stream del canale (sondaggio più
+  /// vecchio degli ultimi [chatRecentLimit] messaggi), solo a chi segue il messaggio.
+  void closePollElsewhere(String id, {bool inChannel = true}) {
+    final i = _messages.indexWhere((m) => m.id == id);
+    if (i < 0) return;
+    final closed = _messages[i].copyWith(
+      meta: {
+        ..._messages[i].meta,
+        'closed_at': clock().toUtc().toIso8601String(),
+      },
+    );
+    if (inChannel) {
+      _saved(closed);
+      return;
+    }
+    _messages[i] = closed;
+    if (!_messageOnly.isClosed) _messageOnly.add(closed);
+  }
 
   @override
   Future<List<ChatMessage>> searchMessages(String query) async {
@@ -1374,5 +1443,6 @@ class DemoChatRepository extends ChatRepository {
     _deletions.close();
     _changes.close();
     _voteChanges.close();
+    _messageOnly.close();
   }
 }

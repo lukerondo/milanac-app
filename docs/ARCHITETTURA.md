@@ -314,8 +314,9 @@ profiles      + play_styles (text[]: codici dei PlayStyle, "+" in fondo per i Pl
 events        + party_code (text, 1-40 caratteri: il codice del party della partita, lo
               scrive il Direttivo e si copia dal Match Day in Home)
 -- dalla migrazione 0031
-event_reminders id, event_id(→ events), kind (ora | lobby | chiamata), sent_at, sent_by;
-              i due automatici una volta sola per partita; nessuna policy (solo il server)
+event_reminders id, event_id(→ events), kind (ora | lobby | chiamata), starts_at, sent_at,
+              sent_by; i due automatici una volta sola per partita e orario (se la partita
+              si sposta ripartono); nessuna policy (solo il server)
 -- dalla migrazione 0030
 messages      un sondaggio è un messaggio con meta {type: poll, options [2-10, 1-80
               caratteri, diverse], multiple, closed_at?} e la domanda nel testo (max 300)

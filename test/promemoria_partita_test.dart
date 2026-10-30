@@ -9,6 +9,8 @@ import 'package:milanac/core/errors.dart';
 import 'package:milanac/core/italian_time.dart';
 import 'package:milanac/features/calendario/club_event.dart';
 import 'package:milanac/features/calendario/events_repository.dart';
+import 'package:milanac/features/presenze/attendance.dart';
+import 'package:milanac/features/presenze/attendance_repository.dart';
 
 import 'home_test.dart' show startAppAt, todayInItalyAt;
 
@@ -200,6 +202,66 @@ void main() {
         const NotifyPrefs({NotifyCategory.partite}).toJson()['partite'],
         isFalse,
       );
+    },
+  );
+
+  testWidgets(
+    'Chi è assente non riceve i promemoria e il Match Day lo dice; il '
+    'Direttivo assente può comunque chiamare la squadra',
+    (tester) async {
+      var now = todayInItalyAt(17, 30);
+      final container = await startAppAt(
+        tester,
+        now,
+        clock: () => now,
+        overrides: [
+          profileProvider.overrideWith(
+            (ref) => Stream.value(
+              const Profile(
+                id: 'demo',
+                displayName: 'Demo Giocatore',
+                role: ClubRole.giocatore,
+                registrationCompleted: true,
+              ),
+            ),
+          ),
+        ],
+      );
+      await _matchToday(container, now);
+      await container
+          .read(attendanceRepositoryProvider)
+          .save(
+            AttendanceEntry(
+              playerId: 'demo',
+              date: italianDay(now),
+              status: AttendanceStatus.assente,
+            ),
+          );
+      await tester.pumpAndSettle();
+      expect(find.text('Sei assente: niente promemoria'), findsOneWidget);
+      expect(find.text('Promemoria alle 20:30 e alle 21:20'), findsNothing);
+      expect(find.text('Chiama'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Direttivo assente: niente promemoria per sé, ma "Chiama" resta',
+    (tester) async {
+      final now = todayInItalyAt(20, 45);
+      final container = await startAppAt(tester, now);
+      await _matchToday(container, now);
+      await container
+          .read(attendanceRepositoryProvider)
+          .save(
+            AttendanceEntry(
+              playerId: 'demo',
+              date: italianDay(now),
+              status: AttendanceStatus.assente,
+            ),
+          );
+      await tester.pumpAndSettle();
+      expect(find.text('Chiama la squadra in lobby'), findsOneWidget);
+      expect(find.text('Chiama'), findsOneWidget);
     },
   );
 }

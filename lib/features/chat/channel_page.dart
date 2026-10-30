@@ -1664,7 +1664,12 @@ class _Bubble extends ConsumerWidget {
                 child: _ExpiredChip(message: message),
               ),
             if (poll != null)
-              PollCard(message: message, poll: poll, width: maxWidth - 24)
+              PollCard(
+                key: ValueKey('sondaggio-${message.id}'),
+                message: message,
+                poll: poll,
+                width: maxWidth - 24,
+              )
             else if (message.hasText)
               LinkText(
                 message.body!,

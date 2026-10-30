@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -30,11 +32,26 @@ class _Chat extends DemoChatRepository {
     : super(clock: () => todayAt(20));
   final bool failVotes;
 
+  /// Se c'è, il voto parte solo quando il test la completa (rete lenta).
+  Completer<void>? slowVote;
+
+  /// Se c'è, i voti arrivano da qui (il primo caricamento si fa aspettare).
+  StreamController<List<PollVote>>? slowVotes;
+
+  /// Voti chiesti al server.
+  final sent = <Set<int>>[];
+
   @override
   Future<void> votePoll(String messageId, Set<int> options) async {
+    sent.add(options);
+    await slowVote?.future;
     if (failVotes) throw const AppError(pollsMissing);
     return super.votePoll(messageId, options);
   }
+
+  @override
+  Stream<List<PollVote>> watchPollVotes(String messageId) =>
+      slowVotes?.stream ?? super.watchPollVotes(messageId);
 }
 
 void main() {
@@ -402,5 +419,137 @@ void main() {
     expect(find.text('SONDAGGIO CHIUSO'), findsOneWidget);
     expect(_percentText(tester, 'q1', 0), '50%');
     expect(_percentText(tester, 'q1', 1), '50%');
+  });
+
+  test('Lunghezze come le conta il database: le emoji composte valgono più '
+      'caratteri', () {
+    // 👨‍👩‍👧 sono 5 punti di codice, 👍🏽 sono 2.
+    expect(
+      ChatPoll.problemWith('${'a' * 299}👨‍👩‍👧', ['Sì', 'No']),
+      contains('La domanda è troppo lunga'),
+    );
+    expect(ChatPoll.problemWith('a' * 300, ['Sì', 'No']), isNull);
+    expect(
+      ChatPoll.problemWith('Chi?', ['${'b' * 79}👍🏽', 'No']),
+      contains('Una risposta è troppo lunga'),
+    );
+    expect(ChatPoll.problemWith('Chi?', ['b' * 80, 'No']), isNull);
+  });
+
+  testWidgets('Il proprio voto cambiato da un altro telefono si vede anche '
+      'subito dopo aver votato da qui', (tester) async {
+    final repo = _Chat();
+    await startChat(tester, repo: repo);
+    await openChannel(tester, 'Milan AC');
+    // Nella demo il tempo reale riporta il voto prima della risposta del server.
+    await tester.tap(find.text('Giovedì'));
+    await tester.pumpAndSettle();
+    expect(_percentText(tester, 'm8', 2), '25%');
+    repo.voteElsewhere('m8', 'demo', {0});
+    await tester.pumpAndSettle();
+    expect(_percentText(tester, 'm8', 0), '50%');
+    expect(_percentText(tester, 'm8', 2), '0%');
+  });
+
+  testWidgets(
+    'Finché il proprio voto non è arrivato le risposte non si toccano '
+    '(con più risposte il voto di prima si perderebbe)',
+    (tester) async {
+      final repo = _Chat(
+        messages: [
+          ChatMessage(
+            id: 'q1',
+            channelId: 'c-milanac',
+            authorId: 'p2',
+            body: 'Che cosa portiamo?',
+            meta: ChatPoll.meta(['Maglie', 'Cuffie', 'Pizza'], multiple: true),
+            createdAt: todayAt(19),
+          ),
+        ],
+      )..slowVotes = StreamController<List<PollVote>>.broadcast();
+      addTearDown(repo.slowVotes!.close);
+      await startChat(tester, repo: repo);
+      await openChannel(tester, 'Milan AC');
+      await tester.tap(find.text('Cuffie'));
+      await tester.pumpAndSettle();
+      expect(repo.sent, isEmpty);
+
+      // Arriva il voto di prima (Maglie e Pizza): il tocco aggiunge Cuffie.
+      repo.slowVotes!.add(const [
+        PollVote(messageId: 'q1', userId: 'demo', options: {0, 2}),
+      ]);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cuffie'));
+      await tester.pumpAndSettle();
+      expect(repo.sent, [
+        {0, 1, 2},
+      ]);
+    },
+  );
+
+  testWidgets('Il voto in corso resta al suo sondaggio anche se arriva un '
+      'messaggio e la conversazione scorre', (tester) async {
+    PollVote vote(String poll, String who, Set<int> o) =>
+        PollVote(messageId: poll, userId: who, options: o);
+    final repo = _Chat(
+      messages: [
+        for (final (id, q, at) in [
+          ('q1', 'Prima domanda?', 18),
+          ('q2', 'Seconda domanda?', 19),
+        ])
+          ChatMessage(
+            id: id,
+            channelId: 'c-milanac',
+            authorId: 'p2',
+            body: q,
+            meta: ChatPoll.meta(['Sì', 'No']),
+            createdAt: todayAt(at),
+          ),
+      ],
+    )..slowVote = Completer<void>();
+    repo.voteElsewhere('q1', 'p3', vote('q1', 'p3', {1}).options);
+    await startChat(tester, repo: repo);
+    await openChannel(tester, 'Milan AC');
+
+    // Si vota la prima; mentre parte arriva un messaggio e tutto scorre di un posto.
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('sondaggio-q1-0')),
+        matching: find.text('Sì'),
+      ),
+    );
+    await tester.pump();
+    repo.receive(
+      ChatMessage(
+        id: 'n1',
+        channelId: 'c-milanac',
+        authorId: 'p3',
+        body: 'Ci sono',
+        createdAt: todayAt(19, 30),
+      ),
+    );
+    await tester.pumpAndSettle();
+    repo.slowVote!.complete();
+    await tester.pumpAndSettle();
+    expect(_percentOf('q1', 0), findsOneWidget);
+    expect(_percentText(tester, 'q1', 0), '50%');
+    // La seconda non risulta votata.
+    expect(_percentOf('q2', 0), findsNothing);
+  });
+
+  testWidgets('Sondaggio chiuso da un altro fuori dagli ultimi messaggi del '
+      'canale: la bolla lo mostra chiuso lo stesso', (tester) async {
+    final repo = _Chat();
+    await startChat(tester, repo: repo);
+    await openChannel(tester, 'Milan AC');
+    expect(find.text('SONDAGGIO'), findsOneWidget);
+    repo.closePollElsewhere('m8', inChannel: false);
+    await tester.pumpAndSettle();
+    expect(find.text('SONDAGGIO CHIUSO'), findsOneWidget);
+    // Chiuso: i risultati si vedono e il menu non offre più la chiusura.
+    expect(_percentText(tester, 'm8', 1), '67%');
+    await tester.longPress(find.text(_question));
+    await tester.pumpAndSettle();
+    expect(find.text('Chiudi il sondaggio'), findsNothing);
   });
 }

@@ -10,12 +10,15 @@ create table if not exists public.event_reminders (
   event_id uuid not null references public.events on delete cascade,
   -- ora = un'ora prima, lobby = dieci minuti prima, chiamata = dal Direttivo
   kind text not null check (kind in ('ora', 'lobby', 'chiamata')),
+  -- L'inizio della partita per cui è partito: se la partita si sposta, i promemoria
+  -- automatici ripartono per il nuovo orario.
+  starts_at timestamptz not null,
   sent_at timestamptz not null default now(),
   sent_by uuid references public.profiles on delete set null
 );
--- I due automatici partono una volta sola per partita.
+-- I due automatici partono una volta sola per partita (e per orario).
 create unique index if not exists event_reminders_auto_idx
-  on public.event_reminders (event_id, kind) where kind <> 'chiamata';
+  on public.event_reminders (event_id, kind, starts_at) where kind <> 'chiamata';
 create index if not exists event_reminders_event_idx
   on public.event_reminders (event_id, sent_at desc);
 alter table public.event_reminders enable row level security;  -- nessuna policy: solo il server
@@ -37,7 +40,7 @@ begin
     if e.starts_at - interval '60 minutes' <= now_
        and e.starts_at > now_ + interval '15 minutes'
        and e.created_at < e.starts_at - interval '60 minutes' then
-      insert into event_reminders (event_id, kind) values (e.id, 'ora')
+      insert into event_reminders (event_id, kind, starts_at) values (e.id, 'ora', e.starts_at)
       on conflict do nothing;
       if found then
         perform notify_push(jsonb_build_object('kind', 'match_reminder', 'id', e.id, 'when', 'ora'));
@@ -45,7 +48,7 @@ begin
     end if;
     -- Dieci minuti prima: tutti in lobby.
     if e.starts_at - interval '10 minutes' <= now_ then
-      insert into event_reminders (event_id, kind) values (e.id, 'lobby')
+      insert into event_reminders (event_id, kind, starts_at) values (e.id, 'lobby', e.starts_at)
       on conflict do nothing;
       if found then
         perform notify_push(jsonb_build_object('kind', 'match_reminder', 'id', e.id, 'when', 'lobby'));
@@ -83,8 +86,8 @@ begin
                and sent_at > now_ - interval '3 minutes') then
     raise exception 'La squadra è stata chiamata da poco: riprova tra qualche minuto';
   end if;
-  insert into event_reminders (event_id, kind, sent_at, sent_by)
-  values (p_event, 'chiamata', now_, auth.uid())
+  insert into event_reminders (event_id, kind, starts_at, sent_at, sent_by)
+  values (p_event, 'chiamata', e.starts_at, now_, auth.uid())
   returning sent_at into sent;
   perform notify_push(jsonb_build_object('kind', 'match_reminder', 'id', p_event, 'when', 'chiamata'));
   return sent;

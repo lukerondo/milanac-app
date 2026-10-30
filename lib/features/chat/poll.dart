@@ -63,6 +63,16 @@ class ChatPoll {
   /// da 2 a 10, diverse tra loro (maiuscole e spazi non contano).
   static String? problemWith(String question, List<String> options) {
     if (question.trim().isEmpty) return 'Scrivi la domanda.';
+    // Le lunghezze come le conta il database (char_length: un'emoji composta vale più
+    // caratteri, anche se il campo di testo la conta una).
+    if (question.trim().runes.length > maxQuestionLength) {
+      return 'La domanda è troppo lunga (al massimo $maxQuestionLength '
+          'caratteri).';
+    }
+    if (options.any((o) => o.trim().runes.length > maxOptionLength)) {
+      return 'Una risposta è troppo lunga (al massimo $maxOptionLength '
+          'caratteri).';
+    }
     final filled = [
       for (final o in options)
         if (o.trim().isNotEmpty) o.trim().toLowerCase(),

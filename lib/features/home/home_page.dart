@@ -179,6 +179,8 @@ class TonightCard extends ConsumerWidget {
                                     AttendanceStatus.ritardo)
                               m,
                         ],
+                        absent:
+                            tonight[me?.id]?.status == AttendanceStatus.assente,
                       ),
                   ],
                 );

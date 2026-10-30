@@ -283,10 +283,14 @@ class MatchDayExtras extends ConsumerWidget {
     required this.event,
     required this.team,
     required this.ready,
+    this.absent = false,
   });
   final ClubEvent event;
   final Team team;
   final List<Member> ready;
+
+  /// Chi guarda stasera è assente: i promemoria non gli arrivano.
+  final bool absent;
 
   Future<void> _copy(BuildContext context, String code) async {
     await Clipboard.setData(ClipboardData(text: code));
@@ -415,18 +419,19 @@ class MatchDayExtras extends ConsumerWidget {
               ),
           ],
         ),
-        _Reminders(event: event),
+        _Reminders(event: event, absent: absent),
       ],
     );
   }
 }
 
-/// I promemoria della partita: quando arrivano (un'ora prima e dieci minuti prima) o che
-/// sono spenti (porta alle impostazioni); per il Direttivo, nelle ore della partita,
-/// "Chiama" la squadra in lobby.
+/// I promemoria della partita: quando arrivano (un'ora prima e dieci minuti prima), che
+/// sono spenti (porta alle impostazioni) o che non arrivano a chi è assente (come sul
+/// server); per il Direttivo, nelle ore della partita, "Chiama" la squadra in lobby.
 class _Reminders extends ConsumerStatefulWidget {
-  const _Reminders({required this.event});
+  const _Reminders({required this.event, required this.absent});
   final ClubEvent event;
+  final bool absent;
 
   @override
   ConsumerState<_Reminders> createState() => _RemindersState();
@@ -506,8 +511,13 @@ class _RemindersState extends ConsumerState<_Reminders> {
         !now.isAfter(start.add(lobbyCallWindow));
     final hm = DateFormat('HH:mm');
     final started = !now.isBefore(start);
+    final absent = widget.absent;
     final String? text = started
         ? (canCall ? 'Manca qualcuno? Chiamalo in lobby' : null)
+        : absent
+        ? (canCall
+              ? 'Chiama la squadra in lobby'
+              : 'Sei assente: niente promemoria')
         : !on
         ? 'Promemoria partita spenti'
         : now.isBefore(hour)
@@ -516,7 +526,9 @@ class _RemindersState extends ConsumerState<_Reminders> {
         ? 'Promemoria per la lobby alle ${hm.format(lobby)}'
         : 'Lobby aperta: si entra!';
     if (text == null) return const SizedBox.shrink();
-    final off = !on && !started;
+    // Spenti dalle impostazioni: il tocco porta lì. Assente: non arrivano e basta.
+    final off = !on && !started && !absent;
+    final muted = off || (absent && !started && !canCall);
     return InkWell(
       onTap: off ? () => context.push('/impostazioni?sezione=notifiche') : null,
       child: ConstrainedBox(
@@ -524,11 +536,11 @@ class _RemindersState extends ConsumerState<_Reminders> {
         child: Row(
           children: [
             Icon(
-              off
+              muted
                   ? Icons.notifications_off_rounded
                   : Icons.notifications_active_rounded,
               size: 22,
-              color: off ? p.textMuted : p.accentText,
+              color: muted ? p.textMuted : p.accentText,
             ),
             const SizedBox(width: 12),
             Expanded(

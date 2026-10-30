@@ -2013,6 +2013,18 @@ select match_reminders_tick();
 do $$ begin
   assert pg_temp.reminders('ora') + pg_temp.reminders('lobby') = 4, 'a partita iniziata niente di nuovo';
 end $$;
+-- La partita m3 si sposta a martedì: i promemoria ripartono per il nuovo orario.
+update events set starts_at = '2026-11-03 21:30 Europe/Rome'
+  where id = '00000000-0000-0000-0000-0000000006e4';
+select set_config('milanac.now', '2026-11-03 20:31 Europe/Rome', false);
+select match_reminders_tick();
+select set_config('milanac.now', '2026-11-03 21:21 Europe/Rome', false);
+select match_reminders_tick();
+select match_reminders_tick();
+do $$ begin
+  assert pg_temp.reminders('ora') = 2 and pg_temp.reminders('lobby') = 4,
+    'partita spostata: di nuovo "tra un''ora" e lobby, una volta sola';
+end $$;
 
 -- La chiamata in lobby: solo il Direttivo, solo per le partite e nelle ore della partita,
 -- al massimo una ogni 3 minuti.
