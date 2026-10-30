@@ -13,15 +13,16 @@ import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
 import '../../shared/gold_loader.dart';
+import '../../shared/member_photo.dart';
+import '../../shared/silhouette.dart';
 import '../../shared/ui.dart';
 import '../auth/gate_ui.dart';
+import '../foto/photo_frame.dart';
 import '../rosa/member.dart';
-import '../volto/face.dart';
-import '../volto/face_editor.dart';
-import '../volto/face_view.dart';
+import '../rosa/rosa_repository.dart';
 import 'registration_repository.dart';
 
-/// Registrazione in tre passi: chi sei, squadra e ruolo, il tuo volto.
+/// Registrazione in tre passi: chi sei, squadra e ruolo, la tua foto.
 /// Alla fine il profilo è completo; manca solo l'accettazione del regolamento.
 class RegistrationPage extends ConsumerStatefulWidget {
   const RegistrationPage({super.key, this.initialStep = 1});
@@ -59,8 +60,9 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   final _number = TextEditingController();
   GamePlatform? _platform;
 
-  // Passo 3.
-  Face _face = Face.random();
+  // Passo 3: la foto caricata (facoltativa: si può mettere anche dopo).
+  String? _photoPath;
+  bool _uploading = false;
 
   @override
   void dispose() {
@@ -93,7 +95,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     _position = p.fieldPosition;
     _platform = GamePlatform.values.asNameMap()[p.platform];
     if (p.shirtNumber != null) _number.text = '${p.shirtNumber}';
-    if (p.face != null) _face = p.face!;
+    _photoPath = p.avatarPath;
   }
 
   void _toast(String text) =>
@@ -173,7 +175,6 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     fieldPosition: _position!,
     shirtNumber: int.tryParse(_number.text.trim()),
     platform: _platform,
-    face: _face,
   );
 
   Future<void> _complete() async {
@@ -288,7 +289,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
                     child: PageView(
                       controller: _pages,
                       physics: const NeverScrollableScrollPhysics(),
-                      children: [_stepWho(), _stepTeam(), _stepFace()],
+                      children: [_stepWho(), _stepTeam(), _stepPhoto()],
                     ),
                   ),
                   BottomActionBar(
@@ -401,7 +402,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
           ),
         ),
       ),
-      _CardNamePreview(name: _cardName.text, face: _face),
+      _CardNamePreview(name: _cardName.text, photoPath: _photoPath),
       const SizedBox(height: 14),
       LabeledField(
         label: 'Il tuo motto (facoltativo)',
@@ -558,15 +559,91 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     ),
   ]);
 
-  Widget _stepFace() => _frame(3, [
+  /// Sceglie la foto dalla galleria, la fa inquadrare e la carica subito (prima della
+  /// fine della registrazione: dopo si passa al regolamento).
+  Future<void> _pickPhoto() async {
+    final me = ref.read(profileProvider).value;
+    if (me == null) return;
+    final jpeg = await pickCardPhoto(context);
+    if (jpeg == null || !mounted) return;
+    setState(() => _uploading = true);
+    try {
+      final path = await ref
+          .read(rosaRepositoryProvider)
+          .uploadPhoto(me.id, jpeg, previous: _photoPath);
+      if (mounted) setState(() => _photoPath = path);
+      Haptics.confirm();
+    } catch (e) {
+      if (mounted) _toast(friendlyError(e, action: 'Foto non caricata'));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Widget _stepPhoto() => _frame(3, [
     const _Legend(
-      'Il tuo volto',
+      'La tua foto',
       text:
-          'Compare sulla carta, nella rosa e in chat. Puoi cambiarlo quando vuoi '
-          'dalle Impostazioni.',
+          'Una foto vera dalla galleria: va sulla tua carta FUT, nella rosa e in '
+          'chat. Inquadra viso e spalle. Puoi cambiarla quando vuoi dalle '
+          'Impostazioni.',
     ),
-    FaceEditor(face: _face, onChanged: (f) => setState(() => _face = f)),
+    Center(
+      child: SizedBox(
+        width: 168,
+        child: AspectRatio(
+          aspectRatio: cardPhotoAspect,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: _PhotoPreview(path: _photoPath),
+          ),
+        ),
+      ),
+    ),
+    const SizedBox(height: 14),
+    Center(
+      child: FilledButton.icon(
+        key: const ValueKey('scegli-foto'),
+        onPressed: _uploading || _saving ? null : _pickPhoto,
+        icon: _uploading
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.photo_library_rounded),
+        label: Text(
+          _photoPath == null ? 'Scegli dalla galleria' : 'Cambia foto',
+        ),
+      ),
+    ),
+    if (_photoPath == null)
+      const _Help(
+        'Se ora non ce l\'hai, puoi caricarla dopo: intanto sulla carta c\'è la '
+        'sagoma grigia.',
+      ),
   ]);
+}
+
+/// La foto appena caricata, o la sagoma grigia.
+class _PhotoPreview extends ConsumerWidget {
+  const _PhotoPreview({required this.path});
+  final String? path;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final photo = photoOf(ref, path);
+    const shape = PlayerSilhouette(
+      background: MilanacColors.surfaceHigh,
+      color: MilanacColors.ivoryMuted,
+    );
+    return photo == null
+        ? shape
+        : Image(
+            image: photo,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => shape,
+          );
+  }
 }
 
 /// Ruolo in campo per esteso, come nel menu ("ATT · Attaccante").
@@ -595,7 +672,7 @@ class _StepHeader extends StatelessWidget {
   const _StepHeader({required this.step});
   final int step;
 
-  static const _titles = ['Dati', 'Squadra e ruolo', 'Volto'];
+  static const _titles = ['Dati', 'Squadra e ruolo', 'Foto'];
 
   @override
   Widget build(BuildContext context) {
@@ -779,14 +856,14 @@ class _TeamCard extends StatelessWidget {
   }
 }
 
-/// Anteprima del nome come apparirà sulla carta.
-class _CardNamePreview extends StatelessWidget {
-  const _CardNamePreview({required this.name, required this.face});
+/// Anteprima del nome come apparirà sulla carta (con la foto, se già caricata).
+class _CardNamePreview extends ConsumerWidget {
+  const _CardNamePreview({required this.name, required this.photoPath});
   final String name;
-  final Face face;
+  final String? photoPath;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final text = name.trim().isEmpty
         ? 'IL TUO NOME'
         : name.trim().toUpperCase();
@@ -797,11 +874,19 @@ class _CardNamePreview extends StatelessWidget {
       child: Row(
         children: [
           ClipOval(
-            child: FaceView(
-              face: face,
-              size: 40,
-              crop: FaceCrop.head,
-              background: MilanacColors.surfaceHigh,
+            child: SizedBox.square(
+              dimension: 40,
+              child: switch (photoOf(ref, photoPath, cacheWidth: 120)) {
+                final photo? => Image(
+                  image: photo,
+                  fit: BoxFit.cover,
+                  alignment: photoAlignment,
+                ),
+                null => const PlayerSilhouette(
+                  background: MilanacColors.surfaceHigh,
+                  color: MilanacColors.ivoryMuted,
+                ),
+              },
             ),
           ),
           const SizedBox(width: 12),

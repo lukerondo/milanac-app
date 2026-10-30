@@ -8,7 +8,6 @@ import 'package:milanac/core/auth/providers.dart';
 import 'package:milanac/core/local_flags.dart';
 import 'package:milanac/core/router.dart';
 import 'package:milanac/core/theme.dart';
-import 'package:milanac/features/auth/gate_ui.dart';
 import 'package:milanac/features/auth/pending_page.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/regolamento/rules_reader.dart';
@@ -99,10 +98,9 @@ void main() {
     await go(tester, c, '/login');
     await go(tester, c, '/registrazione?passo=3');
     expectLight(tester, find.text('Passo 3 di 3'));
-    await tester.tap(find.text('A caso'));
-    await tester.pumpAndSettle();
+    expectLight(tester, find.text('LA TUA FOTO'));
     await scrollToEnd(tester, find.byType(Scrollable).first);
-    expectLight(tester, find.byType(ChoicePill));
+    expectLight(tester, find.text('Scegli dalla galleria'));
     expectLight(tester, find.text('Completa la registrazione'));
 
     // Account sospeso: in demo la pagina di blocco rimanda alla Home, la si apre da sola.
@@ -165,7 +163,7 @@ void main() {
   });
 
   testWidgets(
-    'Tema chiaro: regolamento e storia, impostazioni, volto e privacy',
+    'Tema chiaro: regolamento e storia, impostazioni, foto e privacy',
     (tester) async {
       await startLight(tester);
 
@@ -196,17 +194,9 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
 
-      // Editor del volto: anteprima, "A caso" e tutte le righe di scelta.
-      await tester.tap(find.text('Il tuo volto'));
-      await tester.pumpAndSettle();
-      expectLight(tester, find.text('IL TUO VOLTO'));
-      await tester.tap(find.text('A caso'));
-      await tester.pumpAndSettle();
-      await scrollToEnd(tester, find.byType(Scrollable).first);
-      expectLight(tester, find.byType(ChoicePill));
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Volto aggiornato'), findsNothing);
+      // La foto: niente più volto disegnato.
+      expectLight(tester, find.text('La tua foto'));
+      expect(find.text('Il tuo volto'), findsNothing);
 
       await tester.ensureVisible(find.text('Cambia password'));
       await tester.pumpAndSettle();

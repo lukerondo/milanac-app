@@ -6,7 +6,6 @@ import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../rosa/member.dart';
-import '../volto/face.dart';
 
 /// I dati raccolti nei tre passi della registrazione.
 class RegistrationData {
@@ -23,7 +22,6 @@ class RegistrationData {
     required this.fieldPosition,
     required this.shirtNumber,
     required this.platform,
-    required this.face,
   });
 
   final String firstName;
@@ -38,7 +36,6 @@ class RegistrationData {
   final String fieldPosition;
   final int? shirtNumber;
   final GamePlatform? platform;
-  final Face face;
 
   Map<String, dynamic> toParams() => {
     'p_first_name': firstName,
@@ -55,7 +52,9 @@ class RegistrationData {
     'p_field_position': fieldPosition,
     'p_shirt_number': shirtNumber,
     'p_platform': platform?.name,
-    'p_face': face.toJson(),
+    // Il volto disegnato non c'è più: la foto si carica a parte (passo 3). Il
+    // parametro resta per la firma della funzione sul server.
+    'p_face': null,
   };
 }
 

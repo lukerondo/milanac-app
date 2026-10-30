@@ -11,7 +11,6 @@ import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../shared/member_photo.dart';
-import '../volto/face.dart';
 import 'member.dart';
 
 abstract class RosaRepository {
@@ -22,15 +21,22 @@ abstract class RosaRepository {
   /// Aggiorna solo i campi della carta (anche il giocatore sul proprio profilo).
   Future<void> saveCard(Member member);
 
-  /// Il server non ha ancora i PlayStyle (migrazione 0028): le carte si salvano senza.
-  /// Diventa vero al primo salvataggio rifiutato per questo.
-  bool get playStylesMissing;
+  /// Colonne della carta che il server non ha ancora (PlayStyle della 0028, statistiche
+  /// FUT della 0032): le carte si salvano senza. Si riempie al primo salvataggio
+  /// rifiutato per questo.
+  Set<String> get missingColumns;
 
   /// Aggiorna i dati personali dalle Impostazioni (nome, gamertag, nascita...).
   Future<void> saveProfile(Member member);
 
-  /// Carica la nuova foto del profilo (JPEG) e la imposta; restituisce il percorso.
-  Future<String> uploadPhoto(Member member, Uint8List jpeg);
+  /// Carica la nuova foto del profilo di [memberId] (il JPEG inquadrato, 720×900) al
+  /// posto di [previous] e restituisce il percorso. Funziona anche durante la
+  /// registrazione: ognuno scrive solo nella propria cartella del bucket.
+  Future<String> uploadPhoto(
+    String memberId,
+    Uint8List jpeg, {
+    String? previous,
+  });
 
   /// Elimina definitivamente l'account di un altro membro (solo Direttivo).
   Future<void> deleteAccount(String id);
@@ -39,25 +45,33 @@ abstract class RosaRepository {
   Future<void> removePhoto(Member member);
 }
 
-/// Aggiorna un profilo con [update]. Un database prima della 0028 non ha la colonna dei
-/// PlayStyle (PostgREST risponde PGRST204): si riscrive senza e il resto si salva; con
-/// [skip] non la si manda nemmeno. Restituisce true se la colonna manca.
-Future<bool> updateWithoutMissing(
+/// Colonne di `profiles` arrivate con le migrazioni più recenti: un server non ancora
+/// aggiornato non le ha.
+const recentProfileColumns = ['play_styles', 'fut_stats'];
+
+/// Aggiorna un profilo con [update]. Se al database manca una delle colonne recenti
+/// (PostgREST risponde PGRST204 nominandola) si riscrive senza e il resto si salva;
+/// quelle in [skip] non si mandano nemmeno. Restituisce le colonne che mancano.
+Future<Set<String>> updateWithoutMissing(
   Map<String, dynamic> fields,
   Future<void> Function(Map<String, dynamic> fields) update, {
-  bool skip = false,
+  Set<String> skip = const {},
 }) async {
-  if (skip) {
-    await update({...fields}..remove('play_styles'));
-    return true;
-  }
-  try {
-    await update(fields);
-    return false;
-  } on PostgrestException catch (e) {
-    if (e.code != 'PGRST204' || !fields.containsKey('play_styles')) rethrow;
-    await update({...fields}..remove('play_styles'));
-    return true;
+  final missing = {...skip.where(fields.containsKey)};
+  final send = {...fields}..removeWhere((k, _) => skip.contains(k));
+  while (true) {
+    try {
+      await update(send);
+      return missing;
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST204') rethrow;
+      final column = recentProfileColumns
+          .where((c) => send.containsKey(c) && e.message.contains("'$c'"))
+          .firstOrNull;
+      if (column == null) rethrow;
+      send.remove(column);
+      missing.add(column);
+    }
   }
 }
 
@@ -86,7 +100,8 @@ final rosaRepositoryProvider = Provider<RosaRepository>((ref) {
 final rosaProvider = StreamProvider<List<Member>>((ref) {
   // Al cambio di account si ricarica con i permessi del nuovo utente; anche quando
   // si entra o si esce dal Direttivo (i dati anagrafici degli altri li riceve solo lui).
-  ref.watch(currentUserIdProvider);
+  // Le foto dell'account precedente non restano sul telefono.
+  PhotoDiskCache.forUser(ref.watch(currentUserIdProvider));
   ref.watch(profileProvider.select((p) => p.value?.isDirettivo ?? false));
   return ref.watch(rosaRepositoryProvider).watchAll();
 });
@@ -105,14 +120,15 @@ class _SupabaseRosaRepository implements RosaRepository {
         .from('profiles')
         .stream(primaryKey: ['id'])
         .order('joined_at', ascending: true);
-    return combineLatest(
-      profiles,
-      watchPrivateRows(client),
-      (rows, private) => [
+    return combineLatest(profiles, watchPrivateRows(client), (rows, private) {
+      final members = [
         for (final r in rows)
           Member.fromMap(withPrivateRow(r, private[r['id']])),
-      ],
-    );
+      ];
+      // Sul telefono restano solo le foto attuali dei membri.
+      PhotoDiskCache.syncWithRoster(members.map((m) => m.avatarPath));
+      return members;
+    });
   }
 
   @override
@@ -121,19 +137,18 @@ class _SupabaseRosaRepository implements RosaRepository {
   @override
   Future<void> saveCard(Member m) => _update(m.id, m.cardMap());
 
+  /// Le colonne mancanti all'ultimo salvataggio: si riprova sempre con tutte, così
+  /// appena il server è aggiornato (migrazione applicata) si salvano anche quelle.
   @override
-  bool playStylesMissing = false;
+  var missingColumns = <String>{};
 
   Future<void> _update(String id, Map<String, dynamic> fields) async {
     // Nota: le query Supabase partono solo quando vengono attese (await).
     final profiles = _ref.read(supabaseProvider).from('profiles');
-    if (await updateWithoutMissing(
+    missingColumns = await updateWithoutMissing(
       fields,
       (f) => profiles.update(f).eq('id', id),
-      skip: playStylesMissing,
-    )) {
-      playStylesMissing = true;
-    }
+    );
   }
 
   @override
@@ -152,9 +167,13 @@ class _SupabaseRosaRepository implements RosaRepository {
   }
 
   @override
-  Future<String> uploadPhoto(Member m, Uint8List jpeg) async {
+  Future<String> uploadPhoto(
+    String memberId,
+    Uint8List jpeg, {
+    String? previous,
+  }) async {
     final client = _ref.read(supabaseProvider);
-    final path = '${m.id}/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final path = '$memberId/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
     await client.storage
         .from(avatarsBucket)
         .uploadBinary(
@@ -162,11 +181,54 @@ class _SupabaseRosaRepository implements RosaRepository {
           jpeg,
           fileOptions: const FileOptions(contentType: 'image/jpeg'),
         );
-    await client.from('profiles').update({'avatar_path': path}).eq('id', m.id);
-    if (m.avatarPath != null) {
-      await client.storage.from(avatarsBucket).remove([m.avatarPath!]);
+    // Si vede subito (anche nel walkout) senza riscaricarla.
+    rememberPhoto(path, jpeg);
+    try {
+      // Il volto disegnato si toglie: anche le app vecchie mostrano la foto.
+      await client
+          .from('profiles')
+          .update({'avatar_path': path, 'face': null})
+          .eq('id', memberId);
+    } catch (e) {
+      // Senza risposta (rete persa) il profilo potrebbe essere già aggiornato: si
+      // controlla. Il file si cancella solo se di sicuro il profilo non lo usa: meglio
+      // un file in più nel bucket che una carta che punta a una foto cancellata.
+      final saved = e is PostgrestException
+          ? null
+          : await _savedAvatar(memberId);
+      if (saved?.path != path) {
+        localPhotos.remove(path);
+        if (e is PostgrestException || saved != null) {
+          try {
+            await client.storage.from(avatarsBucket).remove([path]);
+          } catch (_) {}
+        }
+        rethrow;
+      }
+    }
+    await PhotoDiskCache.write(path, jpeg);
+    if (previous != null) {
+      // La foto nuova è già al suo posto: se la vecchia non si cancella, pazienza.
+      try {
+        await client.storage.from(avatarsBucket).remove([previous]);
+      } catch (_) {}
     }
     return path;
+  }
+
+  /// La foto a cui punta ora il profilo; null se non si riesce a saperlo.
+  Future<({String? path})?> _savedAvatar(String memberId) async {
+    try {
+      final row = await _ref
+          .read(supabaseProvider)
+          .from('profiles')
+          .select('avatar_path')
+          .eq('id', memberId)
+          .single();
+      return (path: row['avatar_path'] as String?);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Elimina l'account di un membro con `delete_member_account` (migrazione 0026).
@@ -190,6 +252,7 @@ class _SupabaseRosaRepository implements RosaRepository {
     final path = m.avatarPath;
     await client.from('profiles').update({'avatar_path': null}).eq('id', m.id);
     if (path == null) return;
+    await PhotoDiskCache.delete(path);
     try {
       await client.storage.from(avatarsBucket).remove([path]);
     } catch (_) {}
@@ -235,7 +298,6 @@ class DemoRosaRepository implements RosaRepository {
       shirtNumber: 10,
       joinedAt: DateTime(2025, 1, 10),
       overall: 82,
-      face: const Face(skin: 2, hair: 3, hairColor: 0, brows: 1, beard: 2),
     ),
     Member(
       id: 'p2',
@@ -258,15 +320,6 @@ class DemoRosaRepository implements RosaRepository {
         'primo_controllo',
       ],
       platform: GamePlatform.ps5,
-      face: const Face(
-        skin: 1,
-        hair: 2,
-        hairColor: 1,
-        eyeColor: 1,
-        beard: 4,
-        mouth: 2,
-        accessory: 1,
-      ),
     ),
     Member(
       id: 'p3',
@@ -282,15 +335,6 @@ class DemoRosaRepository implements RosaRepository {
       overall: 78,
       playStyle: 'Muro',
       platform: GamePlatform.ps5,
-      face: const Face(
-        skin: 3,
-        hair: 0,
-        hairColor: 0,
-        eyes: 1,
-        brows: 2,
-        beard: 3,
-        mouth: 1,
-      ),
     ),
     Member(
       id: 'p4',
@@ -305,14 +349,6 @@ class DemoRosaRepository implements RosaRepository {
       joinedAt: DateTime(2025, 4, 20),
       overall: 70,
       teams: {Team.milanac, Team.futuro},
-      face: const Face(
-        skin: 0,
-        hair: 4,
-        hairColor: 3,
-        eyes: 2,
-        eyeColor: 2,
-        accessory: 2,
-      ),
     ),
     Member(
       id: 'p6',
@@ -327,14 +363,6 @@ class DemoRosaRepository implements RosaRepository {
       joinedAt: DateTime(2025, 9, 1),
       overall: 62,
       teams: {Team.futuro},
-      face: const Face(
-        skin: 4,
-        hair: 6,
-        hairColor: 0,
-        brows: 1,
-        beard: 1,
-        accessory: 3,
-      ),
     ),
     // Rimosso dal Direttivo: compare solo in Rosa e squadre, tra i "Rimossi".
     Member(
@@ -350,7 +378,6 @@ class DemoRosaRepository implements RosaRepository {
       joinedAt: DateTime(2025, 6, 1),
       overall: 65,
       active: false,
-      face: const Face(skin: 1, hair: 2, hairColor: 2, brows: 0, beard: 0),
     ),
   ];
 
@@ -428,7 +455,7 @@ class DemoRosaRepository implements RosaRepository {
   Future<void> removePhoto(Member m) async {
     final i = _members.indexWhere((x) => x.id == m.id);
     if (i < 0) return;
-    demoPhotos.remove(_members[i].avatarPath);
+    localPhotos.remove(_members[i].avatarPath);
     _members[i] = _members[i].copyWith(avatarPath: null);
     _emit();
   }
@@ -443,7 +470,7 @@ class DemoRosaRepository implements RosaRepository {
   Future<void> saveCard(Member m) => save(m);
 
   @override
-  bool get playStylesMissing => false;
+  Set<String> get missingColumns => const {};
 
   /// Come `saveProfile` sul server: i dati anagrafici presenti in [m] sostituiscono
   /// quelli salvati, quelli che mancano restano.
@@ -463,22 +490,16 @@ class DemoRosaRepository implements RosaRepository {
   }
 
   @override
-  Future<String> uploadPhoto(Member m, Uint8List jpeg) async {
-    final path = '${m.id}/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    demoPhotos[path] = jpeg;
-    final i = _members.indexWhere((x) => x.id == m.id);
-    if (i >= 0) {
-      final old = _members[i];
-      _members[i] = old.withPersonalData(
-        displayName: old.displayName,
-        gamertag: old.gamertag,
-        birthDate: old.birthDate,
-        city: old.city,
-        nationality: old.nationality,
-        preferredFoot: old.preferredFoot,
-        avatarPath: path,
-      );
-    }
+  Future<String> uploadPhoto(
+    String memberId,
+    Uint8List jpeg, {
+    String? previous,
+  }) async {
+    final path = '$memberId/foto_${DateTime.now().microsecondsSinceEpoch}.jpg';
+    rememberPhoto(path, jpeg);
+    if (previous != null) localPhotos.remove(previous);
+    final i = _members.indexWhere((x) => x.id == memberId);
+    if (i >= 0) _members[i] = _members[i].copyWith(avatarPath: path);
     _emit();
     return path;
   }

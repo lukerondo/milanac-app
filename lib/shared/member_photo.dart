@@ -1,113 +1,248 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../core/auth/providers.dart';
 import '../core/config.dart';
 import '../core/theme.dart';
 import '../features/rosa/member.dart';
-import '../features/volto/face_view.dart';
+import 'silhouette.dart';
 
 const avatarsBucket = 'avatars';
 
-/// Solo demo: foto caricate tenute in memoria (percorso → contenuto).
-final demoPhotos = <String, Uint8List>{};
+/// Foto già in memoria (percorso → contenuto): quelle appena caricate da questo
+/// telefono, quelle lette dalla copia sul telefono e, nella demo, tutte.
+final localPhotos = <String, Uint8List>{};
+final _addedAt = <String, DateTime>{};
 
-/// URL firmato della foto caricata dal membro nel bucket privato "avatars". Vale
-/// 7 giorni: si riusa per 6, poi (quando nessuno lo mostra più) se ne chiede uno nuovo.
-final photoUrlProvider = FutureProvider.autoDispose.family<String?, String>((
-  ref,
-  path,
-) async {
-  if (AppConfig.isDemo) return null;
-  final keep = ref.keepAlive();
-  final timer = Timer(const Duration(days: 6), keep.close);
-  ref.onDispose(timer.cancel);
-  try {
-    return await ref
-        .read(supabaseProvider)
-        .storage
-        .from(avatarsBucket)
-        .createSignedUrl(path, 7 * 24 * 3600);
-  } catch (_) {
-    keep.close(); // un errore non resta in memoria
-    rethrow;
-  }
-});
-
-/// Foto del membro: quella caricata dalle Impostazioni, altrimenti quella dell'account social.
-ImageProvider? memberPhoto(WidgetRef ref, Member m) {
-  final path = m.avatarPath;
-  if (path != null) {
-    final local = demoPhotos[path];
-    if (local != null) return MemoryImage(local);
-    final url = ref.watch(photoUrlProvider(path)).value;
-    if (url != null) return NetworkImage(url);
-  }
-  final social = m.avatarUrl;
-  return social == null || social.isEmpty ? null : NetworkImage(social);
+/// Mette in memoria una foto (appena caricata o letta): si vede subito, senza scaricarla.
+void rememberPhoto(String path, Uint8List bytes) {
+  localPhotos[path] = bytes;
+  _addedAt[path] = DateTime.now();
 }
 
-/// Avatar tondo: foto se c'è, altrimenti numero di maglia o iniziale. Senza foto
-/// usa i colori del tema ([background] e [foreground] per i fondi sempre scuri).
+/// Copia sul telefono delle foto dei membri, nella cartella della cache (fuori dai
+/// backup, il sistema può svuotarla): il percorso nel bucket cambia a ogni foto nuova
+/// (`<id>/foto_<ms>.jpg`), quindi una foto salvata vale finché è quella del membro e
+/// non si riscarica a ogni avvio (e si vede anche senza rete).
+class PhotoDiskCache {
+  @visibleForTesting
+  static Future<Directory> Function() directory = () async =>
+      Directory('${(await getApplicationCacheDirectory()).path}/foto');
+
+  static String _name(String path) => path.replaceAll('/', '_');
+
+  /// Un JPEG intero (inizio e fine): un file scritto a metà si butta.
+  static bool _whole(Uint8List b) =>
+      b.length > 4 &&
+      b[0] == 0xFF &&
+      b[1] == 0xD8 &&
+      b[b.length - 2] == 0xFF &&
+      b[b.length - 1] == 0xD9;
+
+  static Future<Uint8List?> read(String path) async {
+    try {
+      final f = File('${(await directory()).path}/${_name(path)}');
+      if (!await f.exists()) return null;
+      final bytes = await f.readAsBytes();
+      if (_whole(bytes)) return bytes;
+      await f.delete();
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Salva la foto (prima in un file temporaneo, poi rinominato: mai a metà) e toglie
+  /// quelle vecchie dello stesso membro.
+  static Future<void> write(String path, Uint8List bytes) async {
+    if (!_whole(bytes)) return;
+    try {
+      final dir = await directory();
+      await dir.create(recursive: true);
+      final name = _name(path);
+      final owner = '${name.split('_').first}_';
+      await for (final e in dir.list()) {
+        final other = e.uri.pathSegments.last;
+        if (other.startsWith(owner) &&
+            other != name &&
+            !_writing.contains(other)) {
+          await _remove(e);
+        }
+      }
+      final tmp = File('${dir.path}/$name.tmp');
+      _writing.add('$name.tmp');
+      try {
+        await tmp.writeAsBytes(bytes, flush: true);
+        await tmp.rename('${dir.path}/$name');
+      } finally {
+        _writing.remove('$name.tmp');
+      }
+    } catch (_) {}
+  }
+
+  /// I file temporanei in scrittura adesso: la pulizia non li tocca.
+  static final _writing = <String>{};
+
+  /// Un file già sparito (tolto da un'altra pulizia) non ferma le altre.
+  static Future<void> _remove(FileSystemEntity e) async {
+    try {
+      await e.delete();
+    } catch (_) {}
+  }
+
+  static Future<void> delete(String path) async {
+    localPhotos.remove(path);
+    try {
+      final f = File('${(await directory()).path}/${_name(path)}');
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+  }
+
+  /// Tiene solo le foto attuali dei membri della rosa: quelle tolte, sostituite o di
+  /// chi ha lasciato il club spariscono anche dal telefono (restano le foto arrivate da
+  /// poco, che la rosa non ha ancora, e quelle che si stanno scrivendo).
+  static Future<void> keepOnly(Set<String> current) async {
+    final now = DateTime.now();
+    bool recent(String p) =>
+        now.difference(_addedAt[p] ?? DateTime(2000)) <=
+        const Duration(minutes: 2);
+    localPhotos.removeWhere((p, _) => !current.contains(p) && !recent(p));
+    try {
+      final dir = await directory();
+      if (!await dir.exists()) return;
+      final keep = {...current, ..._addedAt.keys.where(recent)}.map(_name);
+      final names = {...keep, ..._writing};
+      await for (final e in dir.list()) {
+        if (!names.contains(e.uri.pathSegments.last)) await _remove(e);
+      }
+    } catch (_) {}
+  }
+
+  /// Cambio di account o uscita: via tutte le foto, in memoria e sul telefono.
+  static Future<void> clear() async {
+    localPhotos.clear();
+    _addedAt.clear();
+    try {
+      final dir = await directory();
+      if (await dir.exists()) await dir.delete(recursive: true);
+    } catch (_) {}
+  }
+
+  static String? _user;
+
+  /// Chiamata quando si sa chi è collegato: con un altro account (o nessuno) le foto
+  /// del precedente non restano sul telefono.
+  static void forUser(String? userId) {
+    if (_user != null && _user != userId) unawaited(clear());
+    _user = userId;
+  }
+
+  static Set<String>? _lastRoster;
+
+  /// La rosa è arrivata (o è cambiata): si tengono solo le foto attuali.
+  static void syncWithRoster(Iterable<String?> paths) {
+    final current = {...paths.whereType<String>()};
+    if (_lastRoster != null && setEquals(_lastRoster, current)) return;
+    _lastRoster = current;
+    unawaited(keepOnly(current));
+  }
+}
+
+/// La foto caricata da un membro (bucket privato "avatars"): prima dalla memoria, poi
+/// dalla copia sul telefono, altrimenti scaricata e salvata. Nella demo c'è solo quella
+/// in memoria. Un errore non resta: alla prossima richiesta si riprova.
+final photoBytesProvider = FutureProvider.autoDispose
+    .family<Uint8List?, String>((ref, path) async {
+      final local = localPhotos[path];
+      if (local != null) return local;
+      if (AppConfig.isDemo) return null;
+      final keep = ref.keepAlive();
+      try {
+        var bytes = await PhotoDiskCache.read(path);
+        if (bytes == null) {
+          bytes = await ref
+              .read(supabaseProvider)
+              .storage
+              .from(avatarsBucket)
+              .download(path);
+          await PhotoDiskCache.write(path, bytes);
+        }
+        rememberPhoto(path, bytes);
+        return bytes;
+      } catch (_) {
+        keep.close();
+        rethrow;
+      }
+    });
+
+/// La foto del membro, solo quella caricata dalla galleria (mai quella dell'account
+/// social): null se non c'è o se non è ancora arrivata. Con [cacheWidth] l'immagine si
+/// decodifica piccola (avatar, mini carte).
+ImageProvider? photoOf(WidgetRef ref, String? avatarPath, {int? cacheWidth}) {
+  if (avatarPath == null) return null;
+  final bytes = ref.watch(photoBytesProvider(avatarPath)).value;
+  if (bytes == null) return null;
+  return ResizeImage.resizeIfNeeded(cacheWidth, null, MemoryImage(bytes));
+}
+
+ImageProvider? memberPhoto(WidgetRef ref, Member m, {int? cacheWidth}) =>
+    photoOf(ref, m.avatarPath, cacheWidth: cacheWidth);
+
+/// Avatar tondo con la foto del membro; senza foto la sagoma grigia (come sulle carte).
+/// [background] e [foreground] per i fondi sempre scuri.
 class MemberAvatar extends ConsumerWidget {
   const MemberAvatar({
     super.key,
     required this.member,
     this.radius = 22,
-    this.showNumber = true,
     this.background,
     this.foreground,
   });
   final Member member;
   final double radius;
-  final bool showNumber;
   final Color? background;
   final Color? foreground;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = context.pal;
-    final fill = background ?? p.surfaceHigher;
-    // Il volto disegnato ha la precedenza su qualsiasi foto.
-    final face = member.face;
-    if (face != null) {
-      return ClipOval(
-        child: FaceView(
-          face: face,
-          size: radius * 2,
-          crop: FaceCrop.head,
-          background: fill,
-        ),
-      );
-    }
-    final photo = memberPhoto(ref, member);
-    final label = showNumber && member.shirtNumber != null
-        ? '${member.shirtNumber}'
-        : member.displayName.isEmpty
-        ? '?'
-        : member.displayName.characters.first.toUpperCase();
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: fill,
-      backgroundImage: photo,
-      child: photo == null
-          ? Text(
-              label,
-              style: TextStyle(
-                fontFamily: sportFont,
-                fontWeight: FontWeight.w600,
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2;
+    final photo = memberPhoto(
+      ref,
+      member,
+      cacheWidth: (radius * 2 * dpr).ceil(),
+    );
+    return ClipOval(
+      child: SizedBox.square(
+        dimension: radius * 2,
+        child: photo == null
+            ? PlayerSilhouette(
+                background: background ?? p.surfaceHigher,
                 color: foreground ?? p.textSecondary,
-                fontSize: (radius * .75).clamp(12, 48).toDouble(),
-                height: 1,
+              )
+            : Image(
+                image: photo,
+                fit: BoxFit.cover,
+                alignment: photoAlignment,
+                gaplessPlayback: true,
+                errorBuilder: (_, _, _) => PlayerSilhouette(
+                  background: background ?? p.surfaceHigher,
+                  color: foreground ?? p.textSecondary,
+                ),
               ),
-            )
-          : null,
+      ),
     );
   }
 }
+
+/// Le foto sono inquadrate 4:5 come il riquadro della carta: nei tondi conta la parte
+/// alta, dove sta il viso.
+const photoAlignment = Alignment(0, -.45);
 
 /// Bandiera (emoji) da un codice ISO a 2 lettere.
 String flagEmoji(String iso2) => String.fromCharCodes(

@@ -1411,7 +1411,7 @@ class _SystemMessage extends StatelessWidget {
 }
 
 /// Bolla di un messaggio (tavola 13): le mie a destra in oro tenue, quelle degli
-/// altri a sinistra con volto e nome; dentro citazione, foto, vocale, testo e ora.
+/// altri a sinistra con foto e nome; dentro citazione, foto, vocale, testo e ora.
 class _Bubble extends ConsumerWidget {
   const _Bubble({
     required this.message,
@@ -1566,7 +1566,7 @@ class _Bubble extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = context.pal;
-    // Chi ha la carta speciale della settimana ha l'anello colorato sul volto.
+    // Chi ha la carta speciale della settimana ha l'anello colorato sulla foto.
     final special = author == null
         ? null
         : ref.watch(activeSpecialCardProvider(author!.id));
@@ -1697,14 +1697,14 @@ class _Bubble extends ConsumerWidget {
             child: Icon(Icons.person_rounded, size: 18, color: p.textMuted),
           )
         : special == null
-        ? MemberAvatar(member: who, radius: 16, showNumber: false)
+        ? MemberAvatar(member: who, radius: 16)
         : Container(
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(color: special.kind.color, width: 2),
             ),
-            child: MemberAvatar(member: who, radius: 12, showNumber: false),
+            child: MemberAvatar(member: who, radius: 12),
           );
     return Padding(
       padding: EdgeInsets.only(top: showAuthor ? 10 : 4),

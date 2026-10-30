@@ -38,6 +38,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | **Nuova app · 6** | Review completa e correzioni (sicurezza del database, dati in tempo reale ovunque, "Riprova" e nuovi tentativi quando manca la rete, ora italiana, stanza vocale robusta e attiva anche a schermo spento, chat con paginazione ed eliminazioni per tutti), nuovo design **nero oro** (scuro, chiaro o automatico come il telefono) con Barlow e Oswald, **barra in basso a cinque schede** (Home, Presenze, Partite, Chat, Club) al posto del menu laterale, profilo e impostazioni dalla foto in alto, preferenze delle notifiche, ricerca nei messaggi, nome e cognome visibili solo al Direttivo, avviso dei nuovi ingressi nella Sala Direttivo, APK sotto gli 80 MB. | ✅ |
 | **Nuova app · 7** | Poteri del Direttivo: promozioni e retrocessioni con le etichette (tracciate nella Sala Direttivo), eliminazione dell'account di un membro con doppia conferma, iscritti in attesa visibili, foto del profilo da togliere, stanza vocale chiusa per tutti; il club non resta mai senza Direttivo. | ✅ |
 | **Nuova app · 8** | Stile Pro Clubs, una novità alla volta: carte vive (riflesso che passa, inclinazione col dito, brillii delle speciali), apertura del pacchetto (bustina da aprire con un tocco o tirandola su, luce dello strappo del colore della carta, San Siro che si accende, fuochi d'artificio, overall che sale punto per punto, vibrazioni a tempo), partita come una diretta TV (tabellone, minuti dei gol, cronaca con il punteggio dopo ogni gol, foto e clip in grande e a tutto schermo; migrazione 0027), animazioni e vibrazioni (la mini carta della Rosa vola fino alla carta grande, caricamenti d'oro al posto delle rotelline, vibrazioni su gol, presenze e conferme, spegnibili da Impostazioni → Aspetto), archetipi e PlayStyle (13 archetipi come in Pro Clubs con icona e descrizione, 30 PlayStyle di cui 2 PlayStyle+ in oro sulla carta; migrazione 0028), formazione in prospettiva (campo inclinato come il menu tattiche di FC, con le mini carte in piedi al posto dei pallini), Match Day in Home (nel giorno della partita la card della serata ha il tabellone con il conto alla rovescia, chi è pronto, la formazione e il codice del party da copiare; migrazione 0029), grafica del risultato da condividere (poster nero oro 4:5 con San Siro, punteggio nel tabellone, marcatori con i minuti e carte della giornata, con anteprima; o il testo), sondaggi in chat (domanda e da 2 a 10 risposte, una o più scelte, barre con le percentuali dopo il voto, voti in tempo reale, chi ha votato, chiusura da chi l'ha creato o dal Direttivo; migrazione 0030), promemoria partita (un'ora prima e dieci minuti prima, con il codice del party, esclusi gli assenti e spegnibili da Impostazioni; il Direttivo chiama la squadra in lobby dal Match Day; migrazione 0031). | ✅ |
+| **Nuova app · 9** | Carte FUT fedeli con la foto vera: carta come gli oggetti di FUT (scudo con le tacche, finiture bronzo/argento/oro con i raggi, rossonera 85+, nero/oro e blu elettrico per le speciali), la foto caricata dal giocatore dalla galleria e inquadrata da lui (sposta e allarga) sfumata dentro la carta, sagoma grigia senza foto, sei statistiche FUT in riga scritte dal giocatore o dal Direttivo (VEL TIR PAS DRI DIF FIS, per i portieri TUF PRE RIN RIF VEL PIA; il bonus delle speciali sale anche su quelle; migrazione 0032), mini carte della Rosa nello stesso stile. Via il volto disegnato ovunque: registrazione, Impostazioni, chat, rosa e PDF usano la foto; copia delle foto sul telefono (niente download a ogni avvio). | ✅ |
 
 ## Provare l'app subito (modalità demo)
 
@@ -51,12 +52,17 @@ flutter run -d chrome  # nel browser
 
 ## Video intro
 
-`assets/video/intro.mp4` è **"Lampi di leggende"**: le foto vere di Maldini, Pirlo, Seedorf,
-Shevchenko, Kaká, Pato, Ronaldinho e Ibrahimović con spinta lenta, nome in oro e lampi bianchi
-tra una e l'altra (15 s, verticale 720×1280, senza audio, circa 1 MB). Si rifà con
-`python3 tools/video/intro_leggende.py CARTELLA_FOTO` (ffmpeg e ImageMagick; le foto non
-stanno nel repository, i nomi dei file sono nello script). Per aggiungere una leggenda basta
-una riga nello script. Se il video manca, l'intro resta su sfondo nero.
+`assets/video/intro.mp4` è il **walkout della squadra** (20 s, verticale 720×1280, circa 3 MB,
+con l'audio, che nell'intro dell'app resta spento): sei striscioni dipinti a mano in
+curva (FORZA IMMU!, FABIO UNICO CAPITANO, CHRYS IL MOTORE, MARTIN UNO DI NOI, ZIO FOR
+PRESIDENT, VICIO NUMBER ONE), ognuno seguito dal suo giocatore che esce dagli spogliatoi, poi
+l'azione che parte da Immu, il gol di Fabio, l'esultanza sotto la curva e il fumo che sfuma nel
+nero; sotto, i cori della curva e lo speaker ("Ha segnato il Milan AC!"). Il video l'ha generato
+Seedance 2.5 su Leonardo con i prompt di `docs/PROMPT_GRAFICA.md`; gli striscioni erano vuoti e
+le scritte, i nomi sulle maglie corretti e il montaggio sono degli script in
+`tools/video/walkout/` (OpenCV + ffmpeg: `striscioni.py`, `nomi.py`, `monta.py`, lanciati da
+una cartella con il video in `in/` e i fotogrammi degli shot in `shots/`). La versione per i
+social (1080×1920) non sta nel repository. Se il video manca, l'intro resta su sfondo nero.
 
 ## Collegare Supabase (gratis)
 

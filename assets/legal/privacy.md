@@ -9,7 +9,7 @@ Il Direttivo del MILANAC Pro Club. Contatto: {{EMAIL}}
 ## Quali dati raccogliamo
 - Accesso: il tuo indirizzo email e la password (il server ne conserva solo una versione cifrata), oppure l'account Google, Microsoft, Yahoo o Apple con cui entri, che ci passa email, nome e foto.
 - Dati anagrafici: nome, cognome e anno di nascita. Oltre a te li vede solo il Direttivo.
-- Profilo nel club, visibile ai membri: nome sulla carta, volto disegnato, foto del profilo, motto, gamertag, squadra, ruolo nel club e in campo, numero di maglia, piattaforma di gioco e carta del giocatore (overall e stile di gioco). Se li indichi nelle Impostazioni, anche città, nazionalità e piede preferito.
+- Profilo nel club, visibile ai membri: nome sulla carta, foto del profilo (quella che carichi tu dalla galleria, inquadrata sulla carta), motto, gamertag, squadra, ruolo nel club e in campo, numero di maglia, piattaforma di gioco e carta del giocatore (overall, statistiche e stile di gioco). Se li indichi nelle Impostazioni, anche città, nazionalità e piede preferito.
 - Presenze: le risposte per le serate (presente, in ritardo con la nota, assente) e il loro storico.
 - Chat: messaggi, foto e messaggi vocali, e i replay della lavagna tattica (voce e mosse). Foto e vocali si cancellano dopo 60 giorni (il messaggio resta, con "Allegato scaduto"), i replay dopo 3 giorni.
 - Stanza vocale: la voce passa in tempo reale dal servizio Agora e non viene registrata né conservata. Il server tiene solo chi è nella stanza, con il microfono acceso o spento, e per quanto tempo (per contare i minuti del mese).

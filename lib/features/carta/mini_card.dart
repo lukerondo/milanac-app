@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/member_photo.dart';
+import '../../shared/silhouette.dart';
 import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
-import '../volto/face_view.dart';
 import 'card_colors.dart';
 import 'card_stats.dart';
+import 'fut_card.dart' show CardPhoto;
+import 'fut_card_skin.dart';
 
 /// Colori (sopra, sotto, scritte) di una mini carta disegnata nel PDF della
 /// formazione: carta speciale o livello dell'overall.
@@ -31,46 +33,25 @@ String _teamsShort(Set<Team> teams) => [
     if (teams.contains(t)) t.short,
 ].join(' · ');
 
-/// Altezza di una mini carta (cresce con il testo grande del telefono).
-double miniCardHeight(BuildContext context) =>
-    99 + 69 * MediaQuery.textScalerOf(context).scale(1);
-
-/// Mini carta del giocatore (Rosa), come la tavola: nero/oro, blu elettrico o
-/// normale (scura, con il colore del livello in alto). Overall con il bonus, ruolo,
-/// volto, nome e tipo di carta. Colori fissi: è un oggetto di gioco.
 /// Etichetta del volo della carta dalla Rosa (mini carta) alla carta grande.
 Object cardHeroTag(String memberId) => 'carta-$memberId';
 
+/// Mini carta del giocatore (Rosa): la stessa carta FUT in piccolo, come nella rosa di
+/// FC. Overall con il bonus, ruolo, foto (o sagoma), nome e squadre o tipo di carta
+/// speciale. Disegnata a 140×200 e scalata alla cella; colori fissi.
 class MiniCard extends ConsumerWidget {
   const MiniCard({super.key, required this.member, this.onTap});
   final Member member;
   final VoidCallback? onTap;
+
+  static const width = 140.0, height = 200.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final special = ref.watch(activeSpecialCardProvider(member.id));
     final overall = overallWith(member.overall, special);
     final kind = special?.kind;
-    final (bg, fg, roleColor, labelColor) = switch (kind) {
-      CardSpecial.neroOro => (
-        CardColors.neroOro,
-        CardColors.goldText,
-        CardColors.goldText,
-        CardColors.goldText,
-      ),
-      CardSpecial.blu => (
-        CardColors.blue,
-        CardColors.onBlue,
-        CardColors.onBlue,
-        CardColors.onBlue,
-      ),
-      null => (
-        CardColors.surface,
-        CardColors.text,
-        CardColors.textMuted,
-        CardColors.caption,
-      ),
-    };
+    final skin = CardSkin.of(kind, member.overall);
     final label = switch (kind) {
       CardSpecial.neroOro => 'NERO/ORO',
       CardSpecial.blu => 'BLU ELETTRICO',
@@ -82,6 +63,7 @@ class MiniCard extends ConsumerWidget {
       if (kind == CardSpecial.neroOro) 'carta nero e oro',
       if (kind == CardSpecial.blu) 'carta blu elettrico',
     ].join(', ');
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2;
     return Semantics(
       button: onTap != null,
       label: description,
@@ -93,122 +75,145 @@ class MiniCard extends ConsumerWidget {
         enabled: TickerMode.valuesOf(context).enabled,
         child: Hero(
           tag: cardHeroTag(member.id),
-          child: Material(
-            color: bg,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: switch (kind) {
-                CardSpecial.neroOro => const BorderSide(color: CardColors.gold),
-                CardSpecial.blu => BorderSide.none,
-                null => const BorderSide(color: CardColors.border),
-              },
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onTap,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (kind == null)
-                    Container(
-                      height: 5,
-                      color: CardColors.tier(tierOf(member.overall)),
-                    ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(8, kind == null ? 6 : 8, 8, 8),
-                    child: Column(
-                      children: [
-                        // Overall (con il bonus) a sinistra, ruolo a destra: si
-                        // rimpiccioliscono se lo spazio non basta.
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+          child: GestureDetector(
+            onTap: onTap,
+            // Oggetto disegnato a misura fissa e scalato: il testo grande del telefono non
+            // deve spostare overall, ruolo e statistiche sulla foto.
+            child: MediaQuery.withNoTextScaling(
+              child: AspectRatio(
+                aspectRatio: width / height,
+                child: FittedBox(
+                  child: SizedBox(
+                    width: width,
+                    height: height,
+                    child: CustomPaint(
+                      painter: CardSkinPainter(skin, rimWidth: 1.6),
+                      child: DefaultTextStyle(
+                        style: TextStyle(
+                          fontFamily: sportFont,
+                          color: skin.text,
+                        ),
+                        child: Stack(
                           children: [
-                            Expanded(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.topLeft,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                            Positioned.fill(
+                              child: ClipPath(
+                                clipper: const FutCardClipper(),
+                                child: Stack(
                                   children: [
-                                    Text(
-                                      overall?.toString() ?? '–',
-                                      style: TextStyle(
-                                        fontFamily: sportFont,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w700,
-                                        height: 1,
-                                        color: fg,
+                                    Positioned(
+                                      left: 36,
+                                      top: 9,
+                                      width: 100,
+                                      height: 125,
+                                      child: CardPhoto(
+                                        member: member,
+                                        silhouette: skin.text,
+                                        cacheWidth: (100 * dpr * 1.5).ceil(),
                                       ),
                                     ),
-                                    if (special != null)
-                                      Text(
-                                        '+${special.bonus}',
-                                        style: TextStyle(
-                                          fontFamily: sportFont,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          height: 1,
-                                          color: fg,
-                                        ),
-                                      ),
                                   ],
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 38),
+                            // Overall (con il bonus) e ruolo in alto a sinistra.
+                            Positioned(
+                              left: 10,
+                              top: 20,
+                              width: 40,
+                              child: Column(
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      overall?.toString() ?? '–',
+                                      style: const TextStyle(
+                                        fontSize: 31,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1,
+                                        letterSpacing: -.5,
+                                      ),
+                                    ),
+                                  ),
+                                  if (special != null)
+                                    Text(
+                                      '+${special.bonus}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      member.fieldPosition ?? '–',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Positioned(
+                              left: 12,
+                              right: 12,
+                              top: 132,
+                              height: 22,
+                              child: Center(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    member.displayName.toUpperCase(),
+                                    maxLines: 1,
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.1,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 16,
+                              right: 16,
+                              top: 156,
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
-                                alignment: Alignment.topRight,
                                 child: Text(
-                                  member.fieldPosition ?? '–',
+                                  label,
+                                  maxLines: 1,
                                   style: TextStyle(
-                                    fontFamily: sportFont,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: roleColor,
+                                    fontFamily: bodyFont,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: .7,
+                                    color: skin.label,
                                   ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 173,
+                              child: Center(
+                                child: Image.asset(
+                                  'assets/images/stemma_256.png',
+                                  width: 15,
+                                  height: 15,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        CardPortrait(member: member, size: 58, special: kind),
-                        const SizedBox(height: 4),
-                        Text(
-                          member.displayName.toUpperCase(),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: sportFont,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            height: 1.15,
-                            color: fg,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: .7,
-                              color: labelColor,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -218,7 +223,8 @@ class MiniCard extends ConsumerWidget {
   }
 }
 
-/// Volto della carta in tondo: il volto disegnato, la foto o il numero di maglia.
+/// Ritratto tondo per le carte piccole (formazione in campo): la foto caricata dal
+/// giocatore o la sagoma grigia.
 class CardPortrait extends ConsumerWidget {
   const CardPortrait({
     super.key,
@@ -237,34 +243,18 @@ class CardPortrait extends ConsumerWidget {
       CardSpecial.blu => (CardColors.blueDeep, CardColors.onBlue),
       null => (CardColors.portrait, CardColors.text),
     };
-    final face = member.face;
-    final photo = face == null ? memberPhoto(ref, member) : null;
-    final fallback = Center(
-      child: Text(
-        member.shirtNumber?.toString() ??
-            (member.displayName.isEmpty
-                ? '?'
-                : member.displayName.characters.first.toUpperCase()),
-        style: TextStyle(
-          fontFamily: sportFont,
-          fontSize: size * .34,
-          fontWeight: FontWeight.w600,
-          color: fg,
-        ),
-      ),
-    );
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2;
+    final photo = memberPhoto(ref, member, cacheWidth: (size * dpr).ceil());
+    final fallback = PlayerSilhouette(background: bg, color: fg);
     return ClipOval(
-      child: Container(
-        width: size,
-        height: size,
-        color: bg,
-        child: face != null
-            ? FaceView(face: face, size: size, crop: FaceCrop.head)
-            : photo == null
+      child: SizedBox.square(
+        dimension: size,
+        child: photo == null
             ? fallback
             : Image(
                 image: photo,
                 fit: BoxFit.cover,
+                alignment: photoAlignment,
                 errorBuilder: (_, _, _) => fallback,
               ),
       ),
@@ -282,11 +272,11 @@ class MiniCardGrid extends StatelessWidget {
   Widget build(BuildContext context) => GridView.builder(
     shrinkWrap: true,
     physics: const NeverScrollableScrollPhysics(),
-    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
       crossAxisCount: 3,
-      mainAxisSpacing: 10,
+      mainAxisSpacing: 12,
       crossAxisSpacing: 10,
-      mainAxisExtent: miniCardHeight(context),
+      childAspectRatio: MiniCard.width / MiniCard.height,
     ),
     itemCount: members.length,
     itemBuilder: (_, i) =>

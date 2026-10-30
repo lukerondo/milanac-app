@@ -190,7 +190,7 @@ class ProfileButton extends ConsumerWidget {
                     color: MilanacColors.ivoryMuted,
                   ),
                 )
-              : MemberAvatar(member: member, radius: 15, showNumber: false),
+              : MemberAvatar(member: member, radius: 15),
         ),
       ),
     );

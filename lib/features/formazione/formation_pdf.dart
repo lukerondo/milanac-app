@@ -13,8 +13,8 @@ import '../../core/italian_time.dart';
 import '../../core/theme.dart';
 import '../carta/mini_card.dart';
 import '../carte/special_cards_repository.dart';
+import '../../shared/silhouette.dart';
 import '../rosa/member.dart';
-import '../volto/face_view.dart';
 import 'modules.dart';
 import 'pitch_painter.dart';
 
@@ -23,12 +23,14 @@ const _logicalWidth = 360.0;
 const _pitchAspect = 0.68;
 
 /// Immagine della formazione: il campo con una mini carta per ogni titolare
-/// (volto, nome sulla carta, ruolo e overall). Disegnata fuori schermo.
+/// (foto, nome sulla carta, ruolo e overall). Disegnata fuori schermo; [photos] sono
+/// le foto già decodificate (per id del membro), chi non ce l'ha ha la sagoma.
 Future<Uint8List> renderFormationImage(
   Formation formation,
   Map<String, Member> members, {
   double width = 1080,
   Map<String, SpecialCard> specials = const {},
+  Map<String, ui.Image> photos = const {},
 }) async {
   final scale = width / _logicalWidth;
   final logical = Size(_logicalWidth, _logicalWidth / _pitchAspect);
@@ -46,7 +48,14 @@ Future<Uint8List> renderFormationImage(
     if (member == null) {
       _paintEmptySlot(canvas, center, slot.label);
     } else {
-      _paintMiniCard(canvas, center, member, slot.label, specials[member.id]);
+      _paintMiniCard(
+        canvas,
+        center,
+        member,
+        slot.label,
+        specials[member.id],
+        photos[member.id],
+      );
     }
   }
 
@@ -87,6 +96,7 @@ void _paintMiniCard(
   Member m,
   String label,
   SpecialCard? special,
+  ui.Image? photo,
 ) {
   final rect = Rect.fromCenter(center: center, width: _cardW, height: _cardH);
   final (top, bottom, text) = miniCardColors(m.overall, special);
@@ -112,37 +122,28 @@ void _paintMiniCard(
       ..color = text.withValues(alpha: .55),
   );
 
-  // Volto (testa) in un cerchio.
+  // La foto (parte alta, dove sta il viso) o la sagoma, in un cerchio.
   final faceCenter = Offset(center.dx, rect.top + 22);
   const faceR = 16.0;
-  final face = m.face;
+  final circle = Rect.fromCircle(center: faceCenter, radius: faceR);
   canvas.save();
-  canvas.clipPath(
-    Path()..addOval(Rect.fromCircle(center: faceCenter, radius: faceR)),
+  canvas.clipPath(Path()..addOval(circle));
+  canvas.drawCircle(
+    faceCenter,
+    faceR,
+    Paint()..color = MilanacColors.ivory.withValues(alpha: .18),
   );
-  if (face != null) {
-    canvas.save();
-    canvas.translate(faceCenter.dx - faceR, faceCenter.dy - faceR);
-    FacePainter(
-      face,
-      crop: FaceCrop.head,
-      background: MilanacColors.ivory.withValues(alpha: .18),
-    ).paint(canvas, const Size(faceR * 2, faceR * 2));
-    canvas.restore();
+  if (photo != null) {
+    final w = photo.width.toDouble(), h = photo.height.toDouble();
+    final side = w < h ? w : h;
+    canvas.drawImageRect(
+      photo,
+      Rect.fromLTWH((w - side) / 2, (h - side) * .2, side, side),
+      circle,
+      Paint()..filterQuality = FilterQuality.medium,
+    );
   } else {
-    canvas.drawCircle(
-      faceCenter,
-      faceR,
-      Paint()..color = MilanacColors.ivory.withValues(alpha: .18),
-    );
-    _text(
-      canvas,
-      m.displayName.isEmpty ? '?' : m.displayName[0].toUpperCase(),
-      faceCenter,
-      14,
-      FontWeight.w800,
-      text,
-    );
+    paintSilhouette(canvas, circle, text.withValues(alpha: .5));
   }
   canvas.restore();
   canvas.drawCircle(
@@ -309,13 +310,23 @@ Future<void> shareFormationPdf(
   required Map<String, Member> members,
   required List<Member> bench,
   Map<String, SpecialCard> specials = const {},
+  Map<String, Uint8List> photos = const {},
 }) async {
   final messenger = ScaffoldMessenger.of(context);
+  final decoded = <String, ui.Image>{};
   try {
+    for (final e in photos.entries) {
+      try {
+        final codec = await ui.instantiateImageCodec(e.value, targetWidth: 96);
+        decoded[e.key] = (await codec.getNextFrame()).image;
+        codec.dispose();
+      } catch (_) {} // foto illeggibile: la sagoma
+    }
     final image = await renderFormationImage(
       formation,
       members,
       specials: specials,
+      photos: decoded,
     );
     final bytes = await buildFormationPdf(
       formation: formation,
@@ -345,5 +356,9 @@ Future<void> shareFormationPdf(
     messenger.showSnackBar(
       SnackBar(content: Text(friendlyError(e, action: 'PDF non creato'))),
     );
+  } finally {
+    for (final image in decoded.values) {
+      image.dispose();
+    }
   }
 }

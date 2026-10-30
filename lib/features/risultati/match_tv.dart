@@ -559,7 +559,7 @@ class _Moment extends StatelessWidget {
   );
 }
 
-/// Un gol nella cronaca: minuto, pallone, "GOL!" con il marcatore (e il suo volto) o
+/// Un gol nella cronaca: minuto, pallone, "GOL!" con il marcatore (e la sua foto) o
 /// il gol subito, e il punteggio dopo il gol.
 class _GoalMoment extends StatelessWidget {
   const _GoalMoment({
@@ -603,7 +603,6 @@ class _GoalMoment extends StatelessWidget {
             MemberAvatar(
               member: m,
               radius: 15,
-              showNumber: false,
               background: CardColors.portrait,
               foreground: HeroText.primary,
             ),

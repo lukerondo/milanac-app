@@ -31,7 +31,7 @@ class MilanacColors {
   static const surface = Color(0xFF151517);
   static const surfaceHigh = Color(0xFF1E1E21);
 
-  /// Rosso della maglia del club (le strisce rossonere del volto disegnato): è la
+  /// Rosso della maglia del club (le strisce rossonere del walkout e del pacchetto): è la
   /// divisa vera, non un colore dell'interfaccia.
   static const kitRed = Color(0xFFC61C23);
 }

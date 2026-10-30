@@ -216,11 +216,7 @@ class _ScorersCard extends ConsumerWidget {
                   child: Row(
                     children: [
                       if (member != null)
-                        MemberAvatar(
-                          member: member,
-                          radius: 17,
-                          showNumber: false,
-                        )
+                        MemberAvatar(member: member, radius: 17)
                       else
                         CircleAvatar(
                           radius: 17,
@@ -401,7 +397,6 @@ class _CardWinner extends StatelessWidget {
               : MemberAvatar(
                   member: m,
                   radius: 20,
-                  showNumber: false,
                   background: CardColors.portrait,
                   foreground: HeroText.primary,
                 ),

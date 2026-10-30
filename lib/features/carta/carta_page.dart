@@ -12,12 +12,15 @@ import '../../core/clock.dart';
 import '../../core/errors.dart';
 import '../../core/haptics.dart';
 import '../../core/local_flags.dart';
+import '../../core/teams.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
 import '../../shared/gold_loader.dart';
+import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
 import '../carte/carte_speciali_page.dart' show openSpecialCards;
 import '../carte/special_cards_repository.dart';
+import '../foto/photo_upload.dart';
 import '../presenze/attendance_repository.dart';
 import '../risultati/matches_repository.dart';
 import '../risultati/result_ui.dart';
@@ -31,6 +34,7 @@ import 'archetypes.dart';
 import 'card_colors.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
+import 'fut_stats.dart';
 import 'live_card.dart';
 import 'mini_card.dart' show cardHeroTag;
 import 'playstyle_ui.dart';
@@ -104,6 +108,32 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
     setState(() => _sharing = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
+      // La foto deve essere già sulla carta, non ancora in arrivo.
+      final path = m.avatarPath;
+      if (path != null) {
+        // Al massimo qualche secondo: senza rete si condivide con la sagoma.
+        try {
+          final bytes = await ref
+              .read(photoBytesProvider(path).future)
+              .timeout(const Duration(seconds: 5));
+          if (bytes != null && mounted) {
+            // Anche decodificata: la stessa immagine (stessa misura) della carta.
+            final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2;
+            await precacheImage(
+              ResizeImage(
+                MemoryImage(bytes),
+                width: (FutCard.photoRect.width * dpr * 2).ceil(),
+              ),
+              context,
+            ).timeout(const Duration(seconds: 3));
+          }
+        } catch (_) {}
+        if (!mounted) return;
+        await WidgetsBinding.instance.endOfFrame;
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+      // Pagina chiusa nel frattempo: niente da condividere (e nessun errore).
+      if (!mounted) return;
       final boundary =
           _cardKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: 3);
@@ -205,25 +235,47 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                     child: LiveCard(
                       special: special?.kind,
                       padding: const EdgeInsets.all(8),
-                      cardWidth: FutCard.width,
-                      child: RepaintBoundary(
-                        key: _cardKey,
-                        child: Padding(
-                          // Margine per l'alone nell'immagine condivisa.
-                          padding: const EdgeInsets.all(8),
-                          // Dalla Rosa arriva in volo la mini carta.
-                          child: Hero(
-                            tag: cardHeroTag(member.id),
-                            child: Material(
-                              type: MaterialType.transparency,
-                              child: FutCard(
-                                member: member,
-                                special: special?.kind,
-                                bonus: special?.bonus ?? 0,
+                      child: Stack(
+                        children: [
+                          RepaintBoundary(
+                            key: _cardKey,
+                            child: Padding(
+                              // Margine per l'alone nell'immagine condivisa.
+                              padding: const EdgeInsets.all(8),
+                              // Dalla Rosa arriva in volo la mini carta.
+                              child: Hero(
+                                tag: cardHeroTag(member.id),
+                                child: Material(
+                                  type: MaterialType.transparency,
+                                  child: FutCard(
+                                    member: member,
+                                    special: special?.kind,
+                                    bonus: special?.bonus ?? 0,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                          // Sulla propria carta senza foto: l'invito a caricarla
+                          // (fuori dall'immagine condivisa).
+                          if (isMine && member.avatarPath == null)
+                            Positioned(
+                              // A destra della colonna di overall e
+                              // PlayStyle+, sopra il nome.
+                              left: 8 + 74,
+                              width: FutCard.photoRect.right - 74,
+                              top: 8 + 150,
+                              child: Center(
+                                child: _UploadPhotoChip(
+                                  onTap: () => changeMemberPhoto(
+                                    context,
+                                    ref,
+                                    memberId: member.id,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -290,8 +342,22 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                     (
                       Icons.edit_rounded,
                       isMine ? 'Modifica la mia carta' : 'Modifica carta',
-                      'Ruolo, numero, archetipo e PlayStyle',
+                      'Ruolo, statistiche, archetipo e PlayStyle',
                       () => showCardEditor(context, member),
+                    ),
+                  if (isMine)
+                    (
+                      Icons.photo_camera_rounded,
+                      member.avatarPath == null
+                          ? 'Carica la tua foto'
+                          : 'Cambia la foto',
+                      'Dalla galleria, inquadrata sulla carta',
+                      () => changeMemberPhoto(
+                        context,
+                        ref,
+                        memberId: member.id,
+                        previous: member.avatarPath,
+                      ),
                     ),
                   (
                     Icons.ios_share_rounded,
@@ -366,6 +432,15 @@ class _InfoCard extends StatelessWidget {
     final direttivo = member.direttivoLabel;
     final rows = [
       ('Gamertag', member.gamertag ?? '–'),
+      if (member.platform != null) ('Piattaforma', member.platform!.label),
+      if (member.shirtNumber != null) ('Numero', '${member.shirtNumber}'),
+      (
+        'Squadre',
+        [
+          for (final t in Team.values)
+            if (member.teams.contains(t)) t.label,
+        ].join(' · '),
+      ),
       (
         'Ruolo nel club',
         direttivo.isEmpty
@@ -566,6 +641,10 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
   late String? _position = widget.member.fieldPosition;
   late GamePlatform? _platform = widget.member.platform;
   late var _styles = [...widget.member.playStyles];
+  late final _stats = {
+    for (final s in FutStat.values)
+      s: TextEditingController(text: widget.member.futStats[s]?.toString()),
+  };
   bool _saving = false;
 
   @override
@@ -579,7 +658,20 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
   void dispose() {
     _style.dispose();
     _number.dispose();
+    for (final c in _stats.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  /// Le statistiche scritte (vuote = non indicate; quelle dell'altro ruolo restano).
+  FutStats get _futStats {
+    var stats = FutStats.empty;
+    for (final e in _stats.entries) {
+      final v = int.tryParse(e.value.text.trim());
+      if (v != null && v >= FutStats.min) stats = stats.withValue(e.key, v);
+    }
+    return stats;
   }
 
   Future<void> _save() async {
@@ -593,6 +685,7 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       playStyle: style.isEmpty ? null : style,
       playStyles: _styles,
       platform: _platform,
+      futStats: _futStats,
     );
     try {
       final rootContext = Navigator.of(context, rootNavigator: true).context;
@@ -608,12 +701,20 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       }
       Haptics.confirm();
       if (mounted) Navigator.of(context).pop();
-      if (_styles.isNotEmpty && repo.playStylesMissing) {
+      final missing = [
+        if (_styles.isNotEmpty && repo.missingColumns.contains('play_styles'))
+          'i PlayStyle',
+        if (!updated.futStats.isEmpty &&
+            repo.missingColumns.contains('fut_stats'))
+          'le statistiche',
+      ];
+      if (missing.isNotEmpty) {
         messenger.showSnackBar(
-          const SnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 8),
             content: Text(
-              'Carta salvata. I PlayStyle si vedranno quando il server del '
-              'club sarà aggiornato.',
+              'Carta salvata, ma senza ${missing.join(' e ')}: il server del '
+              'club non è ancora aggiornato. Inseriscili di nuovo più tardi.',
             ),
           ),
         );
@@ -745,6 +846,8 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            _StatsEditor(position: _position, controllers: _stats),
             const SizedBox(height: 12),
             Text('Archetipo', style: Theme.of(context).textTheme.titleSmall),
             for (final area in ArchetypeArea.values) ...[
@@ -823,4 +926,114 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       ),
     );
   }
+}
+
+/// Le sei statistiche FUT da scrivere come nel gioco (quelle da portiere per il POR).
+class _StatsEditor extends StatelessWidget {
+  const _StatsEditor({required this.position, required this.controllers});
+  final String? position;
+  final Map<FutStat, TextEditingController> controllers;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final stats = FutStat.forPosition(position);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          position == 'POR' ? 'Statistiche da portiere' : 'Statistiche',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Da 1 a 99, come sul tuo Pro in FC. Vuote non compaiono.',
+          style: TextStyle(fontSize: 14, color: p.textMuted),
+        ),
+        const SizedBox(height: 8),
+        // Tre per riga, alti quanto serve (etichetta, valore e aiuto), anche con il
+        // testo grande del telefono.
+        LayoutBuilder(
+          builder: (context, box) {
+            final width = ((box.maxWidth - 2 * 10) / 3).floorToDouble();
+            return Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                for (final s in stats)
+                  SizedBox(
+                    width: width,
+                    child: TextField(
+                      key: ValueKey('statistica-${s.key}'),
+                      controller: controllers[s],
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(2),
+                      ],
+                      style: const TextStyle(
+                        fontFamily: sportFont,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: s.short,
+                        helperText: s.label,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// "Carica la tua foto" sulla propria carta senza foto.
+class _UploadPhotoChip extends StatelessWidget {
+  const _UploadPhotoChip({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.black.withValues(alpha: .72),
+    shape: const StadiumBorder(
+      side: BorderSide(color: MilanacColors.goldLight, width: 1.2),
+    ),
+    child: InkWell(
+      customBorder: const StadiumBorder(),
+      onTap: onTap,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        // Dentro il riquadro della foto: con il testo grande si rimpicciolisce.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.add_a_photo_rounded,
+                size: 16,
+                color: MilanacColors.goldLight,
+              ),
+              SizedBox(width: 6),
+              Text(
+                'Carica la tua foto',
+                style: TextStyle(
+                  fontFamily: bodyFont,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: MilanacColors.goldLight,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }

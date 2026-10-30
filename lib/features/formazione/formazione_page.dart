@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -161,20 +162,35 @@ List<Member> _benchOf(Formation f, Iterable<Member> active) =>
         .toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
 
-/// Condivide il PDF di [formation] (campo, titolari e panchina).
-void _sharePdf(
+/// Condivide il PDF di [formation] (campo, titolari e panchina), con le foto dei
+/// titolari che si riescono a prendere in pochi secondi (le altre: la sagoma).
+Future<void> _sharePdf(
   BuildContext context,
   WidgetRef ref,
   Formation formation,
   List<Member> all,
-) {
+) async {
   final members = _activeMembers(all);
-  shareFormationPdf(
+  final photos = <String, Uint8List>{};
+  await Future.wait([
+    for (final id in formation.players.values)
+      if (members[id]?.avatarPath case final path?)
+        ref
+            .read(photoBytesProvider(path).future)
+            .timeout(const Duration(seconds: 6))
+            .then((bytes) {
+              if (bytes != null) photos[id] = bytes;
+            })
+            .catchError((_) {}),
+  ]);
+  if (!context.mounted) return;
+  await shareFormationPdf(
     context,
     formation: formation,
     members: members,
     bench: _benchOf(formation, members.values),
     specials: ref.read(activeSpecialCardsProvider),
+    photos: photos,
   );
 }
 
@@ -833,7 +849,7 @@ class _BenchPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          MemberAvatar(member: member, radius: 14, showNumber: false),
+          MemberAvatar(member: member, radius: 14),
           const SizedBox(width: 8),
           Text(
             [
@@ -945,7 +961,7 @@ Widget _standing(PitchPerspective pitch, SlotPosition slot, Widget card) {
   );
 }
 
-/// Un posto in campo come una mini carta di FC: overall, ruolo, volto e "9 Rossi" (con i
+/// Un posto in campo come una mini carta di FC: overall, ruolo, foto e "9 Rossi" (con i
 /// colori della carta speciale, se c'è); un posto libero è la carta tratteggiata
 /// dell'IA. Il campo è scuro anche nel tema chiaro.
 class _PitchCard extends ConsumerWidget {

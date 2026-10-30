@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart' show FontLoader, rootBundle;
@@ -9,8 +8,8 @@ import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/core/teams.dart';
 import 'package:milanac/features/formazione/formation_pdf.dart';
 import 'package:milanac/features/formazione/modules.dart';
+import 'package:image/image.dart' as img;
 import 'package:milanac/features/rosa/member.dart';
-import 'package:milanac/features/volto/face.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -48,7 +47,6 @@ void main() {
           joinedAt: DateTime(2025, 9, 1),
           overall: 60 + (i * 3) % 32,
           fieldPosition: 'CC',
-          face: Face.random(Random(i)),
         ),
     };
     final formation = Formation(
@@ -57,7 +55,17 @@ void main() {
       players: {for (var i = 0; i < 11; i++) i: 'm$i'},
       publishedAt: DateTime(2026, 10, 10, 18),
     );
-    final image = await renderFormationImage(formation, members);
+    // Una foto vera per il primo titolare, la sagoma per gli altri.
+    final photo = await decodeImageFromList(
+      img.encodePng(
+        img.Image(width: 72, height: 90)..clear(img.ColorRgb8(200, 30, 40)),
+      ),
+    );
+    final image = await renderFormationImage(
+      formation,
+      members,
+      photos: {'m0': photo},
+    );
     expect(image.length, greaterThan(10000));
     final decoded = await decodeImageFromList(image);
     expect(decoded.width, 1080);

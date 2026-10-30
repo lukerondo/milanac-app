@@ -18,13 +18,11 @@ import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
 import '../auth/gate_ui.dart';
 import '../carta/carta_page.dart';
+import '../foto/photo_upload.dart';
 import '../privacy/privacy_page.dart';
 import '../registrazione/registration_repository.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
-import '../volto/face.dart';
-import '../volto/face_editor_page.dart';
-import '../volto/face_view.dart';
 
 /// Impostazioni (dal profilo, a schermo intero): profilo, notifiche, aspetto e account.
 class ImpostazioniPage extends ConsumerStatefulWidget {
@@ -69,36 +67,50 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
   void _toast(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
-  /// La versione più recente del membro (il volto potrebbe essere appena cambiato).
-  Member? _live(String id) =>
-      ref.read(rosaProvider).value?.where((m) => m.id == id).firstOrNull;
-
-  Future<void> _changeFace(Member member) async {
-    final face = await Navigator.of(context, rootNavigator: true).push<Face>(
-      MaterialPageRoute(
-        builder: (_) => FaceEditorPage(initial: member.face ?? Face.defaults),
+  /// La tua foto: cambiala (galleria e inquadratura) o toglila.
+  Future<void> _photo(Member member) async {
+    if (member.avatarPath == null) {
+      await changeMemberPhoto(context, ref, memberId: member.id);
+      return;
+    }
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text('Scegli un\'altra foto'),
+              onTap: () => Navigator.of(context).pop('cambia'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.hide_image_rounded),
+              title: const Text('Togli la foto'),
+              subtitle: const Text('Sulla carta torna la sagoma grigia'),
+              onTap: () => Navigator.of(context).pop('togli'),
+            ),
+          ],
+        ),
       ),
     );
-    if (face == null || !mounted) return;
-    final current = _live(member.id) ?? member;
+    if (!mounted || choice == null) return;
+    if (choice == 'cambia') {
+      await changeMemberPhoto(
+        context,
+        ref,
+        memberId: member.id,
+        previous: member.avatarPath,
+      );
+      return;
+    }
     try {
-      await ref
-          .read(rosaRepositoryProvider)
-          .saveProfile(
-            current.withPersonalData(
-              displayName: current.displayName,
-              gamertag: current.gamertag,
-              birthDate: current.birthDate,
-              city: current.city,
-              nationality: current.nationality,
-              preferredFoot: current.preferredFoot,
-              face: face,
-            ),
-          );
+      await ref.read(rosaRepositoryProvider).removePhoto(member);
       Haptics.light();
-      if (mounted) _toast('Volto aggiornato: lo vedi anche sulla carta.');
+      if (mounted) _toast('Foto tolta.');
     } catch (e) {
-      if (mounted) _toast(friendlyError(e, action: 'Salvataggio non riuscito'));
+      if (mounted) _toast(friendlyError(e, action: 'Foto non tolta'));
     }
   }
 
@@ -241,9 +253,12 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
                         ),
                       ),
                       _Row(
-                        title: 'Il tuo volto',
-                        trailing: _FaceThumb(member.face ?? Face.defaults),
-                        onTap: () => _changeFace(member),
+                        title: 'La tua foto',
+                        detail: member.avatarPath == null
+                            ? 'Non ancora caricata'
+                            : null,
+                        trailing: _PhotoThumb(member),
+                        onTap: () => _photo(member),
                       ),
                       _Row(
                         title: 'La tua carta',
@@ -431,9 +446,14 @@ class _Row extends StatelessWidget {
               ),
               if (detail != null && detail!.isNotEmpty) ...[
                 const SizedBox(width: 12),
-                Text(
-                  detail!,
-                  style: TextStyle(fontSize: 14, color: p.textMuted),
+                Flexible(
+                  child: Text(
+                    detail!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(fontSize: 14, color: p.textMuted),
+                  ),
                 ),
               ],
               if (trailing != null) ...[const SizedBox(width: 12), trailing!],
@@ -451,10 +471,10 @@ class _Row extends StatelessWidget {
   }
 }
 
-/// Il volto in piccolo, nel cerchio con il bordo oro.
-class _FaceThumb extends StatelessWidget {
-  const _FaceThumb(this.face);
-  final Face face;
+/// La foto in piccolo, nel cerchio con il bordo oro.
+class _PhotoThumb extends StatelessWidget {
+  const _PhotoThumb(this.member);
+  final Member member;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -465,14 +485,12 @@ class _FaceThumb extends StatelessWidget {
       shape: BoxShape.circle,
       color: context.pal.chipBorder,
     ),
-    child: ClipOval(
-      child: FaceView(
-        face: face,
-        size: 27,
-        crop: FaceCrop.head,
-        // Fondo scuro fisso, come le foto dei membri nel resto dell'app.
-        background: MilanacColors.surfaceHigh,
-      ),
+    // Fondo scuro fisso, come le foto dei membri nel resto dell'app.
+    child: MemberAvatar(
+      member: member,
+      radius: 13.5,
+      background: MilanacColors.surfaceHigh,
+      foreground: MilanacColors.ivoryMuted,
     ),
   );
 }
@@ -561,7 +579,7 @@ class _PersonalDataPageState extends ConsumerState<_PersonalDataPage> {
       return;
     }
     setState(() => _saving = true);
-    // La versione più recente del membro (il volto potrebbe essere appena cambiato).
+    // La versione più recente del membro (la foto potrebbe essere appena cambiata).
     final current =
         ref
             .read(rosaProvider)
