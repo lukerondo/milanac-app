@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/auth/notify_prefs.dart';
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/errors.dart';
@@ -414,7 +415,135 @@ class MatchDayExtras extends ConsumerWidget {
               ),
           ],
         ),
+        _Reminders(event: event),
       ],
+    );
+  }
+}
+
+/// I promemoria della partita: quando arrivano (un'ora prima e dieci minuti prima) o che
+/// sono spenti (porta alle impostazioni); per il Direttivo, nelle ore della partita,
+/// "Chiama" la squadra in lobby.
+class _Reminders extends ConsumerStatefulWidget {
+  const _Reminders({required this.event});
+  final ClubEvent event;
+
+  @override
+  ConsumerState<_Reminders> createState() => _RemindersState();
+}
+
+class _RemindersState extends ConsumerState<_Reminders> {
+  late final Timer _tick;
+  bool _calling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Il testo cambia con l'ora (prima i due promemoria, poi solo la lobby).
+    _tick = Timer.periodic(const Duration(seconds: 30), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _tick.cancel();
+    super.dispose();
+  }
+
+  Future<void> _call() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Chiamare la squadra in lobby?'),
+        content: const Text(
+          'Arriva una notifica a chi gioca (non agli assenti), anche a chi ha '
+          'spento i promemoria.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Chiama'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(eventsRepositoryProvider);
+    setState(() => _calling = true);
+    try {
+      await repo.callToLobby(widget.event.id);
+      Haptics.confirm();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Squadra chiamata in lobby.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Chiamata non partita')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _calling = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final profile = ref.watch(profileProvider).value;
+    final on = profile?.notifyPrefs.isOn(NotifyCategory.partite) ?? true;
+    final now = italianClock(ref.watch(clockProvider)());
+    final start = widget.event.startsAt;
+    final hour = start.subtract(const Duration(hours: 1));
+    final lobby = start.subtract(const Duration(minutes: 10));
+    final canCall =
+        (profile?.isDirettivo ?? false) &&
+        !now.isBefore(start.subtract(lobbyCallWindow)) &&
+        !now.isAfter(start.add(lobbyCallWindow));
+    final hm = DateFormat('HH:mm');
+    final started = !now.isBefore(start);
+    final String? text = started
+        ? (canCall ? 'Manca qualcuno? Chiamalo in lobby' : null)
+        : !on
+        ? 'Promemoria partita spenti'
+        : now.isBefore(hour)
+        ? 'Promemoria alle ${hm.format(hour)} e alle ${hm.format(lobby)}'
+        : now.isBefore(lobby)
+        ? 'Promemoria per la lobby alle ${hm.format(lobby)}'
+        : 'Lobby aperta: si entra!';
+    if (text == null) return const SizedBox.shrink();
+    final off = !on && !started;
+    return InkWell(
+      onTap: off ? () => context.push('/impostazioni?sezione=notifiche') : null,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Row(
+          children: [
+            Icon(
+              off
+                  ? Icons.notifications_off_rounded
+                  : Icons.notifications_active_rounded,
+              size: 22,
+              color: off ? p.textMuted : p.accentText,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(text, style: TextStyle(fontSize: 15, color: p.text)),
+            ),
+            if (off) Icon(Icons.chevron_right_rounded, color: p.textSecondary),
+            if (canCall)
+              TextButton.icon(
+                onPressed: _calling ? null : _call,
+                icon: const Icon(Icons.campaign_rounded),
+                label: const Text('Chiama'),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

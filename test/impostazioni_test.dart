@@ -146,7 +146,12 @@ void main() {
     expect(toggle('Notizie e aggiornamenti').value, isFalse);
     expect(toggle('Presenze e promemoria').value, isTrue);
     final prefs = container.read(profileProvider).value!.notifyPrefs;
-    expect(prefs.toJson(), {'presenze': true, 'chat': true, 'notizie': false});
+    expect(prefs.toJson(), {
+      'presenze': true,
+      'partite': true,
+      'chat': true,
+      'notizie': false,
+    });
 
     // Riaperte le impostazioni, la scelta c'è ancora.
     tester.state<NavigatorState>(find.byType(Navigator).first).pop();

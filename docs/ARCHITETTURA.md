@@ -109,7 +109,9 @@ accettano al primo accesso successivo.
    partita diventa il **Match Day**: tabellone con lo stemma contro l'avversario e il conto
    alla rovescia al calcio d'inizio (poi "in corso" e il fischio finale), chi è pronto con i
    volti, lo stato della formazione e il codice del party da copiare (lo scrive il
-   Direttivo); la partita di stasera non si ripete in "Prossima partita".
+   Direttivo), quando arrivano i **promemoria** (un'ora prima e dieci minuti prima, o
+   "spenti" con il link alle impostazioni) e, per il Direttivo, *Chiama* la squadra in
+   lobby; la partita di stasera non si ripete in "Prossima partita".
 3. **Barra in basso a cinque schede** (sempre visibile, ognuna ricorda dove eri rimasto):
    - *Home* · *Presenze* · *Partite* (Calendario, Risultati, Tornei; da qui Formazione e
      dettaglio partita) · *Chat* (con i non letti sull'icona) · *Club* (Rosa, Carte speciali,
@@ -311,6 +313,9 @@ profiles      + play_styles (text[]: codici dei PlayStyle, "+" in fondo per i Pl
 -- dalla migrazione 0029
 events        + party_code (text, 1-40 caratteri: il codice del party della partita, lo
               scrive il Direttivo e si copia dal Match Day in Home)
+-- dalla migrazione 0031
+event_reminders id, event_id(→ events), kind (ora | lobby | chiamata), sent_at, sent_by;
+              i due automatici una volta sola per partita; nessuna policy (solo il server)
 -- dalla migrazione 0030
 messages      un sondaggio è un messaggio con meta {type: poll, options [2-10, 1-80
               caratteri, diverse], multiple, closed_at?} e la domanda nel testo (max 300)
@@ -357,7 +362,12 @@ Lavori automatici con **pg_cron**: `attendance_tick()` gira ogni minuto e, in or
 alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assenze automatiche
 (una volta sola al giorno, grazie a `daily_jobs`). Le risposte dei giocatori sono bloccate dopo
 le 18:30 dalle policy (`attendance_open`); il Direttivo corregge sempre. Nei test l'ora si fissa
-con l'impostazione `milanac.now` (`app_now()`).
+con l'impostazione `milanac.now` (`app_now()`). Promemoria partita (migrazione `0031`):
+`match_reminders_tick()` gira ogni minuto e per le partite (torneo e amichevole) manda
+"Tra un'ora si gioca" (solo se la partita era già in calendario e mancano più di 15 minuti) e
+"Tutti in lobby" dieci minuti prima, con il codice del party, alla squadra esclusi gli assenti
+(categoria "Promemoria partita", spegnibile); `call_to_lobby(evento)` è la chiamata del
+Direttivo (da due ore prima a due ore dopo l'inizio, una ogni 3 minuti, arriva sempre).
 
 Stanza vocale (migrazione `0020`): `voice_rooms` (una aperta per canale, `opened_by`,
 `closed_at`) e `voice_sessions` (ingressi con `agora_uid`, `heartbeat_at`, `muted`, `left_at`),

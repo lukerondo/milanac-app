@@ -1961,3 +1961,93 @@ do $$ begin
   assert (select count(*) from poll_votes where message_id = '00000000-0000-0000-0000-0000000005b1') = 0,
     'voti eliminati con il sondaggio';
 end $$;
+
+-- ================================================================ promemoria partita (0031)
+-- Partite di lunedì 2 novembre 2026 alle 21:30 (ora italiana): m1 in calendario da giorni,
+-- m2 creata alle 21:00 (ha già avuto la sua notifica), un allenamento che non conta.
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+insert into events (id, type, title, starts_at, team, created_at) values
+  ('00000000-0000-0000-0000-0000000006e1', 'torneo', 'FVPA – 5ª giornata vs Lupi',
+   '2026-11-02 21:30 Europe/Rome', 'milanac', '2026-10-28 12:00 Europe/Rome'),
+  ('00000000-0000-0000-0000-0000000006e2', 'amichevole', 'Amichevole vs Orsi',
+   '2026-11-02 21:30 Europe/Rome', 'futuro', '2026-11-02 21:00 Europe/Rome'),
+  ('00000000-0000-0000-0000-0000000006e3', 'allenamento', 'Allenamento',
+   '2026-11-02 21:30 Europe/Rome', null, '2026-10-28 12:00 Europe/Rome');
+delete from net.calls;
+create function pg_temp.reminders(p_when text) returns int language sql as $$
+  select count(*)::int from net.calls
+  where body->>'kind' = 'match_reminder' and body->>'when' = p_when
+$$;
+select set_config('milanac.now', '2026-11-02 20:20 Europe/Rome', false);
+select match_reminders_tick();
+do $$ begin
+  assert pg_temp.reminders('ora') + pg_temp.reminders('lobby') = 0, 'più di un''ora prima: niente';
+end $$;
+select set_config('milanac.now', '2026-11-02 20:31 Europe/Rome', false);
+select match_reminders_tick();
+select match_reminders_tick();
+do $$ begin
+  assert pg_temp.reminders('ora') = 1, 'un''ora prima, una volta sola e solo per m1';
+  assert (select body->>'id' from net.calls where body->>'when' = 'ora')
+         = '00000000-0000-0000-0000-0000000006e1', 'l''avviso dell''ora è di m1';
+  assert pg_temp.reminders('lobby') = 0, 'la lobby non ancora';
+end $$;
+-- m3: in calendario da giorni ma il controllo di pg_cron non è girato fino a 9 minuti
+-- prima: niente "tra un'ora" in ritardo, solo la lobby.
+insert into events (id, type, title, starts_at, team, created_at) values
+  ('00000000-0000-0000-0000-0000000006e4', 'torneo', 'Coppa vs Falchi',
+   '2026-11-02 21:30 Europe/Rome', 'milanac', '2026-10-20 12:00 Europe/Rome');
+select set_config('milanac.now', '2026-11-02 21:21 Europe/Rome', false);
+select match_reminders_tick();
+select match_reminders_tick();
+do $$ begin
+  assert pg_temp.reminders('ora') = 1, 'niente "tra un''ora" a 9 minuti dall''inizio';
+  assert pg_temp.reminders('lobby') = 3, 'lobby per le tre partite, una volta sola';
+  assert not exists (select 1 from net.calls where body->>'id' = '00000000-0000-0000-0000-0000000006e3'
+                     and body->>'kind' = 'match_reminder'), 'l''allenamento non ha promemoria';
+end $$;
+select set_config('milanac.now', '2026-11-02 21:45 Europe/Rome', false);
+select match_reminders_tick();
+do $$ begin
+  assert pg_temp.reminders('ora') + pg_temp.reminders('lobby') = 4, 'a partita iniziata niente di nuovo';
+end $$;
+
+-- La chiamata in lobby: solo il Direttivo, solo per le partite e nelle ore della partita,
+-- al massimo una ogni 3 minuti.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+select pg_temp.expect_error(
+  $q$select call_to_lobby('00000000-0000-0000-0000-0000000006e1')$q$, 'Solo il Direttivo');
+do $$ begin
+  assert (select count(*) from event_reminders) = 0, 'i promemoria non si leggono dall''app';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select set_config('milanac.now', '2026-11-02 21:25 Europe/Rome', false);
+do $$ begin
+  assert call_to_lobby('00000000-0000-0000-0000-0000000006e1') = '2026-11-02 21:25 Europe/Rome'::timestamptz,
+    'chiamata alle 21:25';
+end $$;
+select pg_temp.expect_error(
+  $q$select call_to_lobby('00000000-0000-0000-0000-0000000006e1')$q$, 'chiamata da poco');
+select pg_temp.expect_error(
+  $q$select call_to_lobby('00000000-0000-0000-0000-0000000006e3')$q$, 'Partita non trovata');
+select set_config('milanac.now', '2026-11-02 21:29 Europe/Rome', false);
+select call_to_lobby('00000000-0000-0000-0000-0000000006e1');
+select set_config('milanac.now', '2026-11-02 18:00 Europe/Rome', false);
+select pg_temp.expect_error(
+  $q$select call_to_lobby('00000000-0000-0000-0000-0000000006e2')$q$, 'nelle ore della partita');
+reset role;
+do $$ begin
+  assert pg_temp.reminders('chiamata') = 2, 'due chiamate a quattro minuti di distanza';
+  assert (select count(*) from event_reminders where kind = 'chiamata'
+          and sent_by = '00000000-0000-0000-0000-00000000000d') = 2, 'si sa chi ha chiamato';
+end $$;
+-- Eliminata la partita, spariscono anche i suoi promemoria.
+delete from events where id = '00000000-0000-0000-0000-0000000006e1';
+do $$ begin
+  assert (select count(*) from event_reminders
+          where event_id = '00000000-0000-0000-0000-0000000006e1') = 0, 'promemoria eliminati';
+end $$;
+select set_config('milanac.now', '', false);

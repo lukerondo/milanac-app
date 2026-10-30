@@ -17,6 +17,9 @@
 //   { kind: "special_card", id }            → al giocatore: ha ricevuto una carta nero/oro o blu elettrico
 //   { kind: "special_cards_week", match }   → alla squadra: le carte speciali della giornata
 //   { kind: "voice_room", id }              → ai membri del canale: qualcuno ha aperto la stanza vocale
+//   { kind: "match_reminder", id, when }    → alla squadra della partita, esclusi gli assenti:
+//                                             when = ora (un'ora prima), lobby (dieci minuti
+//                                             prima) o chiamata (dal Direttivo, arriva sempre)
 //   { kind: "cleanup" }                     → nessuna notifica: rimuove dallo Storage i file in coda
 //                                             (allegati della chat scaduti o eliminati)
 //
@@ -40,7 +43,7 @@ Deno.serve(async (req) => {
   if (req.headers.get("x-milanac-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("forbidden", { status: 403 });
   }
-  const { kind, id, version, users, match } = await req.json();
+  const { kind, id, version, users, match, when } = await req.json();
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   if (kind === "cleanup") return Response.json({ removed: await cleanupStorage(db) });
@@ -59,6 +62,7 @@ Deno.serve(async (req) => {
   else if (kind === "special_card") pushes = await specialCardPushes(db, id);
   else if (kind === "special_cards_week") pushes = await specialCardsWeekPushes(db, match);
   else if (kind === "voice_room") pushes = await voiceRoomPushes(db, id);
+  else if (kind === "match_reminder") pushes = await matchReminderPushes(db, id, when);
   else return new Response("unknown kind", { status: 400 });
 
   const category = CATEGORY[kind];
@@ -80,6 +84,7 @@ const CATEGORY: Record<string, string> = {
   chat_message: "chat",
   voice_room: "chat",
   news: "notizie",
+  match_reminder: "partite",
 };
 
 /// Toglie chi ha spento questa categoria (profiles.notify_prefs: { presenze|chat|notizie: false }).
@@ -196,6 +201,47 @@ async function eventPushes(db: SupabaseClient, eventId: string): Promise<Push[]>
     route: e.type === "riunione" ? "/calendario" : `/presenze?giorno=${day}`,
     data: { event: e.id, day },
   }));
+}
+
+// ------------------------------------------------------------------ promemoria partita
+
+/// "21:30" in ora italiana.
+function timeRome(iso: string): string {
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+async function matchReminderPushes(db: SupabaseClient, eventId: string, when: unknown): Promise<Push[]> {
+  const { data: e } = await db
+    .from("events").select("id, title, starts_at, team, party_code").eq("id", eventId).single();
+  if (!e) return [];
+  // Chi ha già detto che non c'è non riceve i promemoria della serata.
+  const day = dayRome(e.starts_at);
+  const { data: absent } = await db
+    .from("attendance").select("player_id").eq("date", day).eq("status", "assente");
+  const out = new Set((absent ?? []).map((a) => a.player_id));
+  const time = timeRome(e.starts_at);
+  const body = `${e.title} alle ${time}${e.party_code ? ` · Party: ${e.party_code}` : ""}`;
+  const minutes = Math.round((new Date(e.starts_at).getTime() - Date.now()) / 60000);
+  const title = when === "ora"
+    ? (minutes >= 50 ? "⚽ Tra un'ora si gioca" : `⚽ Tra ${Math.max(minutes, 1)} minuti si gioca`)
+    : when === "lobby"
+    ? "🎮 Tutti in lobby!"
+    : when === "chiamata"
+    ? "📣 Il Direttivo vi chiama in lobby"
+    : null;
+  if (!title) return [];
+  return (await members(db, e.team))
+    .filter((m) => !out.has(m.id))
+    .map((m) => ({
+      userId: m.id,
+      title,
+      body,
+      route: "/",
+      data: { event: e.id },
+      always: when === "chiamata",
+    }));
 }
 
 // ------------------------------------------------------------------ presenze (18:00 e 18:30)

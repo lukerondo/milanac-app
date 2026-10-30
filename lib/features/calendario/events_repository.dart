@@ -21,11 +21,22 @@ abstract class EventsRepository {
 
   /// Codice del party della partita (null o vuoto = toglie il codice).
   Future<void> setPartyCode(String eventId, String? code);
+
+  /// Il Direttivo chiama la squadra in lobby (notifica a chi gioca, esclusi gli assenti):
+  /// da due ore prima a due ore dopo l'inizio, al massimo una volta ogni
+  /// [lobbyCallInterval]. Restituisce l'ora della chiamata.
+  Future<DateTime> callToLobby(String eventId);
 }
+
+/// Tra una chiamata in lobby e l'altra (come call_to_lobby sul server).
+const lobbyCallInterval = Duration(minutes: 3);
+
+/// Da quanto prima e fino a quanto dopo l'inizio della partita si chiama la squadra.
+const lobbyCallWindow = Duration(hours: 2);
 
 final eventsRepositoryProvider = Provider<EventsRepository>((ref) {
   if (AppConfig.isDemo) {
-    return DemoEventsRepository(now: ref.read(clockProvider)());
+    return DemoEventsRepository(clock: ref.read(clockProvider));
   }
   return _SupabaseEventsRepository(ref);
 });
@@ -91,12 +102,33 @@ class _SupabaseEventsRepository implements EventsRepository {
       rethrow;
     }
   }
+
+  @override
+  Future<DateTime> callToLobby(String eventId) async {
+    try {
+      final at = await _ref
+          .read(supabaseProvider)
+          .rpc('call_to_lobby', params: {'p_event': eventId});
+      return DateTime.parse(at as String).toLocal();
+    } on PostgrestException catch (e) {
+      // Database prima della migrazione 0031: la funzione non c'è ancora.
+      if (e.code == 'PGRST202') {
+        throw const AppError(
+          'La chiamata in lobby si potrà usare quando il server del club sarà '
+          'aggiornato.',
+        );
+      }
+      rethrow;
+    }
+  }
 }
 
 /// Eventi di esempio in memoria (modalità demo e test), intorno al giorno italiano di [now].
 class DemoEventsRepository implements EventsRepository {
-  DemoEventsRepository({DateTime? now}) {
-    final today = italianClock(now ?? DateTime.now());
+  /// Gli eventi stanno intorno al giorno di [now] (o dell'orologio [clock]).
+  DemoEventsRepository({DateTime? now, DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now {
+    final today = italianClock(now ?? _clock());
     // Ore italiane, come gli eventi letti dal server.
     DateTime at(int days, [int h = 21, int m = 30]) =>
         DateTime.utc(today.year, today.month, today.day + days, h, m);
@@ -138,9 +170,13 @@ class DemoEventsRepository implements EventsRepository {
     ]);
   }
 
+  final DateTime Function() _clock;
   final _events = <ClubEvent>[];
   final _controller = StreamController<List<ClubEvent>>.broadcast();
   var _nextId = 100;
+
+  /// Chiamate in lobby fatte, per partita (l'istante vero).
+  final lobbyCalls = <String, List<DateTime>>{};
 
   List<ClubEvent> get _sorted => sortedByStart(_events);
 
@@ -186,5 +222,32 @@ class DemoEventsRepository implements EventsRepository {
       value == null || value.isEmpty ? null : value,
     );
     _controller.add(_sorted);
+  }
+
+  /// Come call_to_lobby: solo le partite, nelle ore della partita, una chiamata ogni
+  /// [lobbyCallInterval].
+  @override
+  Future<DateTime> callToLobby(String eventId) async {
+    final e = _events.where((x) => x.id == eventId).firstOrNull;
+    if (e == null || !e.type.isMatch) {
+      throw const AppError('Partita non trovata.');
+    }
+    final instant = _clock();
+    final now = italianClock(instant);
+    if (now.isBefore(e.startsAt.subtract(lobbyCallWindow)) ||
+        now.isAfter(e.startsAt.add(lobbyCallWindow))) {
+      throw const AppError(
+        'Si chiama la squadra solo nelle ore della partita.',
+      );
+    }
+    final calls = lobbyCalls[eventId] ??= [];
+    if (calls.isNotEmpty &&
+        instant.difference(calls.last) < lobbyCallInterval) {
+      throw const AppError(
+        'La squadra è stata chiamata da poco: riprova tra qualche minuto.',
+      );
+    }
+    calls.add(instant);
+    return instant;
   }
 }
