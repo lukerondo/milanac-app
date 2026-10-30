@@ -139,8 +139,10 @@ certificato, profilo Ad Hoc e secret) in [`docs/PUBBLICAZIONE.md`](docs/PUBBLICA
   `MILANAC-arm64.apk` (circa 70 MB) è quello da installare sui telefoni; `MILANAC.apk` contiene
   anche i processori a 32 bit. Le estensioni video di Agora restano fuori dal pacchetto.
 - **Rilascio Android (.aab firmato)**: Actions → *Rilascio Android*.
-- **iOS**: workflow *iPhone* (`.github/workflows/iphone.yml`) → `MILANAC.ipa` ad hoc (o non firmato
-  senza i secret di firma), nella release *App per iPhone*; per TestFlight c'è Codemagic (`codemagic.yaml`).
+- **iOS**: workflow *iPhone* (`.github/workflows/iphone.yml`) → `MILANAC.ipa` ad hoc, circa 32 MB
+  (o non firmato senza i secret di firma), nella release *App per iPhone*. Come per l'APK le
+  estensioni di Agora restano fuori (`tools/ios/senza_estensioni_agora.py`). Per TestFlight c'è
+  Codemagic (`codemagic.yaml`).
 - **Mac**: workflow *Mac* (`.github/workflows/mac.yml`) → `MILANAC.dmg` firmato ad-hoc, come
   artifact `milanac-mac` e (da `main` o a mano) nella release *App per Mac*.
 - Guida completa per gli store: [`docs/PUBBLICAZIONE.md`](docs/PUBBLICAZIONE.md).

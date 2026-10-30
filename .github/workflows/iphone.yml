@@ -125,38 +125,8 @@ jobs:
             mkdir -p "$d" && cp "$RUNNER_TEMP/profilo.mobileprovision" "$d/$UUID.mobileprovision"
           done
 
-          # Permessi dell'app: solo quelli che il profilo concede (Push e Sign in with Apple
-          # vanno attivati sull'App ID; senza, la firma fallirebbe). L'accesso con Apple passa
-          # dal browser (Supabase), quindi senza il permesso funziona lo stesso.
-          ENT=ios/Runner/Runner.entitlements
-          for chiave in aps-environment com.apple.developer.applesignin; do
-            if ! leggi "Entitlements:$chiave" >/dev/null 2>&1; then
-              /usr/libexec/PlistBuddy -c "Delete :$chiave" "$ENT" 2>/dev/null || true
-              echo "::warning::Il profilo non ha $chiave: tolto dai permessi dell'app per questa build."
-            fi
-          done
-
-          # Firma manuale solo per l'app (non per i pacchetti di Swift e CocoaPods).
-          python3 - "$TEAM" "$NOME" <<'PY'
-          import re, sys
-          team, nome = sys.argv[1], sys.argv[2]
-          p = 'ios/Runner.xcodeproj/project.pbxproj'
-          s = open(p).read()
-          def firma(m):
-              blocco = m.group(0)
-              if 'PRODUCT_BUNDLE_IDENTIFIER = com.milanacproclub.milanac;' not in blocco:
-                  return blocco
-              blocco = re.sub(r'\n\s*(CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PROVISIONING_PROFILE_SPECIFIER|"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]"|CODE_SIGN_IDENTITY) = [^;]*;', '', blocco)
-              return blocco.replace('buildSettings = {', 'buildSettings = {\n'
-                  '\t\t\t\tCODE_SIGN_STYLE = Manual;\n'
-                  f'\t\t\t\tDEVELOPMENT_TEAM = {team};\n'
-                  f'\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "{nome}";\n'
-                  '\t\t\t\t"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";', 1)
-          s, n = re.subn(r'buildSettings = \{.*?\n\t\t\t\};', firma, s, flags=re.S)
-          open(p, 'w').write(s)
-          PY
-          grep -c "PROVISIONING_PROFILE_SPECIFIER" ios/Runner.xcodeproj/project.pbxproj
-
+          # L'archivio si fa senza firma (vedi "Archivio"): certificato e profilo li usa Xcode
+          # all'esportazione.
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -197,9 +167,20 @@ jobs:
           printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
           echo "firmato=true" >> "$GITHUB_OUTPUT"
 
-      # Archivio senza firma, poi Xcode firma all'esportazione: certificato di distribuzione
-      # gestito da Apple (nessuna chiave privata da conservare) e profilo Ad Hoc creato o
-      # aggiornato con tutti gli iPhone registrati.
+      # Archivio senza firma (la mette Xcode all'esportazione, in tutti e due i modi), senza le
+      # estensioni facoltative di Agora come l'APK: la stanza vocale è solo audio e l'IPA passa
+      # da circa 58 a 32 MB, sotto i 50 MB di Diawi gratuito (tools/ios/senza_estensioni_agora.py).
+      # Le notifiche push su iPhone, quando ci sarà Firebase, chiederanno anche il permesso
+      # aps-environment nella firma: l'archivio non firmato non lo porta.
+      - name: Archivio
+        if: steps.firma.outputs.firmato == 'true' || steps.api.outputs.firmato == 'true'
+        run: |
+          xcodebuild -version
+          flutter build ipa --release --no-codesign --dart-define-from-file=env/prod.json
+          python3 tools/ios/senza_estensioni_agora.py build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+
+      # Certificato di distribuzione gestito da Apple (nessuna chiave privata da conservare) e
+      # profilo Ad Hoc creato o aggiornato da Xcode con tutti gli iPhone registrati.
       - name: IPA firmato con la chiave API (ad hoc)
         if: steps.api.outputs.firmato == 'true'
         env:
@@ -207,8 +188,6 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           TEAM: ${{ steps.api.outputs.team }}
         run: |
-          xcodebuild -version
-          flutter build ipa --release --no-codesign --dart-define-from-file=env/prod.json
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -236,9 +215,10 @@ jobs:
       - name: IPA firmato (ad hoc)
         if: steps.firma.outputs.firmato == 'true'
         run: |
-          xcodebuild -version
-          flutter build ipa --release --dart-define-from-file=env/prod.json \
-            --export-options-plist="$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath build/ios/ipa
           cp build/ios/ipa/*.ipa MILANAC.ipa
           echo "IPA=MILANAC.ipa" >> "$GITHUB_ENV"
 
@@ -248,14 +228,18 @@ jobs:
         run: |
           xcodebuild -version
           flutter build ios --release --no-codesign --dart-define-from-file=env/prod.json
+          python3 tools/ios/senza_estensioni_agora.py build/ios/iphoneos/Runner.app
           rm -rf Payload && mkdir Payload
           ditto build/ios/iphoneos/Runner.app Payload/Runner.app
           ditto -c -k --sequesterRsrc --keepParent Payload MILANAC-non-firmato.ipa
           echo "IPA=MILANAC-non-firmato.ipa" >> "$GITHUB_ENV"
 
       # Controllo: dentro c'è l'app giusta (identificativo e versione) e, se firmata, con il
-      # profilo e i dispositivi.
+      # profilo e i dispositivi: tutti quelli registrati sull'account, altrimenti gli ultimi
+      # aggiunti non la installerebbero.
       - name: Verifica l'IPA
+        env:
+          REGISTRATI: ${{ steps.api.outputs.dispositivi }}
         run: |
           rm -rf verifica && mkdir verifica && cd verifica && unzip -q "../$IPA"
           APP=$(ls -d Payload/*.app)
@@ -268,10 +252,18 @@ jobs:
             security cms -D -i "$APP/embedded.mobileprovision" > profilo.plist
             N=$(/usr/libexec/PlistBuddy -c "Print :ProvisionedDevices" profilo.plist | grep -c '^ ')
             echo "Firmato ad hoc con il profilo \"$(/usr/libexec/PlistBuddy -c "Print :Name" profilo.plist)\" per $N iPhone."
+            if [ -n "$REGISTRATI" ] && [ "$N" -lt "$REGISTRATI" ]; then
+              echo "::error::Il profilo comprende $N iPhone ma sull'account ne sono registrati $REGISTRATI: gli ultimi aggiunti non potrebbero installare l'app."
+              exit 1
+            fi
             echo "DISPOSITIVI=$N" >> "$GITHUB_ENV"
           fi
-          echo "$IPA: $ID $VER, $(du -m "../$IPA" | cut -f1) MB"
-          echo "- $IPA: $(du -m "../$IPA" | cut -f1) MB" >> "$GITHUB_STEP_SUMMARY"
+          MB=$(awk "BEGIN { printf \"%.1f\", $(stat -f%z "../$IPA") / 1000000 }")
+          echo "$IPA: $ID $VER, $MB MB"
+          echo "- $IPA: $MB MB" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$(stat -f%z "../$IPA")" -gt 50000000 ]; then
+            echo "::warning::$IPA pesa $MB MB: Diawi gratuito accetta fino a 50 MB."
+          fi
 
       - uses: actions/upload-artifact@v4
         with:

@@ -163,9 +163,12 @@ registrati.
 4. GitHub → *Actions → iPhone → Run workflow*: nella release
    [App per iPhone](https://github.com/lukerondo/milanac-app/releases/tag/iphone-di-prova) esce
    `MILANAC.ipa`, firmato per tutti gli iPhone registrati.
-5. Carica `MILANAC.ipa` su Diawi e manda il link: si apre da **Safari** sull'iPhone → *Installa*.
+5. Carica `MILANAC.ipa` su Diawi (circa 32 MB: l'account gratuito accetta fino a 50 MB) e manda il
+   link: si apre da **Safari** sull'iPhone → *Installa*. Valgono anche gli iPhone già registrati
+   sull'account da prima (developer.apple.com → *Devices*).
 6. **Nuovo membro**: aggiungi la sua riga al secret `IOS_DISPOSITIVI`, rilancia il workflow e ricarica
-   l'IPA su Diawi.
+   l'IPA su Diawi. Il workflow si ferma con un errore se il profilo non comprende tutti gli iPhone
+   registrati.
 
 **In alternativa, certificato e profilo fatti a mano** su developer.apple.com (*Devices*, certificato
 **Apple Distribution** esportato in `.p12` dal Portachiavi, profilo **Ad Hoc** con tutti i dispositivi)
