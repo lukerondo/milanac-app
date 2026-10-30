@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/clock.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/teams.dart';
@@ -393,7 +394,7 @@ abstract class ChatRepository {
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   final repo = AppConfig.isDemo
-      ? DemoChatRepository()
+      ? DemoChatRepository(clock: ref.read(clockProvider))
       : _SupabaseChatRepository(ref);
   ref.onDispose(repo.dispose);
   return repo;
@@ -848,9 +849,10 @@ class _SupabaseChatRepository extends ChatRepository {
 /// canale riceve inserimenti e modifiche ma non le eliminazioni, che arrivano a parte
 /// da [watchDeletions]; il database rifiuta la risposta a un messaggio che non c'è più.
 class DemoChatRepository extends ChatRepository {
-  /// [messages] al posto dei messaggi di esempio (per i test).
-  DemoChatRepository({List<ChatMessage>? messages}) {
-    final now = DateTime.now();
+  /// [messages] al posto dei messaggi di esempio (per i test). Le ore vengono da
+  /// [clock], l'orologio dell'app (nei test un orario fisso).
+  DemoChatRepository({List<ChatMessage>? messages, this.clock = DateTime.now}) {
+    final now = clock();
     if (messages != null) {
       _messages.addAll(messages);
       return;
@@ -971,6 +973,7 @@ class DemoChatRepository extends ChatRepository {
     ),
   ];
 
+  final DateTime Function() clock;
   final _messages = <ChatMessage>[];
   final _reads = <String, DateTime>{};
   final _muted = <String>{};
@@ -1175,7 +1178,7 @@ class DemoChatRepository extends ChatRepository {
       durationS: audio == null && replay == null ? null : durationS,
       replyTo: replyTo,
       meta: meta ?? const {},
-      createdAt: DateTime.now(),
+      createdAt: clock(),
     );
     _saved(m);
     return m;
@@ -1186,7 +1189,7 @@ class DemoChatRepository extends ChatRepository {
 
   @override
   Future<void> markRead(String channelId, {DateTime? until}) async {
-    final at = until ?? DateTime.now();
+    final at = until ?? clock();
     final before = _reads[channelId];
     // Come mark_channel_read: mai all'indietro.
     if (before == null || at.isAfter(before)) _reads[channelId] = at;

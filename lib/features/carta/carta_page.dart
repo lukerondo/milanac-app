@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/local_flags.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
@@ -26,11 +27,13 @@ import '../rosa/rosa_repository.dart';
 import '../traguardi/achievements_view.dart';
 import '../walkout/celebrations.dart';
 import '../walkout/walkout_page.dart';
+import 'archetypes.dart';
 import 'card_colors.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
 import 'live_card.dart';
 import 'mini_card.dart' show cardHeroTag;
+import 'playstyle_ui.dart';
 
 /// Statistiche della carta di un membro (presenze degli ultimi 60 giorni e partite).
 final cardStatsProvider = Provider.family<CardStats?, String>((ref, id) {
@@ -277,13 +280,17 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
               ],
               _InfoCard(member: member),
               const SizedBox(height: 14),
+              ArchetypeCard(
+                playStyle: member.playStyle,
+                codes: member.playStyles,
+              ),
               _ActionsCard(
                 actions: [
                   if (isMine || isDirettivo)
                     (
                       Icons.edit_rounded,
                       isMine ? 'Modifica la mia carta' : 'Modifica carta',
-                      'Ruolo, numero e stile di gioco',
+                      'Ruolo, numero, archetipo e PlayStyle',
                       () => showCardEditor(context, member),
                     ),
                   (
@@ -534,18 +541,6 @@ class _StatsSection extends StatelessWidget {
   }
 }
 
-/// Stili di gioco proposti (si può scrivere anche altro).
-const playStyleSuggestions = [
-  'Finalizzatore',
-  'Regista',
-  'Box to box',
-  'Muro',
-  'Velocista',
-  'Fantasista',
-  'Mediano',
-  'Saracinesca',
-];
-
 Future<void> showCardEditor(BuildContext context, Member member) =>
     showModalBottomSheet(
       context: context,
@@ -570,7 +565,15 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
   );
   late String? _position = widget.member.fieldPosition;
   late GamePlatform? _platform = widget.member.platform;
+  late var _styles = [...widget.member.playStyles];
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // L'archetipo scelto si accende anche scrivendolo a mano.
+    _style.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
@@ -588,10 +591,12 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       shirtNumber: int.tryParse(_number.text.trim()),
       overall: _overall,
       playStyle: style.isEmpty ? null : style,
+      playStyles: _styles,
       platform: _platform,
     );
     try {
       final rootContext = Navigator.of(context, rootNavigator: true).context;
+      final messenger = ScaffoldMessenger.of(context);
       final before = widget.member.overall;
       final repo = ref.read(rosaRepositoryProvider);
       // L'overall lo decide il Direttivo: solo lui lo salva.
@@ -601,7 +606,18 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       } else {
         await repo.saveCard(updated);
       }
+      Haptics.confirm();
       if (mounted) Navigator.of(context).pop();
+      if (_styles.isNotEmpty && repo.playStylesMissing) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Carta salvata. I PlayStyle si vedranno quando il server del '
+              'club sarà aggiornato.',
+            ),
+          ),
+        );
+      }
       // Overall salito: walkout subito (e segnato come visto su questo telefono).
       if (before != null && _overall > before && rootContext.mounted) {
         final me = ref.read(profileProvider).value;
@@ -730,21 +746,54 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
               ],
             ),
             const SizedBox(height: 12),
+            Text('Archetipo', style: Theme.of(context).textTheme.titleSmall),
+            for (final area in ArchetypeArea.values) ...[
+              const SizedBox(height: 8),
+              Text(
+                area.label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: p.textMuted,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final a in archetypes.where((a) => a.area == area))
+                    ChoiceChip(
+                      avatar: Icon(a.icon, size: 18),
+                      label: Text(a.name),
+                      showCheckmark: false,
+                      selected: archetypeOf(_style.text)?.name == a.name,
+                      onSelected: (on) => _style.text = on ? a.name : '',
+                    ),
+                ],
+              ),
+            ],
+            if (archetypeOf(_style.text) case final a?)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  a.description,
+                  style: TextStyle(fontSize: 14, color: p.textSecondary),
+                ),
+              ),
+            const SizedBox(height: 8),
             TextField(
               controller: _style,
               maxLength: 24,
-              decoration: const InputDecoration(labelText: 'Stile di gioco'),
+              decoration: const InputDecoration(
+                labelText: 'Stile di gioco',
+                hintText: 'Un archetipo qui sopra, o scrivi il tuo',
+              ),
             ),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: [
-                for (final s in playStyleSuggestions)
-                  ActionChip(
-                    label: Text(s),
-                    onPressed: () => setState(() => _style.text = s),
-                  ),
-              ],
+            PlayStylePicker(
+              codes: _styles,
+              onChanged: (codes) => setState(() => _styles = codes),
             ),
             const SizedBox(height: 12),
             const Text('Piattaforma'),

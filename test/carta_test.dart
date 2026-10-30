@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/core/teams.dart';
 import 'package:milanac/features/carta/card_stats.dart';
+import 'package:milanac/features/carta/fut_card.dart';
 import 'package:milanac/features/carta/mini_card.dart';
 import 'package:milanac/features/carte/special_cards_repository.dart';
 import 'package:milanac/features/intro/intro_state.dart';
@@ -265,6 +266,7 @@ void main() {
       expect(cleared.overall, 86);
       expect(cleared.cardMap(), {
         'play_style': null,
+        'play_styles': const <String>[],
         'platform': null,
         'field_position': 'ATT',
         'shirt_number': null,
@@ -376,14 +378,18 @@ void main() {
     await tester.tap(find.text('Salva la carta'));
     await tester.pumpAndSettle();
 
-    // Lo stile scelto compare sulla carta, in cima al profilo.
+    // Lo stile scelto compare sulla carta, in cima al profilo (e sotto, con
+    // l'archetipo).
     await tester.scrollUntilVisible(
-      find.text('REGISTA'),
+      find.text('87'),
       -200,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('87'), findsOneWidget);
-    expect(find.text('REGISTA'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(FutCard), matching: find.text('REGISTA')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Carta e dati del membro: i campi lasciati vuoti si cancellano', (
@@ -413,6 +419,8 @@ void main() {
       find.widgetWithText(TextField, 'Stile di gioco'),
       '',
     );
+    // Il campo appena scritto torna in vista da solo: prima si aspetta.
+    await tester.pumpAndSettle();
     await tester.ensureVisible(
       find.widgetWithText(ChoiceChip, 'PlayStation 5'),
     );

@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/audio_focus.dart';
 import '../../core/auth/providers.dart';
+import '../../core/clock.dart';
 import '../../core/errors.dart';
 import '../../core/haptics.dart';
 import '../../core/push/push_service.dart';
@@ -1200,14 +1201,14 @@ class _ReadOnlyNote extends StatelessWidget {
 }
 
 /// Separatore per giorno: pillola al centro ("Oggi", "Ieri", "Lunedì 12 ottobre").
-class _DaySeparator extends StatelessWidget {
+class _DaySeparator extends ConsumerWidget {
   const _DaySeparator(this.day);
   final DateTime day;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final p = context.pal;
-    final now = DateTime.now();
+    final now = ref.watch(clockProvider)();
     final today = DateTime(now.year, now.month, now.day);
     final d = DateTime(day.year, day.month, day.day);
     final long = DateFormat(

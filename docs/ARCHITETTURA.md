@@ -166,6 +166,9 @@ accettano al primo accesso successivo.
     marcatori, mesi nel club, % vittorie), condivisione come immagine. Se il giocatore ha una
     carta speciale in corso, la carta mostrata è quella (colori nero/oro o blu elettrico,
     overall con il bonus) ovunque: carta, Rosa, mini carte del PDF, anello sul volto in chat.
+    Archetipo (uno dei 13 come in Pro Clubs, con icona e descrizione, o uno stile scritto a
+    mano) e PlayStyle (fino a 6, di cui 2 PlayStyle+ nei rombi d'oro sulla carta), scelti dal
+    giocatore o dal Direttivo e mostrati sotto la carta.
 14. **Tattiche & Build** – schemi del club con immagine e spiegazione (Direttivo) e la
     **lavagna tattica**: campo con i gettoni dei giocatori (dalla formazione della squadra,
     con numero e nome sulla carta; anche avversari e gettoni vuoti), pennello *Fuoco* (la
@@ -287,6 +290,10 @@ profile_private id(→ profiles), first_name, last_name, birth_year, birth_date,
 -- dalla migrazione 0027
 matches       + timeline (jsonb: [{minute 1-130, side us|them, scorer?}], mai più gol del
               risultato; l'app salva senza se il server non è ancora aggiornato)
+-- dalla migrazione 0028
+profiles      + play_styles (text[]: codici dei PlayStyle, "+" in fondo per i PlayStyle+;
+              al massimo 6, di cui 2 "+"). L'archetipo resta play_style (testo libero, con
+              i 13 archetipi proposti nell'app)
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),

@@ -6,9 +6,11 @@ import '../../shared/member_photo.dart' show flagEmoji;
 import '../carte/special_cards_repository.dart';
 import '../rosa/member.dart';
 import '../risultati/result_ui.dart' show ClubCrest;
+import 'archetypes.dart';
 import 'card_colors.dart';
 import 'card_stats.dart';
 import 'mini_card.dart' show CardPortrait;
+import 'playstyle_ui.dart';
 
 export '../carte/special_cards_repository.dart' show CardSpecial;
 
@@ -88,6 +90,12 @@ class FutCard extends StatelessWidget {
         if (member.teams.contains(t)) t.short,
     ].join(' · ');
     final style = member.playStyle?.trim() ?? '';
+    final archetype = archetypeOf(style);
+    // Sulla carta i PlayStyle+ (al massimo due), come in FC; gli altri nel profilo.
+    final plus = [
+      for (final c in chosenPlayStyles(member.playStyles))
+        if (c.plus) c,
+    ];
     final kind = switch (special) {
       CardSpecial.neroOro => 'carta nero e oro',
       CardSpecial.blu => 'carta blu elettrico',
@@ -100,6 +108,8 @@ class FutCard extends StatelessWidget {
         ?overall?.toString(),
         ?member.fieldPosition,
         if (style.isNotEmpty) style,
+        if (plus.isNotEmpty)
+          'PlayStyle+: ${plus.map((c) => c.style.name).join(', ')}',
         if (info.isNotEmpty) info,
       ].join(', '),
       excludeSemantics: true,
@@ -180,6 +190,24 @@ class FutCard extends StatelessWidget {
                     top: 16,
                     child: const ClubCrest(size: 40),
                   ),
+                  // I PlayStyle+ sotto lo stemma, nei rombi d'oro.
+                  if (plus.isNotEmpty)
+                    Positioned(
+                      right: 15,
+                      top: 64,
+                      child: Column(
+                        children: [
+                          for (final c in plus) ...[
+                            PlayStyleBadge(
+                              style: c.style,
+                              plus: true,
+                              size: 30,
+                            ),
+                            const SizedBox(height: 4),
+                          ],
+                        ],
+                      ),
+                    ),
                   // Volto.
                   Positioned(
                     left: 0,
@@ -214,16 +242,31 @@ class FutCard extends StatelessWidget {
                           ),
                         ),
                         if (style.isNotEmpty)
-                          Text(
-                            style.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.6,
-                              height: 1.3,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (archetype != null) ...[
+                                Icon(
+                                  archetype.icon,
+                                  size: 13,
+                                  color: look.text,
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              Flexible(
+                                child: Text(
+                                  style.toUpperCase(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 1.6,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         const SizedBox(height: 4),
                         if (info.isNotEmpty)

@@ -1784,3 +1784,32 @@ do $$ begin
                      where id <> '00000000-0000-0000-0000-0000000000bd' and timeline <> '[]'::jsonb),
     'le partite di prima restano senza minuti';
 end $$;
+
+-- ================================================================ archetipi e PlayStyle (0028)
+-- Il giocatore sceglie i suoi PlayStyle (al massimo 6, di cui 2 "+", senza doppioni).
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+update profiles set play_style = 'Finalizzatore',
+                    play_styles = '{tiro_potente+,scatto,primo_controllo}'
+  where id = '00000000-0000-0000-0000-0000000000e1';
+select pg_temp.expect_error(format(
+  $q$update profiles set play_styles = %L where id = '00000000-0000-0000-0000-0000000000e1'$q$, s),
+  'profiles_play_styles_valid')
+from unnest(array[
+  '{a1,b2,c3,d4,e5,f6,g7}',                       -- più di 6 (e codici non validi)
+  '{uno,due,tre,quattro,cinque,sei,sette}',       -- più di 6
+  '{tiro_potente+,scatto+,rapido+}',              -- più di 2 "+"
+  '{scatto,scatto+}',                             -- doppione
+  '{Tiro}',                                       -- maiuscole
+  '{tiro potente}',                               -- spazio
+  '{x}'                                           -- troppo corto
+]) s;
+-- Gli altri non cambiano i PlayStyle di un compagno (la riga non è sua).
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a9');
+update profiles set play_styles = '{}' where id = '00000000-0000-0000-0000-0000000000e1';
+reset role;
+do $$ begin
+  assert (select play_styles from profiles where id = '00000000-0000-0000-0000-0000000000e1')
+         = '{tiro_potente+,scatto,primo_controllo}', 'PlayStyle salvati dal giocatore';
+  assert (select count(*) from profiles where play_styles is null) = 0, 'mai null';
+end $$;

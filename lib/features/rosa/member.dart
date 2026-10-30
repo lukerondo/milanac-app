@@ -25,6 +25,7 @@ class Member {
     this.teams = const {Team.milanac},
     this.overall,
     this.playStyle,
+    this.playStyles = const [],
     this.platform,
     this.avatarPath,
     this.birthDate,
@@ -58,10 +59,14 @@ class Member {
   /// Squadre in cui gioca: le sceglie alla registrazione, le cambia il Direttivo.
   final Set<Team> teams;
 
-  /// Carta FUT: overall (40–99) deciso dal Direttivo, stile di gioco e piattaforma.
+  /// Carta FUT: overall (40–99) deciso dal Direttivo, stile di gioco (l'archetipo) e
+  /// piattaforma.
   final int? overall;
   final String? playStyle;
   final GamePlatform? platform;
+
+  /// PlayStyle scelti (codici, "+" in fondo per i PlayStyle+): vedi `archetypes.dart`.
+  final List<String> playStyles;
 
   /// Dati del profilo (Impostazioni): foto caricata, nascita, città, nazionalità, piede.
   final String? avatarPath;
@@ -129,6 +134,7 @@ class Member {
     Set<Team>? teams,
     int? overall,
     Object? playStyle = _same,
+    List<String>? playStyles,
     Object? platform = _same,
     Face? face,
     String? motto,
@@ -158,6 +164,7 @@ class Member {
     playStyle: identical(playStyle, _same)
         ? this.playStyle
         : playStyle as String?,
+    playStyles: playStyles ?? this.playStyles,
     platform: identical(platform, _same)
         ? this.platform
         : platform as GamePlatform?,
@@ -203,6 +210,11 @@ class Member {
     teams: Team.parseSet(m['teams']),
     overall: (m['overall'] as num?)?.toInt(),
     playStyle: m['play_style'] as String?,
+    // Prima della migrazione 0028 la colonna non c'è: nessun PlayStyle.
+    playStyles: [
+      for (final s in (m['play_styles'] as List?) ?? const [])
+        if (s is String) s,
+    ],
     platform: GamePlatform.values.asNameMap()[m['platform']],
     avatarPath: m['avatar_path'] as String?,
     birthDate: m['birth_date'] == null
@@ -248,6 +260,7 @@ class Member {
     teams: teams,
     overall: overall,
     playStyle: playStyle,
+    playStyles: playStyles,
     platform: platform,
     avatarPath: avatarPath ?? this.avatarPath,
     birthDate: birthDate,
@@ -305,6 +318,7 @@ class Member {
   /// Campi della carta modificabili anche dal giocatore (l'overall no: lo decide il Direttivo).
   Map<String, dynamic> cardMap() => {
     'play_style': playStyle,
+    'play_styles': playStyles,
     'platform': platform?.name,
     'field_position': fieldPosition,
     'shirt_number': shirtNumber,

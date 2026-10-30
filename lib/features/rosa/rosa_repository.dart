@@ -22,6 +22,10 @@ abstract class RosaRepository {
   /// Aggiorna solo i campi della carta (anche il giocatore sul proprio profilo).
   Future<void> saveCard(Member member);
 
+  /// Il server non ha ancora i PlayStyle (migrazione 0028): le carte si salvano senza.
+  /// Diventa vero al primo salvataggio rifiutato per questo.
+  bool get playStylesMissing;
+
   /// Aggiorna i dati personali dalle Impostazioni (nome, gamertag, nascita...).
   Future<void> saveProfile(Member member);
 
@@ -33,6 +37,28 @@ abstract class RosaRepository {
 
   /// Toglie la foto del profilo di un membro (moderazione del Direttivo).
   Future<void> removePhoto(Member member);
+}
+
+/// Aggiorna un profilo con [update]. Un database prima della 0028 non ha la colonna dei
+/// PlayStyle (PostgREST risponde PGRST204): si riscrive senza e il resto si salva; con
+/// [skip] non la si manda nemmeno. Restituisce true se la colonna manca.
+Future<bool> updateWithoutMissing(
+  Map<String, dynamic> fields,
+  Future<void> Function(Map<String, dynamic> fields) update, {
+  bool skip = false,
+}) async {
+  if (skip) {
+    await update({...fields}..remove('play_styles'));
+    return true;
+  }
+  try {
+    await update(fields);
+    return false;
+  } on PostgrestException catch (e) {
+    if (e.code != 'PGRST204' || !fields.containsKey('play_styles')) rethrow;
+    await update({...fields}..remove('play_styles'));
+    return true;
+  }
 }
 
 /// Una funzione nuova del database non c'è ancora (migrazione non applicata).
@@ -90,22 +116,24 @@ class _SupabaseRosaRepository implements RosaRepository {
   }
 
   @override
-  Future<void> save(Member m) async {
-    // Nota: le query Supabase partono solo quando vengono attese (await).
-    await _ref
-        .read(supabaseProvider)
-        .from('profiles')
-        .update(m.toUpdateMap())
-        .eq('id', m.id);
-  }
+  Future<void> save(Member m) => _update(m.id, m.toUpdateMap());
 
   @override
-  Future<void> saveCard(Member m) async {
-    await _ref
-        .read(supabaseProvider)
-        .from('profiles')
-        .update(m.cardMap())
-        .eq('id', m.id);
+  Future<void> saveCard(Member m) => _update(m.id, m.cardMap());
+
+  @override
+  bool playStylesMissing = false;
+
+  Future<void> _update(String id, Map<String, dynamic> fields) async {
+    // Nota: le query Supabase partono solo quando vengono attese (await).
+    final profiles = _ref.read(supabaseProvider).from('profiles');
+    if (await updateWithoutMissing(
+      fields,
+      (f) => profiles.update(f).eq('id', id),
+      skip: playStylesMissing,
+    )) {
+      playStylesMissing = true;
+    }
   }
 
   @override
@@ -223,6 +251,12 @@ class DemoRosaRepository implements RosaRepository {
       joinedAt: DateTime(2025, 2, 3),
       overall: 86,
       playStyle: 'Finalizzatore',
+      playStyles: const [
+        'tiro_potente+',
+        'colpo_di_testa+',
+        'scatto',
+        'primo_controllo',
+      ],
       platform: GamePlatform.ps5,
       face: const Face(
         skin: 1,
@@ -407,6 +441,9 @@ class DemoRosaRepository implements RosaRepository {
 
   @override
   Future<void> saveCard(Member m) => save(m);
+
+  @override
+  bool get playStylesMissing => false;
 
   /// Come `saveProfile` sul server: i dati anagrafici presenti in [m] sostituiscono
   /// quelli salvati, quelli che mancano restano.

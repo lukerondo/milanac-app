@@ -14,6 +14,7 @@ import 'package:milanac/core/appearance.dart';
 import 'package:milanac/core/audio_focus.dart';
 import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/core/auth/providers.dart';
+import 'package:milanac/core/clock.dart';
 import 'package:milanac/core/push/push_service.dart';
 import 'package:milanac/core/router.dart';
 import 'package:milanac/core/theme.dart';
@@ -31,6 +32,7 @@ import 'package:milanac/shared/gold_loader.dart';
 import 'package:milanac/shared/link_text.dart';
 
 import 'helpers.dart';
+import 'home_test.dart' show todayAt;
 
 /// Registratore finto: il test decide quando parte e se c'è il permesso.
 class FakeVoiceRecorder implements VoiceRecorder {
@@ -318,6 +320,8 @@ Future<ProviderContainer> startChat(
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
     overrides: [
+      // Le 20 di oggi: i messaggi di esempio (di poche ore prima) sono sempre di oggi.
+      clockProvider.overrideWithValue(() => todayAt(20)),
       if (repo != null) chatRepositoryProvider.overrideWithValue(repo),
       voiceRecorderFactoryProvider.overrideWithValue(
         () => recorder ?? FakeVoiceRecorder(),
