@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config.dart';
@@ -41,6 +43,11 @@ final voiceEngineFactoryProvider = Provider<VoiceEngine Function()>(
       ? () => DemoVoiceEngine(speakingUid: agoraUidFor('p2'))
       : AgoraVoiceEngine.new,
 );
+
+/// Vivavoce e auricolare ci sono solo sul telefono: sul Mac l'audio esce da dove
+/// dice il sistema e Agora non accetta questi comandi (all'ingresso un errore
+/// farebbe fallire la stanza).
+bool get voiceHasSpeakerphone => defaultTargetPlatform != TargetPlatform.macOS;
 
 /// Rinnovo del biglietto della stanza: chiede quello nuovo con [refresh] e lo passa
 /// ad Agora con [apply]. Un errore di rete (o del server) non chiude la chiamata: si
@@ -169,8 +176,10 @@ class AgoraVoiceEngine implements VoiceEngine {
         reportVad: true,
       );
       _checkOpen();
-      await engine.setDefaultAudioRouteToSpeakerphone(true);
-      _checkOpen();
+      if (voiceHasSpeakerphone) {
+        await engine.setDefaultAudioRouteToSpeakerphone(true);
+        _checkOpen();
+      }
       await engine.joinChannel(
         token: ticket.token,
         channelId: ticket.channel,
@@ -262,8 +271,9 @@ class AgoraVoiceEngine implements VoiceEngine {
       _engine?.muteLocalAudioStream(muted);
 
   @override
-  Future<void> setSpeakerphone(bool on) async =>
-      _engine?.setEnableSpeakerphone(on);
+  Future<void> setSpeakerphone(bool on) async {
+    if (voiceHasSpeakerphone) await _engine?.setEnableSpeakerphone(on);
+  }
 
   @override
   Future<void> dispose() => _disposed ??= _release();

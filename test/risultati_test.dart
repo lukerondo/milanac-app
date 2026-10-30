@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/italian_time.dart';
 import 'package:milanac/core/router.dart';
 import 'package:milanac/features/intro/intro_state.dart';
+import 'package:milanac/features/risultati/clip_service.dart';
 import 'package:milanac/features/risultati/match.dart';
 import 'package:milanac/features/risultati/match_detail_page.dart';
 import 'package:milanac/features/risultati/match_editor.dart';
@@ -200,6 +202,15 @@ void main() {
     expect(resultError(0, 0), isNull);
     expect(resultError(2, null), contains('entrambi i punteggi'));
     expect(resultError(null, 0), contains('entrambi i punteggi'));
+  });
+
+  test('Fuori da Android e iOS la foto scelta è il file originale: dopo il '
+      'caricamento resta dov\'è', () async {
+    final dir = await Directory.systemTemp.createTemp('foto_scelta');
+    addTearDown(() => dir.delete(recursive: true));
+    final photo = File('${dir.path}/foto.jpg')..writeAsBytesSync([1, 2, 3]);
+    await ClipService.discard(photo.path);
+    expect(photo.existsSync(), isTrue);
   });
 
   testWidgets('Dettaglio partita: spinner finché le partite non arrivano, '

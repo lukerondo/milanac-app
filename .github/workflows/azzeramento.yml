@@ -1,0 +1,74 @@
+name: Azzeramento
+
+# "Si riparte da zero", una volta sola e solo a mano: cancella account e contenuti dei membri
+# (tools/db/azzeramento/azzera.sql, con i blocchi che il club ha deciso di tenere già tolti)
+# e poi i loro file nello Storage (svuota_storage.py).
+# La prima volta lancialo in prova (dry_run, predefinito): conta righe e file che sparirebbero
+# senza cancellare nulla. I log sono pubblici: si stampano solo nomi di tabelle e numeri.
+# Secret: MILANACAPP (token personale sbp_...), SUPABASE_SECRET_KEY (sb_secret_...);
+# facoltativo NUOVA_PASSWORD_DIRETTIVO (nuova password del Direttivo, almeno 8 caratteri).
+on:
+  workflow_dispatch:
+    inputs:
+      conferma:
+        description: "Scrivi AZZERA (in maiuscolo) per confermare"
+        required: true
+        type: string
+      dry_run:
+        description: "Solo prova: conta righe e file senza cancellare nulla"
+        type: boolean
+        default: true
+
+# Stessa coda del workflow Database: mai insieme alle migrazioni.
+concurrency: database
+
+permissions:
+  contents: read
+
+jobs:
+  # Prima la prova completa sul PostgreSQL del runner: un errore qui ferma tutto.
+  prova:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - name: Conferma
+        env:
+          CONFERMA: ${{ inputs.conferma }}
+        run: |
+          if [ "$CONFERMA" != "AZZERA" ]; then
+            echo "::error::Per partire scrivi esattamente AZZERA nel campo di conferma"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - name: Avvia PostgreSQL
+        run: |
+          sudo systemctl start postgresql.service
+          cd / && sudo -u postgres psql -qc "alter user postgres password 'postgres'"
+      - run: tools/db/azzeramento/prova_locale.sh
+
+  azzera:
+    needs: prova
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CONFERMA: ${{ inputs.conferma }}
+      DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Database
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.MILANACAPP }}
+          NUOVA_PASSWORD_DIRETTIVO: ${{ secrets.NUOVA_PASSWORD_DIRETTIVO }}
+        run: |
+          export SUPABASE_PROJECT_REF=$(python3 -c "import json,re;print(re.search(r'https://([a-z0-9]+)\.supabase\.co', json.load(open('env/prod.json'))['SUPABASE_URL']).group(1))")
+          python3 tools/db/azzeramento/esegui.py
+      - name: Storage
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          export SUPABASE_URL=$(python3 -c "import json;print(json.load(open('env/prod.json'))['SUPABASE_URL'])")
+          python3 tools/db/azzeramento/svuota_storage.py

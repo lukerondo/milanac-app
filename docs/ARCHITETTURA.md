@@ -14,6 +14,7 @@ con un unico codice.
 | Notifiche push | **Firebase Cloud Messaging** (solo FCM) | 0 € |
 | Sito web | Flutter Web su **GitHub Pages** | 0 € |
 | Build iOS | **Codemagic** free / GitHub Actions macOS | 0 € |
+| App per Mac (di prova) | Flutter macOS, `.dmg` firmato ad-hoc dal workflow **Mac** (release `mac-di-prova`); niente notifiche push | 0 € |
 | Account store | Google Play + Apple Developer | già pagati |
 
 ### Pacchetti Flutter principali
@@ -105,9 +106,10 @@ accettano al primo accesso successivo.
 
 1. **Intro** – video MP4 incluso nell'app (il walkout della squadra, 20 s: striscioni in curva
    con gli slogan dei giocatori, uscita dagli spogliatoi, gol di Fabio ed esultanza; generato
-   con Seedance e montato con `tools/video/walkout/`), barra di
-   caricamento + stemma sovrapposti, "Salta" in alto.
-   Durante il video l'app carica sessione e dati. Tap per saltare.
+   con Seedance e montato con `tools/video/walkout/`) con i cori e lo speaker, barra di
+   caricamento + stemma sovrapposti, "Salta" in alto e accanto il pulsante dell'audio (spento
+   resta spento, salvato sul telefono; nel browser parte senza audio).
+   Durante il video l'app carica sessione e dati. Tap per saltare: l'audio si zittisce.
 2. **Home** – due riquadri. **Mondo Proclub**: ultimo video dei creator, avviso di
    aggiornamento FC 27 e della propria console, scorciatoie a video e notizie.
    **Presenze**: la serata di oggi della propria squadra (allenamento delle 21:30 o l'evento

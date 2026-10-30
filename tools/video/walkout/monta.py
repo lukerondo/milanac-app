@@ -26,8 +26,8 @@ plan = [
     (pngs('out/b1_immu', 20, 1), pngs('out/n_S2', 20, 2)),
     (pngs('out/b2_fabio', 20, 2), orig(72, 91)),
     (pngs('out/b3_chrys', 20, 1), orig(120, 139)),
-    (pngs('out/b4_martin', 20, 2), pngs('out/n_S8', 20, 1)),
-    (pngs('out/b5_zio', 20, 1), pngs('out/n_S9', 20, 1)),
+    (pngs('out/b4_martin', 20, 2), orig(166, 185)),
+    (pngs('out/b5_zio', 20, 1), orig(189, 208)),
     (pngs('out/b6_vicio', 20, 2), orig(211, 233)),
 ]
 flash_at = []  # (indice, intensità)

@@ -20,6 +20,8 @@ class FirebaseConfig {
     final (key, app) = switch (defaultTargetPlatform) {
       TargetPlatform.android => (_androidKey, _androidApp),
       TargetPlatform.iOS => (_iosKey, _iosApp),
+      // Mac compreso: niente push per ora (servono APNs e l'account sviluppatore
+      // Apple). Firebase non parte e il permesso delle notifiche non viene chiesto.
       _ => ('', ''),
     };
     if (key.isEmpty || app.isEmpty) return null;
