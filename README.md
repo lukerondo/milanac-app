@@ -52,12 +52,17 @@ flutter run -d chrome  # nel browser
 
 ## Video intro
 
-`assets/video/intro.mp4` è **"Lampi di leggende"**: le foto vere di Maldini, Pirlo, Seedorf,
-Shevchenko, Kaká, Pato, Ronaldinho e Ibrahimović con spinta lenta, nome in oro e lampi bianchi
-tra una e l'altra (15 s, verticale 720×1280, senza audio, circa 1 MB). Si rifà con
-`python3 tools/video/intro_leggende.py CARTELLA_FOTO` (ffmpeg e ImageMagick; le foto non
-stanno nel repository, i nomi dei file sono nello script). Per aggiungere una leggenda basta
-una riga nello script. Se il video manca, l'intro resta su sfondo nero.
+`assets/video/intro.mp4` è il **walkout della squadra** (20 s, verticale 720×1280, circa 3 MB,
+con l'audio che l'app tiene spento finché non lo si accende): sei striscioni dipinti a mano in
+curva (FORZA IMMU!, FABIO UNICO CAPITANO, CHRYS IL MOTORE, MARTIN UNO DI NOI, ZIO FOR
+PRESIDENT, VICIO NUMBER ONE), ognuno seguito dal suo giocatore che esce dagli spogliatoi, poi
+l'azione che parte da Immu, il gol di Fabio, l'esultanza sotto la curva e il fumo che sfuma nel
+nero; sotto, i cori della curva e lo speaker ("Ha segnato il Milan AC!"). Il video l'ha generato
+Seedance 2.5 su Leonardo con i prompt di `docs/PROMPT_GRAFICA.md`; gli striscioni erano vuoti e
+le scritte, i nomi sulle maglie corretti e il montaggio sono degli script in
+`tools/video/walkout/` (OpenCV + ffmpeg: `striscioni.py`, `nomi.py`, `monta.py`, lanciati da
+una cartella con il video in `in/` e i fotogrammi degli shot in `shots/`). La versione per i
+social (1080×1920) non sta nel repository. Se il video manca, l'intro resta su sfondo nero.
 
 ## Collegare Supabase (gratis)
 
