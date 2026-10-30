@@ -189,13 +189,22 @@ class _SupabaseRosaRepository implements RosaRepository {
           .from('profiles')
           .update({'avatar_path': path, 'face': null})
           .eq('id', memberId);
-    } catch (_) {
-      // Il profilo non punta alla foto nuova: il file non deve restare nel bucket.
-      localPhotos.remove(path);
-      try {
-        await client.storage.from(avatarsBucket).remove([path]);
-      } catch (_) {}
-      rethrow;
+    } catch (e) {
+      // Senza risposta (rete persa) il profilo potrebbe essere già aggiornato: si
+      // controlla. Il file si cancella solo se di sicuro il profilo non lo usa: meglio
+      // un file in più nel bucket che una carta che punta a una foto cancellata.
+      final saved = e is PostgrestException
+          ? null
+          : await _savedAvatar(memberId);
+      if (saved?.path != path) {
+        localPhotos.remove(path);
+        if (e is PostgrestException || saved != null) {
+          try {
+            await client.storage.from(avatarsBucket).remove([path]);
+          } catch (_) {}
+        }
+        rethrow;
+      }
     }
     await PhotoDiskCache.write(path, jpeg);
     if (previous != null) {
@@ -205,6 +214,21 @@ class _SupabaseRosaRepository implements RosaRepository {
       } catch (_) {}
     }
     return path;
+  }
+
+  /// La foto a cui punta ora il profilo; null se non si riesce a saperlo.
+  Future<({String? path})?> _savedAvatar(String memberId) async {
+    try {
+      final row = await _ref
+          .read(supabaseProvider)
+          .from('profiles')
+          .select('avatar_path')
+          .eq('id', memberId)
+          .single();
+      return (path: row['avatar_path'] as String?);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Elimina l'account di un membro con `delete_member_account` (migrazione 0026).

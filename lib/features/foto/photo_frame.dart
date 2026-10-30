@@ -201,10 +201,14 @@ class _PhotoFramePageState extends State<PhotoFramePage> {
     setState(() => _saving = true);
     try {
       final jpeg = await cropToJpeg(image, framing.source(frame));
-      // Solo se la pagina è ancora quella in cima: un secondo pop chiuderebbe quella
-      // sotto (Impostazioni, la carta, la registrazione).
-      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route == null || route.isCurrent) {
         Navigator.of(context).pop(jpeg);
+      } else if (route.isActive) {
+        // Nel frattempo si è aperto qualcos'altro sopra (il walkout di una carta
+        // speciale): un pop chiuderebbe quello, quindi si toglie proprio questa pagina.
+        Navigator.of(context).removeRoute(route, jpeg);
       }
     } catch (_) {
       if (!mounted) return;

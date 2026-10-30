@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -436,6 +437,60 @@ void main() {
     );
   });
 
+  testWidgets('se mentre prepara la foto si apre qualcosa sopra (il walkout), '
+      'la foto arriva lo stesso e la pagina si chiude', (tester) async {
+    final nav = GlobalKey<NavigatorState>();
+    Uint8List? result;
+    var done = false;
+    await tester.pumpWidget(
+      MaterialApp(navigatorKey: nav, home: const Scaffold()),
+    );
+    unawaited(
+      nav.currentState!
+          .push<Uint8List>(
+            MaterialPageRoute(
+              builder: (_) => PhotoFramePage(bytes: _photo(600, 800)),
+            ),
+          )
+          .then((r) {
+            result = r;
+            done = true;
+          }),
+    );
+    final framed = find.descendant(
+      of: find.byType(PhotoFramePage),
+      matching: find.byType(RawImage),
+    );
+    await tester.runAsync(() async {
+      await tester.pump();
+      for (var i = 0; i < 200 && framed.evaluate().isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+        await tester.pump();
+      }
+      await tester.tap(find.text('Usa questa foto'));
+      await tester.pump();
+      // Il walkout di una carta speciale si apre sopra.
+      unawaited(
+        nav.currentState!.push(
+          MaterialPageRoute(
+            builder: (_) => const Scaffold(body: Text('WALKOUT')),
+          ),
+        ),
+      );
+      for (var i = 0; i < 200 && !done; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+        await tester.pump();
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(img.decodeJpg(result!)!.width, 720);
+    // Il walkout resta aperto; sotto, la pagina della foto non c'è più.
+    expect(find.text('WALKOUT'), findsOneWidget);
+    nav.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(PhotoFramePage), findsNothing);
+  });
+
   group('Copia delle foto sul telefono', () {
     late Directory dir;
     setUp(() {
@@ -475,6 +530,30 @@ void main() {
       await PhotoDiskCache.write('c/foto_1.jpg', jpeg());
       await PhotoDiskCache.clear();
       expect(dir.existsSync(), isFalse);
+      dir.createSync();
+    });
+
+    test('una foto appena arrivata resta anche se la rosa non la ha ancora; '
+        'la pulizia non tocca le foto che si stanno scrivendo', () async {
+      List<String> names() =>
+          [for (final e in dir.listSync()) e.uri.pathSegments.last]..sort();
+      final bytes = jpeg();
+      rememberPhoto('d/foto_1.jpg', bytes);
+      await PhotoDiskCache.write('d/foto_1.jpg', bytes);
+      await PhotoDiskCache.write('e/foto_1.jpg', bytes);
+      await PhotoDiskCache.keepOnly({});
+      expect(names(), ['d_foto_1.jpg']);
+      // La rosa cambia proprio mentre si salva la foto nuova: resta sul telefono.
+      for (var i = 0; i < 40; i++) {
+        final path = 'f/foto_$i.jpg';
+        await Future.wait([
+          PhotoDiskCache.write(path, bytes),
+          PhotoDiskCache.keepOnly({path}),
+          PhotoDiskCache.keepOnly({path}),
+        ]);
+        expect(await PhotoDiskCache.read(path), bytes, reason: path);
+      }
+      await PhotoDiskCache.clear();
       dir.createSync();
     });
   });

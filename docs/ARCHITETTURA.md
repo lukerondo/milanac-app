@@ -153,7 +153,7 @@ accettano al primo accesso successivo.
 7. **Risultati** – partite (torneo/amichevole, avversario, punteggio, marcatori e, se il
    Direttivo li scrive, i minuti dei gol). La pagina della partita è come una diretta TV:
    tabellone con le caselle del punteggio e i marcatori con i minuti sotto ogni squadra,
-   cronaca dal calcio d'inizio al fischio finale (linea del tempo, gol con il volto del
+   cronaca dal calcio d'inizio al fischio finale (linea del tempo, gol con la foto del
    marcatore e il punteggio dopo ogni gol), foto, clip e video di YouTube in grande da
    scorrere, che si aprono a tutto schermo una dopo l'altra. Dal tasto di condivisione si
    apre l'anteprima della **grafica del risultato** (poster 1080×1350 nero oro con San Siro,
@@ -208,7 +208,7 @@ accettano al primo accesso successivo.
 15. **Chat** – canali Generale, Milan AC, Milan AC Futuro (visibili a chi ci gioca),
     Tattiche & Schemi, Comunicazioni (scrive solo il Direttivo: avvisi, formazioni, carte
     speciali), Sala Direttivo (riservato). In stile Telegram: bolle rosse per i propri
-    messaggi e grigie per gli altri (volto e nome), separatori per giorno, "Nuovi messaggi"
+    messaggi e grigie per gli altri (foto e nome), separatori per giorno, "Nuovi messaggi"
     dall'ultima lettura, risposta citata, menu a pressione lunga (rispondi, copia, elimina con
     conferma), **vocali** (tieni premuto il microfono, scorri a sinistra per annullare, max
     2 minuti, lettore con avanzamento), foto, link cliccabili, pulsante "torna in fondo".
@@ -220,7 +220,7 @@ accettano al primo accesso successivo.
     Play: si riproduce nell'app (audio più mosse, pochi KB, non è un video) e scade dopo 3
     giorni. Non letti, canali silenziabili, notifiche. **Stanza vocale** (Agora): le cuffie
     nella barra di ogni canale aprono la stanza a schermo intero (sempre scura): chi c'è
-    (volto, bordo e alone d'oro su chi parla, microfono barrato su chi è in muto, "In
+    (foto, bordo e alone d'oro su chi parla, microfono barrato su chi è in muto, "In
     ascolto"), *Entra* o *Apri la stanza*, microfono, vivavoce, *Esci*; la freccia giù la
     riduce a una striscia. Chi apre la stanza avvisa i membri del canale (la notifica apre la
     chat con la stanza già aperta); sotto la barra la card "Stanza vocale aperta · canale —

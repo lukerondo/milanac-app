@@ -113,13 +113,27 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
       if (path != null) {
         // Al massimo qualche secondo: senza rete si condivide con la sagoma.
         try {
-          await ref
+          final bytes = await ref
               .read(photoBytesProvider(path).future)
               .timeout(const Duration(seconds: 5));
+          if (bytes != null && mounted) {
+            // Anche decodificata: la stessa immagine (stessa misura) della carta.
+            final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2;
+            await precacheImage(
+              ResizeImage(
+                MemoryImage(bytes),
+                width: (FutCard.photoRect.width * dpr * 2).ceil(),
+              ),
+              context,
+            ).timeout(const Duration(seconds: 3));
+          }
         } catch (_) {}
+        if (!mounted) return;
         await WidgetsBinding.instance.endOfFrame;
         await Future<void>.delayed(const Duration(milliseconds: 120));
       }
+      // Pagina chiusa nel frattempo: niente da condividere (e nessun errore).
+      if (!mounted) return;
       final boundary =
           _cardKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: 3);

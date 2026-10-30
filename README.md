@@ -53,7 +53,7 @@ flutter run -d chrome  # nel browser
 ## Video intro
 
 `assets/video/intro.mp4` è il **walkout della squadra** (20 s, verticale 720×1280, circa 3 MB,
-con l'audio che l'app tiene spento finché non lo si accende): sei striscioni dipinti a mano in
+con l'audio, che nell'intro dell'app resta spento): sei striscioni dipinti a mano in
 curva (FORZA IMMU!, FABIO UNICO CAPITANO, CHRYS IL MOTORE, MARTIN UNO DI NOI, ZIO FOR
 PRESIDENT, VICIO NUMBER ONE), ognuno seguito dal suo giocatore che esce dagli spogliatoi, poi
 l'azione che parte da Immu, il gol di Fabio, l'esultanza sotto la curva e il fumo che sfuma nel

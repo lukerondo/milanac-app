@@ -68,11 +68,30 @@ class PhotoDiskCache {
       final owner = '${name.split('_').first}_';
       await for (final e in dir.list()) {
         final other = e.uri.pathSegments.last;
-        if (other.startsWith(owner) && other != name) await e.delete();
+        if (other.startsWith(owner) &&
+            other != name &&
+            !_writing.contains(other)) {
+          await _remove(e);
+        }
       }
       final tmp = File('${dir.path}/$name.tmp');
-      await tmp.writeAsBytes(bytes, flush: true);
-      await tmp.rename('${dir.path}/$name');
+      _writing.add('$name.tmp');
+      try {
+        await tmp.writeAsBytes(bytes, flush: true);
+        await tmp.rename('${dir.path}/$name');
+      } finally {
+        _writing.remove('$name.tmp');
+      }
+    } catch (_) {}
+  }
+
+  /// I file temporanei in scrittura adesso: la pulizia non li tocca.
+  static final _writing = <String>{};
+
+  /// Un file già sparito (tolto da un'altra pulizia) non ferma le altre.
+  static Future<void> _remove(FileSystemEntity e) async {
+    try {
+      await e.delete();
     } catch (_) {}
   }
 
@@ -85,22 +104,21 @@ class PhotoDiskCache {
   }
 
   /// Tiene solo le foto attuali dei membri della rosa: quelle tolte, sostituite o di
-  /// chi ha lasciato il club spariscono anche dal telefono (in memoria restano le foto
-  /// appena caricate, che la rosa non ha ancora).
+  /// chi ha lasciato il club spariscono anche dal telefono (restano le foto arrivate da
+  /// poco, che la rosa non ha ancora, e quelle che si stanno scrivendo).
   static Future<void> keepOnly(Set<String> current) async {
     final now = DateTime.now();
-    localPhotos.removeWhere(
-      (p, _) =>
-          !current.contains(p) &&
-          now.difference(_addedAt[p] ?? DateTime(2000)) >
-              const Duration(minutes: 2),
-    );
+    bool recent(String p) =>
+        now.difference(_addedAt[p] ?? DateTime(2000)) <=
+        const Duration(minutes: 2);
+    localPhotos.removeWhere((p, _) => !current.contains(p) && !recent(p));
     try {
       final dir = await directory();
       if (!await dir.exists()) return;
-      final keep = current.map(_name).toSet();
+      final keep = {...current, ..._addedAt.keys.where(recent)}.map(_name);
+      final names = {...keep, ..._writing};
       await for (final e in dir.list()) {
-        if (!keep.contains(e.uri.pathSegments.last)) await e.delete();
+        if (!names.contains(e.uri.pathSegments.last)) await _remove(e);
       }
     } catch (_) {}
   }
