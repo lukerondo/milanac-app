@@ -75,9 +75,10 @@ class ClipService {
   }
 
   /// Cancella la copia temporanea del video (o della foto) scelto: image_picker
-  /// la lascia nella cache dell'app e altrimenti resterebbe lì.
+  /// la lascia nella cache dell'app e altrimenti resterebbe lì. Sul Mac non c'è
+  /// copia: il percorso è il file originale dell'utente e non si tocca.
   static Future<void> discard(String path) async {
-    if (kIsWeb) return;
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS)) return;
     try {
       final f = File(path);
       if (await f.exists()) await f.delete();

@@ -107,6 +107,20 @@ e link nella tabella `news` e cancella quelle più vecchie di 60 giorni.
 - Prova manuale: Actions → *Notizie* → *Run workflow* (spunta "Prova senza salvare" per un test).
 - Aggiungere/togliere fonti: modifica `sources.json` (RSS o Atom; le fonti che non rispondono vengono saltate).
 
+## App per Mac
+
+Versione di prova per Mac (macOS 12 o successivo), ricompilata a ogni modifica di `main`:
+scarica `MILANAC.dmg` dalla release
+[App per Mac](https://github.com/lukerondo/milanac-app/releases/tag/mac-di-prova).
+
+1. Apri `MILANAC.dmg` e trascina **MILANAC** nella cartella **Applicazioni**.
+2. La prima volta: tasto destro (o ctrl-clic) su MILANAC in Applicazioni → **Apri** → **Apri**.
+   Il Mac chiede conferma perché l'app non è firmata con un account sviluppatore Apple.
+3. Su macOS 15 o successivo, se il Mac la blocca senza il pulsante *Apri*: **Impostazioni di
+   Sistema → Privacy e sicurezza** → in fondo alla pagina **Apri comunque**.
+
+Le notifiche push sul Mac per ora non ci sono; le clip highlights si caricano dal telefono.
+
 ## Build
 
 - **CI**: ad ogni push GitHub Actions esegue `flutter analyze`, `flutter test` e la prova delle
@@ -118,6 +132,8 @@ e link nella tabella `news` e cancella quelle più vecchie di 60 giorni.
   anche i processori a 32 bit. Le estensioni video di Agora restano fuori dal pacchetto.
 - **Rilascio Android (.aab firmato)**: Actions → *Rilascio Android*.
 - **iOS**: Codemagic (`codemagic.yaml`) → TestFlight.
+- **Mac**: workflow *Mac* (`.github/workflows/mac.yml`) → `MILANAC.dmg` firmato ad-hoc, come
+  artifact `milanac-mac` e (da `main` o a mano) nella release *App per Mac*.
 - Guida completa per gli store: [`docs/PUBBLICAZIONE.md`](docs/PUBBLICAZIONE.md).
 
 Identificativo app: `com.milanacproclub.milanac`

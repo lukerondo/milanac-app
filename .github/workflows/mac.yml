@@ -1,0 +1,135 @@
+name: Mac
+
+# App per Mac di prova: compila l'app macOS, la firma ad-hoc (senza account sviluppatore
+# Apple) e la mette in un .dmg. Da main o a mano la pubblica nella release "App per Mac"
+# (tag mac-di-prova), comoda da scaricare dal Mac. Sui rami claude/** parte solo se il push
+# tocca macos/, questo file o pubspec: il runner macOS consuma molti più minuti di Linux.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "claude/**"
+
+# Una build alla volta per ramo: due pubblicazioni insieme si sovrapporrebbero.
+concurrency: mac-${{ github.ref }}
+
+jobs:
+  # GitHub non permette filtri sui file diversi da ramo a ramo: lo decide questo controllo
+  # veloce su Linux. Da main e a mano si compila sempre.
+  modifiche:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      mac: ${{ steps.filtro.outputs.mac }}
+    steps:
+      - id: filtro
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != push ] || [ "$GITHUB_REF" = refs/heads/main ]; then
+            echo "mac=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Ramo appena creato: non c'è un commit di prima, si confronta con main.
+          case "$BEFORE" in ""|0000000000000000000000000000000000000000) BEFORE=main ;; esac
+          if ! FILES=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename'); then
+            echo "::warning::Confronto dei file non riuscito: si compila comunque."
+            echo "mac=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if grep -qE '^(macos/|\.github/workflows/mac\.yml$|pubspec\.)' <<< "$FILES"; then
+            echo "mac=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nessuna modifica per il Mac (macos/, mac.yml, pubspec): compilazione saltata."
+            echo "mac=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  app:
+    needs: modifiche
+    if: needs.modifiche.outputs.mac == 'true'
+    runs-on: macos-15
+    permissions:
+      contents: write
+    timeout-minutes: 60
+    env:
+      APP: build/macos/Build/Products/Release/MILANAC.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          # Versione fissa (la stessa usata in sviluppo): build riproducibili.
+          flutter-version: "3.47.7"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # Swift Package Manager scarica Firebase e Agora; CocoaPods installa solo video_compress,
+      # l'unico plugin senza Package.swift. App universale (Apple Silicon e Intel).
+      - name: App per Mac
+        run: |
+          xcodebuild -version
+          flutter build macos --release --dart-define-from-file=env/prod.json
+      # Firma ad-hoc ("-"): niente certificato Apple, il Mac la apre la prima volta con tasto
+      # destro → Apri. Prima tutto quello che sta dentro l'app, poi l'app con i suoi permessi
+      # (sandbox, rete, microfono, file scelti), che la firma --deep da sola toglierebbe.
+      - name: Firma ad-hoc
+        run: |
+          xattr -cr "$APP"
+          codesign --force --deep --sign - "$APP"
+          codesign --force --sign - --entitlements macos/Runner/Release.entitlements "$APP"
+      # Controllo: firma valida in ogni parte (altrimenti il Mac dice "app danneggiata") e
+      # permessi presenti (senza, microfono e rete non funzionano dentro la sandbox).
+      - name: Verifica la firma
+        run: |
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          PERMESSI=$(codesign -d --entitlements - "$APP" 2>/dev/null)
+          for p in app-sandbox network.client network.server device.audio-input files.user-selected.read-write; do
+            if ! grep -q "com.apple.security.$p" <<< "$PERMESSI"; then
+              echo "::error::Permesso com.apple.security.$p mancante nella firma dell'app"
+              exit 1
+            fi
+          done
+          echo "Firma ad-hoc valida, permessi presenti."
+      # Immagine disco con l'app e il collegamento ad Applicazioni (si trascina dentro).
+      # hdiutil sui runner a volte risponde "Resource busy": si riprova.
+      - name: DMG
+        run: |
+          mkdir dmg
+          ditto "$APP" dmg/MILANAC.app
+          ln -s /Applications dmg/Applications
+          codesign --verify --deep --strict dmg/MILANAC.app
+          n=0
+          until hdiutil create -volname MILANAC -srcfolder dmg -format UDZO -ov MILANAC.dmg; do
+            n=$((n + 1))
+            if [ "$n" -ge 3 ]; then exit 1; fi
+            echo "hdiutil non riuscito, riprovo tra 10 secondi."
+            sleep 10
+          done
+          hdiutil verify MILANAC.dmg
+      - name: Peso del DMG
+        run: |
+          echo "MILANAC.dmg: $(du -m MILANAC.dmg | cut -f1) MB"
+          echo "- MILANAC.dmg: $(du -m MILANAC.dmg | cut -f1) MB" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: milanac-mac
+          path: MILANAC.dmg
+      # Solo da main o a mano: le build dei rami claude/** restano come artifact, così la
+      # release non viene sostituita a ogni push (un download a metà sostituzione dà un DMG rotto).
+      - name: Pubblica nella release "App per Mac"
+        if: >
+          github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="App per Mac di prova – compilata il $(date -u '+%d/%m/%Y %H:%M') UTC dal commit ${GITHUB_SHA::7}. Scarica MILANAC.dmg, aprilo e trascina MILANAC in Applicazioni; la prima volta: tasto destro sull'app → Apri → Apri (su macOS 15 e successivi, se il Mac la blocca: Impostazioni di Sistema → Privacy e sicurezza → Apri comunque). Le notifiche push sul Mac per ora non ci sono."
+          if gh release view mac-di-prova >/dev/null 2>&1; then
+            gh release edit mac-di-prova --notes "$NOTES"
+          else
+            gh release create mac-di-prova --prerelease --title "App per Mac" --notes "$NOTES" --target "$GITHUB_SHA"
+          fi
+          gh release upload mac-di-prova MILANAC.dmg --clobber

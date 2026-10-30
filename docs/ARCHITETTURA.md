@@ -14,6 +14,7 @@ con un unico codice.
 | Notifiche push | **Firebase Cloud Messaging** (solo FCM) | 0 € |
 | Sito web | Flutter Web su **GitHub Pages** | 0 € |
 | Build iOS | **Codemagic** free / GitHub Actions macOS | 0 € |
+| App per Mac (di prova) | Flutter macOS, `.dmg` firmato ad-hoc dal workflow **Mac** (release `mac-di-prova`); niente notifiche push | 0 € |
 | Account store | Google Play + Apple Developer | già pagati |
 
 ### Pacchetti Flutter principali

@@ -270,6 +270,22 @@ void main() {
     );
   });
 
+  testWidgets('Sul Mac la stanza non ha il vivavoce (Agora non lo prevede)', (
+    tester,
+  ) async {
+    await startAppAt(tester, todayAt(17));
+    await goToPath(tester, '/chat/milanac');
+    await tester.tap(find.text('Entra'));
+    await tester.pumpAndSettle();
+    expect(find.byType(VoiceRoomPage), findsOneWidget);
+    expect(find.text('Microfono'), findsOneWidget);
+    expect(find.text('Vivavoce'), findsNothing);
+
+    await tester.tap(find.text('Esci'));
+    await tester.pumpAndSettle();
+    expect(find.byType(VoiceRoomPage), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
   testWidgets('Tema chiaro: card, pulsante, stanza e striscia senza errori', (
     tester,
   ) async {

@@ -15,6 +15,7 @@ import '../chat/voice_player.dart' show formatSeconds;
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'voice_call.dart';
+import 'voice_engine.dart' show voiceHasSpeakerphone;
 import 'voice_models.dart';
 import 'voice_repository.dart';
 
@@ -267,20 +268,24 @@ class _VoiceRoomView extends ConsumerWidget {
                                   onTap: notifier.toggleMute,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _RoundAction(
-                                  icon: call.speakerphone
-                                      ? Icons.volume_up_rounded
-                                      : Icons.hearing_rounded,
-                                  label: 'Vivavoce',
-                                  semanticLabel: call.speakerphone
-                                      ? 'Vivavoce acceso: passa all\'auricolare'
-                                      : 'Accendi il vivavoce',
-                                  active: call.speakerphone,
-                                  onTap: notifier.toggleSpeakerphone,
+                              // Sul Mac niente vivavoce: l'audio va dove
+                              // dice il sistema.
+                              if (voiceHasSpeakerphone) ...[
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _RoundAction(
+                                    icon: call.speakerphone
+                                        ? Icons.volume_up_rounded
+                                        : Icons.hearing_rounded,
+                                    label: 'Vivavoce',
+                                    semanticLabel: call.speakerphone
+                                        ? 'Vivavoce acceso: passa all\'auricolare'
+                                        : 'Accendi il vivavoce',
+                                    active: call.speakerphone,
+                                    onTap: notifier.toggleSpeakerphone,
+                                  ),
                                 ),
-                              ),
+                              ],
                               const SizedBox(width: 12),
                               Expanded(
                                 child: _RoundAction(
