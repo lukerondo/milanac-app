@@ -309,6 +309,8 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
   const official = msg.meta?.type === "announcement" || msg.meta?.type === "new_member";
   const text = msg.meta?.type === "replay"
     ? `🎬 Nuovo schema con audio${msg.meta?.title ? `: ${msg.meta.title}` : ""}`
+    : msg.meta?.type === "poll"
+    ? `📊 Sondaggio: ${msg.body?.trim() ?? ""}`
     : msg.body?.trim() || (msg.image_path ? "📷 Foto" : msg.audio_path ? "🎤 Messaggio vocale" : "");
   return (members ?? [])
     .filter((m) => m.id !== msg.author_id && !muted.has(m.id))

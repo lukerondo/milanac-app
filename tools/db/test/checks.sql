@@ -1834,3 +1834,130 @@ do $$ begin
   assert (select party_code from events where id = '00000000-0000-0000-0000-0000000000c9') = 'MILANAC21',
     'il codice resta quello del Direttivo';
 end $$;
+
+-- ================================================================ sondaggi in chat (0030)
+-- Tre giocatori: 5a1 e 5a2 nella squadra Milan AC, 5a3 solo nel Futuro.
+reset role;
+select pg_temp.as_user(null);
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000005a1', 'sondaggi1@example.com'),
+  ('00000000-0000-0000-0000-0000000005a2', 'sondaggi2@example.com'),
+  ('00000000-0000-0000-0000-0000000005a3', 'sondaggi3@example.com');
+update profiles set club_role = 'giocatore', active = true, teams = array['milanac']
+  where id in ('00000000-0000-0000-0000-0000000005a1', '00000000-0000-0000-0000-0000000005a2');
+update profiles set club_role = 'giocatore', active = true, teams = array['futuro']
+  where id = '00000000-0000-0000-0000-0000000005a3';
+do $$ begin
+  assert valid_poll_meta('{"type": "poll", "options": ["Martedì", "Mercoledì"]}'), 'due opzioni';
+  assert valid_poll_meta('{"type": "poll", "options": ["A", "B", "C"], "multiple": true}'), 'scelta multipla';
+  assert not valid_poll_meta('{"type": "poll", "options": ["Solo una"]}'), 'una opzione non basta';
+  assert not valid_poll_meta('{"type": "poll", "options": ["A", "a "]}'), 'opzioni uguali';
+  assert not valid_poll_meta('{"type": "poll", "options": ["A", "  "]}'), 'opzione vuota';
+  assert not valid_poll_meta('{"type": "poll", "options": ["A", 2]}'), 'opzione non testo';
+  assert not valid_poll_meta('{"type": "poll", "options": "A,B"}'), 'opzioni non in elenco';
+  assert not valid_poll_meta('{"type": "poll", "options": ["A", "B"], "multiple": "sì"}'), 'multiple non booleano';
+  assert not valid_poll_meta(jsonb_build_object('type', 'poll', 'options',
+    (select jsonb_agg(i::text) from generate_series(1, 11) i))), 'più di 10 opzioni';
+  assert not valid_poll_meta(jsonb_build_object('type', 'poll', 'options',
+    jsonb_build_array('A', repeat('x', 81)))), 'opzione oltre 80 caratteri';
+end $$;
+
+-- Il giocatore crea un sondaggio nel canale della sua squadra (anche "chiuso" nasce aperto).
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a1');
+insert into messages (id, channel_id, body, meta)
+select '00000000-0000-0000-0000-0000000005b1', id, 'Quando giochiamo l''amichevole?',
+       '{"type": "poll", "options": ["Martedì", "Mercoledì", "Giovedì"], "closed_at": "2026-01-01T00:00:00Z"}'
+from channels where slug = 'milanac';
+insert into messages (id, channel_id, body, meta)
+select '00000000-0000-0000-0000-0000000005b2', id, 'Che cosa portiamo al torneo?',
+       '{"type": "poll", "options": ["Maglie nuove", "Cuffie", "Pizza"], "multiple": true}'
+from channels where slug = 'milanac';
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body, meta) select id, 'Una sola?', '{"type": "poll", "options": ["Sì"]}' from channels where slug = 'milanac'$q$,
+  'messages_poll_valid');
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body, meta) select id, '  ', '{"type": "poll", "options": ["Sì", "No"]}' from channels where slug = 'milanac'$q$,
+  'violates check constraint');
+select pg_temp.expect_error(format(
+  $q$insert into messages (channel_id, body, meta) select id, %L, '{"type": "poll", "options": ["Sì", "No"]}' from channels where slug = 'milanac'$q$,
+  repeat('x', 301)), 'messages_poll_valid');
+select pg_temp.expect_error(
+  $q$insert into messages (channel_id, body, image_path, meta) select id, 'Con foto?', '00000000-0000-0000-0000-0000000005a1/x.jpg', '{"type": "poll", "options": ["Sì", "No"]}' from channels where slug = 'milanac'$q$,
+  'messages_poll_valid');
+do $$ begin
+  assert not (select meta ? 'closed_at' from messages where id = '00000000-0000-0000-0000-0000000005b1'),
+    'il sondaggio nasce aperto';
+end $$;
+
+-- Si vota (una opzione), si cambia idea, si ritira il voto; niente opzioni fuori elenco
+-- o doppie dove se ne sceglie una sola.
+select vote_poll('00000000-0000-0000-0000-0000000005b1', array[0]);
+select vote_poll('00000000-0000-0000-0000-0000000005b1', array[1]);
+select pg_temp.expect_error(
+  $q$select vote_poll('00000000-0000-0000-0000-0000000005b1', array[0, 2])$q$, 'una sola opzione');
+select pg_temp.expect_error(
+  $q$select vote_poll('00000000-0000-0000-0000-0000000005b1', array[3])$q$, 'Opzione non valida');
+select pg_temp.expect_error(
+  $q$select vote_poll('00000000-0000-0000-0000-0000000005b1', array[-1])$q$, 'Opzione non valida');
+select pg_temp.expect_error(
+  $q$select vote_poll('00000000-0000-0000-0000-0000000005b1', array[null]::int[])$q$, 'Opzione non valida');
+select vote_poll('00000000-0000-0000-0000-0000000005b2', array[2, 0, 2]);
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a2');
+select vote_poll('00000000-0000-0000-0000-0000000005b1', array[1]);
+select vote_poll('00000000-0000-0000-0000-0000000005b2', array[0]);
+select vote_poll('00000000-0000-0000-0000-0000000005b2', '{}');
+-- Niente scritture dirette sui voti, nemmeno a nome proprio.
+select pg_temp.expect_error(
+  $q$insert into poll_votes (message_id, user_id, options) values ('00000000-0000-0000-0000-0000000005b1', '00000000-0000-0000-0000-0000000005a2', '{2}')$q$,
+  'row-level security');
+do $$ begin
+  assert (select options from poll_votes where message_id = '00000000-0000-0000-0000-0000000005b1'
+          and user_id = '00000000-0000-0000-0000-0000000005a1') = '{1}', 'voto cambiato';
+  assert (select count(*) from poll_votes where message_id = '00000000-0000-0000-0000-0000000005b1'
+          and 1 = any(options)) = 2, 'due voti per mercoledì';
+  assert (select options from poll_votes where message_id = '00000000-0000-0000-0000-0000000005b2'
+          and user_id = '00000000-0000-0000-0000-0000000005a1') = '{0,2}', 'scelte multiple senza doppioni';
+  assert (select options from poll_votes where message_id = '00000000-0000-0000-0000-0000000005b2'
+          and user_id = '00000000-0000-0000-0000-0000000005a2') = '{}', 'voto ritirato';
+end $$;
+
+-- Chi è solo nel Futuro non vede né vota il sondaggio della prima squadra.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a3');
+select pg_temp.expect_error(
+  $q$select vote_poll('00000000-0000-0000-0000-0000000005b1', array[0])$q$, 'Sondaggio non trovato');
+select pg_temp.expect_error(
+  $q$select close_poll('00000000-0000-0000-0000-0000000005b1')$q$, 'Sondaggio non trovato');
+do $$ begin
+  assert (select count(*) from poll_votes) = 0, 'i voti di un canale non visibile restano nascosti';
+end $$;
+-- Un messaggio normale non è un sondaggio.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a1');
+insert into messages (id, channel_id, body)
+select '00000000-0000-0000-0000-0000000005b3', id, 'Messaggio normale' from channels where slug = 'milanac';
+select pg_temp.expect_error(
+  $q$select vote_poll('00000000-0000-0000-0000-0000000005b3', array[0])$q$, 'Sondaggio non trovato');
+
+-- Lo chiude chi l'ha creato (o il Direttivo), non un altro giocatore; chiuso, non si vota più.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a2');
+select pg_temp.expect_error(
+  $q$select close_poll('00000000-0000-0000-0000-0000000005b1')$q$, 'solo chi l''ha creato');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a1');
+do $$ begin
+  assert close_poll('00000000-0000-0000-0000-0000000005b1') ? 'closed_at', 'chiuso dall''autore';
+end $$;
+select pg_temp.expect_error(
+  $q$select vote_poll('00000000-0000-0000-0000-0000000005b1', array[0])$q$, 'chiuso');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert close_poll('00000000-0000-0000-0000-0000000005b2') ? 'closed_at', 'chiuso dal Direttivo';
+  assert (select count(*) from poll_votes where message_id = '00000000-0000-0000-0000-0000000005b1') = 2,
+    'il Direttivo vede i voti';
+end $$;
+-- Eliminato il sondaggio, spariscono anche i voti.
+delete from messages where id = '00000000-0000-0000-0000-0000000005b1';
+reset role;
+do $$ begin
+  assert (select count(*) from poll_votes where message_id = '00000000-0000-0000-0000-0000000005b1') = 0,
+    'voti eliminati con il sondaggio';
+end $$;

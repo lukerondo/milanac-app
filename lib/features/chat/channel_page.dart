@@ -34,6 +34,8 @@ import '../voce/voice_room_sheet.dart';
 import 'channel_messages.dart';
 import 'chat_repository.dart';
 import 'chat_widgets.dart';
+import 'poll.dart';
+import 'poll_widgets.dart';
 import 'voice_player.dart';
 import 'voice_recorder.dart';
 
@@ -322,6 +324,52 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
       ),
       channel,
     );
+  }
+
+  /// Il foglio "Nuovo sondaggio"; il sondaggio parte come un messaggio (subito nella
+  /// conversazione, "non inviato" se non parte).
+  Future<void> _createPoll() async {
+    final draft = await showPollComposer(context);
+    if (draft == null || !mounted) return;
+    final conversation = _conversation;
+    final channel = _channel;
+    Haptics.light();
+    _jumpToBottom();
+    _report(
+      await conversation.send(
+        body: draft.question,
+        meta: ChatPoll.meta(draft.options, multiple: draft.multiple),
+      ),
+      channel,
+    );
+  }
+
+  Future<void> _closePoll(ChatMessage m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Chiudere il sondaggio?'),
+        content: const Text('Nessuno potrà più votare. I risultati restano.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Chiudi'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final conversation = _conversation;
+    try {
+      conversation.updated(await ref.read(chatRepositoryProvider).closePoll(m));
+      Haptics.confirm();
+    } catch (e) {
+      _notice(friendlyError(e, action: 'Sondaggio non chiuso'));
+    }
   }
 
   Future<void> _retry(ChatMessage m) async {
@@ -700,6 +748,8 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                   m.createdAt.difference(older.createdAt).inMinutes < 5;
               final mine = m.authorId == me?.id;
               final replyTo = m.replyTo;
+              final openPoll =
+                  m.isPoll && !m.isLocal && !(ChatPoll.of(m)?.closed ?? true);
               return Column(
                 children: [
                   if (newDay) _DaySeparator(m.createdAt),
@@ -727,6 +777,10 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                               ? () => setState(() => _replyTo = m)
                               : null,
                           onDelete: () => _confirmDelete(m),
+                          onClosePoll:
+                              openPoll && (mine || (me?.isDirettivo ?? false))
+                              ? () => _closePoll(m)
+                              : null,
                           onRetry: () => _retry(m),
                           onDiscard: () =>
                               ref.read(provider.notifier).discard(m.id),
@@ -814,9 +868,10 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (!_recording)
+                  if (!_recording) ...[
                     IconButton(
                       tooltip: 'Aggiungi una foto',
+                      visualDensity: VisualDensity.compact,
                       onPressed: _pickImage,
                       icon: Icon(
                         Icons.image_rounded,
@@ -824,6 +879,17 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                         color: p.textSecondary,
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Crea un sondaggio',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _createPoll,
+                      icon: Icon(
+                        Icons.poll_rounded,
+                        size: 22,
+                        color: p.textSecondary,
+                      ),
+                    ),
+                  ],
                   Expanded(
                     child: _recording
                         ? _RecordingIndicator(
@@ -1358,6 +1424,7 @@ class _Bubble extends ConsumerWidget {
     required this.onDelete,
     required this.onRetry,
     required this.onDiscard,
+    this.onClosePoll,
     this.quote,
   });
   final ChatMessage message;
@@ -1376,6 +1443,9 @@ class _Bubble extends ConsumerWidget {
   final VoidCallback onRetry;
   final VoidCallback onDiscard;
 
+  /// Sondaggio aperto, di chi scrive (o per il Direttivo): "Chiudi il sondaggio".
+  final VoidCallback? onClosePoll;
+
   /// Il messaggio citato (se risponde a un altro).
   final Widget? quote;
 
@@ -1385,7 +1455,10 @@ class _Bubble extends ConsumerWidget {
     final canReply = reply != null && !message.isLocal;
     final canCopy = message.hasText;
     final canRemove = failed || canDelete;
-    if (!failed && !canReply && !canCopy && !canRemove) return;
+    final closePoll = onClosePoll;
+    if (!failed && !canReply && !canCopy && !canRemove && closePoll == null) {
+      return;
+    }
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (c) => SafeArea(
@@ -1410,6 +1483,12 @@ class _Bubble extends ConsumerWidget {
                 title: const Text('Copia testo'),
                 onTap: () => Navigator.pop(c, 'copy'),
               ),
+            if (closePoll != null)
+              ListTile(
+                leading: const Icon(Icons.lock_rounded),
+                title: const Text('Chiudi il sondaggio'),
+                onTap: () => Navigator.pop(c, 'close-poll'),
+              ),
             if (canRemove)
               ListTile(
                 leading: Icon(
@@ -1433,6 +1512,8 @@ class _Bubble extends ConsumerWidget {
         reply?.call();
       case 'copy':
         await Clipboard.setData(ClipboardData(text: message.body!));
+      case 'close-poll':
+        closePoll?.call();
       case 'delete':
         // Un messaggio non partito c'è solo qui: si toglie senza chiedere.
         failed ? onDiscard() : onDelete();
@@ -1493,7 +1574,9 @@ class _Bubble extends ConsumerWidget {
       MediaQuery.sizeOf(context).width,
       ContentWidth.maxWidth,
     );
-    final maxWidth = screen * (mine ? .70 : .67);
+    final poll = ChatPoll.of(message);
+    // Un sondaggio prende la bolla più larga, per le barre dei risultati.
+    final maxWidth = screen * (poll != null ? .78 : (mine ? .70 : .67));
     final bubble = Container(
       constraints: BoxConstraints(maxWidth: maxWidth),
       padding: EdgeInsets.fromLTRB(12, mine ? 9 : 8, 12, mine ? 7 : 6),
@@ -1580,7 +1663,9 @@ class _Bubble extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 6),
                 child: _ExpiredChip(message: message),
               ),
-            if (message.hasText)
+            if (poll != null)
+              PollCard(message: message, poll: poll, width: maxWidth - 24)
+            else if (message.hasText)
               LinkText(
                 message.body!,
                 style: TextStyle(fontSize: 16, color: p.text, height: 1.3),

@@ -308,8 +308,14 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
     // Quando il messaggio citato viene eliminato il database toglie il riferimento:
     // nella conversazione aperta la citazione resta, come "non più disponibile".
     final lostQuote = m.replyTo == null && !old.isLocal ? old.replyTo : null;
+    // Un sondaggio chiuso non si riapre: una copia vecchia arrivata dopo (tempo reale
+    // in ritardo) non lo fa tornare aperto.
+    final closedAt = old.isPoll ? old.meta['closed_at'] : null;
     return m.copyWith(
       replyTo: lostQuote,
+      meta: closedAt != null && m.isPoll && m.meta['closed_at'] == null
+          ? {...m.meta, 'closed_at': closedAt}
+          : null,
       // Foto e vocale appena inviati da qui: restano quelli in memoria (niente download).
       localImage: m.imagePath == null ? null : old.localImage,
       localAudio: m.audioPath == null ? null : old.localAudio,
@@ -390,6 +396,7 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
     Uint8List? audio,
     int? durationS,
     String? replyTo,
+    Map<String, dynamic>? meta,
   }) {
     final m = ChatMessage(
       id: newMessageId(),
@@ -400,6 +407,7 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
       localAudio: audio,
       durationS: audio == null ? null : durationS,
       replyTo: replyTo,
+      meta: meta ?? const {},
       createdAt: DateTime.now(),
       sending: true,
     );
@@ -419,6 +427,15 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
     _known[id] = again;
     _emit();
     return _enqueue(again);
+  }
+
+  /// Un messaggio cambiato sul server da qui (sondaggio chiuso): si vede subito, anche
+  /// se il tempo reale è giù.
+  void updated(ChatMessage m) {
+    final current = _known[m.id];
+    if (current == null || current.isLocal || _deleted.contains(m.id)) return;
+    _known[m.id] = _merge(current, m);
+    _emit();
   }
 
   /// Toglie dalla conversazione un messaggio non partito.
@@ -448,6 +465,7 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
           audio: message.localAudio,
           durationS: message.durationS,
           replyTo: message.replyTo,
+          meta: message.meta.isEmpty ? null : message.meta,
         );
         _sent(message, saved);
         return (error: null, quoteDropped: quoteDropped);

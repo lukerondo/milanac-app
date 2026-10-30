@@ -12,6 +12,7 @@ import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../lavagna/board_model.dart';
+import 'poll.dart';
 
 const chatBucket = 'chat';
 
@@ -178,6 +179,9 @@ class ChatMessage {
   /// Avviso ufficiale del Direttivo (evidenziato in chat, titolo dedicato nella notifica).
   bool get isAnnouncement => meta['type'] == 'announcement';
 
+  /// Sondaggio con le opzioni (vedi [ChatPoll.of]).
+  bool get isPoll => meta['type'] == 'poll';
+
   /// Tipo del messaggio automatico (formation, special_cards...); vuoto se manca.
   String get systemType {
     final type = meta['type'];
@@ -193,6 +197,8 @@ class ChatMessage {
   /// Testo breve per anteprime e citazioni.
   String get summary => isReplay
       ? '🎬 Schema con audio${replayTitle == null ? '' : ': $replayTitle'}'
+      : isPoll && hasText
+      ? '📊 ${body!.trim()}'
       : hasText
       ? body!.trim()
       : hasImage
@@ -244,6 +250,7 @@ class ChatMessage {
   ChatMessage copyWith({
     String? replyTo,
     bool removeReply = false,
+    Map<String, dynamic>? meta,
     Uint8List? localImage,
     Uint8List? localAudio,
     bool? sending,
@@ -262,7 +269,7 @@ class ChatMessage {
     replyTo: removeReply ? null : replyTo ?? this.replyTo,
     expiresAt: expiresAt,
     expiredAt: expiredAt,
-    meta: meta,
+    meta: meta ?? this.meta,
     localImage: localImage ?? this.localImage,
     localAudio: localAudio ?? this.localAudio,
     localReplay: localReplay,
@@ -319,6 +326,8 @@ class ChannelOverview {
     final empty = lastBody == null || lastBody!.isEmpty;
     final text = lastType == 'replay'
         ? '🎬 Schema con audio'
+        : lastType == 'poll'
+        ? '📊 ${lastBody ?? 'Sondaggio'}'
         : lastHasImage && empty
         ? 'Foto'
         : lastHasAudio && empty
@@ -387,6 +396,17 @@ abstract class ChatRepository {
 
   /// Il file delle azioni di un replay (JSON); null in demo se non è in memoria.
   Future<Uint8List?> replayBytes(ChatMessage message);
+
+  /// I voti del sondaggio [messageId] in tempo reale: uno per chi ha votato (anche
+  /// ritirato, con le opzioni vuote).
+  Stream<List<PollVote>> watchPollVotes(String messageId);
+
+  /// Vota [options] al posto delle scelte di prima (vuoto: ritira il voto).
+  Future<void> votePoll(String messageId, Set<int> options);
+
+  /// Chiude il sondaggio (chi l'ha creato o il Direttivo) e restituisce il messaggio
+  /// aggiornato.
+  Future<ChatMessage> closePoll(ChatMessage message);
 
   /// Chiude gli stream interni.
   void dispose() {}
@@ -476,6 +496,17 @@ final chatAudioUrlProvider = FutureProvider.autoDispose.family<String, String>((
   ref.onDispose(renew.cancel);
   return url;
 });
+
+/// I voti di un sondaggio, in tempo reale finché il sondaggio si vede.
+final pollVotesProvider = StreamProvider.autoDispose
+    .family<List<PollVote>, String>((ref, messageId) {
+      ref.watch(currentUserIdProvider);
+      return ref.watch(chatRepositoryProvider).watchPollVotes(messageId);
+    });
+
+/// Prima della migrazione 0030 il server non ha i sondaggi.
+const pollsMissing =
+    'I sondaggi si potranno usare quando il server del club sarà aggiornato.';
 
 /// Messaggio citato che non è tra quelli caricati (più vecchio): si chiede al server.
 final quotedMessageProvider = FutureProvider.autoDispose
@@ -695,6 +726,7 @@ class _SupabaseChatRepository extends ChatRepository {
       }
     }
 
+    if (meta?['type'] == 'poll') await _checkPolls();
     String? replayPath;
     String? imagePath;
     String? audioPath;
@@ -843,6 +875,54 @@ class _SupabaseChatRepository extends ChatRepository {
     if (path == null) return m.localReplay;
     return _client.storage.from(chatBucket).download(path);
   }
+
+  /// Un sondaggio creato prima che il server li abbia non si potrebbe votare: non si
+  /// crea (PostgREST risponde PGRST205 se la tabella dei voti non c'è).
+  Future<void> _checkPolls() async {
+    try {
+      await _client.from('poll_votes').select('message_id').limit(1);
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' || e.code == '42P01') {
+        throw const AppError(pollsMissing);
+      }
+      rethrow;
+    }
+  }
+
+  /// Le chiamate ai sondaggi: senza le funzioni sul server (PGRST202) lo si dice.
+  Future<T> _polls<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST202') throw const AppError(pollsMissing);
+      rethrow;
+    }
+  }
+
+  /// Chi cambia idea aggiorna la sua riga (non la elimina): il tempo reale filtrato
+  /// per sondaggio riceve inserimenti e modifiche, non le eliminazioni.
+  @override
+  Stream<List<PollVote>> watchPollVotes(String messageId) => _client
+      .from('poll_votes')
+      .stream(primaryKey: ['message_id', 'user_id'])
+      .eq('message_id', messageId)
+      .map((rows) => [for (final r in rows) ?PollVote.tryFromMap(r)]);
+
+  @override
+  Future<void> votePoll(String messageId, Set<int> options) => _polls(
+    () => _client.rpc(
+      'vote_poll',
+      params: {'p_message': messageId, 'p_options': options.toList()..sort()},
+    ),
+  );
+
+  @override
+  Future<ChatMessage> closePoll(ChatMessage m) => _polls(() async {
+    final meta = await _client.rpc('close_poll', params: {'p_message': m.id});
+    return meta is Map
+        ? m.copyWith(meta: Map<String, dynamic>.from(meta))
+        : (await message(m.id) ?? m);
+  });
 }
 
 /// Chat in memoria per la demo e i test. Si comporta come Supabase: lo stream di un
@@ -919,6 +999,22 @@ class DemoChatRepository extends ChatRepository {
         createdAt: now.subtract(const Duration(hours: 5)),
       ),
     ]);
+    // Un sondaggio del Direttivo nel canale della squadra, già votato da tre.
+    _messages.add(
+      ChatMessage(
+        id: 'm8',
+        channelId: 'c-milanac',
+        authorId: 'demo',
+        body: "Quando giochiamo l'amichevole con i Lupi?",
+        meta: ChatPoll.meta(['Martedì', 'Mercoledì', 'Giovedì']),
+        createdAt: now.subtract(const Duration(hours: 4)),
+      ),
+    );
+    _votes['m8'] = {
+      'p2': {1},
+      'p3': {1},
+      'p4': {0},
+    };
     // Generale letto fino a 2 ore e mezza fa: gli ultimi due messaggi sono nuovi.
     _reads['c-main'] = now.subtract(const Duration(hours: 2, minutes: 30));
   }
@@ -978,6 +1074,12 @@ class DemoChatRepository extends ChatRepository {
   final _reads = <String, DateTime>{};
   final _muted = <String>{};
 
+  /// Voti dei sondaggi: id del messaggio → chi ha votato → opzioni scelte.
+  final _votes = <String, Map<String, Set<int>>>{};
+
+  /// Id del sondaggio con i voti cambiati.
+  final _voteChanges = StreamController<String>.broadcast();
+
   /// Messaggi inseriti o modificati (come gli eventi del tempo reale).
   final _rows = StreamController<ChatMessage>.broadcast();
 
@@ -1011,6 +1113,7 @@ class DemoChatRepository extends ChatRepository {
 
   void _remove(String id, {required bool realtime}) {
     _messages.removeWhere((m) => m.id == id);
+    _votes.remove(id);
     // Come nel database (on delete set null): le risposte perdono il riferimento.
     for (var i = 0; i < _messages.length; i++) {
       if (_messages[i].replyTo != id) continue;
@@ -1026,6 +1129,12 @@ class DemoChatRepository extends ChatRepository {
   /// riceve, lo trova solo riconnettendosi.
   void receive(ChatMessage m, {bool realtime = true}) =>
       _saved(m, realtime: realtime);
+
+  /// Solo demo e test: [userId] vota [options] al sondaggio [messageId].
+  void voteElsewhere(String messageId, String userId, Set<int> options) {
+    (_votes[messageId] ??= {})[userId] = Set.of(options);
+    if (!_voteChanges.isClosed) _voteChanges.add(messageId);
+  }
 
   /// Solo demo e test: il messaggio [id] lo elimina un altro (o il server, come
   /// l'annuncio delle carte rifatto). Con [realtime] false l'eliminazione non arriva
@@ -1215,10 +1324,55 @@ class DemoChatRepository extends ChatRepository {
   @override
   Future<Uint8List?> replayBytes(ChatMessage m) async => m.localReplay;
 
+  List<PollVote> _pollVotes(String messageId) => [
+    for (final e in (_votes[messageId] ?? const {}).entries)
+      PollVote(messageId: messageId, userId: e.key, options: Set.of(e.value)),
+  ];
+
+  @override
+  Stream<List<PollVote>> watchPollVotes(String messageId) async* {
+    yield _pollVotes(messageId);
+    yield* _voteChanges.stream
+        .where((id) => id == messageId)
+        .map((_) => _pollVotes(messageId));
+  }
+
+  /// Come vote_poll: niente voti a sondaggi chiusi, opzioni fuori elenco o doppie
+  /// dove se ne sceglie una sola.
+  @override
+  Future<void> votePoll(String messageId, Set<int> options) async {
+    final m = _messages.where((m) => m.id == messageId).firstOrNull;
+    final poll = m == null ? null : ChatPoll.of(m);
+    if (poll == null) throw const AppError('Sondaggio non trovato.');
+    if (poll.closed) throw const AppError('Il sondaggio è chiuso.');
+    if (options.any((o) => o < 0 || o >= poll.options.length)) {
+      throw const AppError('Opzione non valida.');
+    }
+    if (options.length > 1 && !poll.multiple) {
+      throw const AppError('In questo sondaggio si sceglie una sola opzione.');
+    }
+    voteElsewhere(messageId, 'demo', options);
+  }
+
+  @override
+  Future<ChatMessage> closePoll(ChatMessage m) async {
+    final current = _messages.where((x) => x.id == m.id).firstOrNull;
+    if (current == null || !current.isPoll) {
+      throw const AppError('Sondaggio non trovato.');
+    }
+    if (current.meta['closed_at'] != null) return current;
+    final closed = current.copyWith(
+      meta: {...current.meta, 'closed_at': clock().toUtc().toIso8601String()},
+    );
+    _saved(closed);
+    return closed;
+  }
+
   @override
   void dispose() {
     _rows.close();
     _deletions.close();
     _changes.close();
+    _voteChanges.close();
   }
 }

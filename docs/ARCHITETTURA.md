@@ -196,7 +196,10 @@ accettano al primo accesso successivo.
     conferma), **vocali** (tieni premuto il microfono, scorri a sinistra per annullare, max
     2 minuti, lettore con avanzamento), foto, link cliccabili, pulsante "torna in fondo".
     Foto e vocali scadono dopo 60 giorni: il messaggio resta con "Allegato scaduto" (pulizia
-    notturna). Il **replay della lavagna** arriva come riquadro con il campo e il pulsante
+    notturna). **Sondaggi** (icona accanto alla foto): domanda e da 2 a 10 risposte, una o
+    più scelte; si vota toccando una risposta, le barre d'oro con le percentuali compaiono
+    dopo il voto (o a sondaggio chiuso), "N voti" apre chi ha votato, "Ritira il voto";
+    chi l'ha creato o il Direttivo lo chiude dal menu a pressione lunga. Il **replay della lavagna** arriva come riquadro con il campo e il pulsante
     Play: si riproduce nell'app (audio più mosse, pochi KB, non è un video) e scade dopo 3
     giorni. Non letti, canali silenziabili, notifiche. **Stanza vocale** (Agora): le cuffie
     nella barra di ogni canale aprono la stanza a schermo intero (sempre scura): chi c'è
@@ -306,6 +309,13 @@ profiles      + play_styles (text[]: codici dei PlayStyle, "+" in fondo per i Pl
 -- dalla migrazione 0029
 events        + party_code (text, 1-40 caratteri: il codice del party della partita, lo
               scrive il Direttivo e si copia dal Match Day in Home)
+-- dalla migrazione 0030
+messages      un sondaggio è un messaggio con meta {type: poll, options [2-10, 1-80
+              caratteri, diverse], multiple, closed_at?} e la domanda nel testo (max 300)
+poll_votes    message_id(→ messages), user_id(→ profiles), options smallint[] (vuoto =
+              ritirato), voted_at; una riga per chi vota, aggiornata se cambia idea (il tempo
+              reale filtrato riceve le modifiche, non le eliminazioni). RLS: la legge chi
+              vede il canale; si scrive solo con vote_poll
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
@@ -334,7 +344,12 @@ vocali dopo 60 giorni, replay della lavagna dopo 3), mette i file in `storage_cl
 chiama la funzione `notify` (evento `cleanup`) che li elimina dallo Storage con la chiave di
 servizio; i messaggi eliminati accodano i loro file allo stesso modo. Il replay è un file
 JSON con la lavagna di partenza e le azioni con l'istante (`lib/features/lavagna/`): la
-stessa macchina a stati disegna la lavagna e rifà le mosse in riproduzione.
+stessa macchina a stati disegna la lavagna e rifà le mosse in riproduzione. Sondaggi:
+`vote_poll(messaggio, opzioni)` (sostituisce le scelte di prima; niente voti a sondaggio
+chiuso, fuori elenco o doppi dove se ne sceglie una) e `close_poll(messaggio)` (chi l'ha
+creato o il Direttivo; scrive `closed_at` nel meta e lo restituisce); il vincolo
+`messages_poll_valid` controlla domanda e opzioni. Prima della migrazione l'app non crea
+sondaggi e lo dice.
 
 Lavori automatici con **pg_cron**: `attendance_tick()` gira ogni minuto e, in ora italiana,
 alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assenze automatiche
