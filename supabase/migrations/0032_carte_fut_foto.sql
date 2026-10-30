@@ -3,7 +3,7 @@
 -- inserisce il giocatore stesso o il Direttivo, e come immagine solo la foto caricata
 -- dalla galleria (avatar_path, già nel bucket "avatars"). Il volto disegnato non si usa
 -- più: la colonna face e il parametro p_face di complete_registration restano solo per
--- le app non ancora aggiornate.
+-- le app non ancora aggiornate, ma il volto si cancella e non si salva più (vedi in fondo).
 
 -- Le statistiche: un oggetto con le chiavi note e valori interi da 1 a 99. Quelle da
 -- portiere stanno a parte, così cambiando ruolo non si perde niente.
@@ -34,3 +34,18 @@ alter table public.profiles
 -- Nessun permesso nuovo: come gli altri campi della carta, le statistiche le modifica il
 -- giocatore sul proprio profilo ("modifica proprio profilo") e il Direttivo su tutti;
 -- l'overall resta del solo Direttivo (prevent_self_role_change).
+
+-- Via il volto disegnato anche dove c'era: le app non ancora aggiornate (che lo mettono
+-- davanti alla foto) mostrano così la foto vera, o il numero di maglia. Quelle che lo
+-- mandano ancora (registrazione) non lo salvano più.
+create or replace function public.profiles_no_face() returns trigger
+language plpgsql as $$
+begin
+  new.face := null;
+  return new;
+end $$;
+drop trigger if exists profiles_no_face on public.profiles;
+create trigger profiles_no_face before insert or update of face on public.profiles
+  for each row execute function public.profiles_no_face();
+update public.profiles set face = null where face is not null;
+

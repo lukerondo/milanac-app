@@ -77,11 +77,15 @@ class PhotoFraming {
     final min = coverScale(image, frame);
     final s = scale.clamp(min, min * 5).toDouble();
     final w = image.width * s, h = image.height * s;
+    // Con la scala minima w può venire un'inezia più piccola del riquadro
+    // (arrotondamento): il limite basso non deve mai superare lo zero.
+    final minX = math.min(frame.width - w, 0.0);
+    final minY = math.min(frame.height - h, 0.0);
     return PhotoFraming(
       s,
       Offset(
-        offset.dx.clamp(frame.width - w, 0).toDouble(),
-        offset.dy.clamp(frame.height - h, 0).toDouble(),
+        offset.dx.clamp(minX, 0.0).toDouble(),
+        offset.dy.clamp(minY, 0.0).toDouble(),
       ),
     );
   }
@@ -193,11 +197,15 @@ class _PhotoFramePageState extends State<PhotoFramePage> {
 
   Future<void> _use() async {
     final image = _image, framing = _framing, frame = _frame;
-    if (image == null || framing == null || frame == null) return;
+    if (_saving || image == null || framing == null || frame == null) return;
     setState(() => _saving = true);
     try {
       final jpeg = await cropToJpeg(image, framing.source(frame));
-      if (mounted) Navigator.of(context).pop(jpeg);
+      // Solo se la pagina è ancora quella in cima: un secondo pop chiuderebbe quella
+      // sotto (Impostazioni, la carta, la registrazione).
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+        Navigator.of(context).pop(jpeg);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -211,11 +219,17 @@ class _PhotoFramePageState extends State<PhotoFramePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Mentre prepara la foto non si esce (né con la X né con Indietro).
+    return PopScope(canPop: !_saving, child: _scaffold(context));
+  }
+
+  Widget _scaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        automaticallyImplyLeading: !_saving,
         title: const Text('INQUADRA LA FOTO'),
       ),
       body: SafeArea(
@@ -295,10 +309,10 @@ class _PhotoFramePageState extends State<PhotoFramePage> {
   Widget _frameView(BuildContext context, BoxConstraints c) {
     final frame = Size(c.maxWidth, c.maxHeight);
     final image = _imageSize;
-    if (_frame != frame) {
+    if (_frame != frame || _framing == null) {
       // Primo disegno o schermo ruotato: si riparte dall'inquadratura iniziale.
-      _frame = frame;
       _framing = PhotoFraming.initial(image, frame);
+      _frame = frame;
     }
     final f = _framing!;
     return GestureDetector(

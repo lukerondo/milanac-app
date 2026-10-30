@@ -183,6 +183,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Archetipo: un tocco lo sceglie e dice cosa fa.
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Regista'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, 'Regista'));
     await tester.pumpAndSettle();
     expect(find.text('Detta i tempi e accende il gioco.'), findsOneWidget);

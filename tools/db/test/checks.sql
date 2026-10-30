@@ -2106,15 +2106,17 @@ insert into storage.objects (bucket_id, name)
   values ('avatars', '00000000-0000-0000-0000-0000000000fa/foto_1.jpg');
 update profiles set avatar_path = '00000000-0000-0000-0000-0000000000fa/foto_1.jpg'
   where id = '00000000-0000-0000-0000-0000000000fa';
--- La registrazione dell'app nuova non manda più il volto.
+-- La registrazione dell'app nuova non manda più il volto; quella delle app vecchie lo
+-- manda ancora, ma non si salva.
 select complete_registration('Ivo', 'Neri', 1996, 'NERI', null, array['milanac'], false, null, null,
-  'POR', 1, 'ps5', null);
+  'POR', 1, 'ps5', '{"skin": 2}');
 reset role;
 do $$ begin
   assert (select avatar_path from profiles where id = '00000000-0000-0000-0000-0000000000fa')
     = '00000000-0000-0000-0000-0000000000fa/foto_1.jpg', 'la foto resta dopo la registrazione';
   assert (select face from profiles where id = '00000000-0000-0000-0000-0000000000fa') is null,
-    'nessun volto';
+    'nessun volto, nemmeno dalle app vecchie';
+  assert (select count(*) from profiles where face is not null) = 0, 'nessun volto disegnato';
   assert (select registration_completed_at from profiles
           where id = '00000000-0000-0000-0000-0000000000fa') is not null, 'registrazione completa';
 end $$;

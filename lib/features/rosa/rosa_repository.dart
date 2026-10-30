@@ -100,7 +100,8 @@ final rosaRepositoryProvider = Provider<RosaRepository>((ref) {
 final rosaProvider = StreamProvider<List<Member>>((ref) {
   // Al cambio di account si ricarica con i permessi del nuovo utente; anche quando
   // si entra o si esce dal Direttivo (i dati anagrafici degli altri li riceve solo lui).
-  ref.watch(currentUserIdProvider);
+  // Le foto dell'account precedente non restano sul telefono.
+  PhotoDiskCache.forUser(ref.watch(currentUserIdProvider));
   ref.watch(profileProvider.select((p) => p.value?.isDirettivo ?? false));
   return ref.watch(rosaRepositoryProvider).watchAll();
 });
@@ -119,14 +120,15 @@ class _SupabaseRosaRepository implements RosaRepository {
         .from('profiles')
         .stream(primaryKey: ['id'])
         .order('joined_at', ascending: true);
-    return combineLatest(
-      profiles,
-      watchPrivateRows(client),
-      (rows, private) => [
+    return combineLatest(profiles, watchPrivateRows(client), (rows, private) {
+      final members = [
         for (final r in rows)
           Member.fromMap(withPrivateRow(r, private[r['id']])),
-      ],
-    );
+      ];
+      // Sul telefono restano solo le foto attuali dei membri.
+      PhotoDiskCache.syncWithRoster(members.map((m) => m.avatarPath));
+      return members;
+    });
   }
 
   @override
@@ -135,18 +137,17 @@ class _SupabaseRosaRepository implements RosaRepository {
   @override
   Future<void> saveCard(Member m) => _update(m.id, m.cardMap());
 
+  /// Le colonne mancanti all'ultimo salvataggio: si riprova sempre con tutte, così
+  /// appena il server è aggiornato (migrazione applicata) si salvano anche quelle.
   @override
-  final missingColumns = <String>{};
+  var missingColumns = <String>{};
 
   Future<void> _update(String id, Map<String, dynamic> fields) async {
     // Nota: le query Supabase partono solo quando vengono attese (await).
     final profiles = _ref.read(supabaseProvider).from('profiles');
-    missingColumns.addAll(
-      await updateWithoutMissing(
-        fields,
-        (f) => profiles.update(f).eq('id', id),
-        skip: missingColumns,
-      ),
+    missingColumns = await updateWithoutMissing(
+      fields,
+      (f) => profiles.update(f).eq('id', id),
     );
   }
 
@@ -181,12 +182,22 @@ class _SupabaseRosaRepository implements RosaRepository {
           fileOptions: const FileOptions(contentType: 'image/jpeg'),
         );
     // Si vede subito (anche nel walkout) senza riscaricarla.
-    localPhotos[path] = jpeg;
+    rememberPhoto(path, jpeg);
+    try {
+      // Il volto disegnato si toglie: anche le app vecchie mostrano la foto.
+      await client
+          .from('profiles')
+          .update({'avatar_path': path, 'face': null})
+          .eq('id', memberId);
+    } catch (_) {
+      // Il profilo non punta alla foto nuova: il file non deve restare nel bucket.
+      localPhotos.remove(path);
+      try {
+        await client.storage.from(avatarsBucket).remove([path]);
+      } catch (_) {}
+      rethrow;
+    }
     await PhotoDiskCache.write(path, jpeg);
-    await client
-        .from('profiles')
-        .update({'avatar_path': path})
-        .eq('id', memberId);
     if (previous != null) {
       // La foto nuova è già al suo posto: se la vecchia non si cancella, pazienza.
       try {
@@ -217,6 +228,7 @@ class _SupabaseRosaRepository implements RosaRepository {
     final path = m.avatarPath;
     await client.from('profiles').update({'avatar_path': null}).eq('id', m.id);
     if (path == null) return;
+    await PhotoDiskCache.delete(path);
     try {
       await client.storage.from(avatarsBucket).remove([path]);
     } catch (_) {}
@@ -460,7 +472,7 @@ class DemoRosaRepository implements RosaRepository {
     String? previous,
   }) async {
     final path = '$memberId/foto_${DateTime.now().microsecondsSinceEpoch}.jpg';
-    localPhotos[path] = jpeg;
+    rememberPhoto(path, jpeg);
     if (previous != null) localPhotos.remove(previous);
     final i = _members.indexWhere((x) => x.id == memberId);
     if (i >= 0) _members[i] = _members[i].copyWith(avatarPath: path);

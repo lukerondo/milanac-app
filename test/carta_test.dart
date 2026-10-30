@@ -374,6 +374,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Modifica la mia carta'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Regista'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Regista'));
     // Le statistiche come sul suo Pro (centrocampista: VEL TIR PAS DRI DIF FIS).
     await tester.ensureVisible(find.byKey(const ValueKey('statistica-pac')));

@@ -77,178 +77,185 @@ class FutCard extends ConsumerWidget {
         if (member.avatarPath == null) 'senza foto',
       ].join(', '),
       excludeSemantics: true,
-      child: AspectRatio(
-        aspectRatio: width / height,
-        child: FittedBox(
-          child: SizedBox(
-            width: width,
-            height: height,
-            child: CustomPaint(
-              // L'alone segue la forma della carta (non un rettangolo).
-              painter: glow ? _GlowPainter(skin.rim) : null,
+      // Oggetto disegnato a misura fissa e scalato: il testo grande del telefono non
+      // deve spostare overall, ruolo e statistiche sulla foto.
+      child: MediaQuery.withNoTextScaling(
+        child: AspectRatio(
+          aspectRatio: width / height,
+          child: FittedBox(
+            child: SizedBox(
+              width: width,
+              height: height,
               child: CustomPaint(
-                painter: CardSkinPainter(skin),
-                foregroundPainter: _RimPainter(skin),
-                child: DefaultTextStyle(
-                  style: TextStyle(fontFamily: sportFont, color: skin.text),
-                  child: Stack(
-                    children: [
-                      // La foto (o la sagoma) dentro la forma della carta.
-                      Positioned.fill(
-                        child: ClipPath(
-                          clipper: const FutCardClipper(),
-                          child: Stack(
+                // L'alone segue la forma della carta (non un rettangolo).
+                painter: glow ? _GlowPainter(skin.rim) : null,
+                child: CustomPaint(
+                  painter: CardSkinPainter(skin),
+                  foregroundPainter: _RimPainter(skin),
+                  child: DefaultTextStyle(
+                    style: TextStyle(fontFamily: sportFont, color: skin.text),
+                    child: Stack(
+                      children: [
+                        // La foto (o la sagoma) dentro la forma della carta.
+                        Positioned.fill(
+                          child: ClipPath(
+                            clipper: const FutCardClipper(),
+                            child: Stack(
+                              children: [
+                                Positioned.fromRect(
+                                  rect: photoRect,
+                                  child: CardPhoto(
+                                    member: member,
+                                    silhouette: skin.text,
+                                    cacheWidth: (photoRect.width * dpr * 2)
+                                        .ceil(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Overall, bonus, ruolo e PlayStyle+ in colonna a sinistra.
+                        Positioned(
+                          left: 18,
+                          top: 30,
+                          width: 54,
+                          child: Column(
                             children: [
-                              Positioned.fromRect(
-                                rect: photoRect,
-                                child: CardPhoto(
-                                  member: member,
-                                  silhouette: skin.text,
-                                  cacheWidth: (photoRect.width * dpr * 2)
-                                      .ceil(),
+                              Text(
+                                overall?.toString() ?? '??',
+                                style: const TextStyle(
+                                  fontSize: 46,
+                                  fontWeight: FontWeight.w700,
+                                  height: .95,
+                                  letterSpacing: -1,
                                 ),
                               ),
+                              if (bonus > 0 && overall != null)
+                                Text(
+                                  '+$bonus',
+                                  style: const TextStyle(
+                                    fontFamily: bodyFont,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              const SizedBox(height: 2),
+                              Text(
+                                member.fieldPosition ?? '–',
+                                style: const TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1,
+                                ),
+                              ),
+                              for (final c in plus) ...[
+                                const SizedBox(height: 7),
+                                PlayStyleBadge(
+                                  style: c.style,
+                                  plus: true,
+                                  size: 26,
+                                ),
+                              ],
                             ],
                           ),
                         ),
-                      ),
-                      // Overall, bonus, ruolo e PlayStyle+ in colonna a sinistra.
-                      Positioned(
-                        left: 18,
-                        top: 30,
-                        width: 54,
-                        child: Column(
-                          children: [
-                            Text(
-                              overall?.toString() ?? '??',
-                              style: const TextStyle(
-                                fontSize: 46,
-                                fontWeight: FontWeight.w700,
-                                height: .95,
-                                letterSpacing: -1,
-                              ),
-                            ),
-                            if (bonus > 0 && overall != null)
-                              Text(
-                                '+$bonus',
+                        // Nome.
+                        Positioned(
+                          left: 18,
+                          right: 18,
+                          top: 196,
+                          height: 24,
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                member.displayName.trim().toUpperCase(),
+                                maxLines: 1,
                                 style: const TextStyle(
-                                  fontFamily: bodyFont,
-                                  fontSize: 12,
+                                  fontSize: 21,
                                   fontWeight: FontWeight.w700,
+                                  letterSpacing: .4,
                                   height: 1.1,
                                 ),
                               ),
-                            const SizedBox(height: 2),
-                            Text(
-                              member.fieldPosition ?? '–',
-                              style: const TextStyle(
-                                fontSize: 19,
-                                fontWeight: FontWeight.w500,
-                                height: 1,
-                              ),
-                            ),
-                            for (final c in plus) ...[
-                              const SizedBox(height: 7),
-                              PlayStyleBadge(
-                                style: c.style,
-                                plus: true,
-                                size: 26,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      // Nome.
-                      Positioned(
-                        left: 18,
-                        right: 18,
-                        top: 196,
-                        height: 24,
-                        child: Center(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              member.displayName.trim().toUpperCase(),
-                              maxLines: 1,
-                              style: const TextStyle(
-                                fontSize: 21,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: .4,
-                                height: 1.1,
-                              ),
                             ),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        left: 40,
-                        right: 40,
-                        top: 221,
-                        child: Container(
-                          height: .8,
-                          color: skin.text.withValues(alpha: .35),
+                        Positioned(
+                          left: 40,
+                          right: 40,
+                          top: 221,
+                          child: Container(
+                            height: .8,
+                            color: skin.text.withValues(alpha: .35),
+                          ),
                         ),
-                      ),
-                      // Le sei statistiche: sigla sopra, valore sotto.
-                      Positioned(
-                        left: 19,
-                        right: 19,
-                        top: 224,
-                        child: Row(
-                          children: [
-                            for (final (s, v) in stats)
-                              Expanded(
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      s.short,
-                                      style: TextStyle(
-                                        fontFamily: bodyFont,
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: .4,
-                                        height: 1.2,
-                                        color: skin.label,
+                        // Le sei statistiche: sigla sopra, valore sotto.
+                        Positioned(
+                          left: 19,
+                          right: 19,
+                          top: 224,
+                          child: Row(
+                            children: [
+                              for (final (s, v) in stats)
+                                Expanded(
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        s.short,
+                                        style: TextStyle(
+                                          fontFamily: bodyFont,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: .4,
+                                          height: 1.2,
+                                          color: skin.label,
+                                        ),
                                       ),
-                                    ),
-                                    Text(
-                                      v?.toString() ?? '–',
-                                      style: const TextStyle(
-                                        fontSize: 19,
-                                        fontWeight: FontWeight.w700,
-                                        height: 1.05,
+                                      Text(
+                                        v?.toString() ?? '–',
+                                        style: const TextStyle(
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w700,
+                                          height: 1.05,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      // Bandiera (se indicata) e stemma del club.
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: 258,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (member.nationality != null) ...[
-                              Text(
-                                flagEmoji(member.nationality!),
-                                style: const TextStyle(fontSize: 15, height: 1),
-                              ),
-                              const SizedBox(width: 12),
                             ],
-                            Image.asset(
-                              'assets/images/stemma_256.png',
-                              width: 20,
-                              height: 20,
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                        // Bandiera (se indicata) e stemma del club.
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: 258,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (member.nationality != null) ...[
+                                Text(
+                                  flagEmoji(member.nationality!),
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    height: 1,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                              ],
+                              Image.asset(
+                                'assets/images/stemma_256.png',
+                                width: 20,
+                                height: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

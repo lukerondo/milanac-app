@@ -111,7 +111,12 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
       // La foto deve essere già sulla carta, non ancora in arrivo.
       final path = m.avatarPath;
       if (path != null) {
-        await ref.read(photoBytesProvider(path).future);
+        // Al massimo qualche secondo: senza rete si condivide con la sagoma.
+        try {
+          await ref
+              .read(photoBytesProvider(path).future)
+              .timeout(const Duration(seconds: 5));
+        } catch (_) {}
         await WidgetsBinding.instance.endOfFrame;
         await Future<void>.delayed(const Duration(milliseconds: 120));
       }
@@ -241,9 +246,11 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                           // (fuori dall'immagine condivisa).
                           if (isMine && member.avatarPath == null)
                             Positioned(
-                              left: 8 + FutCard.photoRect.left,
-                              width: FutCard.photoRect.width,
-                              top: 8 + FutCard.photoRect.top + 110,
+                              // A destra della colonna di overall e
+                              // PlayStyle+, sopra il nome.
+                              left: 8 + 74,
+                              width: FutCard.photoRect.right - 74,
+                              top: 8 + 150,
                               child: Center(
                                 child: _UploadPhotoChip(
                                   onTap: () => changeMemberPhoto(
@@ -690,9 +697,10 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       if (missing.isNotEmpty) {
         messenger.showSnackBar(
           SnackBar(
+            duration: const Duration(seconds: 8),
             content: Text(
-              'Carta salvata. ${missing.join(' e ')} si vedranno quando il '
-              'server del club sarà aggiornato.',
+              'Carta salvata, ma senza ${missing.join(' e ')}: il server del '
+              'club non è ancora aggiornato. Inseriscili di nuovo più tardi.',
             ),
           ),
         );
@@ -929,36 +937,42 @@ class _StatsEditor extends StatelessWidget {
           style: TextStyle(fontSize: 14, color: p.textMuted),
         ),
         const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: 3,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.9,
-          children: [
-            for (final s in stats)
-              TextField(
-                key: ValueKey('statistica-${s.key}'),
-                controller: controllers[s],
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(2),
-                ],
-                style: const TextStyle(
-                  fontFamily: sportFont,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-                decoration: InputDecoration(
-                  labelText: s.short,
-                  helperText: s.label,
-                  isDense: true,
-                ),
-              ),
-          ],
+        // Tre per riga, alti quanto serve (etichetta, valore e aiuto), anche con il
+        // testo grande del telefono.
+        LayoutBuilder(
+          builder: (context, box) {
+            final width = ((box.maxWidth - 2 * 10) / 3).floorToDouble();
+            return Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                for (final s in stats)
+                  SizedBox(
+                    width: width,
+                    child: TextField(
+                      key: ValueKey('statistica-${s.key}'),
+                      controller: controllers[s],
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(2),
+                      ],
+                      style: const TextStyle(
+                        fontFamily: sportFont,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: s.short,
+                        helperText: s.label,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ],
     );

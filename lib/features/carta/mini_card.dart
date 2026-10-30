@@ -77,132 +77,139 @@ class MiniCard extends ConsumerWidget {
           tag: cardHeroTag(member.id),
           child: GestureDetector(
             onTap: onTap,
-            child: AspectRatio(
-              aspectRatio: width / height,
-              child: FittedBox(
-                child: SizedBox(
-                  width: width,
-                  height: height,
-                  child: CustomPaint(
-                    painter: CardSkinPainter(skin, rimWidth: 1.6),
-                    child: DefaultTextStyle(
-                      style: TextStyle(fontFamily: sportFont, color: skin.text),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: ClipPath(
-                              clipper: const FutCardClipper(),
-                              child: Stack(
+            // Oggetto disegnato a misura fissa e scalato: il testo grande del telefono non
+            // deve spostare overall, ruolo e statistiche sulla foto.
+            child: MediaQuery.withNoTextScaling(
+              child: AspectRatio(
+                aspectRatio: width / height,
+                child: FittedBox(
+                  child: SizedBox(
+                    width: width,
+                    height: height,
+                    child: CustomPaint(
+                      painter: CardSkinPainter(skin, rimWidth: 1.6),
+                      child: DefaultTextStyle(
+                        style: TextStyle(
+                          fontFamily: sportFont,
+                          color: skin.text,
+                        ),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: ClipPath(
+                                clipper: const FutCardClipper(),
+                                child: Stack(
+                                  children: [
+                                    Positioned(
+                                      left: 36,
+                                      top: 9,
+                                      width: 100,
+                                      height: 125,
+                                      child: CardPhoto(
+                                        member: member,
+                                        silhouette: skin.text,
+                                        cacheWidth: (100 * dpr * 1.5).ceil(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            // Overall (con il bonus) e ruolo in alto a sinistra.
+                            Positioned(
+                              left: 10,
+                              top: 20,
+                              width: 40,
+                              child: Column(
                                 children: [
-                                  Positioned(
-                                    left: 36,
-                                    top: 9,
-                                    width: 100,
-                                    height: 125,
-                                    child: CardPhoto(
-                                      member: member,
-                                      silhouette: skin.text,
-                                      cacheWidth: (100 * dpr * 1.5).ceil(),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      overall?.toString() ?? '–',
+                                      style: const TextStyle(
+                                        fontSize: 31,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1,
+                                        letterSpacing: -.5,
+                                      ),
+                                    ),
+                                  ),
+                                  if (special != null)
+                                    Text(
+                                      '+${special.bonus}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      member.fieldPosition ?? '–',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.2,
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ),
-                          // Overall (con il bonus) e ruolo in alto a sinistra.
-                          Positioned(
-                            left: 10,
-                            top: 20,
-                            width: 40,
-                            child: Column(
-                              children: [
-                                FittedBox(
+                            Positioned(
+                              left: 12,
+                              right: 12,
+                              top: 132,
+                              height: 22,
+                              child: Center(
+                                child: FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: Text(
-                                    overall?.toString() ?? '–',
+                                    member.displayName.toUpperCase(),
+                                    maxLines: 1,
                                     style: const TextStyle(
-                                      fontSize: 31,
-                                      fontWeight: FontWeight.w700,
-                                      height: 1,
-                                      letterSpacing: -.5,
-                                    ),
-                                  ),
-                                ),
-                                if (special != null)
-                                  Text(
-                                    '+${special.bonus}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 17,
                                       fontWeight: FontWeight.w700,
                                       height: 1.1,
                                     ),
                                   ),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    member.fieldPosition ?? '–',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      height: 1.2,
-                                    ),
-                                  ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                          Positioned(
-                            left: 12,
-                            right: 12,
-                            top: 132,
-                            height: 22,
-                            child: Center(
+                            Positioned(
+                              left: 16,
+                              right: 16,
+                              top: 156,
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: Text(
-                                  member.displayName.toUpperCase(),
+                                  label,
                                   maxLines: 1,
-                                  style: const TextStyle(
-                                    fontSize: 17,
+                                  style: TextStyle(
+                                    fontFamily: bodyFont,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w700,
-                                    height: 1.1,
+                                    letterSpacing: .7,
+                                    color: skin.label,
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          Positioned(
-                            left: 16,
-                            right: 16,
-                            top: 156,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                label,
-                                maxLines: 1,
-                                style: TextStyle(
-                                  fontFamily: bodyFont,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: .7,
-                                  color: skin.label,
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 173,
+                              child: Center(
+                                child: Image.asset(
+                                  'assets/images/stemma_256.png',
+                                  width: 15,
+                                  height: 15,
                                 ),
                               ),
                             ),
-                          ),
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            top: 173,
-                            child: Center(
-                              child: Image.asset(
-                                'assets/images/stemma_256.png',
-                                width: 15,
-                                height: 15,
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

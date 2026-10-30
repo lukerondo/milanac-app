@@ -172,6 +172,37 @@ void main() {
       expect(far.scale, closeTo(start.scale * 5, 1e-9));
     });
 
+    test('misure qualsiasi (telefoni e foto veri): l\'inquadratura si apre sempre', () {
+      // Con la scala minima l'arrotondamento può lasciare la foto un'inezia più
+      // piccola del riquadro: non deve mai rompere i limiti.
+      for (final (image, frame) in [
+        (const Size(1125, 2000), const Size(356, 445)),
+        (const Size(1080, 1350), const Size(334, 417.5)),
+        (const Size(2000, 1500), const Size(319, 398.75)),
+        (const Size(1170, 2532), const Size(319, 398.75)),
+      ]) {
+        final f = PhotoFraming.initial(image, frame);
+        final src = f.source(frame);
+        expect(src.left, greaterThanOrEqualTo(-1e-6));
+        expect(src.top, greaterThanOrEqualTo(-1e-6));
+        expect(src.right, lessThanOrEqualTo(image.width + 1e-6));
+        expect(src.bottom, lessThanOrEqualTo(image.height + 1e-6));
+        // Anche lo zoom fino al minimo.
+        PhotoFraming.zoom(f, .1, Offset.zero, Offset.zero, image, frame);
+      }
+      for (var w = 300.0; w <= 440; w += 1.5) {
+        for (final long in [1500.0, 2000.0, 2532.0]) {
+          for (final ratio in [3 / 4, 4 / 5, 9 / 16, 1.0, 4 / 3, 16 / 9]) {
+            final image = Size(
+              long * ratio.clamp(0, 1),
+              long / ratio.clamp(1, 9),
+            );
+            PhotoFraming.initial(image, Size(w, w * 5 / 4));
+          }
+        }
+      }
+    });
+
     test('il ritaglio diventa un JPEG 720×900', () async {
       final codec = await ui.instantiateImageCodec(_photo(400, 600));
       final image = (await codec.getNextFrame()).image;
@@ -315,6 +346,7 @@ void main() {
     // Due dita: si allarga, e la foto resta dentro il riquadro.
     final area = find.byKey(const ValueKey('inquadra-foto'));
     final center = tester.getCenter(area);
+    final before = tester.getSize(framed);
     final a = await tester.startGesture(center - const Offset(20, 0));
     final b = await tester.startGesture(center + const Offset(20, 0));
     await a.moveTo(center - const Offset(80, 0));
@@ -322,9 +354,18 @@ void main() {
     await a.up();
     await b.up();
     await tester.pump();
+    expect(tester.getSize(framed).width, closeTo(before.width * 4, 4));
+    final photoRect = tester.getRect(framed), frameRect = tester.getRect(area);
+    expect(photoRect.left, lessThanOrEqualTo(frameRect.left + .5));
+    expect(photoRect.top, lessThanOrEqualTo(frameRect.top + .5));
+    expect(photoRect.right, greaterThanOrEqualTo(frameRect.right - .5));
+    expect(photoRect.bottom, greaterThanOrEqualTo(frameRect.bottom - .5));
 
+    // "Indietro" mentre prepara la foto non chiude niente (né lei né la pagina sotto).
     await tester.runAsync(() async {
       await tester.tap(find.text('Usa questa foto'));
+      await tester.pump();
+      await tester.binding.handlePopRoute();
       await until(() => me().avatarPath != null);
     });
     await tester.pumpAndSettle();
@@ -333,7 +374,27 @@ void main() {
     expect(img.decodeJpg(localPhotos[path]!)!.width, 720);
     expect(find.text('INQUADRA LA FOTO'), findsNothing);
     expect(find.textContaining('Foto aggiornata'), findsOneWidget);
-    // Ora c'è la foto: niente più invito, l'azione diventa "Cambia la foto".
+    // Ora c'è la foto, sulla carta al posto della sagoma: niente più invito, l'azione
+    // diventa "Cambia la foto".
+    expect(
+      find.descendant(
+        of: find.byType(FutCard),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Image && (w.image is MemoryImage || w.image is ResizeImage),
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(FutCard),
+        matching: find.byWidgetPredicate(
+          (w) => w is CustomPaint && w.painter is SilhouettePainter,
+        ),
+      ),
+      findsNothing,
+    );
     expect(find.text('Carica la tua foto'), findsNothing);
     await tester.scrollUntilVisible(
       find.text('Cambia la foto'),
@@ -373,5 +434,181 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  group('Copia delle foto sul telefono', () {
+    late Directory dir;
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('milanac_cache');
+      PhotoDiskCache.directory = () async => dir;
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    Uint8List jpeg() => img.encodeJpg(img.Image(width: 8, height: 10));
+
+    test('si legge solo se intera; un file scritto a metà si butta', () async {
+      final bytes = jpeg();
+      await PhotoDiskCache.write('a/foto_1.jpg', bytes);
+      expect(await PhotoDiskCache.read('a/foto_1.jpg'), bytes);
+      expect(dir.listSync().map((e) => e.uri.pathSegments.last), [
+        'a_foto_1.jpg',
+      ]);
+      File('${dir.path}/a_foto_2.jpg')
+          .writeAsBytesSync(bytes.sublist(0, bytes.length ~/ 2));
+      expect(await PhotoDiskCache.read('a/foto_2.jpg'), isNull);
+      expect(File('${dir.path}/a_foto_2.jpg').existsSync(), isFalse);
+    });
+
+    test('la foto nuova toglie la vecchia; restano solo le foto della rosa; '
+        'all\'uscita sparisce tutto', () async {
+      await PhotoDiskCache.write('a/foto_1.jpg', jpeg());
+      await PhotoDiskCache.write('b/foto_1.jpg', jpeg());
+      await PhotoDiskCache.write('a/foto_2.jpg', jpeg());
+      List<String> names() =>
+          [for (final e in dir.listSync()) e.uri.pathSegments.last]..sort();
+      expect(names(), ['a_foto_2.jpg', 'b_foto_1.jpg']);
+      // b ha tolto la foto (o ha lasciato il club).
+      await PhotoDiskCache.keepOnly({'a/foto_2.jpg'});
+      expect(names(), ['a_foto_2.jpg']);
+      await PhotoDiskCache.delete('a/foto_2.jpg');
+      expect(names(), isEmpty);
+      await PhotoDiskCache.write('c/foto_1.jpg', jpeg());
+      await PhotoDiskCache.clear();
+      expect(dir.existsSync(), isFalse);
+      dir.createSync();
+    });
+  });
+
+  testWidgets(
+    'Con il testo grande del telefono la carta non cambia: overall su '
+    'una riga, niente sopra la foto',
+    (tester) async {
+      Future<double> overallHeight(double scale) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+                child: Center(
+                  child: SizedBox(
+                    width: 210,
+                    child: FutCard(
+                      member: _keeper().copyWith(overall: 86),
+                      bonus: 0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        return tester.getSize(find.text('86')).height;
+      }
+
+      final normal = await overallHeight(1);
+      expect(await overallHeight(1.3), normal);
+      expect(await overallHeight(2), normal);
+    },
+  );
+
+  testWidgets('Impostazioni: la tua foto si toglie (sulla carta torna la '
+      'sagoma)', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container.read(introDoneProvider.notifier).complete();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MilanacApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final repo = container.read(rosaRepositoryProvider);
+    final path = await repo.uploadPhoto('demo', _photo(72, 90));
+    await tester.pumpAndSettle();
+    Member me() =>
+        container.read(rosaProvider).value!.firstWhere((m) => m.id == 'demo');
+    expect(me().avatarPath, path);
+
+    await goToSection(tester, 'Impostazioni');
+    expect(find.text('Non ancora caricata'), findsNothing);
+    await tester.tap(find.text('La tua foto'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Togli la foto'));
+    await tester.pumpAndSettle();
+    expect(find.text('Foto tolta.'), findsOneWidget);
+    expect(me().avatarPath, isNull);
+    expect(localPhotos[path], isNull);
+    expect(find.text('Non ancora caricata'), findsOneWidget);
+  });
+
+  testWidgets('Registrazione, passo 3: la foto dalla galleria, inquadrata e '
+      'caricata subito', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container.read(introDoneProvider.notifier).complete();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MilanacApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // La pagina di registrazione non guarda la rosa: la si tiene attiva per leggerla.
+    final roster = container.listen(rosaProvider, (_, _) {});
+    addTearDown(roster.close);
+    final dir = Directory.systemTemp.createTempSync('milanac_reg');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File('${dir.path}/io.png')
+      ..writeAsBytesSync(_photo(900, 1200));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/image_picker'),
+      (call) async => file.path,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/image_picker'),
+        null,
+      ),
+    );
+    await goToPath(tester, '/registrazione?passo=3');
+    expect(find.text('LA TUA FOTO'), findsOneWidget);
+    expect(find.text('Scegli dalla galleria'), findsOneWidget);
+
+    Future<void> until(bool Function() done) async {
+      for (var i = 0; i < 200 && !done(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+        await tester.pump();
+      }
+    }
+
+    final framed = find.descendant(
+      of: find.byType(PhotoFramePage),
+      matching: find.byType(RawImage),
+    );
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const ValueKey('scegli-foto')));
+      await until(() => framed.evaluate().isNotEmpty);
+    });
+    await tester.pump();
+    String? path() => container
+        .read(rosaProvider)
+        .value!
+        .firstWhere((m) => m.id == 'demo')
+        .avatarPath;
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Usa questa foto'));
+      await until(() => path() != null);
+    });
+    await tester.pumpAndSettle();
+    expect(path(), startsWith('demo/foto_'));
+    expect(find.text('Cambia foto'), findsOneWidget);
+    expect(find.text('Passo 3 di 3'), findsOneWidget);
   });
 }

@@ -17,28 +17,50 @@ const avatarsBucket = 'avatars';
 /// Foto già in memoria (percorso → contenuto): quelle appena caricate da questo
 /// telefono, quelle lette dalla copia sul telefono e, nella demo, tutte.
 final localPhotos = <String, Uint8List>{};
+final _addedAt = <String, DateTime>{};
 
-/// Copia sul telefono delle foto dei membri: il percorso nel bucket cambia a ogni foto
-/// nuova (`<id>/foto_<ms>.jpg`), quindi una foto salvata vale per sempre e non si
-/// riscarica a ogni avvio (e si vede anche senza rete).
+/// Mette in memoria una foto (appena caricata o letta): si vede subito, senza scaricarla.
+void rememberPhoto(String path, Uint8List bytes) {
+  localPhotos[path] = bytes;
+  _addedAt[path] = DateTime.now();
+}
+
+/// Copia sul telefono delle foto dei membri, nella cartella della cache (fuori dai
+/// backup, il sistema può svuotarla): il percorso nel bucket cambia a ogni foto nuova
+/// (`<id>/foto_<ms>.jpg`), quindi una foto salvata vale finché è quella del membro e
+/// non si riscarica a ogni avvio (e si vede anche senza rete).
 class PhotoDiskCache {
   @visibleForTesting
   static Future<Directory> Function() directory = () async =>
-      Directory('${(await getApplicationSupportDirectory()).path}/foto');
+      Directory('${(await getApplicationCacheDirectory()).path}/foto');
 
   static String _name(String path) => path.replaceAll('/', '_');
+
+  /// Un JPEG intero (inizio e fine): un file scritto a metà si butta.
+  static bool _whole(Uint8List b) =>
+      b.length > 4 &&
+      b[0] == 0xFF &&
+      b[1] == 0xD8 &&
+      b[b.length - 2] == 0xFF &&
+      b[b.length - 1] == 0xD9;
 
   static Future<Uint8List?> read(String path) async {
     try {
       final f = File('${(await directory()).path}/${_name(path)}');
-      return await f.exists() ? await f.readAsBytes() : null;
+      if (!await f.exists()) return null;
+      final bytes = await f.readAsBytes();
+      if (_whole(bytes)) return bytes;
+      await f.delete();
+      return null;
     } catch (_) {
       return null;
     }
   }
 
-  /// Salva la foto e toglie quelle vecchie dello stesso membro.
+  /// Salva la foto (prima in un file temporaneo, poi rinominato: mai a metà) e toglie
+  /// quelle vecchie dello stesso membro.
   static Future<void> write(String path, Uint8List bytes) async {
+    if (!_whole(bytes)) return;
     try {
       final dir = await directory();
       await dir.create(recursive: true);
@@ -48,8 +70,68 @@ class PhotoDiskCache {
         final other = e.uri.pathSegments.last;
         if (other.startsWith(owner) && other != name) await e.delete();
       }
-      await File('${dir.path}/$name').writeAsBytes(bytes, flush: true);
+      final tmp = File('${dir.path}/$name.tmp');
+      await tmp.writeAsBytes(bytes, flush: true);
+      await tmp.rename('${dir.path}/$name');
     } catch (_) {}
+  }
+
+  static Future<void> delete(String path) async {
+    localPhotos.remove(path);
+    try {
+      final f = File('${(await directory()).path}/${_name(path)}');
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+  }
+
+  /// Tiene solo le foto attuali dei membri della rosa: quelle tolte, sostituite o di
+  /// chi ha lasciato il club spariscono anche dal telefono (in memoria restano le foto
+  /// appena caricate, che la rosa non ha ancora).
+  static Future<void> keepOnly(Set<String> current) async {
+    final now = DateTime.now();
+    localPhotos.removeWhere(
+      (p, _) =>
+          !current.contains(p) &&
+          now.difference(_addedAt[p] ?? DateTime(2000)) >
+              const Duration(minutes: 2),
+    );
+    try {
+      final dir = await directory();
+      if (!await dir.exists()) return;
+      final keep = current.map(_name).toSet();
+      await for (final e in dir.list()) {
+        if (!keep.contains(e.uri.pathSegments.last)) await e.delete();
+      }
+    } catch (_) {}
+  }
+
+  /// Cambio di account o uscita: via tutte le foto, in memoria e sul telefono.
+  static Future<void> clear() async {
+    localPhotos.clear();
+    _addedAt.clear();
+    try {
+      final dir = await directory();
+      if (await dir.exists()) await dir.delete(recursive: true);
+    } catch (_) {}
+  }
+
+  static String? _user;
+
+  /// Chiamata quando si sa chi è collegato: con un altro account (o nessuno) le foto
+  /// del precedente non restano sul telefono.
+  static void forUser(String? userId) {
+    if (_user != null && _user != userId) unawaited(clear());
+    _user = userId;
+  }
+
+  static Set<String>? _lastRoster;
+
+  /// La rosa è arrivata (o è cambiata): si tengono solo le foto attuali.
+  static void syncWithRoster(Iterable<String?> paths) {
+    final current = {...paths.whereType<String>()};
+    if (_lastRoster != null && setEquals(_lastRoster, current)) return;
+    _lastRoster = current;
+    unawaited(keepOnly(current));
   }
 }
 
@@ -72,7 +154,7 @@ final photoBytesProvider = FutureProvider.autoDispose
               .download(path);
           await PhotoDiskCache.write(path, bytes);
         }
-        localPhotos[path] = bytes;
+        rememberPhoto(path, bytes);
         return bytes;
       } catch (_) {
         keep.close();

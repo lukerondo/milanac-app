@@ -19,7 +19,8 @@ Future<String?> changeMemberPhoto(
   final repo = ref.read(rosaRepositoryProvider);
   final jpeg = await pickCardPhoto(context);
   if (jpeg == null) return null;
-  messenger.showSnackBar(
+  messenger.clearSnackBars();
+  final loading = messenger.showSnackBar(
     const SnackBar(
       content: Text('Carico la foto…'),
       duration: Duration(seconds: 20),
@@ -28,20 +29,16 @@ Future<String?> changeMemberPhoto(
   try {
     final path = await repo.uploadPhoto(memberId, jpeg, previous: previous);
     Haptics.confirm();
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Foto aggiornata: ora è sulla tua carta.'),
-        ),
-      );
+    loading.close();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Foto aggiornata: ora è sulla tua carta.')),
+    );
     return path;
   } catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(friendlyError(e, action: 'Foto non caricata'))),
-      );
+    loading.close();
+    messenger.showSnackBar(
+      SnackBar(content: Text(friendlyError(e, action: 'Foto non caricata'))),
+    );
     return null;
   }
 }
