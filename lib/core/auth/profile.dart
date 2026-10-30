@@ -1,4 +1,3 @@
-import '../../features/volto/face.dart';
 import '../teams.dart';
 import 'notify_prefs.dart';
 
@@ -35,7 +34,7 @@ class Profile {
     this.birthYear,
     this.motto,
     this.direttivoRoles = const [],
-    this.face,
+    this.avatarPath,
     this.platform,
     this.fieldPosition,
     this.shirtNumber,
@@ -68,7 +67,9 @@ class Profile {
   final int? birthYear;
   final String? motto;
   final List<DirettivoRole> direttivoRoles;
-  final Face? face;
+
+  /// Foto caricata dalla galleria (percorso nel bucket `avatars`), null se non c'è.
+  final String? avatarPath;
   final String? platform;
   final String? fieldPosition;
   final int? shirtNumber;
@@ -118,7 +119,7 @@ class Profile {
     birthYear: (m['birth_year'] as num?)?.toInt(),
     motto: m['motto'] as String?,
     direttivoRoles: DirettivoRole.parseList(m['direttivo_roles']),
-    face: Face.fromJson(m['face']),
+    avatarPath: m['avatar_path'] as String?,
     platform: m['platform'] as String?,
     fieldPosition: m['field_position'] as String?,
     shirtNumber: (m['shirt_number'] as num?)?.toInt(),
@@ -144,7 +145,7 @@ class Profile {
     birthYear: birthYear,
     motto: motto,
     direttivoRoles: direttivoRoles,
-    face: face,
+    avatarPath: avatarPath,
     platform: platform,
     fieldPosition: fieldPosition,
     shirtNumber: shirtNumber,
@@ -163,7 +164,6 @@ class Profile {
     role: ClubRole.direttivo,
     direttivoRoles: [DirettivoRole.capitano, DirettivoRole.gestore],
     platform: 'ps5',
-    face: Face.defaults,
     registrationCompleted: true,
     rulesAcceptedVersion: 1,
   );

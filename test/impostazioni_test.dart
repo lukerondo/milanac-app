@@ -46,7 +46,7 @@ void main() {
   }
 
   testWidgets(
-    'Impostazioni: volto e dati personali, poi la bandiera sulla carta',
+    'Impostazioni: foto e dati personali, poi la bandiera sulla carta',
     (tester) async {
       await startApp(tester);
       await goToSection(tester, 'Impostazioni');
@@ -55,17 +55,10 @@ void main() {
         expect(find.text(group), findsOneWidget);
       }
 
-      // Il volto si cambia in una pagina dedicata.
-      await tester.tap(find.text('Il tuo volto'));
-      await tester.pumpAndSettle();
-      expect(find.text('IL TUO VOLTO'), findsOneWidget);
-      await tester.tap(find.text('A caso'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('SALVA'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Volto aggiornato'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
+      // La foto (niente più volto disegnato): ancora da caricare.
+      expect(find.text('La tua foto'), findsOneWidget);
+      expect(find.text('Non ancora caricata'), findsOneWidget);
+      expect(find.text('Il tuo volto'), findsNothing);
 
       // Dati personali: pagina a parte, poi si torna alle impostazioni.
       await tester.tap(find.text('Dati personali'));

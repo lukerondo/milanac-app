@@ -589,11 +589,7 @@ class _Faces extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: p.surface,
                   ),
-                  child: MemberAvatar(
-                    member: m,
-                    radius: size / 2 - 1.5,
-                    showNumber: false,
-                  ),
+                  child: MemberAvatar(member: m, radius: size / 2 - 1.5),
                 ),
               ),
             if (extra > 0)

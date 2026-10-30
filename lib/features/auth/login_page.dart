@@ -248,8 +248,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   if (signUp) ...[
                                     const SizedBox(height: 14),
                                     Text(
-                                      'Al primo accesso completi il profilo, crei il tuo '
-                                      'volto e accetti il regolamento.',
+                                      'Al primo accesso completi il profilo, carichi la '
+                                      'tua foto e accetti il regolamento.',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: p.textMuted,

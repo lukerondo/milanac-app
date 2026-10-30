@@ -312,8 +312,8 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
       builder: (c) => AlertDialog(
         title: const Text('Togliere la foto del profilo?'),
         content: Text(
-          'Al posto della foto di ${widget.member.displayName} tornerà il suo '
-          'volto disegnato. Potrà caricarne un\'altra dalle Impostazioni.',
+          'Al posto della foto di ${widget.member.displayName} tornerà la '
+          'sagoma grigia. Potrà caricarne un\'altra dalle Impostazioni.',
         ),
         actions: [
           TextButton(

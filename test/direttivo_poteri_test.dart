@@ -1,7 +1,6 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/features/rosa/member.dart';
@@ -230,7 +229,10 @@ void main() {
   ) async {
     final repo = await openRoster(tester);
     final p2 = (await memberOf(repo, 'p2'))!;
-    await repo.uploadPhoto(p2, Uint8List.fromList([1, 2, 3]));
+    await repo.uploadPhoto(
+      p2.id,
+      img.encodeJpg(img.Image(width: 72, height: 90)),
+    );
     await tester.pumpAndSettle();
     expect((await memberOf(repo, 'p2'))!.avatarPath, isNotNull);
 

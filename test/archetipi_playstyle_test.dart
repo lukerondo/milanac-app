@@ -104,18 +104,21 @@ void main() {
         'play_style': 'Regista',
         'play_styles': ['tiro_a_giro'],
       };
-      expect(await updateWithoutMissing(fields, update), isTrue);
+      expect(await updateWithoutMissing(fields, update), {'play_styles'});
       expect(sent, hasLength(2));
       expect(sent.last, {'play_style': 'Regista'});
       // Poi non la si manda più.
       sent.clear();
-      expect(await updateWithoutMissing(fields, update, skip: true), isTrue);
+      expect(
+        await updateWithoutMissing(fields, update, skip: {'play_styles'}),
+        {'play_styles'},
+      );
       expect(sent.single, {'play_style': 'Regista'});
       // Con la colonna tutto in un colpo.
       sent.clear();
       expect(
         await updateWithoutMissing(fields, (f) async => sent.add(f)),
-        isFalse,
+        isEmpty,
       );
       expect(sent.single, fields);
       // Gli altri errori arrivano a chi salva.
@@ -128,6 +131,47 @@ void main() {
       );
     },
   );
+
+  test('Server senza le statistiche FUT (migrazione 0032): si tolgono una alla '
+      'volta le colonne che mancano, il resto si salva', () async {
+    final sent = <Map<String, dynamic>>[];
+    Future<void> update(Map<String, dynamic> fields) async {
+      sent.add(fields);
+      for (final c in ['fut_stats', 'play_styles']) {
+        if (fields.containsKey(c)) {
+          throw PostgrestException(
+            message:
+                "Could not find the '$c' column of 'profiles' in the "
+                'schema cache',
+            code: 'PGRST204',
+          );
+        }
+      }
+    }
+
+    final fields = {
+      'play_style': 'Regista',
+      'play_styles': ['tiro_a_giro'],
+      'fut_stats': {'pac': 80},
+    };
+    expect(await updateWithoutMissing(fields, update), {
+      'fut_stats',
+      'play_styles',
+    });
+    expect(sent, hasLength(3));
+    expect(sent.last, {'play_style': 'Regista'});
+    // Una colonna sconosciuta che manca non si toglie: l'errore arriva a chi salva.
+    await expectLater(
+      updateWithoutMissing(
+        {'gamertag': 'x'},
+        (_) async => throw PostgrestException(
+          message: "Could not find the 'gamertag' column",
+          code: 'PGRST204',
+        ),
+      ),
+      throwsA(isA<PostgrestException>()),
+    );
+  });
 
   testWidgets('Editor della carta: archetipo e PlayStyle (un tocco, due per '
       'il "+", tre per toglierlo), con i limiti', (tester) async {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../carte/special_cards_repository.dart';
 import 'card_colors.dart';
+import 'fut_card_skin.dart';
 
 /// La carta "viva" come in FC: ogni pochi secondi un riflesso le passa sopra, toccandola
 /// si inclina seguendo il dito (e torna dritta lasciandola, con un riflesso che segue la
@@ -20,17 +21,10 @@ class LiveCard extends StatefulWidget {
     required this.child,
     this.special,
     this.padding = EdgeInsets.zero,
-    this.cardWidth = 210,
-    this.cardRadius = 22,
   });
   final Widget child;
   final CardSpecial? special;
   final EdgeInsets padding;
-
-  /// Larghezza e raggio degli angoli della carta disegnata (FutCard: 210, 22), per
-  /// tagliare i riflessi sulla sua forma a qualsiasi scala.
-  final double cardWidth;
-  final double cardRadius;
 
   /// Un riflesso ogni tanto: abbastanza per vederla viva, non tanto da distrarre.
   static const sweepEvery = Duration(seconds: 5);
@@ -124,25 +118,19 @@ class _LiveCardState extends State<LiveCard> with TickerProviderStateMixin {
               child: IgnorePointer(
                 child: Padding(
                   padding: widget.padding,
-                  child: LayoutBuilder(
-                    builder: (context, box) {
-                      final scale = box.maxWidth / widget.cardWidth;
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(
-                          widget.cardRadius * scale,
+                  // I riflessi restano dentro la forma della carta FUT.
+                  child: ClipPath(
+                    clipper: const FutCardClipper(),
+                    child: AnimatedBuilder(
+                      animation: _sweep,
+                      builder: (context, _) => CustomPaint(
+                        painter: CardShinePainter(
+                          sweep: _sweep.isAnimating ? _sweep.value : null,
+                          tilt: _tilt,
+                          special: widget.special,
                         ),
-                        child: AnimatedBuilder(
-                          animation: _sweep,
-                          builder: (context, _) => CustomPaint(
-                            painter: CardShinePainter(
-                              sweep: _sweep.isAnimating ? _sweep.value : null,
-                              tilt: _tilt,
-                              special: widget.special,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                      ),
+                    ),
                   ),
                 ),
               ),

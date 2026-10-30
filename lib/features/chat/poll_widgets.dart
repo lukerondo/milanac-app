@@ -644,11 +644,7 @@ Future<void> showPollVoters(
                                     color: p.textMuted,
                                   ),
                                 )
-                              : MemberAvatar(
-                                  member: members[id]!,
-                                  radius: 16,
-                                  showNumber: false,
-                                ),
+                              : MemberAvatar(member: members[id]!, radius: 16),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(

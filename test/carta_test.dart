@@ -267,6 +267,7 @@ void main() {
       expect(cleared.cardMap(), {
         'play_style': null,
         'play_styles': const <String>[],
+        'fut_stats': const <String, int>{},
         'platform': null,
         'field_position': 'ATT',
         'shirt_number': null,
@@ -374,22 +375,32 @@ void main() {
     await tester.tap(find.text('Modifica la mia carta'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Regista'));
+    // Le statistiche come sul suo Pro (centrocampista: VEL TIR PAS DRI DIF FIS).
+    await tester.ensureVisible(find.byKey(const ValueKey('statistica-pac')));
+    await tester.enterText(find.byKey(const ValueKey('statistica-pac')), '70');
+    await tester.enterText(find.byKey(const ValueKey('statistica-pas')), '61');
+    expect(find.byKey(const ValueKey('statistica-div')), findsNothing);
     await tester.ensureVisible(find.text('Salva la carta'));
     await tester.tap(find.text('Salva la carta'));
     await tester.pumpAndSettle();
 
-    // Lo stile scelto compare sulla carta, in cima al profilo (e sotto, con
-    // l'archetipo).
+    // Sulla carta, in cima al profilo, le statistiche con il bonus della nero/oro
+    // (+5) e le altre ancora vuote; lo stile sotto, con l'archetipo.
     await tester.scrollUntilVisible(
       find.text('87'),
       -200,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('87'), findsOneWidget);
-    expect(
-      find.descendant(of: find.byType(FutCard), matching: find.text('REGISTA')),
-      findsOneWidget,
-    );
+    Finder onCard(String text) =>
+        find.descendant(of: find.byType(FutCard), matching: find.text(text));
+    for (final label in ['VEL', 'TIR', 'PAS', 'DRI', 'DIF', 'FIS']) {
+      expect(onCard(label), findsOneWidget);
+    }
+    expect(onCard('75'), findsOneWidget);
+    expect(onCard('66'), findsOneWidget);
+    expect(onCard('–'), findsNWidgets(4));
+    expect(find.text('REGISTA'), findsOneWidget);
   });
 
   testWidgets('Carta e dati del membro: i campi lasciati vuoti si cancellano', (

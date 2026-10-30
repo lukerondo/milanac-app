@@ -42,6 +42,7 @@ dependencies:
   url_launcher: ^6.3.3
   intl: ^0.20.3
   table_calendar: ^3.3.0
+  image: ^4.10.1
   image_picker: ^1.2.3
   video_compress: ^3.1.4
   firebase_core: ^4.15.0

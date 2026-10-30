@@ -2063,3 +2063,58 @@ do $$ begin
           where event_id = '00000000-0000-0000-0000-0000000006e1') = 0, 'promemoria eliminati';
 end $$;
 select set_config('milanac.now', '', false);
+
+-- Carte FUT con la foto vera (0032): le statistiche le scrivono il giocatore e il Direttivo;
+-- chi si sta ancora registrando carica la foto nella propria cartella.
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert valid_fut_stats('{}'), 'nessuna statistica';
+  assert valid_fut_stats('{"pac": 88, "sho": 1, "div": 99}'), 'di movimento e da portiere insieme';
+  assert not valid_fut_stats('{"pac": 0}'), 'da 1';
+  assert not valid_fut_stats('{"pac": 100}'), 'fino a 99';
+  assert not valid_fut_stats('{"pac": 80.5}'), 'solo interi';
+  assert not valid_fut_stats('{"pac": "80"}'), 'solo numeri';
+  assert not valid_fut_stats('{"vel": 80}'), 'solo le chiavi note';
+  assert not valid_fut_stats('[80]'), 'un oggetto';
+  assert not valid_fut_stats(null), 'mai null';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+update profiles set fut_stats = '{"pac": 91, "sho": 84, "pas": 77, "dri": 88, "def": 40, "phy": 72}'
+  where id = '00000000-0000-0000-0000-0000000000e1';
+select pg_temp.expect_error(
+  $q$update profiles set fut_stats = '{"pac": 120}' where id = '00000000-0000-0000-0000-0000000000e1'$q$,
+  'profiles_fut_stats_valid');
+-- Quelle di un altro no (nessuna riga toccata).
+update profiles set fut_stats = '{"pac": 99}' where id = '00000000-0000-0000-0000-0000000000e2';
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update profiles set fut_stats = fut_stats || '{"div": 70}'
+  where id = '00000000-0000-0000-0000-0000000000e1';
+reset role;
+do $$ begin
+  assert (select fut_stats from profiles where id = '00000000-0000-0000-0000-0000000000e1')
+    = '{"pac": 91, "sho": 84, "pas": 77, "dri": 88, "def": 40, "phy": 72, "div": 70}'::jsonb,
+    'statistiche del giocatore e del Direttivo';
+  assert (select fut_stats from profiles where id = '00000000-0000-0000-0000-0000000000e2') = '{}'::jsonb,
+    'nessuno modifica le statistiche altrui';
+end $$;
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000fa', 'foto@example.com');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000fa');
+insert into storage.objects (bucket_id, name)
+  values ('avatars', '00000000-0000-0000-0000-0000000000fa/foto_1.jpg');
+update profiles set avatar_path = '00000000-0000-0000-0000-0000000000fa/foto_1.jpg'
+  where id = '00000000-0000-0000-0000-0000000000fa';
+-- La registrazione dell'app nuova non manda più il volto.
+select complete_registration('Ivo', 'Neri', 1996, 'NERI', null, array['milanac'], false, null, null,
+  'POR', 1, 'ps5', null);
+reset role;
+do $$ begin
+  assert (select avatar_path from profiles where id = '00000000-0000-0000-0000-0000000000fa')
+    = '00000000-0000-0000-0000-0000000000fa/foto_1.jpg', 'la foto resta dopo la registrazione';
+  assert (select face from profiles where id = '00000000-0000-0000-0000-0000000000fa') is null,
+    'nessun volto';
+  assert (select registration_completed_at from profiles
+          where id = '00000000-0000-0000-0000-0000000000fa') is not null, 'registrazione completa';
+end $$;

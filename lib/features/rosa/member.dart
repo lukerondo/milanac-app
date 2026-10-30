@@ -1,6 +1,6 @@
 import '../../core/auth/profile.dart';
 import '../../core/teams.dart';
-import '../volto/face.dart';
+import '../carta/fut_stats.dart';
 
 /// Valore predefinito dei campi svuotabili di [Member.copyWith]: "non toccare".
 class _Same {
@@ -37,7 +37,7 @@ class Member {
     this.birthYear,
     this.motto,
     this.direttivoRoles = const [],
-    this.face,
+    this.futStats = FutStats.empty,
     this.registrationCompleted = true,
   });
 
@@ -62,13 +62,17 @@ class Member {
   /// Carta FUT: overall (40–99) deciso dal Direttivo, stile di gioco (l'archetipo) e
   /// piattaforma.
   final int? overall;
+
+  /// Le sei statistiche FUT della carta (le inserisce il giocatore o il Direttivo).
+  final FutStats futStats;
   final String? playStyle;
   final GamePlatform? platform;
 
   /// PlayStyle scelti (codici, "+" in fondo per i PlayStyle+): vedi `archetypes.dart`.
   final List<String> playStyles;
 
-  /// Dati del profilo (Impostazioni): foto caricata, nascita, città, nazionalità, piede.
+  /// Dati del profilo (Impostazioni): foto caricata dalla galleria (l'unica immagine del
+  /// membro nell'app), nascita, città, nazionalità, piede.
   final String? avatarPath;
   final DateTime? birthDate;
   final String? city;
@@ -79,13 +83,12 @@ class Member {
 
   /// Dati della registrazione: nome, cognome e anno di nascita (con la data di nascita
   /// sono i dati anagrafici di `profile_private`: arrivano solo quelli propri, al
-  /// Direttivo quelli di tutti), motto, etichette del Direttivo e volto disegnato.
+  /// Direttivo quelli di tutti), motto ed etichette del Direttivo.
   final String? firstName;
   final String? lastName;
   final int? birthYear;
   final String? motto;
   final List<DirettivoRole> direttivoRoles;
-  final Face? face;
   final bool registrationCompleted;
 
   int? get age {
@@ -136,7 +139,7 @@ class Member {
     Object? playStyle = _same,
     List<String>? playStyles,
     Object? platform = _same,
-    Face? face,
+    FutStats? futStats,
     String? motto,
     Object? firstName = _same,
     Object? lastName = _same,
@@ -161,6 +164,7 @@ class Member {
     requestedRole: requestedRole,
     teams: teams ?? this.teams,
     overall: overall ?? this.overall,
+    futStats: futStats ?? this.futStats,
     playStyle: identical(playStyle, _same)
         ? this.playStyle
         : playStyle as String?,
@@ -184,7 +188,6 @@ class Member {
     birthYear: identical(birthYear, _same) ? this.birthYear : birthYear as int?,
     motto: motto ?? this.motto,
     direttivoRoles: direttivoRoles ?? this.direttivoRoles,
-    face: face ?? this.face,
     registrationCompleted: registrationCompleted,
   );
 
@@ -209,6 +212,8 @@ class Member {
     requestedRole: parseRole(m['requested_role'], ClubRole.giocatore),
     teams: Team.parseSet(m['teams']),
     overall: (m['overall'] as num?)?.toInt(),
+    // Prima della migrazione 0032 la colonna non c'è: nessuna statistica.
+    futStats: FutStats.fromJson(m['fut_stats']),
     playStyle: m['play_style'] as String?,
     // Prima della migrazione 0028 la colonna non c'è: nessun PlayStyle.
     playStyles: [
@@ -228,7 +233,6 @@ class Member {
     birthYear: (m['birth_year'] as num?)?.toInt(),
     motto: m['motto'] as String?,
     direttivoRoles: DirettivoRole.parseList(m['direttivo_roles']),
-    face: Face.fromJson(m['face']),
     registrationCompleted: m['registration_completed_at'] != null,
   );
 
@@ -245,7 +249,6 @@ class Member {
     String? lastName,
     int? birthYear,
     String? motto,
-    Face? face,
   }) => Member(
     id: id,
     displayName: displayName,
@@ -259,6 +262,7 @@ class Member {
     requestedRole: requestedRole,
     teams: teams,
     overall: overall,
+    futStats: futStats,
     playStyle: playStyle,
     playStyles: playStyles,
     platform: platform,
@@ -272,7 +276,6 @@ class Member {
     birthYear: birthYear ?? this.birthYear,
     motto: motto ?? this.motto,
     direttivoRoles: direttivoRoles,
-    face: face ?? this.face,
     registrationCompleted: registrationCompleted,
   );
 
@@ -285,7 +288,6 @@ class Member {
     'nationality': nationality,
     'preferred_foot': preferredFoot?.name,
     'motto': motto,
-    'face': face?.toJson(),
   };
 
   /// Dati anagrafici da salvare (`profile_private`): solo quelli presenti. Dalle
@@ -319,6 +321,7 @@ class Member {
   Map<String, dynamic> cardMap() => {
     'play_style': playStyle,
     'play_styles': playStyles,
+    'fut_stats': futStats.toJson(),
     'platform': platform?.name,
     'field_position': fieldPosition,
     'shirt_number': shirtNumber,

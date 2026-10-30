@@ -6,12 +6,10 @@ import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/core/auth/providers.dart';
 import 'package:milanac/core/router.dart';
 import 'package:milanac/core/teams.dart';
-import 'package:milanac/features/auth/gate_ui.dart';
 import 'package:milanac/features/intro/intro_state.dart';
 import 'package:milanac/features/regolamento/rules_reader.dart';
 import 'package:milanac/features/registrazione/registration_page.dart';
 import 'package:milanac/features/registrazione/registration_repository.dart';
-import 'package:milanac/features/volto/face.dart';
 import 'package:milanac/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -116,14 +114,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Passo 3 di 3'), findsOneWidget);
 
-    // Volto: a caso, poi una scelta precisa.
-    await tester.tap(find.text('A caso'));
-    await tester.pumpAndSettle();
-    // Il nome dello stile compare anche nel riepilogo quando "A caso" lo sceglie:
-    // si punta alla sola opzione.
-    await reveal(tester, 3, find.widgetWithText(ChoicePill, 'Ciuffo'));
-    await tester.tap(find.widgetWithText(ChoicePill, 'Ciuffo'));
-    await tester.pumpAndSettle();
+    // La foto: niente volto disegnato. Si può caricare anche dopo (sagoma grigia).
+    expect(find.text('LA TUA FOTO'), findsOneWidget);
+    expect(find.text('Scegli dalla galleria'), findsOneWidget);
+    expect(find.text('A caso'), findsNothing);
     await tester.tap(find.text('Completa la registrazione'));
     await tester.pumpAndSettle();
 
@@ -140,7 +134,7 @@ void main() {
     );
     expect(sent.direttivoRoles, hasLength(2));
     expect(sent.fieldPosition, 'ATT');
-    expect(sent.face.hair, FacePart.hair.options.indexOf('Ciuffo'));
+    expect(sent.toParams()['p_face'], isNull);
 
     // Regolamento: si accetta solo in fondo e dopo 2 minuti.
     expect(find.text('Ho letto e accetto'), findsOneWidget);

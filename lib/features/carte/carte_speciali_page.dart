@@ -221,7 +221,6 @@ class _RingedPhoto extends StatelessWidget {
           : MemberAvatar(
               member: m,
               radius: inner,
-              showNumber: false,
               background: CardColors.portrait,
               foreground: CardColors.text,
             ),

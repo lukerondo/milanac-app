@@ -19,7 +19,7 @@ import 'voice_models.dart';
 import 'voice_repository.dart';
 
 /// La stanza vocale a schermo intero, sempre scura come nella tavola (anche con
-/// l'aspetto chiaro): chi c'è con il volto (alone d'oro su chi parla, microfono
+/// l'aspetto chiaro): chi c'è con la foto (alone d'oro su chi parla, microfono
 /// barrato su chi è in muto), entra o esci, microfono e vivavoce.
 class VoiceRoomPage extends StatelessWidget {
   const VoiceRoomPage({super.key, required this.channel});
@@ -454,7 +454,7 @@ class _Participant extends StatelessWidget {
                           color: p.textMuted,
                         ),
                       )
-                    : MemberAvatar(member: m, radius: 52, showNumber: false),
+                    : MemberAvatar(member: m, radius: 52),
               ),
               if (muted)
                 Positioned(

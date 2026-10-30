@@ -46,8 +46,12 @@ Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `compl
    del Direttivo" richiede la **password del club** (solo l'hash bcrypt sta in `app_config`,
    si cambia dall'app con `set_direttivo_password`) e almeno un'etichetta tra Capitano,
    Reclutatore, Organizzatore, Gestore; ruolo in campo, numero, piattaforma.
-3. **Il tuo volto**: avatar disegnato dall'app (parametri in `profiles.face`), usato in rosa, chat,
-   carta e walkout.
+3. **La tua foto** (facoltativa, si può caricare dopo): una foto vera dalla galleria, inquadrata
+   nel riquadro 4:5 della carta (sposta e allarga con due dita), salvata come JPEG 720×900 in
+   `avatars/<id>/foto_<ms>.jpg` (`profiles.avatar_path`) e caricata subito, prima della fine
+   della registrazione. È l'unica immagine del membro nell'app: carta, rosa, chat, walkout e
+   PDF; senza foto la **sagoma grigia** come in FUT. Il volto disegnato non c'è più (la
+   colonna `face` e il parametro `p_face`, sempre null, restano per le app vecchie).
 
 Il profilo resta `pending` finché non si **accetta il regolamento** (`accept_rules`): da lì il ruolo
 richiesto diventa effettivo. Non serve nessuna approvazione del Direttivo: ogni nuovo ingresso
@@ -74,7 +78,8 @@ notifica) e il Direttivo può togliere dalla Rosa chi non conosce (`active = fal
   l'eliminazione dell'account dell'ultimo membro attivo (trigger `direttivo_guard` e controllo
   in `delete_my_account`).
 - **Giocatore**: legge tutto, gestisce **solo le proprie** presenze, i propri dati e il proprio
-  volto, la propria carta (ruolo, numero, stile, piattaforma, non l'overall), scrive in chat e
+  foto, la propria carta (ruolo, numero, stile, statistiche FUT, piattaforma, non l'overall),
+  scrive in chat e
   aggiunge link. Non può cambiarsi ruolo, squadra, stato, overall o data d'ingresso (trigger).
 - **Squadre**: Milan AC e Milan AC Futuro; i giocatori stanno in una sola squadra, chi è del
   Direttivo può stare in entrambe.
@@ -119,7 +124,7 @@ accettano al primo accesso successivo.
      Tattiche, Mondo Proclub, Albo d'oro, Regolamento e Storia, Colonna sonora, Tornei, Sala
      Direttivo per chi ne fa parte, contatti social modificabili dal Direttivo)
    - in alto a destra la propria foto: profilo con la carta, i traguardi e le Impostazioni
-     (dati, volto, notifiche, aspetto scuro/chiaro/automatico come il telefono, vibrazioni,
+     (dati, foto, notifiche, aspetto scuro/chiaro/automatico come il telefono, vibrazioni,
      account);
    - animazioni: dalla Rosa la mini carta vola fino alla carta grande; i caricamenti sono
      d'oro (arco che gira con il pallone, barra che scorre); vibrazioni su tocchi, gol e
@@ -132,14 +137,14 @@ accettano al primo accesso successivo.
    descrizione breve e "Leggi la notizia"; filtri *Aggiornamenti FC 27*, *Console*, *Tornei*,
    *Pro Clubs*, *Ultimate Team*; avviso in evidenza per un nuovo Title Update o un
    aggiornamento della console.
-4. **Rosa completa** – vista predefinita a **mini carte** (volto, overall con l'eventuale
-   bonus della carta speciale, ruolo, nome), oppure carte grandi o elenco (foto, gamertag,
+4. **Rosa completa** – vista predefinita a **mini carte** FUT (foto o sagoma, overall con
+   l'eventuale bonus della carta speciale, ruolo, nome), oppure elenco (foto, gamertag,
    ruolo nel club, ruolo in campo, numero, data di ingresso). Ricerca per nome, cognome o
    gamertag; filtri per squadra, reparto (POR/DIF/CEN/ATT) e *Solo Direttivo*. Un tocco apre
    la carta del giocatore.
 5. **Formazione** – campo in prospettiva come il menu tattiche di FC (disegnato in Flutter:
    erba a strisce, linee proiettate, la porta avversaria lontana), scelta modulo (4-3-3,
-   4-2-3-1, 3-5-2…), 11 mini carte in piedi (overall, ruolo, volto, colori della carta
+   4-2-3-1, 3-5-2…), 11 mini carte in piedi (overall, ruolo, foto, colori della carta
    speciale), più piccole in fondo: il Direttivo tocca una carta e assegna il giocatore.
 6. **Calendario** – vista mensile + lista; tipi evento: *Partita torneo*, *Amichevole*,
    *Allenamento*, *Riunione*, *Altro*. Solo il Direttivo crea eventi (notifica alla squadra
@@ -174,12 +179,19 @@ accettano al primo accesso successivo.
 12. **Formazione pubblicata** – una formazione per squadra; resta in bozza finché il Direttivo non
     la pubblica, poi ogni giocatore della squadra riceve la notifica personale (titolare con
     ruolo o panchina), l'annuncio compare in *Comunicazioni* e chiunque può scaricare il
-    **PDF con le mini carte** (campo, volto, nome, ruolo, overall, panchina).
-13. **Carta FUT** – "La mia carta" e carte in Rosa: overall deciso dal Direttivo (livelli bronzo,
-    argento, oro, rossonera 85+), statistiche dal club (presenze, puntualità, serate, gol dai
-    marcatori, mesi nel club, % vittorie), condivisione come immagine. Se il giocatore ha una
-    carta speciale in corso, la carta mostrata è quella (colori nero/oro o blu elettrico,
-    overall con il bonus) ovunque: carta, Rosa, mini carte del PDF, anello sul volto in chat.
+    **PDF con le mini carte** (campo, foto, nome, ruolo, overall, panchina).
+13. **Carta FUT** – "La mia carta" e carte in Rosa disegnate come gli oggetti di FUT (FC 24–26):
+    scudo con le tacche in alto, overall e ruolo a sinistra con i PlayStyle+, la **foto caricata
+    dal giocatore** sfumata dentro la carta (senza foto la sagoma grigia; sulla propria carta
+    l'invito "Carica la tua foto"), nome, le **sei statistiche FUT** in riga (VEL TIR PAS DRI
+    DIF FIS; per i portieri TUF PRE RIN RIF VEL PIA) scritte dal giocatore o dal Direttivo
+    (`profiles.fut_stats`, migrazione 0032), bandiera e stemma. Finiture metalliche per
+    livello (bronzo, argento, oro con i raggi; rossonera 85+ a righe strette; grigia senza
+    overall), condivisione come immagine. Le statistiche del club (presenze, puntualità,
+    serate, gol, mesi nel club, % vittorie) stanno sotto la carta. Se il giocatore ha una
+    carta speciale in corso, la carta mostrata è quella (nero/oro come la TOTW, blu elettrico
+    a schegge; il bonus sale su overall e statistiche) ovunque: carta, Rosa, mini carte del
+    PDF, anello sulla foto in chat.
     Archetipo (uno dei 13 come in Pro Clubs, con icona e descrizione, o uno stile scritto a
     mano) e PlayStyle (fino a 6, di cui 2 PlayStyle+ nei rombi d'oro sulla carta), scelti dal
     giocatore o dal Direttivo e mostrati sotto la carta.
@@ -276,7 +288,7 @@ tournaments   id, name, organizer, url, team, status, starts_on, ends_on, notes
 tournament_standings  tournament_id, team_name, won, drawn, lost, goals_for, goals_against, is_us
 rules_articles id, sort_order, title, body                -- bozza del Direttivo
 rules_versions number, snapshot(jsonb), published_at       -- versioni pubblicate del regolamento
-profiles      + motto, direttivo_roles[], face(jsonb),
+profiles      + motto, direttivo_roles[], face(jsonb, non più usato), fut_stats(jsonb, 0032),
                 registration_completed_at, rules_accepted_version, rules_accepted_at
                 (nome, cognome e anno di nascita: dalla 0025 in profile_private)
 app_config    + direttivo_password_hash (bcrypt)
@@ -442,7 +454,7 @@ milanac-app/
                errors, audio_focus, appearance, italian_time
     features/  intro/ auth/ registrazione/ home/ mondo/ news/ rosa/ carta/ carte/ formazione/
                calendario/ risultati/ presenze/ chat/ tornei/ albo_doro/ regolamento/
-               tattiche/ lavagna/ voce/ musica/ traguardi/ walkout/ volto/ direttivo/
+               tattiche/ lavagna/ voce/ musica/ traguardi/ walkout/ foto/ direttivo/
                impostazioni/ profilo/ club/ partite/
   assets/      video/intro.mp4 (720p), images/ (stemma), fonts/ (Oswald, Barlow)
   supabase/    migrations/ (schema + RLS), seed.sql
