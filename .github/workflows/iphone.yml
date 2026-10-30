@@ -3,14 +3,18 @@ name: iPhone
 # App per iPhone da distribuire "ad hoc": i telefoni dei membri (UDID) sono registrati
 # sull'account Apple sviluppatore e l'IPA si carica su un sito come Diawi, che dà il link per
 # installarla. Da main o a mano la pubblica nella release "App per iPhone" (tag
-# iphone-di-prova). Sui rami claude/** parte solo se il push tocca ios/, questo file o pubspec.
+# iphone-di-prova). Sui rami claude/** parte solo se il push tocca ios/, tools/ios/, questo file
+# o pubspec.
 #
-# Con i secret di firma (vedi docs/PUBBLICAZIONE.md, "iPhone ad hoc"):
-#   IOS_CERTIFICATO_P12       certificato "Apple Distribution" esportato in .p12, in base64
-#   IOS_CERTIFICATO_PASSWORD  password del .p12
-#   IOS_PROFILO_ADHOC         profilo "Ad Hoc" (.mobileprovision) con gli UDID, in base64
-# esce MILANAC.ipa firmato, pronto per Diawi. Senza, esce MILANAC-non-firmato.ipa, da firmare
-# con il proprio certificato e profilo (strumenti o siti che firmano l'IPA per gli UDID).
+# Firma (vedi docs/PUBBLICAZIONE.md, "iPhone senza App Store"), in ordine di preferenza:
+# 1. Chiave API di App Store Connect (ruolo Admin): fa tutto da sola. Registra gli iPhone del
+#    secret IOS_DISPOSITIVI, crea l'identificativo se manca, firma con il certificato gestito da
+#    Apple e il profilo Ad Hoc che Xcode genera con tutti gli iPhone registrati.
+#      ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (il file .p8 così com'è), IOS_DISPOSITIVI ("Nome;UDID")
+# 2. Certificato e profilo fatti a mano:
+#      IOS_CERTIFICATO_P12 (.p12 in base64), IOS_CERTIFICATO_PASSWORD, IOS_PROFILO_ADHOC (base64)
+# In entrambi i casi esce MILANAC.ipa firmato, pronto per Diawi. Senza secret esce
+# MILANAC-non-firmato.ipa, da firmare con il proprio certificato e profilo.
 on:
   workflow_dispatch:
   push:
@@ -48,10 +52,10 @@ jobs:
             echo "ios=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if grep -qE '^(ios/|\.github/workflows/iphone\.yml$|pubspec\.)' <<< "$FILES"; then
+          if grep -qE '^(ios/|tools/ios/|\.github/workflows/iphone\.yml$|pubspec\.)' <<< "$FILES"; then
             echo "ios=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Nessuna modifica per l'iPhone (ios/, iphone.yml, pubspec): compilazione saltata."
+            echo "Nessuna modifica per l'iPhone (ios/, tools/ios/, iphone.yml, pubspec): compilazione saltata."
             echo "ios=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -84,7 +88,7 @@ jobs:
           PROFILO_BASE64: ${{ secrets.IOS_PROFILO_ADHOC }}
         run: |
           if [ -z "$P12_BASE64" ] || [ -z "$PROFILO_BASE64" ]; then
-            echo "::warning::Secret di firma assenti: esce l'IPA non firmato (vedi docs/PUBBLICAZIONE.md)."
+            echo "Certificato e profilo a mano assenti."
             echo "firmato=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -172,6 +176,63 @@ jobs:
           echo "dispositivi=$DISPOSITIVI" >> "$GITHUB_OUTPUT"
           echo "Profilo \"$NOME\" (team $TEAM) con $DISPOSITIVI iPhone registrati."
 
+      # Con la chiave API: l'account Apple si prepara da solo (vedi tools/ios/apple_api.py).
+      - name: Account Apple (chiave API)
+        id: api
+        if: steps.firma.outputs.firmato != 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          IOS_DISPOSITIVI: ${{ secrets.IOS_DISPOSITIVI }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "::warning::Nessun secret di firma: esce l'IPA non firmato (vedi docs/PUBBLICAZIONE.md)."
+            echo "firmato=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install -q "pyjwt[crypto]==2.10.1"
+          "$RUNNER_TEMP/venv/bin/python" tools/ios/apple_api.py
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          echo "firmato=true" >> "$GITHUB_OUTPUT"
+
+      # Archivio senza firma, poi Xcode firma all'esportazione: certificato di distribuzione
+      # gestito da Apple (nessuna chiave privata da conservare) e profilo Ad Hoc creato o
+      # aggiornato con tutti gli iPhone registrati.
+      - name: IPA firmato con la chiave API (ad hoc)
+        if: steps.api.outputs.firmato == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM: ${{ steps.api.outputs.team }}
+        run: |
+          xcodebuild -version
+          flutter build ipa --release --no-codesign --dart-define-from-file=env/prod.json
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>release-testing</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>thinning</key><string>&lt;none&gt;</string>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath build/ios/ipa \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          cp build/ios/ipa/*.ipa MILANAC.ipa
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+          echo "IPA=MILANAC.ipa" >> "$GITHUB_ENV"
+
       - name: IPA firmato (ad hoc)
         if: steps.firma.outputs.firmato == 'true'
         run: |
@@ -183,7 +244,7 @@ jobs:
 
       # Senza firma: l'app compilata dentro la cartella Payload, zippata (è il formato .ipa).
       - name: IPA non firmato
-        if: steps.firma.outputs.firmato != 'true'
+        if: steps.firma.outputs.firmato != 'true' && steps.api.outputs.firmato != 'true'
         run: |
           xcodebuild -version
           flutter build ios --release --no-codesign --dart-define-from-file=env/prod.json
@@ -201,10 +262,13 @@ jobs:
           ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
           VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
           if [ "$ID" != "$BUNDLE_ID" ]; then echo "::error::Identificativo $ID inatteso"; exit 1; fi
-          if [ "${{ steps.firma.outputs.firmato }}" = true ]; then
+          if [ "$IPA" = MILANAC.ipa ]; then
             codesign --verify --deep --strict "$APP"
             test -f "$APP/embedded.mobileprovision"
-            echo "Firmato ad hoc per ${{ steps.firma.outputs.dispositivi }} iPhone."
+            security cms -D -i "$APP/embedded.mobileprovision" > profilo.plist
+            N=$(/usr/libexec/PlistBuddy -c "Print :ProvisionedDevices" profilo.plist | grep -c '^ ')
+            echo "Firmato ad hoc con il profilo \"$(/usr/libexec/PlistBuddy -c "Print :Name" profilo.plist)\" per $N iPhone."
+            echo "DISPOSITIVI=$N" >> "$GITHUB_ENV"
           fi
           echo "$IPA: $ID $VER, $(du -m "../$IPA" | cut -f1) MB"
           echo "- $IPA: $(du -m "../$IPA" | cut -f1) MB" >> "$GITHUB_STEP_SUMMARY"
@@ -222,8 +286,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "${{ steps.firma.outputs.firmato }}" = true ]; then
-            COME="MILANAC.ipa è firmato ad hoc per ${{ steps.firma.outputs.dispositivi }} iPhone registrati: caricalo su un sito come Diawi e manda il link ai membri (si apre da Safari sull'iPhone)."
+          if [ "$IPA" = MILANAC.ipa ]; then
+            COME="MILANAC.ipa è firmato ad hoc per $DISPOSITIVI iPhone registrati: caricalo su un sito come Diawi e manda il link ai membri (si apre da Safari sull'iPhone)."
           else
             COME="MILANAC-non-firmato.ipa va firmato con il certificato e il profilo Ad Hoc dell'account Apple (con i secret di firma su GitHub esce già firmato)."
           fi
