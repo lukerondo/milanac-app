@@ -145,7 +145,10 @@ accettano al primo accesso successivo.
    tabellone con le caselle del punteggio e i marcatori con i minuti sotto ogni squadra,
    cronaca dal calcio d'inizio al fischio finale (linea del tempo, gol con il volto del
    marcatore e il punteggio dopo ogni gol), foto, clip e video di YouTube in grande da
-   scorrere, che si aprono a tutto schermo una dopo l'altra.
+   scorrere, che si aprono a tutto schermo una dopo l'altra. Dal tasto di condivisione si
+   apre l'anteprima della **grafica del risultato** (poster 1080×1350 nero oro con San Siro,
+   punteggio nel tabellone, marcatori con i minuti, esito, carte della giornata e nota) da
+   condividere come immagine, oppure il risultato come testo.
    Per ogni partita il Direttivo allega media in **due modi**:
    - **Link** (YouTube, Twitch, Instagram, TikTok…) → riprodotto/aperto nell'app
    - **Clip caricata**: video **max 15 secondi** (tagliato nell'app) o foto, compressi prima dell'upload

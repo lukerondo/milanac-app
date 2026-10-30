@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
-import '../../core/push/push_service.dart';
 import '../../core/theme.dart';
 import '../../shared/async_view.dart';
 import '../../shared/gold_loader.dart';
@@ -28,6 +26,7 @@ import 'match_editor.dart';
 import 'match_tv.dart';
 import 'matches_repository.dart';
 import 'media_viewer.dart';
+import 'result_poster.dart';
 import 'result_ui.dart';
 
 /// Indietro: alla pagina precedente o, se la partita è stata aperta da una notifica
@@ -126,34 +125,6 @@ class _MatchScaffold extends ConsumerWidget {
     }
   }
 
-  /// Condivide il risultato come testo (WhatsApp, Telegram...), con i minuti dei gol
-  /// se ci sono.
-  Future<void> _share(List<Member> roster) async {
-    final played = match.outcome != MatchOutcome.daGiocare;
-    final scorers = played
-        ? scorerTicker(match, matchPlayers(roster, match))
-        : const <String>[];
-    final against = [
-      for (final g in match.timeline)
-        if (!g.ours) "${g.minute}'",
-    ];
-    final text = [
-      played
-          ? '${match.team.label} ${scoreText(match)} ${match.opponent}'
-          : '${match.team.label} – ${match.opponent}',
-      matchSubtitle(match),
-      if (scorers.isNotEmpty) 'Marcatori: ${scorers.join(', ')}',
-      if (played && against.isNotEmpty)
-        'Gol ${match.opponent}: ${against.join(' ')}',
-      'MILANAC Pro Club',
-    ].join('\n');
-    try {
-      await SharePlus.instance.share(ShareParams(text: text));
-    } catch (e) {
-      showAppMessage(friendlyError(e, action: 'Condivisione non riuscita'));
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
@@ -164,8 +135,8 @@ class _MatchScaffold extends ConsumerWidget {
           IconButton(
             tooltip: 'Condividi',
             icon: const Icon(Icons.ios_share_rounded),
-            onPressed: () =>
-                _share(ref.read(rosaProvider).value ?? const <Member>[]),
+            // La grafica del risultato (o il testo), con l'anteprima.
+            onPressed: () => openResultPoster(context, match),
           ),
           if (isDirettivo)
             PopupMenuButton<String>(
