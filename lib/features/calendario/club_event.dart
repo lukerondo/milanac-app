@@ -33,6 +33,7 @@ class ClubEvent {
     this.description,
     this.location,
     this.team,
+    this.partyCode,
   });
 
   final String id;
@@ -49,6 +50,21 @@ class ClubEvent {
   /// Squadra interessata (null = tutto il club).
   final Team? team;
 
+  /// Codice del party della partita (lo scrive il Direttivo, si copia dalla Home).
+  final String? partyCode;
+
+  /// Lo stesso evento con un altro codice del party.
+  ClubEvent withPartyCode(String? code) => ClubEvent(
+    id: id,
+    type: type,
+    title: title,
+    startsAt: startsAt,
+    description: description,
+    location: location,
+    team: team,
+    partyCode: code,
+  );
+
   /// L'evento riguarda chi gioca in [teams]?
   bool concerns(Set<Team> teams) => team == null || teams.contains(team);
 
@@ -60,6 +76,8 @@ class ClubEvent {
     description: m['description'] as String?,
     location: m['location'] as String?,
     team: Team.parse(m['team']),
+    // Prima della migrazione 0029 la colonna non c'è.
+    partyCode: m['party_code'] as String?,
   );
 
   Map<String, dynamic> toMap() => {
@@ -69,6 +87,9 @@ class ClubEvent {
     'description': description,
     'location': location,
     'team': team?.name,
+    // Solo se c'è: un server non ancora aggiornato non ha la colonna, e il codice si
+    // cambia a parte (setPartyCode), così modificando l'evento non si perde.
+    'party_code': ?partyCode,
   };
 }
 

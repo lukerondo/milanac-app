@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import '../../core/italian_time.dart';
 import '../../core/teams.dart';
 import 'club_event.dart';
@@ -16,6 +18,9 @@ abstract class EventsRepository {
   /// Crea l'evento se [ClubEvent.id] è vuoto, altrimenti lo aggiorna.
   Future<void> save(ClubEvent event);
   Future<void> delete(String id);
+
+  /// Codice del party della partita (null o vuoto = toglie il codice).
+  Future<void> setPartyCode(String eventId, String? code);
 }
 
 final eventsRepositoryProvider = Provider<EventsRepository>((ref) {
@@ -64,6 +69,27 @@ class _SupabaseEventsRepository implements EventsRepository {
   @override
   Future<void> delete(String id) async {
     await _ref.read(supabaseProvider).from('events').delete().eq('id', id);
+  }
+
+  @override
+  Future<void> setPartyCode(String eventId, String? code) async {
+    final value = code?.trim();
+    try {
+      await _ref
+          .read(supabaseProvider)
+          .from('events')
+          .update({'party_code': value == null || value.isEmpty ? null : value})
+          .eq('id', eventId);
+    } on PostgrestException catch (e) {
+      // Database prima della migrazione 0029: la colonna non c'è ancora.
+      if (e.code == 'PGRST204') {
+        throw const AppError(
+          'Il codice del party si potrà salvare quando il server del club sarà '
+          'aggiornato.',
+        );
+      }
+      rethrow;
+    }
   }
 }
 
@@ -126,6 +152,8 @@ class DemoEventsRepository implements EventsRepository {
 
   @override
   Future<void> save(ClubEvent e) async {
+    // Come sul server: modificando l'evento il codice del party resta.
+    final old = _events.where((x) => x.id == e.id).firstOrNull;
     _events.removeWhere((x) => x.id == e.id);
     _events.add(
       e.id.isEmpty
@@ -138,7 +166,7 @@ class DemoEventsRepository implements EventsRepository {
               location: e.location,
               team: e.team,
             )
-          : e,
+          : e.withPartyCode(e.partyCode ?? old?.partyCode),
     );
     _controller.add(_sorted);
   }
@@ -146,6 +174,17 @@ class DemoEventsRepository implements EventsRepository {
   @override
   Future<void> delete(String id) async {
     _events.removeWhere((x) => x.id == id);
+    _controller.add(_sorted);
+  }
+
+  @override
+  Future<void> setPartyCode(String eventId, String? code) async {
+    final i = _events.indexWhere((x) => x.id == eventId);
+    if (i < 0) return;
+    final value = code?.trim();
+    _events[i] = _events[i].withPartyCode(
+      value == null || value.isEmpty ? null : value,
+    );
     _controller.add(_sorted);
   }
 }

@@ -29,6 +29,7 @@ import '../risultati/match_detail_page.dart';
 import '../risultati/matches_repository.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
+import 'match_day.dart';
 
 /// La Home: la serata di oggi per prima, poi la prossima partita, l'ultimo
 /// risultato e Mondo Proclub.
@@ -102,6 +103,8 @@ class TonightCard extends ConsumerWidget {
     final myTeams = me?.teams ?? const {Team.milanac};
     final event = eveningEvent(events, today, teams: myTeams);
     final team = event.team ?? mainTeam(myTeams);
+    // Giorno di partita: la card diventa il Match Day.
+    final matchDay = event.type.isMatch && event.id.isNotEmpty;
 
     void retry() {
       ref.invalidate(rosaProvider);
@@ -113,43 +116,73 @@ class TonightCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionLabel('Stasera · ${team.label}', gold: true),
-          const SizedBox(height: 2),
-          Text(
-            '${event.type.label.toUpperCase()} '
-            '${DateFormat('HH:mm').format(event.startsAt)}',
-            style: _cardTitle(p, size: 24),
+          SectionLabel(
+            '${matchDay ? 'Match day' : 'Stasera'} · ${team.label}',
+            gold: true,
           ),
-          if (event.title != event.type.label)
+          const SizedBox(height: 2),
+          if (matchDay) ...[
+            const SizedBox(height: 10),
+            MatchDayHeader(event: event, team: team),
+            const SizedBox(height: 14),
+          ] else ...[
             Text(
-              event.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: p.textSecondary, fontSize: 15),
+              '${event.type.label.toUpperCase()} '
+              '${DateFormat('HH:mm').format(event.startsAt)}',
+              style: _cardTitle(p, size: 24),
             ),
+            if (event.title != event.type.label)
+              Text(
+                event.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: p.textSecondary, fontSize: 15),
+              ),
+          ],
           AsyncView(
             value: rosa,
             onRetry: retry,
             data: (all) => AsyncView(
               value: attendance,
               onRetry: retry,
-              data: (entries) => _Tonight(
-                me: me,
-                members: [
+              data: (entries) {
+                final members = [
                   for (final m in all)
                     if (m.active &&
                         m.role != ClubRole.pending &&
                         m.teams.contains(team))
                       m,
-                ],
-                tonight: {
+                ];
+                final tonight = {
                   for (final e in entries.where((e) => e.date == today))
                     e.playerId: e,
-                },
-                today: today,
-                open: answersOpen(today, now),
-                event: event,
-              ),
+                };
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Tonight(
+                      me: me,
+                      members: members,
+                      tonight: tonight,
+                      today: today,
+                      open: answersOpen(today, now),
+                      event: event,
+                    ),
+                    if (matchDay)
+                      MatchDayExtras(
+                        event: event,
+                        team: team,
+                        ready: [
+                          for (final m in members)
+                            if (tonight[m.id]?.status
+                                case AttendanceStatus.presente ||
+                                    AttendanceStatus.ritardo)
+                              m,
+                        ],
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -279,11 +312,19 @@ class NextMatchCard extends ConsumerWidget {
     // Gli orari degli eventi sono in ora italiana.
     final now = italianClock(ref.watch(clockProvider)());
     final myTeams = me?.teams ?? const {Team.milanac};
+    final events = ref.watch(eventsProvider).value ?? const <ClubEvent>[];
+    // La partita di stasera è già nel Match Day, in cima.
+    final tonight = eveningEvent(
+      events,
+      DateTime(now.year, now.month, now.day),
+      teams: myTeams,
+    );
     final next =
-        (ref.watch(eventsProvider).value ?? const <ClubEvent>[])
+        events
             .where(
               (e) =>
                   e.type.isMatch &&
+                  e.id != tonight.id &&
                   e.concerns(myTeams) &&
                   e.startsAt.isAfter(now.subtract(const Duration(hours: 3))),
             )

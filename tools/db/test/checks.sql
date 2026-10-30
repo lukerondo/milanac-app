@@ -1813,3 +1813,24 @@ do $$ begin
          = '{tiro_potente+,scatto,primo_controllo}', 'PlayStyle salvati dal giocatore';
   assert (select count(*) from profiles where play_styles is null) = 0, 'mai null';
 end $$;
+
+-- ================================================================ Match Day (0029)
+-- Il codice del party lo scrive il Direttivo; un giocatore no.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into events (id, type, title, starts_at)
+values ('00000000-0000-0000-0000-0000000000c9', 'torneo', 'FVPA – 4ª giornata vs Lupi', now() + interval '3 hours');
+update events set party_code = 'MILANAC21' where id = '00000000-0000-0000-0000-0000000000c9';
+select pg_temp.expect_error(
+  $q$update events set party_code = '   ' where id = '00000000-0000-0000-0000-0000000000c9'$q$,
+  'events_party_code_len');
+select pg_temp.expect_error(format(
+  $q$update events set party_code = %L where id = '00000000-0000-0000-0000-0000000000c9'$q$,
+  repeat('x', 41)), 'events_party_code_len');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+update events set party_code = 'INTRUSO' where id = '00000000-0000-0000-0000-0000000000c9';
+reset role;
+do $$ begin
+  assert (select party_code from events where id = '00000000-0000-0000-0000-0000000000c9') = 'MILANAC21',
+    'il codice resta quello del Direttivo';
+end $$;

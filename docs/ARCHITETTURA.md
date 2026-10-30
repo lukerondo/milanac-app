@@ -103,7 +103,11 @@ accettano al primo accesso successivo.
 2. **Home** – due riquadri. **Mondo Proclub**: ultimo video dei creator, avviso di
    aggiornamento FC 27 e della propria console, scorciatoie a video e notizie.
    **Presenze**: la serata di oggi della propria squadra (allenamento delle 21:30 o l'evento
-   del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi.
+   del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi. Nel giorno di una
+   partita diventa il **Match Day**: tabellone con lo stemma contro l'avversario e il conto
+   alla rovescia al calcio d'inizio (poi "in corso" e il fischio finale), chi è pronto con i
+   volti, lo stato della formazione e il codice del party da copiare (lo scrive il
+   Direttivo); la partita di stasera non si ripete in "Prossima partita".
 3. **Barra in basso a cinque schede** (sempre visibile, ognuna ricorda dove eri rimasto):
    - *Home* · *Presenze* · *Partite* (Calendario, Risultati, Tornei; da qui Formazione e
      dettaglio partita) · *Chat* (con i non letti sull'icona) · *Club* (Rosa, Carte speciali,
@@ -296,6 +300,9 @@ matches       + timeline (jsonb: [{minute 1-130, side us|them, scorer?}], mai pi
 profiles      + play_styles (text[]: codici dei PlayStyle, "+" in fondo per i PlayStyle+;
               al massimo 6, di cui 2 "+"). L'archetipo resta play_style (testo libero, con
               i 13 archetipi proposti nell'app)
+-- dalla migrazione 0029
+events        + party_code (text, 1-40 caratteri: il codice del party della partita, lo
+              scrive il Direttivo e si copia dal Match Day in Home)
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
