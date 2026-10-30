@@ -1,22 +1,29 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/config.dart';
+import '../../core/local_flags.dart';
 import '../../core/theme.dart';
 import '../../shared/gold_loader.dart';
 import 'intro_state.dart';
 
-/// Intro: video del club (assets/video/intro.mp4; se manca, sfondo nero), stemma del
-/// Milano FC, barra di caricamento in oro e "Milano siamo noi". Tocca per saltare.
+/// Intro: video del club (assets/video/intro.mp4; se manca, sfondo nero) con i cori e
+/// lo speaker, stemma del Milano FC, barra di caricamento in oro e "Milano siamo noi".
+/// Tocca per saltare; l'audio si spegne (e resta spento) con il pulsante accanto a
+/// "Salta".
 class IntroPage extends ConsumerStatefulWidget {
   const IntroPage({super.key});
 
   static const videoAsset = 'assets/video/intro.mp4';
   static const fallbackDuration = Duration(milliseconds: 3500);
+
+  /// Preferenza salvata sul telefono: "1" se l'audio dell'intro è spento.
+  static const mutedFlag = 'intro_audio_spento';
 
   @override
   ConsumerState<IntroPage> createState() => _IntroPageState();
@@ -26,6 +33,10 @@ class _IntroPageState extends ConsumerState<IntroPage>
     with SingleTickerProviderStateMixin {
   VideoPlayerController? _video;
   late final AnimationController _progress;
+
+  /// Nel browser parte senza audio: i browser bloccano i video con l'audio che partono
+  /// da soli.
+  bool _muted = kIsWeb;
 
   @override
   void initState() {
@@ -40,11 +51,16 @@ class _IntroPageState extends ConsumerState<IntroPage>
   }
 
   Future<void> _start() async {
+    final flags = ref.read(localFlagsProvider);
+    try {
+      if (await flags.getString(IntroPage.mutedFlag) == '1') _muted = true;
+    } catch (_) {}
+    if (mounted) setState(() {});
     if (await _hasVideo()) {
       final controller = VideoPlayerController.asset(IntroPage.videoAsset);
       try {
         await controller.initialize();
-        await controller.setVolume(0);
+        await controller.setVolume(_muted ? 0 : 1);
         if (!mounted) {
           await controller.dispose();
           return;
@@ -70,7 +86,22 @@ class _IntroPageState extends ConsumerState<IntroPage>
 
   void _finish() {
     if (AppConfig.isMisconfigured) return;
+    // Saltata: i cori si zittiscono (può partire la musica dell'app).
+    unawaited(_video?.setVolume(0));
     ref.read(introDoneProvider.notifier).complete();
+  }
+
+  void _toggleAudio() {
+    setState(() => _muted = !_muted);
+    if (!ref.read(introDoneProvider)) {
+      unawaited(_video?.setVolume(_muted ? 0 : 1));
+    }
+    unawaited(
+      ref
+          .read(localFlagsProvider)
+          .setString(IntroPage.mutedFlag, _muted ? '1' : '0')
+          .catchError((_) {}),
+    );
   }
 
   @override
@@ -131,9 +162,16 @@ class _IntroPageState extends ConsumerState<IntroPage>
                   Positioned(
                     top: 8,
                     right: 16,
-                    child: _SkipButton(
-                      waiting: waiting,
-                      onPressed: waiting ? null : _finish,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _AudioButton(muted: _muted, onPressed: _toggleAudio),
+                        const SizedBox(width: 10),
+                        _SkipButton(
+                          waiting: waiting,
+                          onPressed: waiting ? null : _finish,
+                        ),
+                      ],
                     ),
                   ),
                   Positioned(
@@ -185,6 +223,26 @@ class _IntroPageState extends ConsumerState<IntroPage>
       ),
     );
   }
+}
+
+/// Audio dell'intro acceso o spento, accanto a "Salta".
+class _AudioButton extends StatelessWidget {
+  const _AudioButton({required this.muted, required this.onPressed});
+  final bool muted;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    onPressed: onPressed,
+    tooltip: muted ? 'Accendi l\'audio' : 'Spegni l\'audio',
+    style: IconButton.styleFrom(
+      minimumSize: const Size(44, 44),
+      backgroundColor: MilanacColors.black.withValues(alpha: .55),
+      foregroundColor: MilanacColors.ivory,
+      side: BorderSide(color: MilanacColors.goldLight.withValues(alpha: .7)),
+    ),
+    icon: Icon(muted ? Icons.volume_off_rounded : Icons.volume_up_rounded),
+  );
 }
 
 /// "Salta" in alto a destra; finita l'intro, l'attesa del profilo.

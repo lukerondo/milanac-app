@@ -53,13 +53,16 @@ flutter run -d chrome  # nel browser
 ## Video intro
 
 `assets/video/intro.mp4` è il **walkout della squadra** (20 s, verticale 720×1280, circa 3 MB,
-con l'audio, che nell'intro dell'app resta spento): sei striscioni dipinti a mano in
+con l'audio: nell'intro si sente, e il pulsante accanto a "Salta" lo spegne e se lo ricorda):
+sei striscioni dipinti a mano in
 curva (FORZA IMMU!, FABIO UNICO CAPITANO, CHRYS IL MOTORE, MARTIN UNO DI NOI, ZIO FOR
 PRESIDENT, VICIO NUMBER ONE), ognuno seguito dal suo giocatore che esce dagli spogliatoi, poi
 l'azione che parte da Immu, il gol di Fabio, l'esultanza sotto la curva e il fumo che sfuma nel
 nero; sotto, i cori della curva e lo speaker ("Ha segnato il Milan AC!"). Il video l'ha generato
-Seedance 2.5 su Leonardo con i prompt di `docs/PROMPT_GRAFICA.md`; gli striscioni erano vuoti e
-le scritte, i nomi sulle maglie corretti e il montaggio sono degli script in
+Seedance 2.5 su Leonardo con i prompt di `docs/PROMPT_GRAFICA.md`; gli striscioni erano vuoti.
+Le scritte sugli striscioni, la U di IMMU sulla maglia del portiere (l'AI aveva scritto IMMI: la u
+è la prima n della scritta capovolta, fotogramma per fotogramma, così carattere e luce sono quelli
+del video; gli altri nomi sono quelli generati) e il montaggio sono degli script in
 `tools/video/walkout/` (OpenCV + ffmpeg: `striscioni.py`, `nomi.py`, `monta.py`, lanciati da
 una cartella con il video in `in/` e i fotogrammi degli shot in `shots/`). La versione per i
 social (1080×1920) non sta nel repository. Se il video manca, l'intro resta su sfondo nero.
