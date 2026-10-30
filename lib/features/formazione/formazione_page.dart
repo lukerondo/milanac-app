@@ -20,6 +20,9 @@ import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
 import '../calendario/club_event.dart';
 import '../calendario/events_repository.dart';
+import '../carta/card_colors.dart';
+import '../carta/card_stats.dart';
+import '../carta/mini_card.dart' show CardPortrait;
 import '../carte/special_cards_repository.dart';
 import '../presenze/evening.dart';
 import '../rosa/member.dart';
@@ -27,7 +30,7 @@ import '../rosa/rosa_repository.dart';
 import 'formation_pdf.dart';
 import 'formation_repository.dart';
 import 'modules.dart';
-import 'pitch_painter.dart';
+import 'perspective_pitch.dart';
 
 /// La squadra chiesta dalla rotta della formazione (`/formazione?squadra=futuro`, i valori
 /// sono i nomi di [Team]); null = nessuna, si mostra quella del giocatore.
@@ -538,25 +541,33 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
                 'Campo con la formazione ${formation.module}: '
                 '${formationSummary(onField, formation.slots.length - onField)}',
             child: AspectRatio(
-              aspectRatio: .81,
+              aspectRatio: .8,
               child: LayoutBuilder(
                 builder: (context, box) {
-                  const inset = PitchPainter.inset;
-                  final fieldW = box.maxWidth - inset * 2;
-                  final fieldH = box.maxHeight - inset * 2;
+                  final pitch = PitchPerspective(box.biggest);
+                  // Dalle carte lontane alle vicine: quelle davanti coprono le altre.
+                  final order = [
+                    for (final (i, slot) in formation.slots.indexed) (i, slot),
+                  ]..sort((a, b) => a.$2.y.compareTo(b.$2.y));
                   return Stack(
+                    clipBehavior: Clip.none,
                     children: [
                       const Positioned.fill(
-                        child: CustomPaint(painter: PitchPainter()),
+                        child: CustomPaint(painter: PerspectivePitchPainter()),
                       ),
-                      // Foto e nome insieme sono centrati sul posto: così anche
-                      // il portiere resta dentro il campo.
-                      for (final (i, slot) in formation.slots.indexed)
-                        Positioned(
-                          left: inset + slot.x * fieldW - 40,
-                          top: inset + slot.y * fieldH - 31,
-                          width: 80,
-                          child: _PlayerToken(
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: CardShadowsPainter([
+                            for (final s in formation.slots) (s.x, s.y),
+                          ]),
+                        ),
+                      ),
+                      // Ogni carta sta in piedi sul suo posto, più piccola in fondo.
+                      for (final (i, slot) in order)
+                        _standing(
+                          pitch,
+                          slot,
+                          _PitchCard(
                             slot: slot,
                             member: allMembers[formation.players[i]],
                             onTap: canEdit
@@ -918,16 +929,35 @@ Future<String?> _pickPlayer(
   );
 }
 
-/// Un posto in campo: la foto con il bordo oro e "9 Rossi", oppure (posto libero) il
-/// cerchio tratteggiato dell'IA con il ruolo. Il campo è scuro anche nel tema chiaro.
-class _PlayerToken extends StatelessWidget {
-  const _PlayerToken({required this.slot, required this.member, this.onTap});
+/// Una carta in piedi sul suo posto: i piedi sul punto del campo, più piccola in fondo.
+Widget _standing(PitchPerspective pitch, SlotPosition slot, Widget card) {
+  final at = pitch.project(slot.x, slot.y);
+  final s = PitchPerspective.cardScaleAt(pitch.nearness(slot.y));
+  const w = _PitchCard.width, h = _PitchCard.height;
+  return Positioned(
+    left: at.dx - w * s / 2,
+    top: at.dy - (h - 4) * s,
+    width: w * s,
+    height: h * s,
+    child: FittedBox(
+      child: SizedBox(width: w, height: h, child: card),
+    ),
+  );
+}
+
+/// Un posto in campo come una mini carta di FC: overall, ruolo, volto e "9 Rossi" (con i
+/// colori della carta speciale, se c'è); un posto libero è la carta tratteggiata
+/// dell'IA. Il campo è scuro anche nel tema chiaro.
+class _PitchCard extends ConsumerWidget {
+  const _PitchCard({required this.slot, required this.member, this.onTap});
   final SlotPosition slot;
   final Member? member;
   final VoidCallback? onTap;
 
+  static const width = 52.0, height = 70.0;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final m = member;
     final label = m == null
         ? slot.label
@@ -935,6 +965,37 @@ class _PlayerToken extends StatelessWidget {
             if (m.shirtNumber != null) '${m.shirtNumber}',
             m.displayName.split(' ').last,
           ].join(' ');
+    final special = m == null
+        ? null
+        : ref.watch(activeSpecialCardProvider(m.id));
+    final kind = special?.kind;
+    final (top, bottom, border, fg) = switch (kind) {
+      CardSpecial.neroOro => (
+        CardColors.neroOroLight,
+        CardColors.neroOro,
+        CardColors.gold,
+        CardColors.goldText,
+      ),
+      CardSpecial.blu => (
+        CardColors.blue,
+        CardColors.blueDeep,
+        CardColors.blueRing,
+        CardColors.onBlue,
+      ),
+      null => (
+        CardColors.surfaceHigh,
+        MilanacColors.black,
+        CardColors.tier(tierOf(m?.overall)),
+        CardColors.text,
+      ),
+    };
+    final name = TextStyle(
+      fontFamily: sportFont,
+      fontSize: 10,
+      fontWeight: FontWeight.w600,
+      height: 1.1,
+      color: m == null ? MilanacColors.ivory : fg,
+    );
     return Semantics(
       button: onTap != null,
       label: m == null
@@ -944,84 +1005,141 @@ class _PlayerToken extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox.square(
-              dimension: 44,
-              child: m == null
-                  ? const CustomPaint(
-                      painter: _DashedCircle(),
-                      child: Center(
-                        child: Text(
+        child: m == null
+            ? CustomPaint(
+                painter: const _DashedCard(),
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
                           'IA',
                           style: TextStyle(
                             fontFamily: sportFont,
-                            fontSize: 14,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
                             color: MilanacColors.ivory,
                           ),
                         ),
+                        Text(label, style: name),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(color: border, width: 1.5),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [top, bottom],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: MilanacColors.black.withValues(alpha: .5),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 3, 4, 3),
+                  child: Column(
+                    children: [
+                      // Overall e ruolo si rimpiccioliscono se non c'è posto.
+                      Row(
+                        children: [
+                          Flexible(
+                            flex: 3,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                overallWith(m.overall, special)?.toString() ??
+                                    '–',
+                                style: TextStyle(
+                                  fontFamily: sportFont,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1,
+                                  color: fg,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Flexible(
+                            flex: 2,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                slot.label,
+                                style: TextStyle(
+                                  fontFamily: sportFont,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1,
+                                  color: fg.withValues(alpha: .85),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    )
-                  : DecoratedBox(
-                      decoration: const BoxDecoration(
-                        color: MilanacColors.gold,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(2),
-                        child: MemberAvatar(
-                          member: m,
-                          radius: 20,
-                          showNumber: false,
+                      Expanded(
+                        child: Center(
+                          child: CardPortrait(
+                            member: m,
+                            size: 32,
+                            special: kind,
+                          ),
                         ),
                       ),
-                    ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: MilanacColors.ivory,
-                shadows: [Shadow(color: MilanacColors.black, blurRadius: 3)],
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: name,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
 }
 
-/// Cerchio tratteggiato di un posto lasciato all'IA.
-class _DashedCircle extends CustomPainter {
-  const _DashedCircle();
+/// La carta tratteggiata di un posto lasciato all'IA.
+class _DashedCard extends CustomPainter {
+  const _DashedCard();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final radius = size.shortestSide / 2 - 1;
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()..color = MilanacColors.ink.withValues(alpha: .4),
+    final r = RRect.fromRectAndRadius(
+      (Offset.zero & size).deflate(1),
+      const Radius.circular(7),
+    );
+    canvas.drawRRect(
+      r,
+      Paint()..color = MilanacColors.ink.withValues(alpha: .45),
     );
     final dash = Paint()
       ..color = MilanacColors.ivory.withValues(alpha: .55)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    const segments = 16;
-    const sweep = 2 * 3.141592653589793 / segments;
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    for (var i = 0; i < segments; i++) {
-      canvas.drawArc(rect, i * sweep, sweep * .55, false, dash);
+      ..strokeWidth = 1.5;
+    for (final metric in (Path()..addRRect(r)).computeMetrics()) {
+      for (var d = 0.0; d < metric.length; d += 9) {
+        canvas.drawPath(metric.extractPath(d, d + 5), dash);
+      }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DashedCircle oldDelegate) => false;
+  bool shouldRepaint(covariant _DashedCard oldDelegate) => false;
 }

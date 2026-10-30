@@ -128,8 +128,10 @@ accettano al primo accesso successivo.
    ruolo nel club, ruolo in campo, numero, data di ingresso). Ricerca per nome, cognome o
    gamertag; filtri per squadra, reparto (POR/DIF/CEN/ATT) e *Solo Direttivo*. Un tocco apre
    la carta del giocatore.
-5. **Formazione** – campo verde stile San Siro (disegnato in Flutter), scelta modulo
-   (4-3-3, 4-2-3-1, 3-5-2…), 11 bollini: il Direttivo tocca un bollino e assegna il giocatore.
+5. **Formazione** – campo in prospettiva come il menu tattiche di FC (disegnato in Flutter:
+   erba a strisce, linee proiettate, la porta avversaria lontana), scelta modulo (4-3-3,
+   4-2-3-1, 3-5-2…), 11 mini carte in piedi (overall, ruolo, volto, colori della carta
+   speciale), più piccole in fondo: il Direttivo tocca una carta e assegna il giocatore.
 6. **Calendario** – vista mensile + lista; tipi evento: *Partita torneo*, *Amichevole*,
    *Allenamento*, *Riunione*, *Altro*. Solo il Direttivo crea eventi (notifica alla squadra
    o a tutti). Ogni giorno compare l'allenamento automatico delle 21:30 per la squadra che
