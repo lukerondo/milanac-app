@@ -1,0 +1,240 @@
+name: iPhone
+
+# App per iPhone da distribuire "ad hoc": i telefoni dei membri (UDID) sono registrati
+# sull'account Apple sviluppatore e l'IPA si carica su un sito come Diawi, che dà il link per
+# installarla. Da main o a mano la pubblica nella release "App per iPhone" (tag
+# iphone-di-prova). Sui rami claude/** parte solo se il push tocca ios/, questo file o pubspec.
+#
+# Con i secret di firma (vedi docs/PUBBLICAZIONE.md, "iPhone ad hoc"):
+#   IOS_CERTIFICATO_P12       certificato "Apple Distribution" esportato in .p12, in base64
+#   IOS_CERTIFICATO_PASSWORD  password del .p12
+#   IOS_PROFILO_ADHOC         profilo "Ad Hoc" (.mobileprovision) con gli UDID, in base64
+# esce MILANAC.ipa firmato, pronto per Diawi. Senza, esce MILANAC-non-firmato.ipa, da firmare
+# con il proprio certificato e profilo (strumenti o siti che firmano l'IPA per gli UDID).
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "claude/**"
+
+# Una build alla volta per ramo: due pubblicazioni insieme si sovrapporrebbero.
+concurrency: iphone-${{ github.ref }}
+
+jobs:
+  # Come per il Mac: il filtro sui file per i rami claude/** lo decide un controllo veloce su
+  # Linux. Da main e a mano si compila sempre.
+  modifiche:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      ios: ${{ steps.filtro.outputs.ios }}
+    steps:
+      - id: filtro
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != push ] || [ "$GITHUB_REF" = refs/heads/main ]; then
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Ramo appena creato: non c'è un commit di prima, si confronta con main.
+          case "$BEFORE" in ""|0000000000000000000000000000000000000000) BEFORE=main ;; esac
+          if ! FILES=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename'); then
+            echo "::warning::Confronto dei file non riuscito: si compila comunque."
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if grep -qE '^(ios/|\.github/workflows/iphone\.yml$|pubspec\.)' <<< "$FILES"; then
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nessuna modifica per l'iPhone (ios/, iphone.yml, pubspec): compilazione saltata."
+            echo "ios=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  app:
+    needs: modifiche
+    if: needs.modifiche.outputs.ios == 'true'
+    runs-on: macos-15
+    permissions:
+      contents: write
+    timeout-minutes: 60
+    env:
+      BUNDLE_ID: com.milanacproclub.milanac
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          # Versione fissa (la stessa usata in sviluppo): build riproducibili.
+          flutter-version: "3.47.7"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      # Certificato e profilo nel portachiavi del runner (temporaneo, sparisce con lui). Le
+      # password passano dall'ambiente, non dal testo dello script.
+      - name: Firma (se ci sono i secret)
+        id: firma
+        env:
+          P12_BASE64: ${{ secrets.IOS_CERTIFICATO_P12 }}
+          P12_PASSWORD: ${{ secrets.IOS_CERTIFICATO_PASSWORD }}
+          PROFILO_BASE64: ${{ secrets.IOS_PROFILO_ADHOC }}
+        run: |
+          if [ -z "$P12_BASE64" ] || [ -z "$PROFILO_BASE64" ]; then
+            echo "::warning::Secret di firma assenti: esce l'IPA non firmato (vedi docs/PUBBLICAZIONE.md)."
+            echo "firmato=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/milanac.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+
+          echo "$PROFILO_BASE64" | base64 --decode > "$RUNNER_TEMP/profilo.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/profilo.mobileprovision" > "$RUNNER_TEMP/profilo.plist"
+          leggi() { /usr/libexec/PlistBuddy -c "Print :$1" "$RUNNER_TEMP/profilo.plist"; }
+          UUID=$(leggi UUID)
+          NOME=$(leggi Name)
+          TEAM=$(leggi TeamIdentifier:0)
+          APP_ID=$(leggi Entitlements:application-identifier)
+          if [ "$APP_ID" != "$TEAM.$BUNDLE_ID" ]; then
+            echo "::error::Il profilo è per $APP_ID, non per $TEAM.$BUNDLE_ID"
+            exit 1
+          fi
+          if ! leggi ProvisionedDevices >/dev/null 2>&1; then
+            echo "::error::Il profilo non ha UDID: serve un profilo \"Ad Hoc\" (non App Store)"
+            exit 1
+          fi
+          DISPOSITIVI=$(leggi ProvisionedDevices | grep -c '^ ')
+          # Xcode 16 legge i profili da qui; le versioni prima dalla cartella MobileDevice.
+          for d in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" \
+                   "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+            mkdir -p "$d" && cp "$RUNNER_TEMP/profilo.mobileprovision" "$d/$UUID.mobileprovision"
+          done
+
+          # Permessi dell'app: solo quelli che il profilo concede (Push e Sign in with Apple
+          # vanno attivati sull'App ID; senza, la firma fallirebbe). L'accesso con Apple passa
+          # dal browser (Supabase), quindi senza il permesso funziona lo stesso.
+          ENT=ios/Runner/Runner.entitlements
+          for chiave in aps-environment com.apple.developer.applesignin; do
+            if ! leggi "Entitlements:$chiave" >/dev/null 2>&1; then
+              /usr/libexec/PlistBuddy -c "Delete :$chiave" "$ENT" 2>/dev/null || true
+              echo "::warning::Il profilo non ha $chiave: tolto dai permessi dell'app per questa build."
+            fi
+          done
+
+          # Firma manuale solo per l'app (non per i pacchetti di Swift e CocoaPods).
+          python3 - "$TEAM" "$NOME" <<'PY'
+          import re, sys
+          team, nome = sys.argv[1], sys.argv[2]
+          p = 'ios/Runner.xcodeproj/project.pbxproj'
+          s = open(p).read()
+          def firma(m):
+              blocco = m.group(0)
+              if 'PRODUCT_BUNDLE_IDENTIFIER = com.milanacproclub.milanac;' not in blocco:
+                  return blocco
+              blocco = re.sub(r'\n\s*(CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PROVISIONING_PROFILE_SPECIFIER|"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]"|CODE_SIGN_IDENTITY) = [^;]*;', '', blocco)
+              return blocco.replace('buildSettings = {', 'buildSettings = {\n'
+                  '\t\t\t\tCODE_SIGN_STYLE = Manual;\n'
+                  f'\t\t\t\tDEVELOPMENT_TEAM = {team};\n'
+                  f'\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "{nome}";\n'
+                  '\t\t\t\t"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";', 1)
+          s, n = re.subn(r'buildSettings = \{.*?\n\t\t\t\};', firma, s, flags=re.S)
+          open(p, 'w').write(s)
+          PY
+          grep -c "PROVISIONING_PROFILE_SPECIFIER" ios/Runner.xcodeproj/project.pbxproj
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>release-testing</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict><key>$BUNDLE_ID</key><string>$NOME</string></dict>
+            <key>thinning</key><string>&lt;none&gt;</string>
+          </dict>
+          </plist>
+          PLIST
+          echo "firmato=true" >> "$GITHUB_OUTPUT"
+          echo "dispositivi=$DISPOSITIVI" >> "$GITHUB_OUTPUT"
+          echo "Profilo \"$NOME\" (team $TEAM) con $DISPOSITIVI iPhone registrati."
+
+      - name: IPA firmato (ad hoc)
+        if: steps.firma.outputs.firmato == 'true'
+        run: |
+          xcodebuild -version
+          flutter build ipa --release --dart-define-from-file=env/prod.json \
+            --export-options-plist="$RUNNER_TEMP/ExportOptions.plist"
+          cp build/ios/ipa/*.ipa MILANAC.ipa
+          echo "IPA=MILANAC.ipa" >> "$GITHUB_ENV"
+
+      # Senza firma: l'app compilata dentro la cartella Payload, zippata (è il formato .ipa).
+      - name: IPA non firmato
+        if: steps.firma.outputs.firmato != 'true'
+        run: |
+          xcodebuild -version
+          flutter build ios --release --no-codesign --dart-define-from-file=env/prod.json
+          rm -rf Payload && mkdir Payload
+          ditto build/ios/iphoneos/Runner.app Payload/Runner.app
+          ditto -c -k --sequesterRsrc --keepParent Payload MILANAC-non-firmato.ipa
+          echo "IPA=MILANAC-non-firmato.ipa" >> "$GITHUB_ENV"
+
+      # Controllo: dentro c'è l'app giusta (identificativo e versione) e, se firmata, con il
+      # profilo e i dispositivi.
+      - name: Verifica l'IPA
+        run: |
+          rm -rf verifica && mkdir verifica && cd verifica && unzip -q "../$IPA"
+          APP=$(ls -d Payload/*.app)
+          ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
+          VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+          if [ "$ID" != "$BUNDLE_ID" ]; then echo "::error::Identificativo $ID inatteso"; exit 1; fi
+          if [ "${{ steps.firma.outputs.firmato }}" = true ]; then
+            codesign --verify --deep --strict "$APP"
+            test -f "$APP/embedded.mobileprovision"
+            echo "Firmato ad hoc per ${{ steps.firma.outputs.dispositivi }} iPhone."
+          fi
+          echo "$IPA: $ID $VER, $(du -m "../$IPA" | cut -f1) MB"
+          echo "- $IPA: $(du -m "../$IPA" | cut -f1) MB" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: milanac-iphone
+          path: ${{ env.IPA }}
+
+      # Solo da main o a mano: le build dei rami claude/** restano come artifact.
+      - name: Pubblica nella release "App per iPhone"
+        if: >
+          github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ steps.firma.outputs.firmato }}" = true ]; then
+            COME="MILANAC.ipa è firmato ad hoc per ${{ steps.firma.outputs.dispositivi }} iPhone registrati: caricalo su un sito come Diawi e manda il link ai membri (si apre da Safari sull'iPhone)."
+          else
+            COME="MILANAC-non-firmato.ipa va firmato con il certificato e il profilo Ad Hoc dell'account Apple (con i secret di firma su GitHub esce già firmato)."
+          fi
+          NOTES="App per iPhone di prova – compilata il $(date -u '+%d/%m/%Y %H:%M') UTC dal commit ${GITHUB_SHA::7}. $COME"
+          if gh release view iphone-di-prova >/dev/null 2>&1; then
+            gh release edit iphone-di-prova --notes "$NOTES"
+          else
+            gh release create iphone-di-prova --prerelease --title "App per iPhone" --notes "$NOTES" --target "$GITHUB_SHA"
+          fi
+          # Un solo IPA nella release: quello vecchio dell'altro tipo si toglie.
+          for vecchio in MILANAC.ipa MILANAC-non-firmato.ipa; do
+            if [ "$vecchio" != "$IPA" ]; then gh release delete-asset iphone-di-prova "$vecchio" -y 2>/dev/null || true; fi
+          done
+          gh release upload iphone-di-prova "$IPA" --clobber

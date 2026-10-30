@@ -121,6 +121,14 @@ scarica `MILANAC.dmg` dalla release
 
 Le notifiche push sul Mac per ora non ci sono; le clip highlights si caricano dal telefono.
 
+## App per iPhone
+
+Senza App Store: i membri mandano l'UDID del loro iPhone, che si registra sull'account sviluppatore
+Apple; il workflow *iPhone* compila `MILANAC.ipa` firmato per quei telefoni e lo pubblica nella
+release [App per iPhone](https://github.com/lukerondo/milanac-app/releases/tag/iphone-di-prova);
+caricato su un sito come Diawi dà il link per installarlo da Safari. Tutti i passaggi (UDID,
+certificato, profilo Ad Hoc e secret) in [`docs/PUBBLICAZIONE.md`](docs/PUBBLICAZIONE.md).
+
 ## Build
 
 - **CI**: ad ogni push GitHub Actions esegue `flutter analyze`, `flutter test` e la prova delle
@@ -131,7 +139,8 @@ Le notifiche push sul Mac per ora non ci sono; le clip highlights si caricano da
   `MILANAC-arm64.apk` (circa 70 MB) è quello da installare sui telefoni; `MILANAC.apk` contiene
   anche i processori a 32 bit. Le estensioni video di Agora restano fuori dal pacchetto.
 - **Rilascio Android (.aab firmato)**: Actions → *Rilascio Android*.
-- **iOS**: Codemagic (`codemagic.yaml`) → TestFlight.
+- **iOS**: workflow *iPhone* (`.github/workflows/iphone.yml`) → `MILANAC.ipa` ad hoc (o non firmato
+  senza i secret di firma), nella release *App per iPhone*; per TestFlight c'è Codemagic (`codemagic.yaml`).
 - **Mac**: workflow *Mac* (`.github/workflows/mac.yml`) → `MILANAC.dmg` firmato ad-hoc, come
   artifact `milanac-mac` e (da `main` o a mano) nella release *App per Mac*.
 - Guida completa per gli store: [`docs/PUBBLICAZIONE.md`](docs/PUBBLICAZIONE.md).

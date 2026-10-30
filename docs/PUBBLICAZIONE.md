@@ -137,6 +137,40 @@ regolamento da accettare). Crea un account di prova con email e password, comple
 *Giocatore* e accetta il regolamento, poi scrivi email e password nelle **Note per la revisione** di App Store
 Connect (idem nella sezione *Accesso all'app* della Play Console). Finita la revisione, toglilo dalla Rosa.
 
+### iPhone senza App Store (ad hoc, con gli UDID)
+
+Per far provare l'app ai membri senza App Store né TestFlight: i loro iPhone (UDID) si registrano
+sull'account sviluppatore, GitHub compila un IPA firmato per quei telefoni (workflow **iPhone**) e un
+sito come [Diawi](https://www.diawi.com) dà il link per installarlo da Safari. Massimo 100 iPhone
+l'anno per tipo di dispositivo; profilo e certificato durano un anno.
+
+1. **UDID**: ogni membro apre da Safari sull'iPhone un sito come <https://udid.tech>, installa il
+   profilo che propone (Impostazioni → Profilo scaricato) e ti manda il codice UDID.
+2. developer.apple.com → *Certificates, IDs & Profiles*:
+   - **Devices → +**: un dispositivo per ogni UDID (come nome, quello del giocatore).
+   - **Identifiers**: l'App ID `com.milanacproclub.milanac` (se manca, crealo). Push Notifications e
+     Sign in with Apple sono facoltativi: se non ci sono, il workflow li toglie dai permessi dell'app.
+   - **Certificates → +** → **Apple Distribution**: sul Mac *Accesso Portachiavi → Assistente
+     Certificato → Richiedi un certificato da un'Autorità di certificazione* (salvata su disco), carica il
+     file, scarica il certificato e aprilo (finisce nel Portachiavi). In *Portachiavi → I miei
+     certificati* tasto destro su "Apple Distribution: …" → **Esporta** → `.p12` con una password.
+   - **Profiles → +** → **Ad Hoc** → App ID `com.milanacproclub.milanac` → il certificato → **tutti i
+     dispositivi** → nome per esempio `MILANAC Ad Hoc` → scarica il `.mobileprovision`.
+3. GitHub → *Settings → Secrets and variables → Actions → New repository secret* (dal Terminale del Mac
+   `base64 -i FILE | pbcopy` copia il file già pronto da incollare):
+   - `IOS_CERTIFICATO_P12`: il `.p12` in base64;
+   - `IOS_CERTIFICATO_PASSWORD`: la password del `.p12`;
+   - `IOS_PROFILO_ADHOC`: il `.mobileprovision` in base64.
+4. GitHub → *Actions → iPhone → Run workflow*: nella release
+   [App per iPhone](https://github.com/lukerondo/milanac-app/releases/tag/iphone-di-prova) esce
+   `MILANAC.ipa`, firmato per gli iPhone del profilo.
+5. Carica `MILANAC.ipa` su Diawi e manda il link: si apre da **Safari** sull'iPhone → *Installa*.
+6. **Nuovo membro**: registra il suo UDID (punto 2), modifica il profilo Ad Hoc spuntando il nuovo
+   dispositivo, scaricalo, aggiorna il secret `IOS_PROFILO_ADHOC` e rilancia il workflow.
+
+Senza i secret il workflow pubblica `MILANAC-non-firmato.ipa`, da firmare con il proprio certificato e
+profilo (per esempio con gli strumenti o i siti che firmano l'IPA per gli UDID).
+
 ## 5. Testi per gli store
 
 **Nome**: MILANAC Pro Club
