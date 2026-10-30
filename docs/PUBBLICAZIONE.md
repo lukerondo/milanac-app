@@ -137,6 +137,44 @@ regolamento da accettare). Crea un account di prova con email e password, comple
 *Giocatore* e accetta il regolamento, poi scrivi email e password nelle **Note per la revisione** di App Store
 Connect (idem nella sezione *Accesso all'app* della Play Console). Finita la revisione, toglilo dalla Rosa.
 
+### iPhone senza App Store (ad hoc, con gli UDID)
+
+Per far provare l'app ai membri senza App Store né TestFlight: i loro iPhone (UDID) si registrano
+sull'account sviluppatore, GitHub compila un IPA firmato per quei telefoni (workflow **iPhone**) e un
+sito come [Diawi](https://www.diawi.com) dà il link per installarlo da Safari. Massimo 100 iPhone
+l'anno. Il repository è pubblico: gli UDID stanno solo nei secret, mai nei file.
+
+**Modo semplice (consigliato): chiave API di App Store Connect.** Il workflow fa tutto da solo:
+registra gli iPhone, crea l'identificativo `com.milanacproclub.milanac` se manca, firma con il
+certificato di distribuzione gestito da Apple e il profilo Ad Hoc che Xcode crea con tutti gli iPhone
+registrati.
+
+1. appstoreconnect.apple.com → **Utenti e accesso → Integrazioni → App Store Connect API → Chiavi del
+   team → +**: nome `GitHub MILANAC`, accesso **Admin** → *Genera*. Scarica il file `.p8` (si scarica
+   una volta sola) e copia **ID chiave** e **ID emittente** (Issuer ID, in alto nella pagina).
+2. **UDID**: ogni membro apre da Safari sull'iPhone un sito come <https://udid.tech>, installa il
+   profilo che propone (Impostazioni → Profilo scaricato) e ti manda il codice UDID.
+3. GitHub → *Settings → Secrets and variables → Actions → New repository secret*:
+   - `ASC_KEY_ID`: l'ID chiave;
+   - `ASC_ISSUER_ID`: l'ID emittente;
+   - `ASC_KEY_P8`: il contenuto del file `.p8` (aprilo con TextEdit e incolla tutto, righe
+     `BEGIN`/`END PRIVATE KEY` comprese);
+   - `IOS_DISPOSITIVI`: una riga per iPhone, `Nome;UDID` (per esempio `Fabio;00008110-001A2B3C4D5E6F70`).
+4. GitHub → *Actions → iPhone → Run workflow*: nella release
+   [App per iPhone](https://github.com/lukerondo/milanac-app/releases/tag/iphone-di-prova) esce
+   `MILANAC.ipa`, firmato per tutti gli iPhone registrati.
+5. Carica `MILANAC.ipa` su Diawi e manda il link: si apre da **Safari** sull'iPhone → *Installa*.
+6. **Nuovo membro**: aggiungi la sua riga al secret `IOS_DISPOSITIVI`, rilancia il workflow e ricarica
+   l'IPA su Diawi.
+
+**In alternativa, certificato e profilo fatti a mano** su developer.apple.com (*Devices*, certificato
+**Apple Distribution** esportato in `.p12` dal Portachiavi, profilo **Ad Hoc** con tutti i dispositivi)
+e tre secret: `IOS_CERTIFICATO_P12` e `IOS_PROFILO_ADHOC` (i file in base64: `base64 -i FILE | pbcopy`
+dal Terminale) e `IOS_CERTIFICATO_PASSWORD`. Se ci sono, il workflow usa questi.
+
+Senza nessun secret il workflow pubblica `MILANAC-non-firmato.ipa`, da firmare con il proprio
+certificato e profilo (per esempio con gli strumenti o i siti che firmano l'IPA per gli UDID).
+
 ## 5. Testi per gli store
 
 **Nome**: MILANAC Pro Club
