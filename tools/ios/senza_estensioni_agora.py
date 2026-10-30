@@ -102,10 +102,31 @@ def strong_imports(data: bytes, start: int) -> set[int]:
             ordinal, weak, special = v & 0xFFFF, v >> 16 & 1, 0xFFF0
         else:
             raise NonVerificabile(f"formato degli import {fmt} sconosciuto")
-        # 0 = sé stesso, i valori più alti sono negativi (eseguibile principale, ricerca piatta).
-        if not weak and 0 < ordinal < special:
+        # 0 = sé stesso; come per dyld, solo i valori sopra 0xF0 (0xFFF0) sono negativi
+        # (eseguibile principale, ricerca piatta, ricerca debole).
+        if not weak and 0 < ordinal <= special:
             used.add(ordinal)
     return used
+
+
+def loads_to_weaken(data: bytes, extensions: set[str]) -> list[int]:
+    """Posizioni dei caricamenti forti di un'estensione, da rendere deboli. NonVerificabile se
+    l'eseguibile usa un simbolo di un'estensione o le carica in un modo che non si sa trattare."""
+    out = []
+    for start in slices(data):
+        loads = dylibs(data, start)
+        strong = [(i + 1, pos, cmd) for i, (pos, cmd, name) in enumerate(loads)
+                  if is_extension(name, extensions) and cmd != LC_LOAD_WEAK_DYLIB]
+        if not strong:
+            continue
+        if any(cmd != LC_LOAD_DYLIB for _, _, cmd in strong):
+            raise NonVerificabile("le carica in un modo particolare")
+        used = strong_imports(data, start) & {o for o, _, _ in strong}
+        if used:
+            raise NonVerificabile("usa " + ", ".join(sorted(loads[o - 1][2].split("/")[-1]
+                                                            for o in used)))
+        out += [pos for _, pos, _ in strong]
+    return out
 
 
 def is_extension(name: str, extensions: set[str]) -> bool:
@@ -144,25 +165,15 @@ def main(app: Path) -> int:
 
     # 1. Chi le carica in modo forte non deve usarne nessun simbolo.
     patches: dict[Path, list[int]] = {}
-    try:
-        for path in binaries(app, found):
-            data = path.read_bytes()
-            for start in slices(data):
-                loads = dylibs(data, start)
-                strong = [(i + 1, pos, cmd) for i, (pos, cmd, name) in enumerate(loads)
-                          if is_extension(name, names) and cmd != LC_LOAD_WEAK_DYLIB]
-                if not strong:
-                    continue
-                if any(cmd != LC_LOAD_DYLIB for _, _, cmd in strong):
-                    raise NonVerificabile(f"{path.name} le carica in un modo particolare")
-                used = strong_imports(data, start) & {o for o, _, _ in strong}
-                if used:
-                    names_used = sorted(loads[o - 1][2].split("/")[-1] for o in used)
-                    raise NonVerificabile(f"{path.name} usa {', '.join(names_used)}")
-                patches.setdefault(path, []).extend(pos for _, pos, _ in strong)
-    except NonVerificabile as e:
-        print(f"::warning::Estensioni di Agora lasciate nell'app ({e}): l'IPA resta più pesante.")
-        return 0
+    for path in binaries(app, found):
+        try:
+            positions = loads_to_weaken(path.read_bytes(), names)
+        except NonVerificabile as e:
+            print(f"::warning::Estensioni di Agora lasciate nell'app ({path.relative_to(app)}: "
+                  f"{e}): l'IPA resta più pesante.")
+            return 0
+        if positions:
+            patches[path] = positions
 
     # 2. Caricamenti deboli: stessa struttura del comando, cambia solo il suo tipo.
     for path, positions in patches.items():

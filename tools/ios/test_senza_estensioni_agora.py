@@ -37,7 +37,11 @@ def macho(loads: list[tuple[int, str]], imports: list[tuple[int, bool]] | None =
                 table += struct.pack("<QQ", ordinal | int(weak) << 16, 0)
             else:
                 table += struct.pack("<I", ordinal | int(weak) << 8) + b"\0" * (4 if fmt == 2 else 0)
-        blob = struct.pack("<7I", 0, 28, 28, 28 + len(table), len(imports), fmt, 0) + table
+        # Come nei file veri, prima degli import c'è altro (qui 8 byte che, letti per errore come
+        # import, sarebbero un uso forte della libreria 2).
+        starts = struct.pack("<II", 2, 2)
+        blob = struct.pack("<7I", 0, 28, 28 + len(starts), 28 + len(starts) + len(table),
+                           len(imports), fmt, 0) + starts + table
         cmds += struct.pack("<4I", sea.LC_DYLD_CHAINED_FIXUPS, 16, 32 + len(cmds) + 16, len(blob))
         ncmds += 1
     header = struct.pack("<IiiIIIII", sea.MH_MAGIC_64, 0x0100000C, 0, 2, ncmds, len(cmds), 0, 0)
@@ -74,8 +78,12 @@ class SenzaEstensioni(unittest.TestCase):
         self.framework("AgoraRtcWrapper", macho([(sea.LC_LOAD_DYLIB, rpath("AgoraRtcKit")),
                                                  (sea.LC_LOAD_WEAK_DYLIB, rpath(LIP)),
                                                  (sea.LC_LOAD_WEAK_DYLIB, rpath(SPATIAL))]))
+        # Le estensioni non si controllano: anche se una carica l'altra in modo forte (e senza
+        # chained fixups) vanno via tutte e due insieme.
+        self.framework(LIP, macho([(sea.LC_LOAD_DYLIB, rpath("AgoraRtcKit"))]))
+        self.framework(SPATIAL, macho([(sea.LC_LOAD_DYLIB, rpath("AgoraRtcKit")),
+                                       (sea.LC_LOAD_DYLIB, rpath(LIP))]))
         for ext in (LIP, SPATIAL):
-            self.framework(ext, macho([(sea.LC_LOAD_DYLIB, rpath("AgoraRtcKit"))]))
             (self.app / "Frameworks" / f"{ext}.framework" / "Info.plist").write_text("<plist/>")
 
     def tearDown(self):
@@ -139,9 +147,27 @@ class SenzaEstensioni(unittest.TestCase):
         original = macho([(sea.LC_LOAD_DYLIB, rpath(LIP))])
         runner = self.runner(original)
 
-        self.assertIn("senza chained fixups", self.run_main())
+        self.assertIn("(Runner: senza chained fixups)", self.run_main())
         self.assertEqual(runner.read_bytes(), original)
         self.assertEqual(len(self.extensions_left()), 2)
+
+    def test_le_lascia_con_un_eseguibile_a_32_bit(self):
+        thin32 = struct.pack("<7I", 0xFEEDFACE, 12, 0, 2, 0, 0, 0)
+        original = fat(macho([(sea.LC_LOAD_DYLIB, rpath(LIP))], imports=[]), thin32)
+        runner = self.runner(original)
+
+        self.assertIn("Runner: Mach-O a 32 bit", self.run_main())
+        self.assertEqual(runner.read_bytes(), original)
+        self.assertEqual(len(self.extensions_left()), 2)
+
+    def test_ordinale_240_e_una_libreria(self):
+        # dyld considera negativi (speciali) solo i valori sopra 0xF0: la libreria 240 è vera.
+        loads = [(sea.LC_LOAD_DYLIB, f"/usr/lib/lib{i}.dylib") for i in range(239)]
+        original = macho(loads + [(sea.LC_LOAD_DYLIB, rpath(LIP))], imports=[(240, False)])
+        runner = self.runner(original)
+
+        self.assertIn(f"usa {LIP}", self.run_main())
+        self.assertEqual(runner.read_bytes(), original)
 
     def test_le_lascia_se_caricate_in_modo_particolare(self):
         original = macho([(sea.LC_REEXPORT_DYLIB, rpath(SPATIAL))], imports=[])
@@ -163,10 +189,12 @@ class SenzaEstensioni(unittest.TestCase):
         self.assertEqual(self.extensions_left(), [])
 
     def test_import_con_addendo(self):
-        original = macho([(sea.LC_LOAD_DYLIB, rpath(LIP))], imports=[(1, False)], fmt=2)
+        # Formato 2: 8 byte per import; il secondo usa LipSync.
+        original = macho([(sea.LC_LOAD_DYLIB, rpath("Flutter")), (sea.LC_LOAD_DYLIB, rpath(LIP))],
+                         imports=[(1, False), (2, False)], fmt=2)
         runner = self.runner(original)
 
-        self.assertIn("usa", self.run_main())
+        self.assertIn(f"usa {LIP}", self.run_main())
         self.assertEqual(runner.read_bytes(), original)
 
     def test_senza_estensioni_non_fa_niente(self):

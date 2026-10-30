@@ -27,7 +27,9 @@ Nome: **MILANAC** · Versione: in `pubspec.yaml` (`version: 1.0.0+1`)
    di GitHub chiamato **`FIREBASE_SERVICE_ACCOUNT`**. (È una chiave segreta: non metterla nel repository.)
 6. **iPhone**: su developer.apple.com → *Keys* → nuova chiave con **Apple Push Notifications service (APNs)** →
    scarica il `.p8` → Firebase → Impostazioni → **Cloud Messaging** → *Configurazione app Apple* → carica la chiave
-   (Key ID e Team ID).
+   (Key ID e Team ID). L'IPA ad hoc del workflow *iPhone* per ora non riceve le push: l'archivio
+   non firmato non porta il permesso `aps-environment`, che va rimesso nella firma prima
+   dell'esportazione quando si attivano.
 
 7. **Notifiche personali** (formazione, chat): dopo aver creato il secret `FIREBASE_SERVICE_ACCOUNT`
    vai su GitHub → **Actions → Funzioni → Run workflow**. Il workflow passa la chiave alla funzione
