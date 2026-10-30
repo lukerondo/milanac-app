@@ -4,7 +4,8 @@
 // Eventi gestiti:
 //   { kind: "formation", id }               → ai membri della squadra: titolare (con ruolo) o panchina
 //   { kind: "chat_message", id }            → ai membri del canale, escluso l'autore e chi l'ha silenziato
-//                                             (un replay della lavagna: "Nuovo schema con audio")
+//                                             (un replay della lavagna: "Nuovo schema con audio";
+//                                             nella Sala Direttivo anche l'avviso di un nuovo ingresso)
 //   { kind: "match_result", id }            → ai giocatori della squadra: risultato e marcatori
 //   { kind: "rules", version }              → a tutti i membri: nuova versione del regolamento da accettare
 //   { kind: "event", id }                   → alla squadra (o a tutti): nuovo appuntamento in calendario
@@ -16,6 +17,9 @@
 //   { kind: "special_card", id }            → al giocatore: ha ricevuto una carta nero/oro o blu elettrico
 //   { kind: "special_cards_week", match }   → alla squadra: le carte speciali della giornata
 //   { kind: "voice_room", id }              → ai membri del canale: qualcuno ha aperto la stanza vocale
+//   { kind: "match_reminder", id, when }    → alla squadra della partita, esclusi gli assenti:
+//                                             when = ora (un'ora prima), lobby (dieci minuti
+//                                             prima) o chiamata (dal Direttivo, arriva sempre)
 //   { kind: "cleanup" }                     → nessuna notifica: rimuove dallo Storage i file in coda
 //                                             (allegati della chat scaduti o eliminati)
 //
@@ -25,13 +29,21 @@
 
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 
-type Push = { userId: string; title: string; body: string; route: string; data?: Record<string, string> };
+type Push = {
+  userId: string;
+  title: string;
+  body: string;
+  route: string;
+  data?: Record<string, string>;
+  /// Arriva anche a chi ha spento la categoria (avvisi del Direttivo, nuovi ingressi).
+  always?: boolean;
+};
 
 Deno.serve(async (req) => {
   if (req.headers.get("x-milanac-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("forbidden", { status: 403 });
   }
-  const { kind, id, version, users, match } = await req.json();
+  const { kind, id, version, users, match, when } = await req.json();
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   if (kind === "cleanup") return Response.json({ removed: await cleanupStorage(db) });
@@ -50,7 +62,11 @@ Deno.serve(async (req) => {
   else if (kind === "special_card") pushes = await specialCardPushes(db, id);
   else if (kind === "special_cards_week") pushes = await specialCardsWeekPushes(db, match);
   else if (kind === "voice_room") pushes = await voiceRoomPushes(db, id);
+  else if (kind === "match_reminder") pushes = await matchReminderPushes(db, id, when);
   else return new Response("unknown kind", { status: 400 });
+
+  const category = CATEGORY[kind];
+  if (category && pushes.length > 0) pushes = await withoutMuted(db, pushes, category);
 
   const account = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
   if (!account) {
@@ -59,6 +75,28 @@ Deno.serve(async (req) => {
   const sent = await sendAll(db, JSON.parse(account), pushes);
   return Response.json({ pushes: pushes.length, sent });
 });
+
+/// Notifiche che si possono spegnere in Impostazioni → Notifiche (le altre arrivano sempre).
+const CATEGORY: Record<string, string> = {
+  event: "presenze",
+  attendance_reminder: "presenze",
+  attendance_auto_absent: "presenze",
+  chat_message: "chat",
+  voice_room: "chat",
+  news: "notizie",
+  match_reminder: "partite",
+};
+
+/// Toglie chi ha spento questa categoria (profiles.notify_prefs: { presenze|chat|notizie: false }).
+async function withoutMuted(db: SupabaseClient, pushes: Push[], category: string): Promise<Push[]> {
+  const ids = [...new Set(pushes.filter((p) => !p.always).map((p) => p.userId))];
+  if (ids.length === 0) return pushes;
+  const { data } = await db.from("profiles").select("id, notify_prefs").in("id", ids);
+  const off = new Set(
+    (data ?? []).filter((r) => r.notify_prefs?.[category] === false).map((r) => r.id),
+  );
+  return pushes.filter((p) => p.always || !off.has(p.userId));
+}
 
 const TEAM_NAMES: Record<string, string> = { milanac: "Milan AC", futuro: "Milan AC Futuro" };
 const PLATFORM_NAMES: Record<string, string> = { ps5: "PlayStation", xbox: "Xbox" };
@@ -108,7 +146,7 @@ async function formationPushes(db: SupabaseClient, formationId: string): Promise
       userId: m.id,
       title: `📋 ${teamName}: formazione pubblicata`,
       body: role ? `Sei titolare: ${role}. Forza ${teamName}!` : "Parti dalla panchina: tieniti pronto!",
-      route: "/formazione",
+      route: `/formazione?squadra=${team}`,
       data: { team },
     };
   });
@@ -165,6 +203,47 @@ async function eventPushes(db: SupabaseClient, eventId: string): Promise<Push[]>
   }));
 }
 
+// ------------------------------------------------------------------ promemoria partita
+
+/// "21:30" in ora italiana.
+function timeRome(iso: string): string {
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+async function matchReminderPushes(db: SupabaseClient, eventId: string, when: unknown): Promise<Push[]> {
+  const { data: e } = await db
+    .from("events").select("id, title, starts_at, team, party_code").eq("id", eventId).single();
+  if (!e) return [];
+  // Chi ha già detto che non c'è non riceve i promemoria della serata.
+  const day = dayRome(e.starts_at);
+  const { data: absent } = await db
+    .from("attendance").select("player_id").eq("date", day).eq("status", "assente");
+  const out = new Set((absent ?? []).map((a) => a.player_id));
+  const time = timeRome(e.starts_at);
+  const body = `${e.title} alle ${time}${e.party_code ? ` · Party: ${e.party_code}` : ""}`;
+  const minutes = Math.round((new Date(e.starts_at).getTime() - Date.now()) / 60000);
+  const title = when === "ora"
+    ? (minutes >= 50 ? "⚽ Tra un'ora si gioca" : `⚽ Tra ${Math.max(minutes, 1)} minuti si gioca`)
+    : when === "lobby"
+    ? "🎮 Tutti in lobby!"
+    : when === "chiamata"
+    ? "📣 Il Direttivo vi chiama in lobby"
+    : null;
+  if (!title) return [];
+  return (await members(db, e.team))
+    .filter((m) => !out.has(m.id))
+    .map((m) => ({
+      userId: m.id,
+      title,
+      body,
+      route: "/",
+      data: { event: e.id },
+      always: when === "chiamata",
+    }));
+}
+
 // ------------------------------------------------------------------ presenze (18:00 e 18:30)
 
 function attendancePushes(users: unknown, what: "reminder" | "absent"): Push[] {
@@ -207,6 +286,10 @@ async function videoPublishedPushes(db: SupabaseClient, linkId: string): Promise
   const { data: v } = await db
     .from("shared_links").select("id, title, created_by, published_by").eq("id", linkId).single();
   if (!v || !v.created_by || v.created_by === v.published_by) return [];
+  // Chi nel frattempo è uscito dal club non riceve più avvisi.
+  const { data: author } = await db
+    .from("profiles").select("active, club_role").eq("id", v.created_by).maybeSingle();
+  if (!author?.active || author.club_role === "pending") return [];
   return [{
     userId: v.created_by,
     title: "🎬 Il tuo video è stato pubblicato",
@@ -267,8 +350,13 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
   const { data: mutes } = await db
     .from("channel_mutes").select("user_id").eq("channel_id", msg.channel_id);
   const muted = new Set((mutes ?? []).map((m) => m.user_id));
+  // Gli avvisi ufficiali arrivano anche a chi ha spento le notifiche della chat
+  // (il silenzio esplicito del singolo canale invece vale sempre).
+  const official = msg.meta?.type === "announcement" || msg.meta?.type === "new_member";
   const text = msg.meta?.type === "replay"
     ? `🎬 Nuovo schema con audio${msg.meta?.title ? `: ${msg.meta.title}` : ""}`
+    : msg.meta?.type === "poll"
+    ? `📊 Sondaggio: ${msg.body?.trim() ?? ""}`
     : msg.body?.trim() || (msg.image_path ? "📷 Foto" : msg.audio_path ? "🎤 Messaggio vocale" : "");
   return (members ?? [])
     .filter((m) => m.id !== msg.author_id && !muted.has(m.id))
@@ -281,6 +369,7 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
       body: text.length > 140 ? text.slice(0, 137) + "…" : text,
       route: `/chat/${channel?.slug ?? ""}`,
       data: { channel: channel?.slug ?? "" },
+      always: official,
     }));
 }
 
@@ -398,21 +487,34 @@ async function sendAll(db: SupabaseClient, account: ServiceAccount, pushes: Push
             message: {
               token: t.token,
               notification: { title: p.title, body: p.body },
-              data: { route: p.route, ...(p.data ?? {}) },
-              android: { priority: "high", notification: { color: "#C61C23" } },
+              // FCM accetta solo testi nei dati.
+              data: Object.fromEntries(
+                Object.entries({ route: p.route, ...(p.data ?? {}) }).map(([k, v]) => [k, String(v)]),
+              ),
+              android: { priority: "high", notification: { color: "#D6B354" } },
               apns: { payload: { aps: { sound: "default" } } },
             },
           }),
         },
       );
       if (res.ok) sent++;
-      else if (res.status === 404 || res.status === 400) {
-        // Token scaduto o non valido: lo rimuoviamo.
+      else if (await isDeadToken(res)) {
+        // App disinstallata o token non più valido: lo rimuoviamo.
         await db.from("device_tokens").delete().eq("token", t.token);
       }
     }
   }
   return sent;
+}
+
+/// Il token non vale più solo se FCM lo dice (UNREGISTERED o token non valido):
+/// un 400 per un messaggio sbagliato non deve cancellare i token di tutti.
+async function isDeadToken(res: Response): Promise<boolean> {
+  if (res.status !== 404 && res.status !== 400) return false;
+  const err = (await res.json().catch(() => ({})))?.error ?? {};
+  const codes = ((err.details ?? []) as { errorCode?: string }[]).map((d) => d.errorCode);
+  if (codes.includes("UNREGISTERED")) return true;
+  return res.status === 400 && /registration token/i.test(String(err.message ?? ""));
 }
 
 type ServiceAccount = { client_email: string; private_key: string; project_id: string };

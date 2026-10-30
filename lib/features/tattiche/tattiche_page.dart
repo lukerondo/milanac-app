@@ -2,77 +2,179 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show ContentWidth;
+import '../../shared/async_view.dart';
+import '../../shared/ui.dart';
 import '../formazione/modules.dart';
 import '../lavagna/board_model.dart';
 import '../lavagna/board_page.dart';
 import '../lavagna/board_painter.dart';
+import '../lavagna/full_page.dart';
 import 'tactics_repository.dart';
 
-/// Tattiche: gli schemi del club con immagine e spiegazione (li pubblica il Direttivo).
-/// I video dei creator sono in Mondo Proclub.
-class TattichePage extends ConsumerWidget {
+/// Tattiche (nella scheda Club): la lavagna, gli schemi del club con immagine e
+/// spiegazione (li pubblica il Direttivo) e, in fondo, le build dei creator, che
+/// stanno in Mondo Proclub.
+class TattichePage extends ConsumerStatefulWidget {
   const TattichePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TattichePage> createState() => _TattichePageState();
+}
+
+class _TattichePageState extends ConsumerState<TattichePage> {
+  /// Filtro per modulo o tipo (null = tutti).
+  String? _module;
+
+  @override
+  Widget build(BuildContext context) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      floatingActionButton: isDirettivo
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'tattica',
-                  backgroundColor: MilanacColors.surfaceHigh,
-                  foregroundColor: Colors.white,
-                  onPressed: () => showTacticEditor(context),
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Nuova tattica'),
+    return AsyncView(
+      value: ref.watch(tacticsProvider),
+      onRetry: () => ref.invalidate(tacticsProvider),
+      data: (list) {
+        // I moduli presenti, nell'ordine degli schemi (i più recenti prima).
+        final modules = <String>[];
+        for (final t in list) {
+          final m = t.module;
+          if (m != null && !modules.contains(m)) modules.add(m);
+        }
+        final module = modules.contains(_module) ? _module : null;
+        final shown = [
+          for (final t in list)
+            if (module == null || t.module == module) t,
+        ];
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          children: [
+            if (isDirettivo) ...[
+              _ActionCard(
+                icon: Icons.draw_rounded,
+                title: 'Lavagna',
+                subtitle: 'Disegna e registra il replay',
+                important: true,
+                onTap: () => openBoard(context),
+              ),
+              const SizedBox(height: 10),
+              _ActionCard(
+                icon: Icons.add_photo_alternate_rounded,
+                title: 'Nuova tattica',
+                subtitle: 'Con immagine e spiegazione',
+                onTap: () => showTacticEditor(context),
+              ),
+              const SizedBox(height: 22),
+            ],
+            const SectionLabel('Schemi del club'),
+            const SizedBox(height: 10),
+            if (modules.length > 1) ...[
+              SizedBox(
+                height: 36,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    FilterPill(
+                      label: 'Tutti',
+                      selected: module == null,
+                      onTap: () => setState(() => _module = null),
+                    ),
+                    for (final m in modules) ...[
+                      const SizedBox(width: 8),
+                      FilterPill(
+                        label: m,
+                        selected: module == m,
+                        onTap: () => setState(() => _module = m),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 10),
-                FloatingActionButton.extended(
-                  heroTag: 'lavagna',
-                  backgroundColor: MilanacColors.red,
-                  onPressed: () => openBoard(context),
-                  icon: const Icon(Icons.draw_rounded),
-                  label: const Text('Lavagna'),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (shown.isEmpty)
+              AppCard(
+                child: Text(
+                  'Nessuno schema ancora.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, color: context.pal.textMuted),
                 ),
+              )
+            else
+              for (final (i, t) in shown.indexed) ...[
+                if (i > 0) const SizedBox(height: 10),
+                _TacticCard(tactic: t),
               ],
-            )
-          : null,
-      body: const _TacticsTab(),
+            const SizedBox(height: 22),
+            const SectionLabel('Build dei creator'),
+            const SizedBox(height: 10),
+            _ActionCard(
+              icon: Icons.smart_display_rounded,
+              title: 'Build per ruolo',
+              subtitle: 'Video dei creator in Mondo Proclub',
+              onTap: () => context.push('/mondo'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
-// ------------------------------------------------------------------ tattiche
-
-class _TacticsTab extends ConsumerWidget {
-  const _TacticsTab();
+/// Riga con icona, titolo e descrizione che porta a un'azione (come in Mondo
+/// Proclub); [important] = l'azione principale, con il bordo e l'icona d'oro.
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.important = false,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool important;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tactics = ref.watch(tacticsProvider);
-    return tactics.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Errore: $e')),
-      data: (list) => list.isEmpty
-          ? const Center(
-              child: Text(
-                'Nessuno schema ancora.',
-                style: TextStyle(color: Colors.white54),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-              children: [for (final t in list) _TacticCard(tactic: t)],
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return AppCard(
+      important: important,
+      radius: 16,
+      padding: const EdgeInsets.all(14),
+      onTap: onTap,
+      child: Row(
+        children: [
+          IconTile(icon, solid: important),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 14, color: p.textSecondary),
+                ),
+              ],
             ),
+          ),
+          const SizedBox(width: 8),
+          Icon(Icons.chevron_right_rounded, color: p.textMuted),
+        ],
+      ),
     );
   }
 }
@@ -89,21 +191,31 @@ class _TacticImage extends ConsumerWidget {
     }
     final url = ref.watch(tacticImageUrlProvider(tactic.imagePath!)).value;
     if (url == null || url.isEmpty) {
-      return const ColoredBox(color: MilanacColors.surfaceHigh);
+      return ColoredBox(color: context.pal.surfaceHigh);
     }
     return Image.network(url, fit: fit);
   }
 }
 
+/// Modulo (o tipo) dello schema, e "lavagna" se è disegnato: l'etichetta d'oro
+/// sopra il titolo.
+String? _category(Tactic t) {
+  final parts = [?t.module, if (t.hasBoard) 'lavagna'];
+  return parts.isEmpty ? null : parts.join(' · ').toUpperCase();
+}
+
+/// Uno schema nell'elenco: la lavagna (o l'immagine) in alto, sotto etichetta,
+/// titolo e l'inizio della spiegazione.
 class _TacticCard extends StatelessWidget {
   const _TacticCard({required this.tactic});
   final Tactic tactic;
 
   @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 10),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final category = _category(tactic);
+    return AppCard(
+      padding: EdgeInsets.zero,
       onTap: () => Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(builder: (_) => TacticPage(tacticId: tactic.id)),
       ),
@@ -115,40 +227,41 @@ class _TacticCard extends StatelessWidget {
           else if (tactic.hasImage)
             AspectRatio(aspectRatio: 16 / 9, child: _TacticImage(tactic)),
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        tactic.title,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+                if (category != null) ...[
+                  Text(
+                    category,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                      color: p.accentText,
                     ),
-                    if (tactic.hasBoard)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 6),
-                        child: Icon(
-                          Icons.draw_rounded,
-                          size: 18,
-                          color: MilanacColors.gold,
-                        ),
-                      ),
-                    if (tactic.module != null) _ModuleChip(tactic.module!),
-                  ],
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                Text(
+                  tactic.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                  ),
                 ),
                 if (tactic.description.isNotEmpty) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     tactic.description,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70),
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.35,
+                      color: p.textSecondary,
+                    ),
                   ),
                 ],
               ],
@@ -156,8 +269,8 @@ class _TacticCard extends StatelessWidget {
           ),
         ],
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Lo schema della lavagna ritagliato in formato 16:9 (la parte centrale del campo).
@@ -180,44 +293,53 @@ class _BoardThumb extends StatelessWidget {
   );
 }
 
-class _ModuleChip extends StatelessWidget {
-  const _ModuleChip(this.module);
-  final String module;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      border: Border.all(color: MilanacColors.gold),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      module,
-      style: const TextStyle(
-        color: MilanacColors.gold,
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
-      ),
-    ),
-  );
-}
-
-/// Dettaglio di uno schema: immagine ingrandibile e spiegazione completa.
+/// Dettaglio di uno schema: la lavagna (o l'immagine ingrandibile) e la spiegazione.
 class TacticPage extends ConsumerWidget {
   const TacticPage({super.key, required this.tacticId});
   final String tacticId;
 
+  Future<void> _delete(BuildContext context, WidgetRef ref, Tactic t) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Eliminare la tattica?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            style: dangerButtonStyle(c),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(tacticsRepositoryProvider).delete(t);
+      if (context.mounted) Navigator.of(context).pop();
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Eliminazione non riuscita')),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    final t = ref
-        .watch(tacticsProvider)
-        .value
-        ?.where((x) => x.id == tacticId)
-        .firstOrNull;
+    final tactics = ref.watch(tacticsProvider);
+    final t = tactics.value?.where((x) => x.id == tacticId).firstOrNull;
+    final p = context.pal;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('TATTICA'),
+      appBar: fullPageBar(
+        context,
+        title: 'TATTICA',
         actions: [
           if (isDirettivo && t != null) ...[
             IconButton(
@@ -228,84 +350,88 @@ class TacticPage extends ConsumerWidget {
             IconButton(
               tooltip: 'Elimina',
               icon: const Icon(Icons.delete_outline_rounded),
-              onPressed: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (c) => AlertDialog(
-                    title: const Text('Eliminare la tattica?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(c, false),
-                        child: const Text('Annulla'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(c, true),
-                        child: const Text('Elimina'),
-                      ),
-                    ],
-                  ),
-                );
-                if (ok != true) return;
-                await ref.read(tacticsRepositoryProvider).delete(t);
-                if (context.mounted) Navigator.of(context).pop();
-              },
+              onPressed: () => _delete(context, ref, t),
             ),
+            const SizedBox(width: 4),
           ],
         ],
       ),
-      body: t == null
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.only(bottom: 32),
-              children: [
-                if (t.hasBoard)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: Column(
-                      children: [
-                        BoardPreview(state: t.board!, showNames: true),
-                        const SizedBox(height: 8),
-                        FilledButton.icon(
-                          onPressed: () =>
-                              openBoard(context, tactic: t, readOnly: !isDirettivo),
-                          icon: const Icon(Icons.draw_rounded),
-                          label: Text(
-                            isDirettivo ? 'Apri la lavagna' : 'Guarda sulla lavagna',
-                          ),
-                        ),
-                      ],
+      body: AsyncView(
+        value: tactics,
+        onRetry: () => ref.invalidate(tacticsProvider),
+        data: (_) => t == null
+            ? const TacticNotFound()
+            : ContentWidth(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  children: [
+                    if (t.module != null) ...[
+                      SectionLabel(t.module!, gold: true),
+                      const SizedBox(height: 4),
+                    ],
+                    Text(
+                      t.title.toUpperCase(),
+                      style: TextStyle(
+                        fontFamily: sportFont,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: .6,
+                        height: 1.2,
+                        color: p.text,
+                      ),
                     ),
-                  )
-                else if (t.hasImage)
-                  AspectRatio(
-                    aspectRatio: 4 / 3,
-                    child: InteractiveViewer(
-                      maxScale: 5,
-                      child: _TacticImage(t, fit: BoxFit.contain),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (t.module != null) _ModuleChip(t.module!),
-                      const SizedBox(height: 8),
-                      Text(
-                        t.title,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w900),
+                    const SizedBox(height: 14),
+                    if (t.hasBoard) ...[
+                      BoardPreview(
+                        state: t.board!,
+                        showNames: true,
+                        radius: 16,
                       ),
                       const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: () => openBoard(
+                          context,
+                          tactic: t,
+                          readOnly: !isDirettivo,
+                        ),
+                        icon: const Icon(Icons.draw_rounded),
+                        label: Text(
+                          isDirettivo
+                              ? 'Apri la lavagna'
+                              : 'Guarda sulla lavagna',
+                        ),
+                      ),
+                    ] else if (t.hasImage)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: AspectRatio(
+                          aspectRatio: 4 / 3,
+                          child: ColoredBox(
+                            color: p.surfaceHigh,
+                            child: InteractiveViewer(
+                              maxScale: 5,
+                              child: _TacticImage(t, fit: BoxFit.contain),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (t.description.isNotEmpty) ...[
+                      const SizedBox(height: 22),
+                      const SectionLabel('Spiegazione'),
+                      const SizedBox(height: 8),
                       SelectableText(
                         t.description,
-                        style: const TextStyle(fontSize: 16, height: 1.45),
+                        style: TextStyle(
+                          fontSize: 16,
+                          height: 1.45,
+                          color: p.text,
+                        ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+      ),
     );
   }
 }
@@ -344,14 +470,24 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
   }
 
   Future<void> _pickImage() async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1800,
-      imageQuality: 85,
-    );
-    if (file == null) return;
-    final bytes = await file.readAsBytes();
-    setState(() => _image = bytes);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1800,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (mounted) setState(() => _image = bytes);
+    } catch (e) {
+      // Permesso delle foto negato, file illeggibile...
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Immagine non caricata')),
+        ),
+      );
+    }
   }
 
   Future<void> _save() async {
@@ -368,16 +504,24 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
       description: _description.text.trim(),
       imagePath: widget.tactic?.imagePath,
       localImage: widget.tactic?.localImage,
+      // Si cambia il testo, non il disegno della lavagna.
+      board: widget.tactic?.board,
+      team: widget.tactic?.team,
     );
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await ref.read(tacticsRepositoryProvider).save(t, image: _image);
+      await container.read(tacticsRepositoryProvider).save(t, image: _image);
+      // L'elenco si aggiorna anche in tempo reale; per sicurezza si ricarica.
+      container.invalidate(tacticsProvider);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 
@@ -386,9 +530,9 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
     final modules = [...formationModules.keys, ..._otherModules];
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        20,
+        16,
         0,
-        20,
+        16,
         20 + MediaQuery.viewInsetsOf(context).bottom,
       ),
       child: SingleChildScrollView(
@@ -396,10 +540,15 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              widget.tactic == null ? 'Nuova tattica' : 'Modifica tattica',
-              style: Theme.of(context).textTheme.titleLarge,
+              widget.tactic == null ? 'NUOVA TATTICA' : 'MODIFICA TATTICA',
+              style: const TextStyle(
+                fontFamily: sportFont,
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                letterSpacing: .6,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             TextField(
               controller: _title,
               maxLength: 80,
@@ -408,6 +557,7 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
                 hintText: 'es. Uscita dal basso con il 3-5-2',
               ),
             ),
+            const SizedBox(height: 4),
             DropdownButtonFormField<String>(
               initialValue: modules.contains(_module) ? _module : null,
               decoration: const InputDecoration(
@@ -419,7 +569,7 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
               ],
               onChanged: (v) => setState(() => _module = v),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             TextField(
               controller: _description,
               minLines: 4,
@@ -430,6 +580,7 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
                 alignLabelWithHint: true,
               ),
             ),
+            const SizedBox(height: 4),
             OutlinedButton.icon(
               onPressed: _pickImage,
               icon: const Icon(Icons.image_rounded),
@@ -441,19 +592,16 @@ class _TacticEditorState extends ConsumerState<_TacticEditor> {
             ),
             if (_image != null)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: 10),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                   child: Image.memory(_image!, height: 160, fit: BoxFit.cover),
                 ),
               ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _saving ? null : _save,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('Salva tattica'),
-              ),
+              child: const Text('Salva tattica'),
             ),
           ],
         ),

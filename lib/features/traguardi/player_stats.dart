@@ -2,6 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../carte/special_cards_repository.dart';
+import '../presenze/attendance.dart';
+import '../presenze/attendance_repository.dart';
 
 /// Numeri di sempre di un giocatore per i traguardi (funzione `player_stats`).
 class PlayerStats {
@@ -40,9 +43,42 @@ final playerStatsRepositoryProvider = Provider<PlayerStatsRepository>((ref) {
   return _SupabasePlayerStatsRepository(ref);
 });
 
-final playerStatsProvider = FutureProvider.family<PlayerStats, String>(
-  (ref, id) => ref.watch(playerStatsRepositoryProvider).load(id),
-);
+/// Si ricarica quando il giocatore riceve una carta o cambia una sua presenza:
+/// prima i traguardi nuovi si sbloccavano solo riaprendo l'app.
+final playerStatsProvider = FutureProvider.family<PlayerStats, String>((
+  ref,
+  id,
+) {
+  ref.watch(currentUserIdProvider);
+  void reloadOnChange(String? previous, String? next) {
+    // Il primo arrivo dei dati non conta: i numeri sono appena stati letti.
+    if (previous != null && previous != next) ref.invalidateSelf();
+  }
+
+  ref.listen<String?>(
+    specialCardsProvider.select(
+      (cards) => cards.value == null
+          ? null
+          : [
+              for (final c in cards.value!)
+                if (c.playerId == id) c.id,
+            ].join(','),
+    ),
+    reloadOnChange,
+  );
+  ref.listen<String?>(
+    attendanceProvider.select(
+      (entries) => entries.value == null
+          ? null
+          : [
+              for (final e in entries.value!)
+                if (e.playerId == id) '${dateKey(e.date)}:${e.status.name}',
+            ].join(','),
+    ),
+    reloadOnChange,
+  );
+  return ref.watch(playerStatsRepositoryProvider).load(id);
+});
 
 class _SupabasePlayerStatsRepository implements PlayerStatsRepository {
   _SupabasePlayerStatsRepository(this._ref);

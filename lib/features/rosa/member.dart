@@ -2,6 +2,13 @@ import '../../core/auth/profile.dart';
 import '../../core/teams.dart';
 import '../volto/face.dart';
 
+/// Valore predefinito dei campi svuotabili di [Member.copyWith]: "non toccare".
+class _Same {
+  const _Same();
+}
+
+const _same = _Same();
+
 /// Un membro della rosa (riga della tabella `profiles`).
 class Member {
   const Member({
@@ -18,6 +25,7 @@ class Member {
     this.teams = const {Team.milanac},
     this.overall,
     this.playStyle,
+    this.playStyles = const [],
     this.platform,
     this.avatarPath,
     this.birthDate,
@@ -51,10 +59,14 @@ class Member {
   /// Squadre in cui gioca: le sceglie alla registrazione, le cambia il Direttivo.
   final Set<Team> teams;
 
-  /// Carta FUT: overall (40–99) deciso dal Direttivo, stile di gioco e piattaforma.
+  /// Carta FUT: overall (40–99) deciso dal Direttivo, stile di gioco (l'archetipo) e
+  /// piattaforma.
   final int? overall;
   final String? playStyle;
   final GamePlatform? platform;
+
+  /// PlayStyle scelti (codici, "+" in fondo per i PlayStyle+): vedi `archetypes.dart`.
+  final List<String> playStyles;
 
   /// Dati del profilo (Impostazioni): foto caricata, nascita, città, nazionalità, piede.
   final String? avatarPath;
@@ -65,8 +77,9 @@ class Member {
   final String? nationality;
   final PreferredFoot? preferredFoot;
 
-  /// Dati della registrazione: nome e cognome (li vede il Direttivo), anno di nascita,
-  /// motto, etichette del Direttivo e volto disegnato.
+  /// Dati della registrazione: nome, cognome e anno di nascita (con la data di nascita
+  /// sono i dati anagrafici di `profile_private`: arrivano solo quelli propri, al
+  /// Direttivo quelli di tutti), motto, etichette del Direttivo e volto disegnato.
   final String? firstName;
   final String? lastName;
   final int? birthYear;
@@ -87,7 +100,7 @@ class Member {
     return y == null ? null : DateTime.now().year - y;
   }
 
-  /// Nome e cognome (per il Direttivo), altrimenti il nome sulla carta.
+  /// Nome e cognome (per il Direttivo e per sé), altrimenti il nome sulla carta.
   String get fullName {
     final parts = [
       firstName,
@@ -107,47 +120,80 @@ class Member {
   /// Etichette del Direttivo ("Capitano, Gestore"), vuoto per i giocatori.
   String get direttivoLabel => direttivoRoles.map((r) => r.label).join(', ');
 
+  /// Copia con i campi indicati. Gamertag, posizione, numero di maglia, stile,
+  /// piattaforma e dati anagrafici si possono svuotare passando null (omessi restano
+  /// come sono); per gli altri campi null vuol dire "invariato".
   Member copyWith({
     String? displayName,
     ClubRole? role,
     DateTime? joinedAt,
-    String? gamertag,
-    String? fieldPosition,
-    int? shirtNumber,
+    Object? gamertag = _same,
+    Object? fieldPosition = _same,
+    Object? shirtNumber = _same,
     bool? active,
     Set<Team>? teams,
     int? overall,
-    String? playStyle,
-    GamePlatform? platform,
+    Object? playStyle = _same,
+    List<String>? playStyles,
+    Object? platform = _same,
     Face? face,
     String? motto,
+    Object? firstName = _same,
+    Object? lastName = _same,
+    Object? birthYear = _same,
+    Object? birthDate = _same,
+    List<DirettivoRole>? direttivoRoles,
+    Object? avatarPath = _same,
   }) => Member(
     id: id,
     displayName: displayName ?? this.displayName,
     role: role ?? this.role,
     joinedAt: joinedAt ?? this.joinedAt,
-    gamertag: gamertag ?? this.gamertag,
-    fieldPosition: fieldPosition ?? this.fieldPosition,
-    shirtNumber: shirtNumber ?? this.shirtNumber,
+    gamertag: identical(gamertag, _same) ? this.gamertag : gamertag as String?,
+    fieldPosition: identical(fieldPosition, _same)
+        ? this.fieldPosition
+        : fieldPosition as String?,
+    shirtNumber: identical(shirtNumber, _same)
+        ? this.shirtNumber
+        : shirtNumber as int?,
     avatarUrl: avatarUrl,
     active: active ?? this.active,
     requestedRole: requestedRole,
     teams: teams ?? this.teams,
     overall: overall ?? this.overall,
-    playStyle: playStyle ?? this.playStyle,
-    platform: platform ?? this.platform,
-    avatarPath: avatarPath,
-    birthDate: birthDate,
+    playStyle: identical(playStyle, _same)
+        ? this.playStyle
+        : playStyle as String?,
+    playStyles: playStyles ?? this.playStyles,
+    platform: identical(platform, _same)
+        ? this.platform
+        : platform as GamePlatform?,
+    avatarPath: identical(avatarPath, _same)
+        ? this.avatarPath
+        : avatarPath as String?,
+    birthDate: identical(birthDate, _same)
+        ? this.birthDate
+        : birthDate as DateTime?,
     city: city,
     nationality: nationality,
     preferredFoot: preferredFoot,
-    firstName: firstName,
-    lastName: lastName,
-    birthYear: birthYear,
+    firstName: identical(firstName, _same)
+        ? this.firstName
+        : firstName as String?,
+    lastName: identical(lastName, _same) ? this.lastName : lastName as String?,
+    birthYear: identical(birthYear, _same) ? this.birthYear : birthYear as int?,
     motto: motto ?? this.motto,
-    direttivoRoles: direttivoRoles,
+    direttivoRoles: direttivoRoles ?? this.direttivoRoles,
     face: face ?? this.face,
     registrationCompleted: registrationCompleted,
+  );
+
+  /// Lo stesso membro senza dati anagrafici: come lo riceve chi non è del Direttivo.
+  Member withoutPrivateData() => copyWith(
+    firstName: null,
+    lastName: null,
+    birthYear: null,
+    birthDate: null,
   );
 
   factory Member.fromMap(Map<String, dynamic> m) => Member(
@@ -164,6 +210,11 @@ class Member {
     teams: Team.parseSet(m['teams']),
     overall: (m['overall'] as num?)?.toInt(),
     playStyle: m['play_style'] as String?,
+    // Prima della migrazione 0028 la colonna non c'è: nessun PlayStyle.
+    playStyles: [
+      for (final s in (m['play_styles'] as List?) ?? const [])
+        if (s is String) s,
+    ],
     platform: GamePlatform.values.asNameMap()[m['platform']],
     avatarPath: m['avatar_path'] as String?,
     birthDate: m['birth_date'] == null
@@ -209,6 +260,7 @@ class Member {
     teams: teams,
     overall: overall,
     playStyle: playStyle,
+    playStyles: playStyles,
     platform: platform,
     avatarPath: avatarPath ?? this.avatarPath,
     birthDate: birthDate,
@@ -224,26 +276,38 @@ class Member {
     registrationCompleted: registrationCompleted,
   );
 
-  /// Campi personali, modificabili dal membro sul proprio profilo.
+  /// Campi personali di `profiles`, modificabili dal membro sul proprio profilo (i dati
+  /// anagrafici sono a parte: [privateMap]).
   Map<String, dynamic> personalMap() => {
     'display_name': displayName,
     'gamertag': gamertag,
-    'birth_date': birthDate?.toIso8601String().substring(0, 10),
     'city': city,
     'nationality': nationality,
     'preferred_foot': preferredFoot?.name,
-    'first_name': firstName,
-    'last_name': lastName,
-    'birth_year': birthYear,
     'motto': motto,
     'face': face?.toJson(),
   };
 
-  /// Campi modificabili dal Direttivo.
+  /// Dati anagrafici da salvare (`profile_private`): solo quelli presenti. Dalle
+  /// Impostazioni non si cancellano, e così chi non li ha ricevuti non li azzera.
+  Map<String, dynamic> privateMap() => {
+    'first_name': ?firstName,
+    'last_name': ?lastName,
+    'birth_year': ?birthYear,
+    'birth_date': ?birthDate?.toIso8601String().substring(0, 10),
+  };
+
+  /// Campi modificabili dal Direttivo (mai i dati anagrafici: dopo la migrazione 0025
+  /// non sono più colonne di `profiles`).
   Map<String, dynamic> toUpdateMap() => {
     'display_name': displayName,
     'gamertag': gamertag,
     'club_role': role.name,
+    // Le etichette valgono solo nel Direttivo (il database le azzera anche da sé).
+    'direttivo_roles': [
+      if (role == ClubRole.direttivo)
+        for (final r in direttivoRoles) r.name,
+    ],
     'joined_at': joinedAt.toIso8601String().substring(0, 10),
     'active': active,
     'teams': teamsToJson(teams),
@@ -254,6 +318,7 @@ class Member {
   /// Campi della carta modificabili anche dal giocatore (l'overall no: lo decide il Direttivo).
   Map<String, dynamic> cardMap() => {
     'play_style': playStyle,
+    'play_styles': playStyles,
     'platform': platform?.name,
     'field_position': fieldPosition,
     'shirt_number': shirtNumber,

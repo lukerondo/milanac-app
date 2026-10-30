@@ -2,173 +2,142 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
+import '../../shared/ui.dart';
+import '../auth/gate_ui.dart';
 import 'pages_repository.dart';
-import 'parchment.dart';
 import 'rules_editor_page.dart';
 import 'rules_reader.dart';
 import 'rules_repository.dart';
 
-/// Regolamento e Storia su pergamena, in un'unica sezione a schede.
-class RegolamentoPage extends ConsumerWidget {
+/// Regolamento e Storia (scheda Club): selettore in alto e lettura su fondo scuro.
+/// Il Direttivo modifica l'uno o l'altra dalla matita accanto al selettore.
+class RegolamentoPage extends ConsumerStatefulWidget {
   const RegolamentoPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          const TabBar(
-            indicatorColor: MilanacColors.gold,
-            labelColor: MilanacColors.gold,
-            tabs: [
-              Tab(text: 'Regolamento'),
-              Tab(text: 'Cenni storici'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _RulesTab(editable: isDirettivo),
-                _StoryTab(editable: isDirettivo),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  ConsumerState<RegolamentoPage> createState() => _RegolamentoPageState();
 }
 
-/// Pergamena tra i due rulli, con lo spazio per il bottone in basso.
-class _Scroll extends StatelessWidget {
-  const _Scroll({required this.child});
-  final Widget child;
+class _RegolamentoPageState extends ConsumerState<RegolamentoPage> {
+  /// 0 = Regolamento, 1 = Storia.
+  int _tab = 0;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
-    child: Column(
-      children: [
-        const ParchmentRod(),
-        Expanded(child: ParchmentSheet(child: child)),
-        const ParchmentRod(),
-      ],
-    ),
-  );
-}
-
-class _RulesTab extends ConsumerWidget {
-  const _RulesTab({required this.editable});
-  final bool editable;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final rules = ref.watch(latestRulesProvider);
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      floatingActionButton: editable
-          ? FloatingActionButton.extended(
-              backgroundColor: MilanacColors.red,
-              onPressed: () async {
-                await Navigator.of(context, rootNavigator: true).push(
-                  MaterialPageRoute(builder: (_) => const RulesEditorPage()),
-                );
-                ref.invalidate(latestRulesProvider);
-              },
-              icon: const Icon(Icons.edit_rounded),
-              label: const Text('Modifica'),
-            )
-          : null,
-      body: rules.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _Retry(
-          text: 'Impossibile caricare il regolamento.',
-          onRetry: () => ref.invalidate(latestRulesProvider),
-        ),
-        data: (version) => version == null
-            ? const Center(
-                child: Text(
-                  'Nessun regolamento pubblicato.',
-                  style: TextStyle(color: Colors.white54),
-                ),
-              )
-            : _Scroll(child: RulesReader(version: version, bottomPadding: 90)),
-      ),
-    );
-  }
-}
-
-class _StoryTab extends ConsumerWidget {
-  const _StoryTab({required this.editable});
-  final bool editable;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final content = ref.watch(pageContentProvider(ClubPage.storia));
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      floatingActionButton: editable && content.hasValue
-          ? FloatingActionButton.extended(
-              backgroundColor: MilanacColors.red,
-              onPressed: () => _edit(context, ref, content.value!),
-              icon: const Icon(Icons.edit_rounded),
-              label: const Text('Modifica'),
-            )
-          : null,
-      body: content.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _Retry(
-          text: 'Impossibile caricare la storia.',
-          onRetry: () => ref.invalidate(pageContentProvider(ClubPage.storia)),
-        ),
-        data: (text) => _Scroll(child: StoryReader(text: text)),
-      ),
-    );
+  void initState() {
+    super.initState();
+    // Le versioni non arrivano in tempo reale: aprendo la sezione si rilegge l'ultima
+    // (se è nuova, il router chiede di accettarla).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.invalidate(latestRulesProvider);
+    });
   }
 
-  Future<void> _edit(
-    BuildContext context,
-    WidgetRef ref,
-    String current,
-  ) async {
+  Future<void> _editRules() async {
+    await Navigator.of(
+      context,
+      rootNavigator: true,
+    ).push(MaterialPageRoute<void>(builder: (_) => const RulesEditorPage()));
+    if (mounted) ref.invalidate(latestRulesProvider);
+  }
+
+  Future<void> _editStory() async {
+    final current = ref.read(pageContentProvider(ClubPage.storia)).value;
+    if (current == null) return;
     final result = await Navigator.of(context, rootNavigator: true)
         .push<String>(
           MaterialPageRoute(builder: (_) => _StoryEditorPage(initial: current)),
         );
-    if (result == null) return;
+    if (result == null || !mounted) return;
     try {
       await ref.read(pagesRepositoryProvider).save(ClubPage.storia, result);
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+          ),
+        );
       }
     }
-    ref.invalidate(pageContentProvider(ClubPage.storia));
+    if (mounted) ref.invalidate(pageContentProvider(ClubPage.storia));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
+    final story = _tab == 1;
+    return Column(
+      children: [
+        SubHeader(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: SegmentedTabs(
+                  labels: const ['Regolamento', 'Storia'],
+                  selected: _tab,
+                  onSelected: (i) => setState(() => _tab = i),
+                ),
+              ),
+              if (isDirettivo) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: story
+                      ? 'Modifica la storia'
+                      : 'Modifica il regolamento',
+                  icon: const Icon(Icons.edit_rounded),
+                  onPressed: story ? _editStory : _editRules,
+                ),
+              ],
+            ],
+          ),
+        ),
+        Expanded(child: story ? const _StoryTab() : const _RulesTab()),
+      ],
+    );
   }
 }
 
-class _Retry extends StatelessWidget {
-  const _Retry({required this.text, required this.onRetry});
-  final String text;
-  final VoidCallback onRetry;
+class _RulesTab extends ConsumerWidget {
+  const _RulesTab();
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.wifi_off_rounded, size: 40, color: Colors.white54),
-        const SizedBox(height: 8),
-        Text(text),
-        TextButton(onPressed: onRetry, child: const Text('Riprova')),
-      ],
-    ),
+  Widget build(BuildContext context, WidgetRef ref) => AsyncView<RulesVersion?>(
+    value: ref.watch(latestRulesProvider),
+    action: 'Impossibile caricare il regolamento',
+    onRetry: () => ref.invalidate(latestRulesProvider),
+    data: (version) => version == null
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Text(
+                'Nessun regolamento pubblicato.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.pal.textMuted, fontSize: 16),
+              ),
+            ),
+          )
+        : RulesReader(version: version),
   );
+}
+
+class _StoryTab extends ConsumerWidget {
+  const _StoryTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // L'organigramma sta nel regolamento: qui si mostra anche sotto la storia.
+    final organigramma = organigrammaOf(ref.watch(latestRulesProvider).value);
+    return AsyncView<String>(
+      value: ref.watch(pageContentProvider(ClubPage.storia)),
+      action: 'Impossibile caricare la storia',
+      onRetry: () => ref.invalidate(pageContentProvider(ClubPage.storia)),
+      data: (text) => StoryReader(text: text, organigramma: organigramma),
+    );
+  }
 }
 
 class _StoryEditorPage extends StatefulWidget {
@@ -191,25 +160,26 @@ class _StoryEditorPageState extends State<_StoryEditorPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('MODIFICA STORIA'),
+      appBar: gateAppBar(
+        title: 'MODIFICA LA STORIA',
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(_controller.text),
-            child: const Text(
-              'SALVA',
-              style: TextStyle(color: MilanacColors.gold),
+            style: TextButton.styleFrom(
+              foregroundColor: MilanacColors.goldLight,
             ),
+            child: const Text('Salva'),
           ),
         ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Separa i paragrafi con una riga vuota: il primo avrà il capolettera.',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+            Text(
+              'Separa i paragrafi con una riga vuota.',
+              style: TextStyle(color: context.pal.textMuted, fontSize: 14),
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -218,7 +188,7 @@ class _StoryEditorPageState extends State<_StoryEditorPage> {
                 maxLines: null,
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
+                textCapitalization: TextCapitalization.sentences,
               ),
             ),
           ],
@@ -236,7 +206,7 @@ class SimpleRichText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context).textTheme;
+    final p = context.pal;
     final children = <Widget>[];
     for (final line in text.split('\n')) {
       if (line.startsWith('## ')) {
@@ -245,9 +215,12 @@ class SimpleRichText extends StatelessWidget {
             padding: const EdgeInsets.only(top: 16, bottom: 6),
             child: Text(
               line.substring(3),
-              style: theme.titleMedium?.copyWith(
-                color: MilanacColors.gold,
-                fontWeight: FontWeight.w800,
+              style: TextStyle(
+                fontFamily: sportFont,
+                fontWeight: FontWeight.w600,
+                fontSize: 18,
+                letterSpacing: .8,
+                color: p.accentText,
               ),
             ),
           ),
@@ -258,7 +231,13 @@ class SimpleRichText extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               line.substring(2),
-              style: theme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+              style: TextStyle(
+                fontFamily: sportFont,
+                fontWeight: FontWeight.w600,
+                fontSize: 22,
+                letterSpacing: 1,
+                color: p.text,
+              ),
             ),
           ),
         );
@@ -269,15 +248,19 @@ class SimpleRichText extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '•  ',
                   style: TextStyle(
-                    color: MilanacColors.red,
+                    color: p.accentText,
+                    fontSize: 16,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 Expanded(
-                  child: Text(line.substring(2), style: theme.bodyLarge),
+                  child: Text(
+                    line.substring(2),
+                    style: TextStyle(color: p.text, fontSize: 16, height: 1.5),
+                  ),
                 ),
               ],
             ),
@@ -289,7 +272,10 @@ class SimpleRichText extends StatelessWidget {
         children.add(
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
-            child: Text(line, style: theme.bodyLarge?.copyWith(height: 1.4)),
+            child: Text(
+              line,
+              style: TextStyle(color: p.text, fontSize: 16, height: 1.5),
+            ),
           ),
         );
       }

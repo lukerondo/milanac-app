@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import 'voice_models.dart';
 
 abstract class VoiceRepository {
@@ -20,10 +21,14 @@ abstract class VoiceRepository {
   /// Registra il proprio ingresso con il numero utente Agora; restituisce la sessione.
   Future<String> join(String roomId, int agoraUid);
 
-  /// Segno di vita (ogni minuto) con lo stato del microfono.
-  Future<void> heartbeat(String sessionId, {required bool muted});
+  /// Segno di vita (ogni minuto) con lo stato del microfono; false se il server
+  /// ha già chiuso la sessione (per esempio dopo 3 minuti senza segnale).
+  Future<bool> heartbeat(String sessionId, {required bool muted});
 
   Future<void> leave(String sessionId);
+
+  /// Il Direttivo chiude la stanza per tutti (chi è dentro esce).
+  Future<void> closeRoom(String roomId);
 
   /// Biglietto Agora per la stanza.
   Future<VoiceTicket> ticket(String roomId);
@@ -37,9 +42,13 @@ final voiceRepositoryProvider = Provider<VoiceRepository>((ref) {
   return _SupabaseVoiceRepository(ref);
 });
 
-final openVoiceRoomsProvider = StreamProvider<List<VoiceRoom>>(
-  (ref) => ref.watch(voiceRepositoryProvider).watchOpenRooms(),
-);
+// Come i dati della chat, le stanze dipendono da chi è entrato (si vedono quelle dei
+// suoi canali): con un altro account sullo stesso telefono si ricaricano da zero.
+
+final openVoiceRoomsProvider = StreamProvider<List<VoiceRoom>>((ref) {
+  if (ref.watch(currentUserIdProvider) == null) return Stream.value(const []);
+  return ref.watch(voiceRepositoryProvider).watchOpenRooms();
+});
 
 /// La stanza aperta di un canale (null se nessuna).
 final channelVoiceRoomProvider = Provider.family<VoiceRoom?, String>(
@@ -49,9 +58,10 @@ final channelVoiceRoomProvider = Provider.family<VoiceRoom?, String>(
 );
 
 final voiceSessionsProvider = StreamProvider.autoDispose
-    .family<List<VoiceSession>, String>(
-      (ref, roomId) => ref.watch(voiceRepositoryProvider).watchSessions(roomId),
-    );
+    .family<List<VoiceSession>, String>((ref, roomId) {
+      ref.watch(currentUserIdProvider);
+      return ref.watch(voiceRepositoryProvider).watchSessions(roomId);
+    });
 
 /// Chi è dentro la stanza adesso, nell'ordine di ingresso.
 final voiceParticipantsProvider = Provider.autoDispose
@@ -63,9 +73,10 @@ final voiceParticipantsProvider = Provider.autoDispose
             ..sort((a, b) => a.joinedAt.compareTo(b.joinedAt)),
     );
 
-final voiceMinutesProvider = FutureProvider.autoDispose<int>(
-  (ref) => ref.watch(voiceRepositoryProvider).minutesThisMonth(),
-);
+final voiceMinutesProvider = FutureProvider.autoDispose<int>((ref) {
+  ref.watch(currentUserIdProvider);
+  return ref.watch(voiceRepositoryProvider).minutesThisMonth();
+});
 
 /// Quanti minuti-partecipante dà il piano gratuito di Agora ogni mese.
 const voiceMinutesPerMonth = 10000;
@@ -105,11 +116,27 @@ class _SupabaseVoiceRepository implements VoiceRepository {
   ) as String;
 
   @override
-  Future<void> heartbeat(String sessionId, {required bool muted}) async {
-    await _client.rpc(
+  Future<bool> heartbeat(String sessionId, {required bool muted}) async {
+    final alive = await _client.rpc(
       'voice_heartbeat',
       params: {'p_session': sessionId, 'p_muted': muted},
     );
+    // Prima della migrazione 0023 la funzione non restituiva niente: ancora dentro.
+    return alive != false;
+  }
+
+  @override
+  Future<void> closeRoom(String roomId) async {
+    try {
+      await _client.rpc('close_voice_room', params: {'p_room': roomId});
+    } catch (e) {
+      if (isMissingFunction(e)) {
+        throw const AppError(
+          'Per ora non si può: il server del club non è ancora aggiornato.',
+        );
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -125,7 +152,16 @@ class _SupabaseVoiceRepository implements VoiceRepository {
         'voice-token',
         body: {'room': roomId},
       );
+    } on FunctionsFetchException {
+      // Rete assente: niente risposta dal server (lo dice chi chiama).
+      rethrow;
     } on FunctionException catch (e) {
+      if (e.status == 409) throw const VoiceException(voiceLeftMessage);
+      if (e.status == 404) {
+        throw const VoiceException(
+          'La stanza è stata chiusa: entra di nuovo per riaprirla.',
+        );
+      }
       if (e.status == 503) {
         throw const VoiceException(
           'La stanza vocale non è ancora attiva: manca la configurazione '
@@ -135,7 +171,9 @@ class _SupabaseVoiceRepository implements VoiceRepository {
       if (e.status == 401 || e.status == 403) {
         throw const VoiceException('Non hai accesso a questa stanza.');
       }
-      throw VoiceException('Biglietto non ricevuto (${e.status}). Riprova.');
+      // Altri errori del server (5xx, troppe richieste): passano, si può riprovare
+      // (il rinnovo del biglietto durante la chiamata lo fa da solo).
+      rethrow;
     }
     final data = res.data;
     if (data is! Map) throw const VoiceException('Risposta inattesa. Riprova.');
@@ -207,21 +245,27 @@ class DemoVoiceRepository implements VoiceRepository {
     yield* _changes.stream.map((_) => of());
   }
 
+  /// Tutte le sessioni, chiuse comprese (per i test).
+  List<VoiceSession> get sessions => List.unmodifiable(_sessions);
+
   @override
   Future<String> open(String channelId) async {
-    final room = _open.where((r) => r.channelId == channelId).firstOrNull;
-    if (room != null) return room.id;
-    final id = 'vr-${_next++}';
-    _rooms.add(
-      VoiceRoom(
-        id: id,
-        channelId: channelId,
-        openedBy: _me,
-        openedAt: DateTime.now(),
-      ),
-    );
+    var room = _open.where((r) => r.channelId == channelId).firstOrNull?.id;
+    if (room == null) {
+      room = 'vr-${_next++}';
+      _rooms.add(
+        VoiceRoom(
+          id: room,
+          channelId: channelId,
+          openedBy: _me,
+          openedAt: DateTime.now(),
+        ),
+      );
+    }
+    // Come sul server: chi apre la stanza (o la trova aperta) è già dentro.
+    _enter(room);
     _emit();
-    return id;
+    return room;
   }
 
   @override
@@ -229,38 +273,59 @@ class DemoVoiceRepository implements VoiceRepository {
     if (_open.every((r) => r.id != roomId)) {
       throw const VoiceException('Stanza chiusa o non disponibile');
     }
-    final i = _sessions.indexWhere(
-      (s) => s.roomId == roomId && s.userId == _me && s.isActive,
-    );
-    if (i >= 0) {
-      _sessions[i] = _sessions[i].copyWith(agoraUid: agoraUid);
-      _emit();
-      return _sessions[i].id;
+    final id = _enter(roomId);
+    _emit();
+    return id;
+  }
+
+  // Una stanza per volta, come sul server: le altre sessioni aperte si chiudono.
+  String _enter(String roomId) {
+    for (final s in _sessions.toList()) {
+      if (s.userId == _me && s.isActive && s.roomId != roomId) _close(s.id);
     }
+    final mine = _sessions
+        .where((s) => s.roomId == roomId && s.userId == _me && s.isActive)
+        .firstOrNull;
+    if (mine != null) return mine.id;
     final id = 'vs-${_next++}';
     _sessions.add(
       VoiceSession(
         id: id,
         roomId: roomId,
         userId: _me,
-        agoraUid: agoraUid,
+        agoraUid: agoraUidFor(_me),
         joinedAt: DateTime.now(),
       ),
     );
-    _emit();
     return id;
   }
 
   @override
-  Future<void> heartbeat(String sessionId, {required bool muted}) async {
+  Future<bool> heartbeat(String sessionId, {required bool muted}) async {
     final i = _sessions.indexWhere((s) => s.id == sessionId && s.isActive);
-    if (i < 0) return;
+    if (i < 0) return false;
     _sessions[i] = _sessions[i].copyWith(muted: muted);
     _emit();
+    return true;
   }
 
   @override
   Future<void> leave(String sessionId) async {
+    _close(sessionId);
+    _emit();
+  }
+
+  /// Come `close_voice_room`: tutte le sessioni aperte finiscono, la stanza si chiude.
+  @override
+  Future<void> closeRoom(String roomId) async {
+    for (final s in _sessions.toList()) {
+      if (s.roomId == roomId && s.isActive) _close(s.id);
+    }
+    _emit();
+  }
+
+  // Chiude la sessione; se era l'ultima, anche la stanza.
+  void _close(String sessionId) {
     final i = _sessions.indexWhere((s) => s.id == sessionId && s.isActive);
     if (i < 0) return;
     final s = _sessions[i].copyWith(leftAt: DateTime.now());
@@ -278,12 +343,18 @@ class DemoVoiceRepository implements VoiceRepository {
         );
       }
     }
-    _emit();
   }
 
   @override
-  Future<VoiceTicket> ticket(String roomId) async =>
-      VoiceTicket(appId: 'demo', token: '', channel: roomId);
+  Future<VoiceTicket> ticket(String roomId) async {
+    // Come la funzione voice-token: il biglietto solo a chi ha una sessione aperta.
+    if (!_sessions.any(
+      (s) => s.roomId == roomId && s.userId == _me && s.isActive,
+    )) {
+      throw const VoiceException(voiceLeftMessage);
+    }
+    return VoiceTicket(appId: 'demo', token: '', channel: roomId);
+  }
 
   @override
   Future<int> minutesThisMonth() async => 1260;

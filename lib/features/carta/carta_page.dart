@@ -2,47 +2,62 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/clock.dart';
+import '../../core/errors.dart';
+import '../../core/haptics.dart';
 import '../../core/local_flags.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
+import '../../shared/gold_loader.dart';
+import '../../shared/ui.dart';
+import '../carte/carte_speciali_page.dart' show openSpecialCards;
 import '../carte/special_cards_repository.dart';
 import '../presenze/attendance_repository.dart';
 import '../risultati/matches_repository.dart';
+import '../risultati/result_ui.dart';
 import '../rosa/member.dart';
 import '../rosa/member_editor.dart';
 import '../rosa/rosa_repository.dart';
-import '../traguardi/achievements.dart';
 import '../traguardi/achievements_view.dart';
 import '../walkout/celebrations.dart';
 import '../walkout/walkout_page.dart';
+import 'archetypes.dart';
+import 'card_colors.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
+import 'live_card.dart';
+import 'mini_card.dart' show cardHeroTag;
+import 'playstyle_ui.dart';
 
 /// Statistiche della carta di un membro (presenze degli ultimi 60 giorni e partite).
 final cardStatsProvider = Provider.family<CardStats?, String>((ref, id) {
   final members = ref.watch(rosaProvider).value;
   final member = members?.where((m) => m.id == id).firstOrNull;
-  if (member == null) return null;
+  if (members == null || member == null) return null;
   return CardStats.of(
     member,
     attendance: ref.watch(attendanceProvider).value ?? const [],
     matches: ref.watch(matchesProvider).value ?? const [],
+    roster: members,
+    now: ref.watch(clockProvider)(),
   );
 });
 
-/// Sezione "La mia carta".
+/// Il contenuto del tuo profilo (pagina "Il tuo profilo"): la tua carta, i dati e i
+/// traguardi.
 class MyCardPage extends ConsumerWidget {
   const MyCardPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(profileProvider).value;
-    if (me == null) return const Center(child: CircularProgressIndicator());
+    if (me == null) return const Center(child: GoldLoader());
     return PlayerCardView(memberId: me.id);
   }
 }
@@ -53,14 +68,22 @@ void openPlayerCard(BuildContext context, String memberId) => Navigator.of(
   rootNavigator: true,
 ).push(MaterialPageRoute(builder: (_) => PlayerCardPage(memberId: memberId)));
 
-/// Carta di un compagno, aperta dalla Rosa.
+/// Carta di un compagno, aperta dalla Rosa: come il profilo, con la barra scura che
+/// continua nella testata della carta.
 class PlayerCardPage extends StatelessWidget {
   const PlayerCardPage({super.key, required this.memberId});
   final String memberId;
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('CARTA GIOCATORE')),
+    appBar: AppBar(
+      backgroundColor: context.pal.hero,
+      title: const Text('CARTA GIOCATORE'),
+      flexibleSpace: const Align(
+        alignment: Alignment.topCenter,
+        child: GoldRule(),
+      ),
+    ),
     body: PlayerCardView(memberId: memberId),
   );
 }
@@ -76,8 +99,6 @@ class PlayerCardView extends ConsumerStatefulWidget {
 class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
   final _cardKey = GlobalKey();
   bool _sharing = false;
-
-  /// Mostra la carta base anche se c'è quella speciale di Uomo partita.
 
   Future<void> _share(Member m) async {
     setState(() => _sharing = true);
@@ -98,168 +119,427 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Condivisione non riuscita: $e')),
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Condivisione non riuscita')),
+        ),
       );
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
   }
 
+  void _walkout(Member member, CardStats stats, SpecialCard? special) {
+    final mine = ref.read(profileProvider).value?.id == member.id;
+    final match = special == null
+        ? null
+        : ref
+              .read(matchesProvider)
+              .value
+              ?.where((m) => m.id == special.matchId)
+              .firstOrNull;
+    showWalkout(
+      context,
+      member: member,
+      stats: stats,
+      special: special?.kind,
+      bonus: special?.bonus ?? 0,
+      caption: special == null
+          ? null
+          : specialCardCaption(
+              special,
+              match: match,
+              name: mine ? null : member.displayName,
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final me = ref.watch(profileProvider).value;
-    final member = ref
-        .watch(rosaProvider)
-        .value
+    final rosa = ref.watch(rosaProvider);
+    final member = rosa.value
         ?.where((m) => m.id == widget.memberId)
         .firstOrNull;
     final stats = ref.watch(cardStatsProvider(widget.memberId));
     if (member == null || stats == null) {
-      return const Center(child: CircularProgressIndicator());
+      // Lo spinner mentre la rosa carica, poi l'errore con "Riprova" o
+      // "non trovato" (prima lo spinner girava per sempre).
+      if (rosa.hasError && (!rosa.isLoading || rosa.retrying)) {
+        return ErrorRetry(
+          message: friendlyError(
+            rosa.error!,
+            action: 'Caricamento non riuscito',
+          ),
+          onRetry: () => ref.invalidate(rosaProvider),
+        );
+      }
+      if (rosa.isLoading) {
+        return const Center(child: GoldLoader());
+      }
+      return ErrorRetry(
+        message: 'Giocatore non trovato.',
+        onRetry: () => ref.invalidate(rosaProvider),
+      );
     }
+    final me = ref.watch(profileProvider).value;
     // La carta speciale della settimana (se c'è) sostituisce quella normale.
     final special = ref.watch(activeSpecialCardProvider(member.id));
     final isMine = me?.id == member.id;
     final isDirettivo = me?.isDirettivo ?? false;
+    final now = ref.watch(clockProvider)();
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      padding: const EdgeInsets.only(bottom: 32),
       children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 340),
-            child: RepaintBoundary(
-              key: _cardKey,
-              child: Padding(
-                // Margine per l'ombra nell'immagine condivisa.
-                padding: const EdgeInsets.all(8),
-                child: FutCard(
-                  member: member,
-                  stats: stats,
-                  special: special?.kind,
-                  bonus: special?.bonus ?? 0,
-                  badges: [
-                    for (final a in topBadges(
-                      ref.watch(achievementsProvider(member.id)) ?? const [],
-                    ))
-                      (a.icon, a.level.color),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (special != null) _SpecialNote(card: special),
-        if (isMine && member.overall == null)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: Text(
-              'Il Direttivo non ha ancora assegnato il tuo overall: intanto scegli ruolo e stile di gioco.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: MilanacColors.gold),
-            ),
-          ),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            if (isMine || isDirettivo)
-              FilledButton.icon(
-                onPressed: () => showCardEditor(context, member),
-                icon: const Icon(Icons.edit_rounded),
-                label: Text(
-                  isMine ? 'Modifica la mia carta' : 'Modifica carta',
-                ),
-              ),
-            OutlinedButton.icon(
-              onPressed: _sharing ? null : () => _share(member),
-              icon: const Icon(Icons.ios_share_rounded),
-              label: const Text('Condividi'),
-            ),
-            OutlinedButton.icon(
-              onPressed: () => showWalkout(
-                context,
-                member: member,
-                stats: stats,
-                special: special?.kind,
-                bonus: special?.bonus ?? 0,
-              ),
-              icon: const Icon(Icons.auto_awesome_rounded),
-              label: const Text('Walkout'),
-            ),
-            if (isDirettivo && !isMine)
-              TextButton.icon(
-                onPressed: () => showMemberEditor(context, member),
-                icon: const Icon(Icons.manage_accounts_rounded),
-                label: const Text('Dati del membro'),
-              ),
-          ],
-        ),
-        AchievementsGrid(memberId: member.id),
-        const SizedBox(height: 20),
-        for (final MapEntry(:key, :value) in cardStatLegend.entries)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: '$key  ',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: MilanacColors.gold,
+        // Testata scura con la carta, come la tavola del profilo.
+        ColoredBox(
+          color: context.pal.hero,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 22),
+            child: Column(
+              children: [
+                Center(
+                  child: SizedBox(
+                    width: FutCard.width + 16,
+                    // Carta viva (riflessi, inclinazione, brillii): i riflessi stanno
+                    // fuori dall'immagine condivisa, che resta la carta pulita.
+                    child: LiveCard(
+                      special: special?.kind,
+                      padding: const EdgeInsets.all(8),
+                      cardWidth: FutCard.width,
+                      child: RepaintBoundary(
+                        key: _cardKey,
+                        child: Padding(
+                          // Margine per l'alone nell'immagine condivisa.
+                          padding: const EdgeInsets.all(8),
+                          // Dalla Rosa arriva in volo la mini carta.
+                          child: Hero(
+                            tag: cardHeroTag(member.id),
+                            child: Material(
+                              type: MaterialType.transparency,
+                              child: FutCard(
+                                member: member,
+                                special: special?.kind,
+                                bonus: special?.bonus ?? 0,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  TextSpan(
-                    text: value,
-                    style: const TextStyle(color: Colors.white60),
-                  ),
+                ),
+                if (special != null) ...[
+                  const SizedBox(height: 4),
+                  _SpecialLine(card: special, now: now),
                 ],
-              ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  // La testata è sempre scura: bordo e scritta d'oro anche nel chiaro.
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 44),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    foregroundColor: MilanacColors.goldLight,
+                    side: BorderSide(
+                      color: AppPalette.dark.chipBorder,
+                      width: 1.5,
+                    ),
+                    textStyle: const TextStyle(
+                      fontFamily: bodyFont,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onPressed: () => _walkout(member, stats, special),
+                  child: Text(
+                    isMine ? 'Rivedi il walkout' : 'Guarda il walkout',
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
+        const GoldFadeLine(color: MilanacColors.goldDeep),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (isMine && member.overall == null) ...[
+                AppCard(
+                  important: true,
+                  child: Text(
+                    'Il Direttivo non ha ancora assegnato il tuo overall: '
+                    'intanto scegli ruolo e stile di gioco.',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: context.pal.textSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              _InfoCard(member: member),
+              const SizedBox(height: 14),
+              ArchetypeCard(
+                playStyle: member.playStyle,
+                codes: member.playStyles,
+              ),
+              _ActionsCard(
+                actions: [
+                  if (isMine || isDirettivo)
+                    (
+                      Icons.edit_rounded,
+                      isMine ? 'Modifica la mia carta' : 'Modifica carta',
+                      'Ruolo, numero, archetipo e PlayStyle',
+                      () => showCardEditor(context, member),
+                    ),
+                  (
+                    Icons.ios_share_rounded,
+                    'Condividi la carta',
+                    "Come immagine, nelle chat o sui social",
+                    _sharing ? null : () => _share(member),
+                  ),
+                  if (isDirettivo && !isMine)
+                    (
+                      Icons.manage_accounts_rounded,
+                      'Dati del membro',
+                      'Squadre, ruolo nel club, gamertag',
+                      () => showMemberEditor(context, member),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              _StatsSection(stats: stats),
+              const SizedBox(height: 24),
+              AchievementsGrid(memberId: member.id),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-/// Sotto la carta: perché è speciale e fino a quando.
-class _SpecialNote extends StatelessWidget {
-  const _SpecialNote({required this.card});
+/// Sotto la carta: "Carta della settimana · scade tra 5 giorni" (porta alle Carte
+/// speciali).
+class _SpecialLine extends StatelessWidget {
+  const _SpecialLine({required this.card, required this.now});
   final SpecialCard card;
+  final DateTime now;
 
   @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 10),
-    child: ListTile(
-      leading: Icon(card.kind.icon, color: card.kind.color, size: 30),
-      title: Text(
-        'Carta ${card.kind.label.toLowerCase()} +${card.bonus}',
-        style: TextStyle(fontWeight: FontWeight.w800, color: card.kind.color),
+  Widget build(BuildContext context) {
+    final what = card.isBlue ? 'Blu elettrico' : 'Carta della settimana';
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => openSpecialCards(context),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Center(
+            widthFactor: 1,
+            child: Text(
+              '$what · scade ${relativeDay(card.endsAt, now)}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: card.isBlue ? CardColors.blueText : CardColors.goldText,
+              ),
+            ),
+          ),
+        ),
       ),
-      subtitle: Text(
-        '${card.reason ?? 'Carta della settimana'} · fino al '
-        '${DateFormat('d MMMM', 'it').format(card.endsAt)}',
-      ),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: () => context.push('/carte-speciali'),
-    ),
-  );
+    );
+  }
 }
 
-/// Stili di gioco proposti (si può scrivere anche altro).
-const playStyleSuggestions = [
-  'Finalizzatore',
-  'Regista',
-  'Box to box',
-  'Muro',
-  'Velocista',
-  'Fantasista',
-  'Mediano',
-  'Saracinesca',
-];
+/// Gamertag, ruolo nel club, data d'ingresso e motto, una riga ciascuno.
+class _InfoCard extends StatelessWidget {
+  const _InfoCard({required this.member});
+  final Member member;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final direttivo = member.direttivoLabel;
+    final rows = [
+      ('Gamertag', member.gamertag ?? '–'),
+      (
+        'Ruolo nel club',
+        direttivo.isEmpty
+            ? member.roleLabel
+            : '${member.roleLabel} · ${direttivo.toLowerCase()}',
+      ),
+      ('Nel club dal', DateFormat('d MMMM yyyy', 'it').format(member.joinedAt)),
+      if (member.motto != null && member.motto!.trim().isNotEmpty)
+        ('Motto', member.motto!.trim()),
+    ];
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        children: [
+          for (final (i, (label, value)) in rows.indexed) ...[
+            if (i > 0) const Divider(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(fontSize: 15, color: p.textMuted),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      value,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Le azioni sulla carta: modificarla, condividerla, i dati del membro.
+class _ActionsCard extends StatelessWidget {
+  const _ActionsCard({required this.actions});
+  final List<(IconData, String, String, VoidCallback?)> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          for (final (i, (icon, title, subtitle, onTap))
+              in actions.indexed) ...[
+            if (i > 0) const Divider(indent: 68, endIndent: 16),
+            InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    IconTile(icon),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            subtitle,
+                            style: TextStyle(fontSize: 14, color: p.textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded, color: p.textMuted),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// I numeri della carta (dai dati del club), con la loro spiegazione.
+class _StatsSection extends StatelessWidget {
+  const _StatsSection({required this.stats});
+  final CardStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    String pct(int? v) => v == null ? '–' : '$v%';
+    final cells = [
+      (pct(stats.presence), 'Presenze'),
+      (pct(stats.punctuality), 'Puntualità'),
+      ('${stats.nights}', 'Serate'),
+      ('${stats.goals}', 'Gol'),
+      ('${stats.months}', 'Mesi nel club'),
+      (pct(stats.winRate), 'Vittorie'),
+    ];
+    Widget cell((String, String) c) => Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          children: [
+            Text(
+              c.$1,
+              style: const TextStyle(
+                fontFamily: sportFont,
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              c.$2,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: p.textMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'STATISTICHE',
+          style: TextStyle(
+            fontFamily: sportFont,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            letterSpacing: .9,
+          ),
+        ),
+        const SizedBox(height: 10),
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            children: [
+              Row(children: [for (final c in cells.take(3)) cell(c)]),
+              const Divider(),
+              Row(children: [for (final c in cells.skip(3)) cell(c)]),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Presenze, puntualità e serate degli ultimi 60 giorni; gol e vittorie '
+          'delle partite delle sue squadre.',
+          style: TextStyle(fontSize: 13, color: p.textMuted),
+        ),
+      ],
+    );
+  }
+}
 
 Future<void> showCardEditor(BuildContext context, Member member) =>
     showModalBottomSheet(
@@ -285,7 +565,15 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
   );
   late String? _position = widget.member.fieldPosition;
   late GamePlatform? _platform = widget.member.platform;
+  late var _styles = [...widget.member.playStyles];
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // L'archetipo scelto si accende anche scrivendolo a mano.
+    _style.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
@@ -297,15 +585,18 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
   Future<void> _save() async {
     setState(() => _saving = true);
     final style = _style.text.trim();
+    // Numero, stile e piattaforma lasciati vuoti si cancellano davvero.
     final updated = widget.member.copyWith(
       fieldPosition: _position,
-      shirtNumber: int.tryParse(_number.text),
+      shirtNumber: int.tryParse(_number.text.trim()),
       overall: _overall,
       playStyle: style.isEmpty ? null : style,
+      playStyles: _styles,
       platform: _platform,
     );
     try {
       final rootContext = Navigator.of(context, rootNavigator: true).context;
+      final messenger = ScaffoldMessenger.of(context);
       final before = widget.member.overall;
       final repo = ref.read(rosaRepositoryProvider);
       // L'overall lo decide il Direttivo: solo lui lo salva.
@@ -315,7 +606,18 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
       } else {
         await repo.saveCard(updated);
       }
+      Haptics.confirm();
       if (mounted) Navigator.of(context).pop();
+      if (_styles.isNotEmpty && repo.playStylesMissing) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Carta salvata. I PlayStyle si vedranno quando il server del '
+              'club sarà aggiornato.',
+            ),
+          ),
+        );
+      }
       // Overall salito: walkout subito (e segnato come visto su questo telefono).
       if (before != null && _overall > before && rootContext.mounted) {
         final me = ref.read(profileProvider).value;
@@ -337,25 +639,18 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
-    final preview = Member(
-      id: widget.member.id,
-      displayName: widget.member.displayName,
-      role: widget.member.role,
-      joinedAt: widget.member.joinedAt,
-      avatarUrl: widget.member.avatarUrl,
-      teams: widget.member.teams,
-      fieldPosition: _position,
-      overall: _overall,
-    );
+    final p = context.pal;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -370,11 +665,11 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
             Text('La carta', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             if (!isDirettivo)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   'L\'overall lo assegna il Direttivo.',
-                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                  style: TextStyle(fontSize: 14, color: p.textMuted),
                 ),
               ),
             if (isDirettivo)
@@ -383,18 +678,32 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
                   Text(
                     '$_overall',
                     style: TextStyle(
+                      fontFamily: sportFont,
                       fontSize: 34,
-                      fontWeight: FontWeight.w900,
-                      color: switch (tierOf(preview.overall)) {
-                        CardTier.rossonera => MilanacColors.red,
-                        CardTier.oro => MilanacColors.gold,
-                        CardTier.argento => const Color(0xFFC9CED6),
-                        _ => const Color(0xFFD9A273),
-                      },
+                      fontWeight: FontWeight.w600,
+                      color: p.text,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Text('OVERALL'),
+                  // Il colore del livello, come il bordo della carta.
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: CardColors.tier(tierOf(_overall)),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'OVERALL',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.3,
+                      color: p.textMuted,
+                    ),
+                  ),
                   Expanded(
                     child: Slider(
                       value: _overall.toDouble(),
@@ -427,27 +736,64 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
                   child: TextField(
                     controller: _number,
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
                     decoration: const InputDecoration(labelText: 'Numero'),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
+            Text('Archetipo', style: Theme.of(context).textTheme.titleSmall),
+            for (final area in ArchetypeArea.values) ...[
+              const SizedBox(height: 8),
+              Text(
+                area.label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: p.textMuted,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final a in archetypes.where((a) => a.area == area))
+                    ChoiceChip(
+                      avatar: Icon(a.icon, size: 18),
+                      label: Text(a.name),
+                      showCheckmark: false,
+                      selected: archetypeOf(_style.text)?.name == a.name,
+                      onSelected: (on) => _style.text = on ? a.name : '',
+                    ),
+                ],
+              ),
+            ],
+            if (archetypeOf(_style.text) case final a?)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  a.description,
+                  style: TextStyle(fontSize: 14, color: p.textSecondary),
+                ),
+              ),
+            const SizedBox(height: 8),
             TextField(
               controller: _style,
               maxLength: 24,
-              decoration: const InputDecoration(labelText: 'Stile di gioco'),
+              decoration: const InputDecoration(
+                labelText: 'Stile di gioco',
+                hintText: 'Un archetipo qui sopra, o scrivi il tuo',
+              ),
             ),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: [
-                for (final s in playStyleSuggestions)
-                  ActionChip(
-                    label: Text(s),
-                    onPressed: () => setState(() => _style.text = s),
-                  ),
-              ],
+            PlayStylePicker(
+              codes: _styles,
+              onChanged: (codes) => setState(() => _styles = codes),
             ),
             const SizedBox(height: 12),
             const Text('Piattaforma'),

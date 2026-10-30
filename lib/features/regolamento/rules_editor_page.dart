@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
+import '../../shared/ui.dart';
+import '../auth/gate_ui.dart';
 import 'rules_repository.dart';
 
 /// Editor del Direttivo: la bozza degli articoli, da pubblicare come nuova versione.
@@ -33,7 +38,7 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
       await ref.read(rulesRepositoryProvider).saveArticle(result);
       ref.invalidate(rulesDraftProvider);
     } catch (e) {
-      _toast('Salvataggio non riuscito: $e');
+      _toast(friendlyError(e, action: 'Salvataggio non riuscito'));
     }
   }
 
@@ -60,7 +65,7 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
       await ref.read(rulesRepositoryProvider).deleteArticle(a.id!);
       ref.invalidate(rulesDraftProvider);
     } catch (e) {
-      _toast('Eliminazione non riuscita: $e');
+      _toast(friendlyError(e, action: 'Eliminazione non riuscita'));
     }
   }
 
@@ -72,7 +77,7 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
       await ref.read(rulesRepositoryProvider).reorder(items);
       ref.invalidate(rulesDraftProvider);
     } catch (e) {
-      _toast('Riordino non riuscito: $e');
+      _toast(friendlyError(e, action: 'Riordino non riuscito'));
     }
   }
 
@@ -83,7 +88,7 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
         title: const Text('Pubblicare la nuova versione?'),
         content: const Text(
           'Tutti i membri riceveranno la notifica e dovranno leggere e accettare '
-          'di nuovo il regolamento al prossimo accesso.',
+          'di nuovo il regolamento: chi ha l\'app aperta lo vede subito.',
         ),
         actions: [
           TextButton(
@@ -101,16 +106,21 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
     setState(() => _publishing = true);
     try {
       final n = await ref.read(rulesRepositoryProvider).publish();
+      if (!mounted) return;
+      // Chi pubblica risulta averla accettata: profilo e versione si rileggono insieme,
+      // così il router non lo manda ad accettare quello che ha appena scritto.
+      ref.invalidate(profileProvider);
       ref.invalidate(latestRulesProvider);
       _toast('Versione $n pubblicata: tutti dovranno accettarla.');
-      if (!mounted) return;
       if (widget.firstTime) {
         context.go('/');
       } else {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      _toast('Pubblicazione non riuscita: $e');
+      if (mounted) {
+        _toast(friendlyError(e, action: 'Pubblicazione non riuscita'));
+      }
     } finally {
       if (mounted) setState(() => _publishing = false);
     }
@@ -118,45 +128,50 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
 
   Widget _body(List<RulesArticle> list) {
     final content = list.isEmpty
-        ? const Center(
+        ? Center(
             child: Padding(
-              padding: EdgeInsets.all(32),
+              padding: const EdgeInsets.all(32),
               child: Text(
                 'Nessun articolo: aggiungi il primo e poi pubblica.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: context.pal.textMuted, fontSize: 16),
               ),
             ),
           )
         : ReorderableListView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
             itemCount: list.length,
             onReorderItem: (from, to) => _reorder(list, from, to),
             itemBuilder: (context, i) {
               final a = list[i];
-              return Card(
+              return Padding(
                 key: ValueKey(a.id ?? i),
-                child: ListTile(
-                  leading: ReorderableDragStartListener(
-                    index: i,
-                    child: const Icon(Icons.drag_handle_rounded),
+                padding: const EdgeInsets.only(bottom: 8),
+                child: AppCard(
+                  radius: 16,
+                  padding: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: ReorderableDragStartListener(
+                      index: i,
+                      child: const Icon(Icons.drag_handle_rounded),
+                    ),
+                    title: Text(a.title),
+                    subtitle: Text(
+                      a.body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      tooltip: 'Azioni',
+                      onSelected: (v) =>
+                          v == 'edit' ? _edit(a, list.length) : _delete(a),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Modifica')),
+                        PopupMenuItem(value: 'delete', child: Text('Elimina')),
+                      ],
+                    ),
+                    onTap: () => _edit(a, list.length),
                   ),
-                  title: Text(a.title),
-                  subtitle: Text(
-                    a.body,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    tooltip: 'Azioni',
-                    onSelected: (v) =>
-                        v == 'edit' ? _edit(a, list.length) : _delete(a),
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Modifica')),
-                      PopupMenuItem(value: 'delete', child: Text('Elimina')),
-                    ],
-                  ),
-                  onTap: () => _edit(a, list.length),
                 ),
               );
             },
@@ -170,50 +185,61 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
     );
   }
 
+  /// "Più tardi" (anche con l'indietro di Android): si torna alla Home, o alla Sala
+  /// Direttivo se si arriva dal suo promemoria (cioè se era già stato rimandato).
+  void _later() {
+    final fromReminder = ref.read(rulesWriteLaterProvider);
+    ref.read(rulesWriteLaterProvider.notifier).postpone();
+    context.go(fromReminder ? '/direttivo' : '/');
+  }
+
   @override
   Widget build(BuildContext context) {
     final draft = ref.watch(rulesDraftProvider);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.firstTime
+    // L'editor iniziale si apre come unica pagina (dalla porta d'ingresso o con go dal
+    // promemoria della Sala Direttivo): indietro vale "Più tardi" invece di chiudere
+    // l'app.
+    return PopScope(
+      canPop: !widget.firstTime || !(ModalRoute.of(context)?.isFirst ?? false),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _later();
+      },
+      child: Scaffold(
+        appBar: gateAppBar(
+          title: widget.firstTime
               ? 'REGOLAMENTO D\'INGRESSO'
               : 'BOZZA DEL REGOLAMENTO',
-        ),
-        automaticallyImplyLeading: !widget.firstTime,
-        actions: [
-          if (widget.firstTime)
-            TextButton(
-              onPressed: () {
-                ref.read(rulesWriteLaterProvider.notifier).postpone();
-                context.go('/');
-              },
-              child: const Text(
-                'Più tardi',
-                style: TextStyle(color: Colors.white70),
+          automaticallyImplyLeading: !widget.firstTime,
+          actions: [
+            if (widget.firstTime)
+              TextButton(
+                onPressed: _later,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppPalette.dark.textSecondary,
+                ),
+                child: const Text('Più tardi'),
               ),
+            TextButton.icon(
+              onPressed: _publishing ? null : _publish,
+              style: TextButton.styleFrom(
+                foregroundColor: MilanacColors.goldLight,
+              ),
+              icon: const Icon(Icons.publish_rounded),
+              label: const Text('PUBBLICA'),
             ),
-          TextButton.icon(
-            onPressed: _publishing ? null : _publish,
-            icon: const Icon(Icons.publish_rounded, color: MilanacColors.gold),
-            label: const Text(
-              'PUBBLICA',
-              style: TextStyle(color: MilanacColors.gold),
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: MilanacColors.red,
-        onPressed: () => _edit(null, draft.value?.length ?? 0),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Nuovo articolo'),
-      ),
-      body: draft.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) =>
-            Center(child: Text('Impossibile caricare la bozza: $e')),
-        data: _body,
+          ],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _edit(null, draft.value?.length ?? 0),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Nuovo articolo'),
+        ),
+        body: AsyncView<List<RulesArticle>>(
+          value: draft,
+          action: 'Impossibile caricare la bozza',
+          onRetry: () => ref.invalidate(rulesDraftProvider),
+          data: _body,
+        ),
       ),
     );
   }
@@ -306,22 +332,18 @@ class _FirstTimeIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-    child: Container(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+    child: AppCard(
+      important: true,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        color: MilanacColors.gold.withValues(alpha: .12),
-        border: Border.all(color: MilanacColors.gold.withValues(alpha: .5)),
-      ),
-      child: const Text(
+      child: Text(
         'Benvenuto nel Direttivo! Il regolamento d\'ingresso non è ancora stato '
         'scritto e sei tra i primi a entrare: tocca a te. Aggiungi gli articoli '
         'con «Nuovo articolo» e premi PUBBLICA: da quel momento ogni membro '
         'dovrà leggerlo per almeno 2 minuti e accettarlo prima di usare l\'app. '
         'Se adesso non hai tempo, «Più tardi»: il promemoria resta nella Sala '
         'Direttivo.',
-        style: TextStyle(color: Colors.white, height: 1.4),
+        style: TextStyle(color: context.pal.text, fontSize: 15, height: 1.4),
       ),
     ),
   );

@@ -1,61 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/providers.dart';
+import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/async_view.dart';
 import '../../shared/shared_links.dart';
+import '../../shared/ui.dart';
 import '../news/news_page.dart';
 import '../risultati/match.dart' show youtubeId;
+import '../risultati/result_ui.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 
 const _anyRole = 'Tutti i ruoli';
 
-/// Mondo Proclub: i video dei creator (pubblicati dal Direttivo, proposti dai
-/// giocatori) e le notizie dal mondo FC.
-class MondoPage extends ConsumerStatefulWidget {
-  const MondoPage({super.key, this.initialTab});
+/// Mondo Proclub: le notizie dal mondo FC e i video dei creator (pubblicati dal
+/// Direttivo, proposti dai giocatori), come la tavola.
+///
+/// La scheda scelta sta nella rotta (`/mondo?scheda=notizie`), come in Partite: anche
+/// le schede in alto cambiano la rotta, così una notifica la segue sempre, anche se
+/// arriva una seconda volta con la stessa `?scheda=`.
+class MondoPage extends ConsumerWidget {
+  const MondoPage({super.key, this.tab});
 
   /// "video" (predefinita) oppure "notizie".
-  final String? initialTab;
+  final String? tab;
+
+  /// Le schede nell'ordine della tavola.
+  static const tabs = ['notizie', 'video'];
 
   @override
-  ConsumerState<MondoPage> createState() => _MondoPageState();
-}
-
-class _MondoPageState extends ConsumerState<MondoPage>
-    with SingleTickerProviderStateMixin {
-  late final _tabs = TabController(
-    length: 2,
-    vsync: this,
-    initialIndex: widget.initialTab == 'notizie' ? 1 : 0,
-  )..addListener(() => setState(() {}));
-
-  @override
-  void didUpdateWidget(covariant MondoPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Stessa pagina, rotta cambiata (es. da una notifica): cambia scheda.
-    if (widget.initialTab != oldWidget.initialTab) {
-      _tabs.animateTo(widget.initialTab == 'notizie' ? 1 : 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
+    // 0 = Notizie, 1 = Video; senza scheda, i video.
+    final selected = tab == 'notizie' ? 0 : 1;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: _tabs.index == 0
+      floatingActionButton: selected == 1
           ? FloatingActionButton.extended(
               heroTag: 'video',
-              backgroundColor: MilanacColors.red,
               onPressed: () => proposeVideo(context, ref),
               icon: const Icon(Icons.add_link_rounded),
               label: Text(isDirettivo ? 'Aggiungi video' : 'Proponi un video'),
@@ -63,21 +49,18 @@ class _MondoPageState extends ConsumerState<MondoPage>
           : null,
       body: Column(
         children: [
-          TabBar(
-            controller: _tabs,
-            indicatorColor: MilanacColors.red,
-            labelColor: Colors.white,
-            tabs: const [
-              Tab(icon: Icon(Icons.smart_display_rounded), text: 'Video'),
-              Tab(icon: Icon(Icons.newspaper_rounded), text: 'Notizie'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabs,
-              children: const [_VideoTab(), NewsList()],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: SegmentedTabs(
+              labels: const ['Notizie', 'Video'],
+              selected: selected,
+              onSelected: (i) {
+                if (i != selected) context.go('/mondo?scheda=${tabs[i]}');
+              },
             ),
           ),
+          // Solo la scheda scelta resta costruita (e collegata al server).
+          Expanded(child: selected == 0 ? const NewsList() : const _VideoTab()),
         ],
       ),
     );
@@ -141,7 +124,26 @@ Future<void> proposeVideo(
       );
     }
   } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Non salvato: $e')));
+    messenger.showSnackBar(
+      SnackBar(content: Text(friendlyError(e, action: 'Non salvato'))),
+    );
+  }
+}
+
+/// Esegue un'azione su un video (pubblica, scarta, elimina…) e, se non riesce,
+/// lo dice con un messaggio invece di lasciare un'eccezione non gestita.
+Future<void> _act(
+  BuildContext context,
+  Future<void> Function() action, {
+  required String failure,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await action();
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text(friendlyError(e, action: failure))),
+    );
   }
 }
 
@@ -164,9 +166,10 @@ class _VideoTabState extends ConsumerState<_VideoTab> {
       for (final m in ref.watch(rosaProvider).value ?? const <Member>[])
         m.id: m.displayName,
     };
-    return links.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Errore: $e')),
+    final p = context.pal;
+    return AsyncView(
+      value: links,
+      onRetry: () => ref.invalidate(sharedLinksProvider(LinkCategory.video)),
       data: (all) {
         final published = all.where((l) => l.isPublished).toList()
           ..sort(
@@ -186,79 +189,79 @@ class _VideoTabState extends ConsumerState<_VideoTab> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
           children: [
             if (proposals.isNotEmpty) ...[
-              _Header(
+              SectionLabel(
                 isDirettivo
                     ? 'Proposte da approvare (${proposals.length})'
                     : 'Le tue proposte',
+                gold: true,
               ),
+              const SizedBox(height: 10),
               for (final l in proposals)
-                _ProposalCard(
-                  link: l,
-                  proposer: names[l.createdBy] ?? 'Un giocatore',
-                  canDecide: isDirettivo,
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _ProposalCard(
+                    link: l,
+                    proposer: names[l.createdBy] ?? 'Un giocatore',
+                    canDecide: isDirettivo,
+                  ),
                 ),
+              const SizedBox(height: 8),
             ],
-            const _Header('Video dei creator'),
-            const Text(
+            const SectionLabel('Video dei creator'),
+            const SizedBox(height: 6),
+            Text(
               'Scelti dal Direttivo: build, tattiche e consigli per ogni ruolo. '
               'Hai visto un video utile? Proponilo.',
-              style: TextStyle(color: Colors.white60),
+              style: TextStyle(fontSize: 15, color: p.textSecondary),
             ),
-            const SizedBox(height: 8),
-            if (roles.isNotEmpty)
+            const SizedBox(height: 12),
+            if (roles.isNotEmpty) ...[
               Wrap(
                 spacing: 6,
-                runSpacing: 4,
+                runSpacing: 6,
                 children: [
-                  ChoiceChip(
-                    label: const Text('Tutti'),
+                  FilterPill(
+                    label: 'Tutti',
+                    square: true,
                     selected: _role == null,
-                    onSelected: (_) => setState(() => _role = null),
+                    onTap: () => setState(() => _role = null),
                   ),
                   for (final r in fieldPositions.where(roles.contains))
-                    ChoiceChip(
-                      label: Text(r),
+                    FilterPill(
+                      label: r,
+                      square: true,
                       selected: _role == r,
-                      onSelected: (_) => setState(() => _role = r),
+                      onTap: () => setState(() => _role = r),
                     ),
                 ],
               ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 12),
+            ],
             if (shown.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 32),
-                child: Center(
-                  child: Text(
-                    'Nessun video ancora.',
-                    style: TextStyle(color: Colors.white54),
-                  ),
+              AppCard(
+                child: Text(
+                  'Nessun video ancora.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, color: p.textMuted),
+                ),
+              )
+            else
+              AppCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    for (final (i, l) in shown.indexed) ...[
+                      if (i > 0) const Divider(indent: 16, endIndent: 16),
+                      VideoCard(link: l, canEdit: isDirettivo),
+                    ],
+                  ],
                 ),
               ),
-            for (final l in shown) VideoCard(link: l, canEdit: isDirettivo),
           ],
         );
       },
     );
   }
-}
-
-class _Header extends StatelessWidget {
-  const _Header(this.title);
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(2, 8, 2, 8),
-    child: Text(
-      title.toUpperCase(),
-      style: const TextStyle(
-        fontFamily: sportFont,
-        fontSize: 15,
-        letterSpacing: 1.5,
-        color: MilanacColors.gold,
-      ),
-    ),
-  );
 }
 
 /// Anteprima di un video: miniatura di YouTube se il link è di YouTube.
@@ -276,17 +279,9 @@ class VideoThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final id = youtubeId(url);
-    final placeholder = Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [MilanacColors.redDark, MilanacColors.black],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-    );
+    final placeholder = ColoredBox(color: context.pal.surfaceHigher);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       child: SizedBox(
         width: width,
         height: height,
@@ -301,11 +296,20 @@ class VideoThumb extends StatelessWidget {
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => placeholder,
               ),
-            const Center(
-              child: Icon(
-                Icons.play_circle_fill_rounded,
-                size: 30,
-                color: Colors.white,
+            // Sopra la miniatura: tondo scuro con il triangolo, come i lettori video.
+            Center(
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: MilanacColors.black.withValues(alpha: .6),
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  size: 22,
+                  color: MilanacColors.ivory,
+                ),
               ),
             ),
           ],
@@ -315,7 +319,7 @@ class VideoThumb extends StatelessWidget {
   }
 }
 
-/// Video pubblicato: miniatura, titolo, creator, ruolo e data.
+/// Video pubblicato: miniatura, titolo, ruolo, creator e data (riga di una card).
 class VideoCard extends ConsumerWidget {
   const VideoCard({super.key, required this.link, this.canEdit = false});
   final SharedLink link;
@@ -323,65 +327,67 @@ class VideoCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
     final date = link.publishedAt ?? link.createdAt;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => openSharedLink(link.url),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              VideoThumb(url: link.url),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      link.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+    return InkWell(
+      onTap: () => openSharedLink(link.url),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 12, canEdit ? 4 : 16, 12),
+        child: Row(
+          children: [
+            VideoThumb(url: link.url, width: 96, height: 54),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    link.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      height: 1.25,
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      [
-                        if (link.tag != null) link.tag!,
-                        if (link.note != null && link.note!.isNotEmpty)
-                          link.note!,
-                        if (date != null)
-                          DateFormat('d MMM', 'it').format(date),
-                      ].join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      if (link.tag != null) link.tag!,
+                      if (link.note != null && link.note!.isNotEmpty)
+                        link.note!,
+                      if (date != null) DateFormat('d MMM', 'it').format(date),
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, color: p.textMuted),
+                  ),
+                ],
               ),
-              if (canEdit)
-                PopupMenuButton<String>(
-                  onSelected: (v) async {
-                    if (v == 'delete') {
-                      await ref
+            ),
+            if (canEdit)
+              PopupMenuButton<String>(
+                tooltip: 'Altre azioni',
+                onSelected: (v) async {
+                  if (v == 'delete') {
+                    await _act(
+                      context,
+                      () => ref
                           .read(sharedLinksRepositoryProvider)
-                          .delete(link.id);
-                    } else if (context.mounted) {
-                      await proposeVideo(context, ref, link: link);
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Modifica')),
-                    PopupMenuItem(value: 'delete', child: Text('Elimina')),
-                  ],
-                ),
-            ],
-          ),
+                          .delete(link.id),
+                      failure: 'Eliminazione non riuscita',
+                    );
+                  } else if (context.mounted) {
+                    await proposeVideo(context, ref, link: link);
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Modifica')),
+                  PopupMenuItem(value: 'delete', child: Text('Elimina')),
+                ],
+              ),
+          ],
         ),
       ),
     );
@@ -401,83 +407,95 @@ class _ProposalCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.pal;
     final repo = ref.read(sharedLinksRepositoryProvider);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: MilanacColors.gold.withValues(alpha: .6)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            InkWell(
-              onTap: () => openSharedLink(link.url),
-              child: Row(
-                children: [
-                  VideoThumb(url: link.url, width: 96, height: 54),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          link.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+    return AppCard(
+      important: true,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => openSharedLink(link.url),
+            child: Row(
+              children: [
+                VideoThumb(url: link.url, width: 96, height: 54),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        link.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
                         ),
-                        Text(
-                          [
-                            'Proposto da $proposer',
-                            if (link.tag != null) link.tag!,
-                          ].join(' · '),
-                          style: const TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12.5,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                      Text(
+                        [
+                          'Proposto da $proposer',
+                          if (link.tag != null) link.tag!,
+                        ].join(' · '),
+                        style: TextStyle(fontSize: 14, color: p.textMuted),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Wrap(
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
               alignment: WrapAlignment.end,
               crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 4,
+              spacing: 8,
               children: canDecide
                   ? [
-                      TextButton.icon(
-                        onPressed: () => repo.delete(link.id),
-                        icon: const Icon(Icons.close_rounded),
-                        label: const Text('Scarta'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: () => repo.save(
-                          link.copyWith(status: LinkStatus.pubblicato),
+                      TextButton(
+                        onPressed: () => _act(
+                          context,
+                          () => repo.delete(link.id),
+                          failure: 'Non scartato',
                         ),
-                        icon: const Icon(Icons.publish_rounded),
-                        label: const Text('Pubblica'),
+                        child: const Text('Scarta'),
+                      ),
+                      // Oro tenue: l'oro pieno resta per l'azione della pagina.
+                      FilledButton.tonal(
+                        onPressed: () => _act(
+                          context,
+                          () => repo.save(
+                            link.copyWith(status: LinkStatus.pubblicato),
+                          ),
+                          failure: 'Pubblicazione non riuscita',
+                        ),
+                        child: const Text('Pubblica'),
                       ),
                     ]
                   : [
-                      const Chip(
-                        avatar: Icon(Icons.hourglass_top_rounded, size: 16),
-                        label: Text('In attesa del Direttivo'),
+                      StatusPill(
+                        'In attesa del Direttivo',
+                        color: p.warning,
+                        background: p.warningBg,
                       ),
                       TextButton(
-                        onPressed: () => repo.delete(link.id),
+                        onPressed: () => _act(
+                          context,
+                          () => repo.delete(link.id),
+                          failure: 'Proposta non ritirata',
+                        ),
                         child: const Text('Ritira'),
                       ),
                     ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

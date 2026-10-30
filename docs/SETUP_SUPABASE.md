@@ -84,10 +84,23 @@ per le prove (pochi messaggi all'ora). Serve un servizio SMTP gratuito, per esem
 
 ## 8. Password del Direttivo
 Chi si registra scegliendo "Faccio parte del Direttivo" deve inserire la **password del club**.
-Nel database c'è solo il suo hash (`app_config`, chiave `direttivo_password_hash`), impostato dalla
-migrazione `0016`. Si cambia dall'app: Impostazioni → Account → *Password del Direttivo*
-(oppure dall'SQL Editor: `select set_direttivo_password('attuale', 'nuova')` eseguito come Direttivo).
-Non serve più nominare il primo Direttivo a mano: basta registrarsi con la password.
+Nel database c'è solo il suo hash (`app_config`, chiave `direttivo_password_hash`).
+
+> **Cambiala subito.** La password iniziale impostata dalla migrazione `0016` è scritta nella
+> storia del repository (pubblico): chiunque la conosca può registrarsi come Direttivo.
+
+- Dall'app (serve la password attuale): Impostazioni → Account → *Password del Direttivo*.
+- Dall'SQL Editor di Supabase (anche senza conoscere quella attuale):
+  ```sql
+  update public.app_config
+  set value = extensions.crypt('NUOVA-PASSWORD', extensions.gen_salt('bf', 12))
+  where key = 'direttivo_password_hash';
+  ```
+  (`set_direttivo_password` dall'SQL Editor non funziona: lì non c'è un utente collegato.)
+
+Dopo il cambio controlla in Sala Direttivo → Rosa e squadre che nel Direttivo non ci sia
+nessuno che non conosci. Non serve più nominare il primo Direttivo a mano: basta registrarsi
+con la password.
 
 ## 9. Azzeramento dei dati
 La migrazione `0016` svuota presenze, formazioni, eventi, risultati, trofei, tattiche, chat e tornei,
@@ -143,8 +156,8 @@ in una stanza, dice che la voce non è ancora attiva.
    In alternativa al passo 3, i due codici si possono incollare direttamente nel modulo
    *Run workflow* (campi *App ID di Agora* e *App Certificate di Agora*): finiscono solo tra i
    segreti delle funzioni su Supabase e non compaiono nel log.
-L'App Certificate non sta mai nell'app: i biglietti d'ingresso (token validi 3 ore) li firma la
-funzione `voice-token` solo per chi ha accesso al canale. Per controllare: `select jobname from
+L'App Certificate non sta mai nell'app: i biglietti d'ingresso (token validi un'ora, rinnovati
+dall'app) li firma la funzione `voice-token` solo per chi è entrato nella stanza. Per controllare: `select jobname from
 cron.job;` deve mostrare anche `stanze-vocali` (chiude le stanze abbandonate) e
 `select * from voice_rooms where closed_at is null;` elenca le stanze aperte adesso.
 Sul telefono l'app chiede il permesso del microfono la prima volta che si entra.

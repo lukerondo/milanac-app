@@ -31,10 +31,21 @@ $$;
 
 -- ---------------------------------------------------------------- 2) azzeramento
 -- Restano account, notizie automatiche, link social e musicali, token dei telefoni.
-truncate table public.attendance, public.formation_slots, public.formations,
-  public.match_media, public.matches, public.events, public.trophies, public.seasons,
-  public.tactics, public.messages, public.channel_reads, public.channel_mutes,
-  public.tournament_standings, public.tournaments;
+-- Solo alla prima esecuzione (prima che esista la colonna registration_completed_at):
+-- se il file venisse riapplicato per errore, i dati del club non si perdono.
+create temp table if not exists _m0016 on commit drop as
+  select not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles'
+      and column_name = 'registration_completed_at') as prima_volta;
+do $$ begin
+  if (select prima_volta from _m0016) then
+    truncate table public.attendance, public.formation_slots, public.formations,
+      public.match_media, public.matches, public.events, public.trophies, public.seasons,
+      public.tactics, public.messages, public.channel_reads, public.channel_mutes,
+      public.tournament_standings, public.tournaments;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------- 3) profilo completo
 alter table public.profiles
@@ -64,11 +75,16 @@ alter table public.profiles drop constraint if exists profiles_direttivo_roles_c
 alter table public.profiles add constraint profiles_direttivo_roles_check
   check (direttivo_roles <@ array['capitano', 'reclutatore', 'organizzatore', 'gestore']);
 
--- Tutti ripassano dalla registrazione: il ruolo lo riprendono completandola.
-update public.profiles set
-  club_role = 'pending', requested_role = 'giocatore', active = true,
-  overall = null, direttivo_roles = '{}', face = null,
-  registration_completed_at = null, rules_accepted_version = null, rules_accepted_at = null;
+-- Tutti ripassano dalla registrazione: il ruolo lo riprendono completandola
+-- (anche questo solo alla prima esecuzione).
+do $$ begin
+  if (select prima_volta from _m0016) then
+    update public.profiles set
+      club_role = 'pending', requested_role = 'giocatore', active = true,
+      overall = null, direttivo_roles = '{}', face = null,
+      registration_completed_at = null, rules_accepted_version = null, rules_accepted_at = null;
+  end if;
+end $$;
 
 -- Il membro non può cambiarsi da solo ruolo, squadre, stato, overall, etichette e accettazioni:
 -- li impostano il Direttivo o le funzioni di registrazione (che alzano il flag di sessione).

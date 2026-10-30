@@ -5,9 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/errors.dart';
 import '../../core/theme.dart';
 import 'albo_doro_page.dart';
-import 'scene_painters.dart';
+import 'trophy_shape_painter.dart';
 import 'trophies_repository.dart';
 import 'trophy.dart';
 
@@ -29,10 +30,8 @@ Future<void> showTrophyDetails(
           Text(
             t.name,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: MilanacColors.gold,
-              fontWeight: FontWeight.w900,
-            ),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(color: context.pal.accentText),
           ),
           Text(
             [
@@ -40,11 +39,16 @@ Future<void> showTrophyDetails(
               if (t.wonOn != null)
                 DateFormat('d MMMM yyyy', 'it').format(t.wonOn!),
             ].join(' · '),
-            style: const TextStyle(color: Colors.white70),
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, color: context.pal.textSecondary),
           ),
           if (t.description != null && t.description!.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text(t.description!, textAlign: TextAlign.center),
+            Text(
+              t.description!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, height: 1.4),
+            ),
           ],
           if (canEdit) ...[
             const SizedBox(height: 20),
@@ -72,8 +76,23 @@ Future<void> showTrophyDetails(
                         ],
                       ),
                     );
-                    if (ok != true) return;
-                    await ref.read(trophiesRepositoryProvider).delete(t);
+                    if (ok != true || !context.mounted) return;
+                    final messenger = ScaffoldMessenger.of(context);
+                    try {
+                      await ref.read(trophiesRepositoryProvider).delete(t);
+                    } catch (e) {
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            friendlyError(
+                              e,
+                              action: 'Eliminazione non riuscita',
+                            ),
+                          ),
+                        ),
+                      );
+                      return;
+                    }
                     ref.invalidate(trophiesProvider(t.seasonId));
                     if (sheet.mounted) Navigator.of(sheet).pop();
                   },
@@ -156,13 +175,20 @@ class _TrophyEditorState extends ConsumerState<_TrophyEditor> {
   }
 
   Future<void> _pickImage() async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1000,
-    );
-    if (file == null) return;
-    final bytes = await file.readAsBytes();
-    setState(() => _image = bytes);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1000,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (mounted) setState(() => _image = bytes);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyError(e, action: 'Foto non caricata'))),
+      );
+    }
   }
 
   Future<void> _save() async {
@@ -208,9 +234,11 @@ class _TrophyEditorState extends ConsumerState<_TrophyEditor> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Salvataggio non riuscito: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyError(e, action: 'Salvataggio non riuscito')),
+        ),
+      );
     }
   }
 
@@ -334,7 +362,6 @@ class _TrophyEditorState extends ConsumerState<_TrophyEditor> {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _saving ? null : _save,
-              style: FilledButton.styleFrom(backgroundColor: MilanacColors.red),
               child: const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Text('Metti in bacheca'),

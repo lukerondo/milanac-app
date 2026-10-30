@@ -1,4 +1,5 @@
 import '../../core/config.dart';
+import '../../core/italian_time.dart';
 
 enum AttendanceStatus {
   presente('Presente'),
@@ -9,21 +10,25 @@ enum AttendanceStatus {
   final String label;
 }
 
-/// Ora entro cui rispondere per la serata (ora del telefono; il server usa l'ora italiana).
+/// Ora entro cui rispondere per la serata, in ora italiana come sul server.
 const attendanceDeadlineHour = 18;
 const attendanceDeadlineMinute = 30;
 const attendanceDeadlineLabel = '18:30';
 
-DateTime attendanceDeadline(DateTime day) => DateTime(
-  day.year,
-  day.month,
-  day.day,
-  attendanceDeadlineHour,
-  attendanceDeadlineMinute,
+/// L'istante in cui chiudono le risposte per [day]: le 18:30 italiane di quel giorno,
+/// qualunque sia il fuso del telefono.
+DateTime attendanceDeadline(DateTime day) => fromItalianClock(
+  DateTime.utc(
+    day.year,
+    day.month,
+    day.day,
+    attendanceDeadlineHour,
+    attendanceDeadlineMinute,
+  ),
 );
 
 /// Le risposte di un giorno sono aperte finché non scatta la sua scadenza
-/// (per i giorni successivi si può rispondere in anticipo).
+/// (per i giorni successivi si può rispondere in anticipo). [now] è un istante.
 bool answersOpen(DateTime day, [DateTime? now]) =>
     (now ?? DateTime.now()).isBefore(attendanceDeadline(day));
 
@@ -80,6 +85,50 @@ class AttendanceEntry {
 }
 
 DateTime dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+/// Lo storico di [playerId] fino a [today] compreso, dal più recente: le risposte date in
+/// anticipo per i giorni successivi non contano (come sul server, in player_stats).
+List<AttendanceEntry> historyOf(
+  String playerId,
+  Iterable<AttendanceEntry> entries,
+  DateTime today,
+) =>
+    entries
+        .where((e) => e.playerId == playerId && !e.date.isAfter(today))
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+/// Presenti, in ritardo, assenti e senza risposta di una serata tra [memberIds]:
+/// le risposte degli altri (l'altra squadra, chi non è più nella rosa) non contano.
+class DayCounts {
+  const DayCounts._(this.present, this.late, this.absent, this.waiting);
+
+  /// [ofDay]: le risposte della serata, per giocatore.
+  factory DayCounts(
+    Iterable<String> memberIds,
+    Map<String, AttendanceEntry> ofDay,
+  ) {
+    var present = 0, late = 0, absent = 0, waiting = 0;
+    for (final id in memberIds) {
+      switch (ofDay[id]?.status) {
+        case AttendanceStatus.presente:
+          present++;
+        case AttendanceStatus.ritardo:
+          late++;
+        case AttendanceStatus.assente:
+          absent++;
+        case null:
+          waiting++;
+      }
+    }
+    return DayCounts._(present, late, absent, waiting);
+  }
+
+  final int present;
+  final int late;
+  final int absent;
+  final int waiting;
+}
 
 String dateKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

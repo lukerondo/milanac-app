@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/widgets.dart' show ImageProvider, MemoryImage, NetworkImage;
+import 'package:flutter/widgets.dart'
+    show AppLifecycleListener, ImageProvider, MemoryImage, NetworkImage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import '../../core/teams.dart';
 
 const tournamentsBucket = 'tournaments';
@@ -124,8 +126,8 @@ class StandingRow {
     );
   }
 
-  Map<String, dynamic> toMap(String tournamentId) => {
-    'tournament_id': tournamentId,
+  /// La riga come la vuole `save_standings`.
+  Map<String, dynamic> toJson() => {
     'team_name': teamName,
     'won': won,
     'drawn': drawn,
@@ -133,6 +135,11 @@ class StandingRow {
     'goals_for': goalsFor,
     'goals_against': goalsAgainst,
     'is_us': isUs,
+  };
+
+  Map<String, dynamic> toMap(String tournamentId) => {
+    'tournament_id': tournamentId,
+    ...toJson(),
   };
 }
 
@@ -161,40 +168,63 @@ abstract class TournamentsRepository {
   Future<void> saveStandings(String tournamentId, List<StandingRow> rows);
 
   /// Carica la foto (o il logo) del torneo e la collega; restituisce il percorso.
-  Future<String> uploadImage(String tournamentId, Uint8List bytes);
+  /// [replacing] è la foto di prima: si toglie dallo storage solo a torneo aggiornato.
+  Future<String> uploadImage(
+    String tournamentId,
+    Uint8List bytes, {
+    String? replacing,
+  });
 
   /// URL temporaneo della foto (null in demo: si usa la copia in memoria).
   Future<String?> imageUrl(String path);
 }
 
-/// Immagine del torneo: dalla memoria (demo) o dal bucket privato.
-final tournamentImageProvider = FutureProvider.family<ImageProvider?, String>((
-  ref,
-  path,
-) async {
-  final local = demoTournamentPhotos[path];
-  if (local != null) return MemoryImage(local);
-  final url = await ref.watch(tournamentsRepositoryProvider).imageUrl(path);
-  return url == null || url.isEmpty ? null : NetworkImage(url);
-});
+/// Immagine del torneo: dalla memoria (demo) o dal bucket privato. L'URL firmato vale
+/// 7 giorni: si riusa per 6, poi (quando nessuno lo mostra più) se ne chiede uno nuovo.
+final tournamentImageProvider = FutureProvider.autoDispose
+    .family<ImageProvider?, String>((ref, path) async {
+      final local = demoTournamentPhotos[path];
+      if (local != null) return MemoryImage(local);
+      final keep = ref.keepAlive();
+      final timer = Timer(const Duration(days: 6), keep.close);
+      ref.onDispose(timer.cancel);
+      try {
+        final url = await ref
+            .watch(tournamentsRepositoryProvider)
+            .imageUrl(path);
+        return url == null || url.isEmpty ? null : NetworkImage(url);
+      } catch (_) {
+        keep.close(); // un errore non resta in memoria
+        rethrow;
+      }
+    });
 
 final tournamentsRepositoryProvider = Provider<TournamentsRepository>((ref) {
   if (AppConfig.isDemo) return DemoTournamentsRepository();
-  return _SupabaseTournamentsRepository(ref);
+  return SupabaseTournamentsRepository(ref);
 });
 
-final tournamentsProvider = StreamProvider<List<Tournament>>(
-  (ref) => ref.watch(tournamentsRepositoryProvider).watchAll(),
-);
+final tournamentsProvider = StreamProvider<List<Tournament>>((ref) {
+  // Al cambio di account si ricarica con i permessi del nuovo utente.
+  ref.watch(currentUserIdProvider);
+  return ref.watch(tournamentsRepositoryProvider).watchAll();
+});
 
-final standingsProvider = FutureProvider.family<List<StandingRow>, String>(
-  (ref, id) async => sortStandings(
-    await ref.watch(tournamentsRepositoryProvider).standings(id),
-  ),
-);
+/// La classifica di un torneo. Non arriva in tempo reale (la aggiorna il Direttivo da un
+/// altro telefono): si rilegge a ogni apertura dei Tornei o del torneo (rilascio
+/// automatico, vedi anche TournamentPage), al ritorno in primo piano e trascinando in giù.
+final standingsProvider = FutureProvider.autoDispose
+    .family<List<StandingRow>, String>((ref, id) async {
+      ref.watch(currentUserIdProvider);
+      final lifecycle = AppLifecycleListener(onResume: ref.invalidateSelf);
+      ref.onDispose(lifecycle.dispose);
+      return sortStandings(
+        await ref.watch(tournamentsRepositoryProvider).standings(id),
+      );
+    });
 
-class _SupabaseTournamentsRepository implements TournamentsRepository {
-  _SupabaseTournamentsRepository(this._ref);
+class SupabaseTournamentsRepository implements TournamentsRepository {
+  SupabaseTournamentsRepository(this._ref);
   final Ref _ref;
 
   SupabaseClient get _client => _ref.read(supabaseProvider);
@@ -234,23 +264,52 @@ class _SupabaseTournamentsRepository implements TournamentsRepository {
     return rows.map(StandingRow.fromMap).toList();
   }
 
+  /// Tutta la classifica in una transazione (`save_standings`): se la rete cade a metà
+  /// resta quella di prima, senza righe doppie.
   @override
   Future<void> saveStandings(
     String tournamentId,
     List<StandingRow> rows,
   ) async {
-    await _client
-        .from('tournament_standings')
-        .delete()
-        .eq('tournament_id', tournamentId);
-    if (rows.isEmpty) return;
-    await _client.from('tournament_standings').insert([
-      for (final r in rows) r.toMap(tournamentId),
-    ]);
+    try {
+      await _client.rpc(
+        'save_standings',
+        params: {
+          'p_tournament': tournamentId,
+          'p_rows': [for (final r in rows) r.toJson()],
+        },
+      );
+    } catch (e) {
+      if (!isMissingFunction(e)) rethrow;
+      // Database senza save_standings (migrazione non ancora applicata): come prima.
+      await _saveStandingsInSteps(tournamentId, rows);
+    }
+  }
+
+  /// La strada di prima: le righe nuove, poi via le vecchie (se la rete cade a metà la
+  /// classifica non resta vuota, al massimo per un attimo doppia).
+  Future<void> _saveStandingsInSteps(
+    String tournamentId,
+    List<StandingRow> rows,
+  ) async {
+    final table = _client.from('tournament_standings');
+    final inserted = rows.isEmpty
+        ? const <Map<String, dynamic>>[]
+        : await table
+              .insert([for (final r in rows) r.toMap(tournamentId)])
+              .select('id');
+    final keep = [for (final r in inserted) r['id']];
+    var old = table.delete().eq('tournament_id', tournamentId);
+    if (keep.isNotEmpty) old = old.not('id', 'in', keep);
+    await old;
   }
 
   @override
-  Future<String> uploadImage(String tournamentId, Uint8List bytes) async {
+  Future<String> uploadImage(
+    String tournamentId,
+    Uint8List bytes, {
+    String? replacing,
+  }) async {
     final path =
         '$tournamentId/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
     await _client.storage
@@ -260,11 +319,27 @@ class _SupabaseTournamentsRepository implements TournamentsRepository {
           bytes,
           fileOptions: const FileOptions(contentType: 'image/jpeg'),
         );
-    await _client
-        .from('tournaments')
-        .update({'image_path': path})
-        .eq('id', tournamentId);
+    try {
+      await _client
+          .from('tournaments')
+          .update({'image_path': path})
+          .eq('id', tournamentId);
+    } on PostgrestException {
+      // Il torneo non è cambiato: la foto nuova resterebbe orfana. (Con la rete caduta
+      // non si sa se l'ha presa, e il file resta.)
+      await _removeQuietly(path);
+      rethrow;
+    }
+    // Solo ora che il torneo punta alla foto nuova si toglie quella di prima.
+    if (replacing != null && replacing != path) await _removeQuietly(replacing);
     return path;
+  }
+
+  /// Un file in meno nello storage; se non riesce resta un file orfano, non un errore.
+  Future<void> _removeQuietly(String path) async {
+    try {
+      await _client.storage.from(tournamentsBucket).remove([path]);
+    } catch (_) {}
   }
 
   @override
@@ -319,6 +394,7 @@ class DemoTournamentsRepository implements TournamentsRepository {
   };
   final _changes = StreamController<void>.broadcast();
   var _next = 10;
+  var _photos = 1;
 
   @override
   Stream<List<Tournament>> watchAll() async* {
@@ -362,27 +438,36 @@ class DemoTournamentsRepository implements TournamentsRepository {
   Future<void> saveStandings(String id, List<StandingRow> rows) async =>
       _standings[id] = List.of(rows);
 
+  /// Come sul server: ogni foto ha un nome nuovo e quella di prima si toglie solo
+  /// quando il torneo punta alla nuova.
   @override
-  Future<String> uploadImage(String tournamentId, Uint8List bytes) async {
-    final path = '$tournamentId/foto.jpg';
+  Future<String> uploadImage(
+    String tournamentId,
+    Uint8List bytes, {
+    String? replacing,
+  }) async {
+    final path = '$tournamentId/foto_${_photos++}.jpg';
     demoTournamentPhotos[path] = bytes;
     final i = _tournaments.indexWhere((x) => x.id == tournamentId);
-    if (i >= 0) {
-      final t = _tournaments[i];
-      _tournaments[i] = Tournament(
-        id: t.id,
-        name: t.name,
-        organizer: t.organizer,
-        url: t.url,
-        team: t.team,
-        status: t.status,
-        startsOn: t.startsOn,
-        endsOn: t.endsOn,
-        notes: t.notes,
-        imagePath: path,
-      );
-      _changes.add(null);
+    if (i < 0) {
+      demoTournamentPhotos.remove(path);
+      throw const AppError('Torneo non trovato.');
     }
+    final t = _tournaments[i];
+    _tournaments[i] = Tournament(
+      id: t.id,
+      name: t.name,
+      organizer: t.organizer,
+      url: t.url,
+      team: t.team,
+      status: t.status,
+      startsOn: t.startsOn,
+      endsOn: t.endsOn,
+      notes: t.notes,
+      imagePath: path,
+    );
+    _changes.add(null);
+    if (replacing != null) demoTournamentPhotos.remove(replacing);
     return path;
   }
 

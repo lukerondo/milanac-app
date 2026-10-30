@@ -63,7 +63,7 @@ void main() {
 
   testWidgets('Calendario: il Direttivo crea un evento', (tester) async {
     await open(tester, 'Calendario');
-    expect(find.text('PROSSIMI APPUNTAMENTI'), findsOneWidget);
+    expect(find.text('QUESTA SETTIMANA'), findsOneWidget);
 
     await tester.tap(find.text('Nuovo evento'));
     await tester.pumpAndSettle();
@@ -94,13 +94,15 @@ void main() {
     );
     await tester.enterText(find.widgetWithText(TextField, 'MILAN AC'), '4');
     await tester.enterText(find.widgetWithText(TextField, 'Avversari'), '0');
+    // Con il risultato compaiono le righe dei minuti: il tasto scende.
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Salva partita'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Salva partita'));
     await tester.pumpAndSettle();
 
     expect(find.text('Inter Digitale'), findsOneWidget);
-    expect(find.text('4 : 0'), findsOneWidget);
+    expect(find.text('4 – 0'), findsOneWidget);
 
     // Apre la partita e aggiunge un link.
     await tester.tap(find.text('Inter Digitale'));
@@ -109,7 +111,9 @@ void main() {
       find.text('Nessun video o foto per questa partita.'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Aggiungi media'));
+    await tester.ensureVisible(find.text('Aggiungi video o foto'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aggiungi video o foto'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Link a un video'));
     await tester.pumpAndSettle();

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Diagnostica in sola lettura del database (nessun dato personale stampato: niente email).
+"""Diagnostica in sola lettura del database.
+
+I log di GitHub Actions del repository sono pubblici: qui si stampano solo conteggi e
+impostazioni, mai nomi, ruoli dei singoli membri, email o id.
 
 Simula l'approvazione di un utente in attesa da parte del Direttivo dentro una
 transazione annullata (rollback), per capire se i permessi la consentono.
@@ -31,12 +34,14 @@ def show(title: str, sql: str) -> list:
     return rows
 
 
-show("Profili (id abbreviato, nome, ruolo, attivo)",
-     "select left(id::text, 8) as id, display_name, club_role, active from public.profiles order by created_at")
-show("Permessi su profiles",
-     "select grantee, string_agg(privilege_type, ',' order by privilege_type) as privilegi "
-     "from information_schema.role_table_grants where table_schema='public' and table_name='profiles' "
-     "and grantee in ('anon','authenticated') group by grantee")
+show("Profili per ruolo e stato (solo conteggi)",
+     "select club_role, active, count(*) as profili from public.profiles "
+     "group by club_role, active order by club_role, active")
+show("Permessi su profiles e profile_private",
+     "select table_name, grantee, string_agg(privilege_type, ',' order by privilege_type) as privilegi "
+     "from information_schema.role_table_grants where table_schema='public' "
+     "and table_name in ('profiles', 'profile_private') "
+     "and grantee in ('anon','authenticated') group by table_name, grantee order by 1, 2")
 show("Proprietari delle funzioni di sicurezza",
      "select p.proname, r.rolname as owner, p.prosecdef as security_definer from pg_proc p "
      "join pg_roles r on r.oid = p.proowner where p.proname in "

@@ -25,8 +25,19 @@ void main() {
     await fonts.load();
 
     const names = [
-      'Donnarumma', 'Calabria', 'Tomori', 'Thiaw', 'Theo', 'Bennacer',
-      'Reijnders', 'Loftus', 'Pulisic', 'Giroud', 'Leao', 'Maignan', 'Florenzi',
+      'Donnarumma',
+      'Calabria',
+      'Tomori',
+      'Thiaw',
+      'Theo',
+      'Bennacer',
+      'Reijnders',
+      'Loftus',
+      'Pulisic',
+      'Giroud',
+      'Leao',
+      'Maignan',
+      'Florenzi',
     ];
     final members = {
       for (final (i, n) in names.indexed)

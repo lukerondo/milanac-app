@@ -35,6 +35,9 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | **Nuova app · 3** | Chat in stile Telegram (risposte citate, vocali fino a 2 minuti, foto e vocali che scadono dopo 60 giorni, link cliccabili, "Nuovi messaggi"), carte speciali al posto dei voti (nero/oro della settimana assegnata dal Direttivo per reparto con bonus +1…+5, blu elettrico automatica per tripletta o tre partite senza subire gol, annuncio in Comunicazioni, walkout e traguardi dedicati), Rosa con mini carte, ricerca e filtri, Tornei con foto o logo. | ✅ |
 | **Nuova app · 4** | Lavagna tattica in Tattiche e schemi: gettoni dei giocatori delle due squadre (dalla formazione), pennello heatmap, frecce continue o tratteggiate, annulla, schemi salvati con immagine esportata; registrazione del replay (voce e mosse sincronizzate, fino a 5 minuti) con anteprima e invio in chat, dove si riproduce nell'app e sparisce dopo 3 giorni. | ✅ |
 | **Nuova app · 5** | Stanza vocale in ogni chat (Agora): cuffie nella barra, *Entra* / *Apri la stanza* con un tocco, microfono e vivavoce, cerchio verde su chi parla, avviso "stanza aperta" a chi è nel canale, chiusura automatica quando esce l'ultimo; minuti del mese nella Sala Direttivo (10.000 gratis). Rifiniture: errori con "Riprova", larghezza massima su tablet. | ✅ |
+| **Nuova app · 6** | Review completa e correzioni (sicurezza del database, dati in tempo reale ovunque, "Riprova" e nuovi tentativi quando manca la rete, ora italiana, stanza vocale robusta e attiva anche a schermo spento, chat con paginazione ed eliminazioni per tutti), nuovo design **nero oro** (scuro, chiaro o automatico come il telefono) con Barlow e Oswald, **barra in basso a cinque schede** (Home, Presenze, Partite, Chat, Club) al posto del menu laterale, profilo e impostazioni dalla foto in alto, preferenze delle notifiche, ricerca nei messaggi, nome e cognome visibili solo al Direttivo, avviso dei nuovi ingressi nella Sala Direttivo, APK sotto gli 80 MB. | ✅ |
+| **Nuova app · 7** | Poteri del Direttivo: promozioni e retrocessioni con le etichette (tracciate nella Sala Direttivo), eliminazione dell'account di un membro con doppia conferma, iscritti in attesa visibili, foto del profilo da togliere, stanza vocale chiusa per tutti; il club non resta mai senza Direttivo. | ✅ |
+| **Nuova app · 8** | Stile Pro Clubs, una novità alla volta: carte vive (riflesso che passa, inclinazione col dito, brillii delle speciali), apertura del pacchetto (bustina da aprire con un tocco o tirandola su, luce dello strappo del colore della carta, San Siro che si accende, fuochi d'artificio, overall che sale punto per punto, vibrazioni a tempo), partita come una diretta TV (tabellone, minuti dei gol, cronaca con il punteggio dopo ogni gol, foto e clip in grande e a tutto schermo; migrazione 0027), animazioni e vibrazioni (la mini carta della Rosa vola fino alla carta grande, caricamenti d'oro al posto delle rotelline, vibrazioni su gol, presenze e conferme, spegnibili da Impostazioni → Aspetto), archetipi e PlayStyle (13 archetipi come in Pro Clubs con icona e descrizione, 30 PlayStyle di cui 2 PlayStyle+ in oro sulla carta; migrazione 0028), formazione in prospettiva (campo inclinato come il menu tattiche di FC, con le mini carte in piedi al posto dei pallini), Match Day in Home (nel giorno della partita la card della serata ha il tabellone con il conto alla rovescia, chi è pronto, la formazione e il codice del party da copiare; migrazione 0029), grafica del risultato da condividere (poster nero oro 4:5 con San Siro, punteggio nel tabellone, marcatori con i minuti e carte della giornata, con anteprima; o il testo), sondaggi in chat (domanda e da 2 a 10 risposte, una o più scelte, barre con le percentuali dopo il voto, voti in tempo reale, chi ha votato, chiusura da chi l'ha creato o dal Direttivo; migrazione 0030), promemoria partita (un'ora prima e dieci minuti prima, con il codice del party, esclusi gli assenti e spegnibili da Impostazioni; il Direttivo chiama la squadra in lobby dal Match Day; migrazione 0031). | ✅ |
 
 ## Provare l'app subito (modalità demo)
 
@@ -48,8 +51,12 @@ flutter run -d chrome  # nel browser
 
 ## Video intro
 
-Metti il video in `assets/video/intro.mp4` (verticale 1080×1920, 10–15s, max ~8 MB).
-Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
+`assets/video/intro.mp4` è **"Lampi di leggende"**: le foto vere di Maldini, Pirlo, Seedorf,
+Shevchenko, Kaká, Pato, Ronaldinho e Ibrahimović con spinta lenta, nome in oro e lampi bianchi
+tra una e l'altra (15 s, verticale 720×1280, senza audio, circa 1 MB). Si rifà con
+`python3 tools/video/intro_leggende.py CARTELLA_FOTO` (ffmpeg e ImageMagick; le foto non
+stanno nel repository, i nomi dei file sono nello script). Per aggiungere una leggenda basta
+una riga nello script. Se il video manca, l'intro resta su sfondo nero.
 
 ## Collegare Supabase (gratis)
 
@@ -71,11 +78,12 @@ Se il file non c'è, l'intro usa l'immagine `assets/images/intro_bg.png`.
    flutter run --dart-define-from-file=env/prod.json
    ```
    **Non** inserire mai nel repository la chiave `secret` / `service_role`.
-6. Fai il primo login, poi nell'SQL Editor nomina il primo Direttivo:
-   ```sql
-   update profiles set club_role = 'direttivo' where display_name = 'Il tuo nome';
-   ```
-   Da lì in poi è il Direttivo ad approvare gli altri dall'app.
+6. Registrati dall'app scegliendo *Faccio parte del Direttivo* con la password del Direttivo
+   (impostata nel database: vedi `docs/SETUP_SUPABASE.md`, § 8): il primo del Direttivo che entra
+   scrive e pubblica il regolamento d'ingresso.
+   Gli altri entrano da soli, completando la registrazione e accettando il regolamento: non c'è
+   un'approvazione, ma il Direttivo riceve l'avviso di ogni nuovo ingresso nella chat *Sala
+   Direttivo* e può togliere dalla Rosa chi non conosce (Sala Direttivo → Rosa e squadre).
 7. **Stanza vocale** (facoltativa): serve un account Agora gratuito; App ID e App Certificate vanno
    nei secret `AGORA_APP_ID` e `AGORA_APP_CERTIFICATE` di GitHub (vedi `docs/SETUP_SUPABASE.md`, § 13).
    Senza, l'app funziona lo stesso e la stanza dice che la voce non è ancora attiva.

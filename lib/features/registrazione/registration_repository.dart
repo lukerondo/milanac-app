@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../rosa/member.dart';
 import '../volto/face.dart';
@@ -78,9 +78,14 @@ class _SupabaseRegistrationRepository implements RegistrationRepository {
 
   @override
   Future<void> complete(RegistrationData data) async {
-    await _ref
+    final result = await _ref
         .read(supabaseProvider)
         .rpc('complete_registration', params: data.toParams());
+    // La password sbagliata non è un errore del database (così il tentativo resta
+    // contato per il limite di 5 ogni 15 minuti): arriva come risposta.
+    if (result == 'password_errata') {
+      throw const RegistrationError('Password del Direttivo non corretta');
+    }
   }
 
   @override
@@ -95,24 +100,40 @@ class _SupabaseRegistrationRepository implements RegistrationRepository {
 }
 
 class DemoRegistrationRepository implements RegistrationRepository {
+  /// Password del Direttivo della sola demo: quella vera esiste solo come hash sul
+  /// server e non va mai scritta nel codice.
+  static const direttivoPassword = 'demo-direttivo';
+
   RegistrationData? last;
   String? newPassword;
 
+  /// Come `complete_registration`: con la password del Direttivo sbagliata non si salva.
   @override
-  Future<void> complete(RegistrationData data) async => last = data;
+  Future<void> complete(RegistrationData data) async {
+    if (data.direttivo &&
+        data.direttivoPassword != (newPassword ?? direttivoPassword)) {
+      throw const RegistrationError('Password del Direttivo non corretta');
+    }
+    last = data;
+  }
 
   @override
   Future<void> changeDirettivoPassword(String current, String next) async =>
       newPassword = next;
 }
 
-/// Testo comprensibile per gli errori della registrazione (le regole del database
-/// parlano già italiano: "Password del Direttivo non corretta", ...).
-String friendlyRegistrationError(Object e) {
-  if (e is PostgrestException) return e.message;
-  final s = e.toString();
-  if (s.contains('SocketException') || s.contains('Failed host lookup')) {
-    return 'Nessuna connessione: controlla la rete e riprova.';
-  }
-  return 'Salvataggio non riuscito: $s';
+/// Errore della registrazione con il testo già pronto da mostrare.
+class RegistrationError extends AppError {
+  const RegistrationError(super.message);
 }
+
+/// Testo comprensibile per gli errori della registrazione (le regole del database
+/// parlano già italiano: "Troppi tentativi con la password del Direttivo", ...).
+String friendlyRegistrationError(Object e) =>
+    friendlyError(e, action: 'Salvataggio non riuscito');
+
+/// Password del Direttivo sbagliata, o troppi tentativi: si torna al passo 2 sul campo.
+bool isDirettivoPasswordError(Object e) =>
+    friendlyRegistrationError(e)
+        .toLowerCase()
+        .contains('password del direttivo');
