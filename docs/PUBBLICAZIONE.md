@@ -27,7 +27,9 @@ Nome: **MILANAC** · Versione: in `pubspec.yaml` (`version: 1.0.0+1`)
    di GitHub chiamato **`FIREBASE_SERVICE_ACCOUNT`**. (È una chiave segreta: non metterla nel repository.)
 6. **iPhone**: su developer.apple.com → *Keys* → nuova chiave con **Apple Push Notifications service (APNs)** →
    scarica il `.p8` → Firebase → Impostazioni → **Cloud Messaging** → *Configurazione app Apple* → carica la chiave
-   (Key ID e Team ID).
+   (Key ID e Team ID). L'IPA ad hoc del workflow *iPhone* per ora non riceve le push: l'archivio
+   non firmato non porta il permesso `aps-environment`, che va rimesso nella firma prima
+   dell'esportazione quando si attivano.
 
 7. **Notifiche personali** (formazione, chat): dopo aver creato il secret `FIREBASE_SERVICE_ACCOUNT`
    vai su GitHub → **Actions → Funzioni → Run workflow**. Il workflow passa la chiave alla funzione
@@ -163,9 +165,12 @@ registrati.
 4. GitHub → *Actions → iPhone → Run workflow*: nella release
    [App per iPhone](https://github.com/lukerondo/milanac-app/releases/tag/iphone-di-prova) esce
    `MILANAC.ipa`, firmato per tutti gli iPhone registrati.
-5. Carica `MILANAC.ipa` su Diawi e manda il link: si apre da **Safari** sull'iPhone → *Installa*.
+5. Carica `MILANAC.ipa` su Diawi (circa 32 MB: l'account gratuito accetta fino a 50 MB) e manda il
+   link: si apre da **Safari** sull'iPhone → *Installa*. Valgono anche gli iPhone già registrati
+   sull'account da prima (developer.apple.com → *Devices*).
 6. **Nuovo membro**: aggiungi la sua riga al secret `IOS_DISPOSITIVI`, rilancia il workflow e ricarica
-   l'IPA su Diawi.
+   l'IPA su Diawi. Il workflow si ferma con un errore se il profilo non comprende tutti gli iPhone
+   registrati.
 
 **In alternativa, certificato e profilo fatti a mano** su developer.apple.com (*Devices*, certificato
 **Apple Distribution** esportato in `.p12` dal Portachiavi, profilo **Ad Hoc** con tutti i dispositivi)
