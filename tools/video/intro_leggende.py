@@ -23,15 +23,19 @@ GOLD = "0xE8C96A"
 CRF, GRAIN = "26", "5"
 
 # (foto, nome, durata in secondi, centro x/y della spinta in avanti, inquadratura:
-# "cover" riempie lo schermo, "wide" per le foto larghe su sfondo sfocato)
+# "cover" riempie lo schermo, "wide" per le foto larghe su sfondo sfocato; per "cover"
+# anche il punto da tenere quando la foto si taglia, da 0 a 1 in orizzontale e verticale)
 SHOTS = [
-    ("pirlo.jpg", "PIRLO", 2.6, .45, .25, "cover"),
-    ("seedorf.jpg", "SEEDORF", 2.6, .55, .15, "cover"),
-    ("pato.jpg", "PATO", 2.6, .5, .15, "cover"),
-    ("ronaldinho.jpg", "RONALDINHO", 2.6, .5, .2, "cover"),
-    ("ibrahimovic.jpg", "IBRAHIMOVIĆ", 4.3, .5, .4, "wide"),
+    ("maldini.jpg", "MALDINI", 1.75, .5, .3, "cover", .5, .4),
+    ("pirlo.jpg", "PIRLO", 1.75, .45, .25, "cover", .5, .5),
+    ("seedorf.jpg", "SEEDORF", 1.75, .55, .15, "cover", .5, .5),
+    ("shevchenko.jpg", "SHEVCHENKO", 1.75, .45, .2, "cover", .38, .5),
+    ("kaka.jpg", "KAKÁ", 1.75, .5, .2, "cover", .68, .5),
+    ("pato.jpg", "PATO", 1.75, .5, .15, "cover", .5, .5),
+    ("ronaldinho.jpg", "RONALDINHO", 1.75, .5, .2, "cover", .5, .5),
+    ("ibrahimovic.jpg", "IBRAHIMOVIĆ", 3.55, .5, .4, "wide", .5, .5),
 ]
-INTRO = 1.8
+INTRO = 1.6
 XF = 0.3
 
 def run(args):
@@ -54,7 +58,7 @@ def name_text(name, start):
         f"x=(w-text_w)/2:y=0.63*h+96:alpha='{a}'"
     )
 
-def segment(i, f, name, dur, cx, cy, mode):
+def segment(i, f, name, dur, cx, cy, mode, fx, fy):
     n = int(round(dur * FPS))
     W2, H2 = W * 2, H * 2
     z = f"(1+0.09*n/{n})"  # spinta lenta in avanti
@@ -62,7 +66,8 @@ def segment(i, f, name, dur, cx, cy, mode):
             f"scale={W}:{H}:flags=lanczos")
     if mode == "cover":
         graph = (f"[0:v]scale={W2}:{H2}:force_original_aspect_ratio=increase:flags=lanczos,"
-                 f"crop={W2}:{H2},unsharp=7:7:0.8,setsar=1,format=yuv420p,"
+                 f"crop={W2}:{H2}:(iw-{W2})*{fx}:(ih-{H2})*{fy},unsharp=7:7:0.8,"
+                 f"setsar=1,format=yuv420p,"
                  f"setpts=N/{FPS}/TB,{crop}[v]")
     else:
         # Foto larga: sfondo sfocato e scuro, la foto intera in alto.
@@ -73,7 +78,7 @@ def segment(i, f, name, dur, cx, cy, mode):
                  f"[bg][fg]overlay=0:{int(H2*0.2)},setsar=1,format=yuv420p,"
                  f"setpts=N/{FPS}/TB,{crop}[v]")
     # Fascia scura morbida sotto i nomi, poi i nomi.
-    graph += f";[v][1:v]overlay=0:0[vb];[vb]{name_text(name, 0.35)},fps={FPS}[o]"
+    graph += f";[v][1:v]overlay=0:0[vb];[vb]{name_text(name, 0.2)},fps={FPS}[o]"
     run(["-loop", "1", "-i", f"{FOTO}/{f}", "-loop", "1", "-i", band, "-filter_complex", graph, "-map", "[o]",
          "-frames:v", str(n), "-c:v", "libx264", "-crf", "8", "-preset", "veryfast",
          "-pix_fmt", "yuv420p", f"{OUT}/s{i}.mp4"])
@@ -81,8 +86,8 @@ def segment(i, f, name, dur, cx, cy, mode):
 def intro():
     n = int(round(INTRO * FPS))
     # Tre flash da fotografi sul nero, poi il titolo.
-    flash = "+".join(f"exp(-pow((T-{t})*28,2))" for t in (0.1, 0.3, 0.52))
-    a = "if(lt(t,.55),0,if(lt(t,.9),(t-.55)/.35,1))"
+    flash = "+".join(f"exp(-pow((T-{t})*28,2))" for t in (0.1, 0.28, 0.46))
+    a = "if(lt(t,.5),0,if(lt(t,.8),(t-.5)/.3,1))"
     graph = (f"color=c=black:s={W}x{H}:r={FPS}:d={INTRO},format=yuv420p,"
              f"drawtext=fontfile={FONT}:text='LAMPI DI LEGGENDE':fontsize=64:fontcolor={GOLD}:"
              f"x=(w-text_w)/2:y=0.42*h:alpha='{a}',"

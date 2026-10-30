@@ -51,9 +51,9 @@ flutter run -d chrome  # nel browser
 
 ## Video intro
 
-`assets/video/intro.mp4` è **"Lampi di leggende"**: le foto vere di Pirlo, Seedorf, Pato,
-Ronaldinho e Ibrahimović con spinta lenta, nome in oro e lampi bianchi tra una e l'altra
-(15 s, verticale 720×1280, senza audio, meno di 1 MB). Si rifà con
+`assets/video/intro.mp4` è **"Lampi di leggende"**: le foto vere di Maldini, Pirlo, Seedorf,
+Shevchenko, Kaká, Pato, Ronaldinho e Ibrahimović con spinta lenta, nome in oro e lampi bianchi
+tra una e l'altra (15 s, verticale 720×1280, senza audio, circa 1 MB). Si rifà con
 `python3 tools/video/intro_leggende.py CARTELLA_FOTO` (ffmpeg e ImageMagick; le foto non
 stanno nel repository, i nomi dei file sono nello script). Per aggiungere una leggenda basta
 una riga nello script. Se il video manca, l'intro resta su sfondo nero.

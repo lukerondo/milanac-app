@@ -98,8 +98,9 @@ accettano al primo accesso successivo.
 
 ## 4. Sezioni dell'app
 
-1. **Intro** – video MP4 incluso nell'app ("Lampi di leggende", 15 s: le leggende del Milan
-   con nome in oro e lampi bianchi, fatto con `tools/video/intro_leggende.py`), barra di
+1. **Intro** – video MP4 incluso nell'app ("Lampi di leggende", 15 s: otto leggende del Milan,
+   da Maldini a Ibrahimović, con nome in oro e lampi bianchi, fatto con
+   `tools/video/intro_leggende.py`), barra di
    caricamento + stemma sovrapposti, "Salta" in alto.
    Durante il video l'app carica sessione e dati. Tap per saltare.
 2. **Home** – due riquadri. **Mondo Proclub**: ultimo video dei creator, avviso di
