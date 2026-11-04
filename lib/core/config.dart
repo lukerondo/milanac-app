@@ -28,7 +28,9 @@ class AppConfig {
   static bool get isMisconfigured =>
       !_hasServer && !demoRequested && kReleaseMode && !kIsWeb;
 
+  /// Le serate del club (regolamento): dalle 21:30 alle 23:30, dal lunedì al venerdì.
   static const defaultArrivalTime = '21:30';
+  static const eveningEndTime = '23:30';
 
   /// Email di contatto del club (informativa privacy e pagine degli store).
   static const contactEmail = String.fromEnvironment('CONTACT_EMAIL');

@@ -50,21 +50,29 @@ class DirettivoPage extends ConsumerWidget {
     // Stasera in Italia, come sul server.
     final today = italianDay(ref.watch(clockProvider)());
     final attendance = ref.watch(attendanceProvider).value;
+    final events = ref.watch(eventsProvider).value ?? const <ClubEvent>[];
     final answered = {
       for (final e in attendance ?? const [])
         if (e.date == today) e.playerId,
     };
+    // Chi ha la serata stasera: tutti dal lunedì al venerdì; sabato e domenica solo chi
+    // gioca nella squadra di un evento.
+    final expected = playingTonight(members, events, today);
     // Finché i dati non arrivano i numeri restano vuoti (non "tutti senza risposta").
     final missing = all == null || attendance == null
         ? null
-        : members.where((m) => !answered.contains(m.id)).length;
-    final formations = [
-      for (final t in Team.values) ref.watch(formationProvider(t)).value,
-    ];
-    final toPublish = formations.contains(null)
+        : expected.where((m) => !answered.contains(m.id)).length;
+    final noEvening = all != null && expected.isEmpty;
+    final formations = {
+      for (final t in Team.values) t: ref.watch(formationProvider(t)).value,
+    };
+    // Solo le squadre che stasera hanno la serata (nel fine settimana: una partita).
+    final toPublish = formations.containsValue(null)
         ? null
-        : formations
-              .where((f) => !f!.isPublishedOn(today) || f.hasUnpublishedChanges)
+        : formations.entries
+              .where((e) => eveningEvent(events, today, teams: {e.key}) != null)
+              .map((e) => e.value!)
+              .where((f) => !f.isPublishedOn(today) || f.hasUnpublishedChanges)
               .length;
     final proposals =
         (ref.watch(sharedLinksProvider(LinkCategory.video)).value ??
@@ -103,7 +111,9 @@ class DirettivoPage extends ConsumerWidget {
               _TodoRow(
                 value: missing,
                 title: 'Senza risposta stasera',
-                subtitle: 'Correggi anche dopo le $attendanceDeadlineLabel',
+                subtitle: noEvening
+                    ? 'Stasera niente serata (lunedì-venerdì)'
+                    : 'Correggi anche dopo le $attendanceDeadlineLabel',
                 onTap: () => push(const TonightAttendancePage()),
               ),
               const Divider(indent: 74),
@@ -791,9 +801,12 @@ class TonightAttendancePage extends ConsumerWidget {
     required DateTime now,
   }) {
     final p = context.pal;
-    final members =
-        all.where((m) => m.active && m.role != ClubRole.pending).toList()
-          ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    // Solo chi ha la serata stasera (nel fine settimana chi gioca in una partita).
+    final members = playingTonight(
+      all.where((m) => m.active && m.role != ClubRole.pending),
+      events,
+      today,
+    )..sort((a, b) => a.displayName.compareTo(b.displayName));
     final tonight = {
       for (final e in entries)
         if (e.date == today) e.playerId: e,
@@ -821,7 +834,10 @@ class TonightAttendancePage extends ConsumerWidget {
         day: today,
         status: status,
         current: entry,
-        event: eveningEvent(events, today, teams: {mainTeam(m.teams)}),
+        // La serata della sua squadra principale; nel fine settimana quella dell'evento.
+        event:
+            eveningEvent(events, today, teams: {mainTeam(m.teams)}) ??
+            eveningEvent(events, today, teams: m.teams),
       );
     }
 
@@ -876,6 +892,20 @@ class TonightAttendancePage extends ConsumerWidget {
 
     final closed = !answersOpen(today, now);
     final day = DateFormat('EEEE d MMMM', 'it').format(today);
+    if (members.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        children: [
+          Text(
+            '${day[0].toUpperCase()}${day.substring(1)} · stasera niente serata. '
+            'Le serate del club sono dal lunedì al venerdì, $eveningHours: '
+            'nel fine settimana le presenze si chiedono solo per gli eventi in '
+            'calendario.',
+            style: TextStyle(fontSize: 15, color: p.textSecondary),
+          ),
+        ],
+      );
+    }
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [

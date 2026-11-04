@@ -45,8 +45,10 @@ Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `compl
    (è il nome mostrato in tutta l'app: `display_name`), motto.
 2. **Squadra e ruolo**: Milan AC o Milan AC Futuro (entrambe solo per il Direttivo); "Faccio parte
    del Direttivo" richiede la **password del club** (solo l'hash bcrypt sta in `app_config`,
-   si cambia dall'app con `set_direttivo_password`) e almeno un'etichetta tra Capitano,
-   Reclutatore, Organizzatore, Gestore; ruolo in campo, numero, piattaforma.
+   si cambia dall'app con `set_direttivo_password`) e almeno un ruolo dell'organigramma del
+   regolamento (Presidente, Fondatore, Capitano, Vice-capitano, Resp. Comunicazioni e
+   Marketing, Resp. Tecnico/Tattico, Resp. Reclutamento, Resp. Tornei e Amichevoli, Resp.
+   Presenze, Resp. IT; migrazione `0034`); ruolo in campo, numero, piattaforma.
 3. **La tua foto** (facoltativa, si può caricare dopo): una foto vera dalla galleria, inquadrata
    nel riquadro 4:5 della carta (sposta e allarga con due dita), salvata come JPEG 720×900 in
    `avatars/<id>/foto_<ms>.jpg` (`profiles.avatar_path`) e caricata subito, prima della fine
@@ -66,9 +68,10 @@ notifica) e il Direttivo può togliere dalla Rosa chi non conosce (`active = fal
   Tutti i membri del Direttivo hanno gli stessi poteri, anche gli uni sugli altri (migrazione
   `0026`), dalla scheda del membro (Sala Direttivo → Rosa e squadre, o "Dati del membro" sulla
   sua carta):
-  - **promuove** un giocatore nel Direttivo con le etichette (Capitano, Reclutatore,
-    Organizzatore, Gestore) o lo **retrocede** (le etichette si azzerano); promozioni e
-    retrocessioni compaiono nella Sala Direttivo con chi le ha decise;
+  - **promuove** un giocatore nel Direttivo con i ruoli dell'organigramma (Presidente,
+    Fondatore, Capitano, Vice-capitano e i responsabili: sono solo etichette, i poteri sono
+    gli stessi) o lo **retrocede** (i ruoli si azzerano); promozioni e retrocessioni
+    compaiono nella Sala Direttivo con chi le ha decise;
   - **elimina definitivamente l'account** di un altro membro (`delete_member_account`, doppia
     conferma), anche di chi si è registrato ma non è mai entrato ("In attesa di entrare");
   - **toglie la foto del profilo** di un membro e **chiude una stanza vocale** per tutti
@@ -123,11 +126,14 @@ del documento nella Storia; gli stessi testi stanno in
 2. **Home** – due riquadri. **Mondo Proclub**: ultimo video dei creator, avviso di
    aggiornamento FC 27 e della propria console, scorciatoie a video e notizie.
    **Presenze**: la serata di oggi della propria squadra (allenamento delle 21:30 o l'evento
-   del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi. Nel giorno di una
+   del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi. Le serate sono dal
+   **lunedì al venerdì, 21:30-23:30** (regolamento): sabato e domenica, senza un evento in
+   calendario, la card dice "Riposo" e porta alla prossima serata. Nel giorno di una
    partita diventa il **Match Day**: tabellone con lo stemma contro l'avversario e il conto
    alla rovescia al calcio d'inizio (poi "in corso" e il fischio finale), chi è pronto con i
    volti, lo stato della formazione e il codice del party da copiare (lo scrive il
-   Direttivo), quando arrivano i **promemoria** (un'ora prima e dieci minuti prima, o
+   Direttivo), quando arrivano i **promemoria** (trenta minuti prima, quando i convocati
+   devono essere in party come da regolamento, e dieci minuti prima per la lobby, o
    "spenti" con il link alle impostazioni) e, per il Direttivo, *Chiama* la squadra in
    lobby; la partita di stasera non si ripete in "Prossima partita".
 3. **Barra in basso a cinque schede** (sempre visibile, ognuna ricorda dove eri rimasto):
@@ -192,7 +198,11 @@ del documento nella Storia; gli stessi testi stanno in
     (anche per i giorni successivi si risponde in anticipo); alle 18:00 promemoria a chi
     non ha risposto; alle 18:30 chi non ha risposto diventa "assente, non ha risposto"
     (in grigio, conta come assenza). Dopo, solo il Direttivo corregge, e resta registrato.
-    Scheda *Statistiche*: percentuale, puntuali, ritardi e assenze per giocatore.
+    Sabato e domenica non c'è la serata (giorno più chiaro, "Riposo", niente risposte,
+    promemoria né assenze), a meno che il Direttivo non metta un evento in calendario:
+    allora vale come le altre sere per chi gioca nella squadra dell'evento.
+    Scheda *Statistiche*: percentuale, puntuali, ritardi e assenze per giocatore (contano
+    solo le serate con una risposta).
 
 11. **Riquadro Presenze in Home** – la serata di oggi con la risposta rapida (vedi Home).
 12. **Formazione pubblicata** – una formazione per squadra; resta in bozza finché il Direttivo non
@@ -389,9 +399,14 @@ profiles      + play_styles (text[]: codici dei PlayStyle, "+" in fondo per i Pl
 events        + party_code (text, 1-40 caratteri: il codice del party della partita, lo
               scrive il Direttivo e si copia dal Match Day in Home)
 -- dalla migrazione 0031
-event_reminders id, event_id(→ events), kind (ora | lobby | chiamata), starts_at, sent_at,
-              sent_by; i due automatici una volta sola per partita e orario (se la partita
-              si sposta ripartono); nessuna policy (solo il server)
+event_reminders id, event_id(→ events), kind (party | lobby | chiamata; "ora" fino alla 0034),
+              starts_at, sent_at, sent_by; i due automatici una volta sola per partita e
+              orario (se la partita si sposta ripartono); nessuna policy (solo il server)
+-- dalla migrazione 0034
+profiles      direttivo_roles tra presidente, fondatore, capitano, vicecapitano,
+              comunicazione, tecnico, reclutamento, tornei, presenze, it (i nomi di prima,
+              reclutatore e organizzatore, si traducono anche dalle app vecchie; gestore
+              sparisce); club_evening(giorno, squadre) dice se c'è la serata
 -- dalla migrazione 0035
 formations    + set_pieces (jsonb, bozza) e published_set_pieces (jsonb, congelati alla
               pubblicazione): {"rigori"|"punizioni"|"angoli_sx"|"angoli_dx": id del giocatore},
@@ -456,11 +471,15 @@ sondaggi e lo dice.
 
 Lavori automatici con **pg_cron**: `attendance_tick()` gira ogni minuto e, in ora italiana,
 alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assenze automatiche
-(una volta sola al giorno, grazie a `daily_jobs`). Le risposte dei giocatori sono bloccate dopo
+(una volta sola al giorno, grazie a `daily_jobs`). Dalla migrazione `0034` solo nei giorni con
+la serata (`club_evening(giorno, squadre)`): dal lunedì al venerdì per tutti; sabato e domenica
+solo con un evento (non una riunione) e solo per chi gioca nella sua squadra; un evento del
+fine settimana messo in calendario dopo le 18:30 non fa assenze. Le risposte dei giocatori sono bloccate dopo
 le 18:30 dalle policy (`attendance_open`); il Direttivo corregge sempre. Nei test l'ora si fissa
 con l'impostazione `milanac.now` (`app_now()`). Promemoria partita (migrazione `0031`):
 `match_reminders_tick()` gira ogni minuto e per le partite (torneo e amichevole) manda
-"Tra un'ora si gioca" (solo se la partita era già in calendario e mancano più di 15 minuti) e
+"Tra 30 minuti si gioca: tutti in party!" (dalla migrazione `0034`, come da regolamento; prima
+era un'ora prima; solo se la partita era già in calendario e mancano più di 15 minuti) e
 "Tutti in lobby" dieci minuti prima, con il codice del party, alla squadra esclusi gli assenti
 (categoria "Promemoria partita", spegnibile); `call_to_lobby(evento)` è la chiamata del
 Direttivo (da due ore prima a due ore dopo l'inizio, una ogni 3 minuti, arriva sempre).

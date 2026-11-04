@@ -171,7 +171,11 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     teams: _direttivo ? _teams : {_teams.first},
     direttivo: _direttivo,
     direttivoPassword: _password.text,
-    direttivoRoles: _roles.toList(),
+    // Nell'ordine dell'organigramma, come li mostra il resto dell'app.
+    direttivoRoles: [
+      for (final r in DirettivoRole.values)
+        if (_roles.contains(r)) r,
+    ],
     fieldPosition: _position!,
     shirtNumber: int.tryParse(_number.text.trim()),
     platform: _platform,

@@ -18,11 +18,20 @@ begin
   perform set_config('request.jwt.claim.sub', coalesce(uid::text, ''), false);
 end $$;
 
--- Fissa "adesso" (app_now) a un orario italiano di oggi: le presenze chiudono alle 18:30.
+-- Il giorno delle prove sulle presenze: oggi se è un giorno feriale, altrimenti il lunedì
+-- dopo (le serate del club sono dal lunedì al venerdì: nel fine settimana senza eventi non
+-- partono promemoria né assenze).
+create function pg_temp.giorno() returns date language sql as $$
+  select d + case extract(isodow from d)::int when 6 then 2 when 7 then 1 else 0 end
+  from (select (now() at time zone 'Europe/Rome')::date as d) x
+$$;
+
+-- Fissa "adesso" (app_now) a un orario italiano del giorno delle prove: le presenze
+-- chiudono alle 18:30.
 create function pg_temp.at_rome(t text) returns void language plpgsql as $$
 begin
   perform set_config('milanac.now',
-    ((((now() at time zone 'Europe/Rome')::date)::text || ' ' || t)::timestamp at time zone 'Europe/Rome')::text,
+    (((pg_temp.giorno())::text || ' ' || t)::timestamp at time zone 'Europe/Rome')::text,
     false);
 end $$;
 
@@ -352,7 +361,7 @@ select pg_temp.expect_error(
 -- Una presenza di stasera (le risposte sono aperte alle 17:00) non produce messaggi in chat.
 select pg_temp.at_rome('17:00');
 insert into attendance (player_id, date, status)
-values ('00000000-0000-0000-0000-0000000000e1', (now() at time zone 'Europe/Rome')::date, 'presente');
+values ('00000000-0000-0000-0000-0000000000e1', pg_temp.giorno(), 'presente');
 insert into channel_mutes (channel_id) select id from channels where slug = 'tattiche';
 
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
@@ -539,13 +548,13 @@ end $$;
 select pg_temp.expect_error(
   $q$select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['milanac', 'futuro'], true, 'prova-test', '{}', 'CC', 10, 'ps5', '{}')$q$,
   'almeno un ruolo');
-select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['futuro', 'milanac', 'milanac'], true, 'prova-test', array['capitano', 'gestore'], 'CC', 10, 'ps5', '{}');
+select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['futuro', 'milanac', 'milanac'], true, 'prova-test', array['capitano', 'presenze'], 'CC', 10, 'ps5', '{}');
 select accept_rules(2);
 do $$ begin
   assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 'direttivo', 'entrato nel Direttivo';
   assert (select teams from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['milanac', 'futuro'],
     'squadre in ordine, senza doppioni';
-  assert (select direttivo_roles from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['capitano', 'gestore'], 'etichette';
+  assert (select direttivo_roles from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['capitano', 'presenze'], 'etichette';
 end $$;
 -- Nuova versione del regolamento: notifica a tutti e nuova accettazione.
 insert into rules_articles (sort_order, title, body) values (7, 'Art. 6 – Presenze', 'Rispondi entro le 18:30.');
@@ -586,12 +595,12 @@ set role authenticated;
 select pg_temp.at_rome('17:00');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
 select pg_temp.expect_error(
-  $q$insert into attendance (player_id, date, status, arrival_time) values ('00000000-0000-0000-0000-0000000000e2', (now() at time zone 'Europe/Rome')::date, 'ritardo', '21:50')$q$,
+  $q$insert into attendance (player_id, date, status, arrival_time) values ('00000000-0000-0000-0000-0000000000e2', pg_temp.giorno(), 'ritardo', '21:50')$q$,
   'attendance_late_note_check');
 insert into attendance (player_id, date, status, arrival_time, note)
-values ('00000000-0000-0000-0000-0000000000e2', (now() at time zone 'Europe/Rome')::date, 'ritardo', '21:50', 'Traffico');
+values ('00000000-0000-0000-0000-0000000000e2', pg_temp.giorno(), 'ritardo', '21:50', 'Traffico');
 insert into attendance (player_id, date, status)
-values ('00000000-0000-0000-0000-0000000000e2', (now() at time zone 'Europe/Rome')::date + 1, 'presente');
+values ('00000000-0000-0000-0000-0000000000e2', pg_temp.giorno() + 1, 'presente');
 -- 18:05: il promemoria va solo a chi non ha risposto per stasera (D, a1, a2).
 select pg_temp.at_rome('18:05');
 reset role;
@@ -609,27 +618,27 @@ set role authenticated;
 select pg_temp.at_rome('18:31');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
 update attendance set status = 'presente', note = null
-  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = (now() at time zone 'Europe/Rome')::date;
+  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = pg_temp.giorno();
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 select pg_temp.expect_error(
-  $q$insert into attendance (player_id, date, status) values ('00000000-0000-0000-0000-0000000000a1', (now() at time zone 'Europe/Rome')::date, 'presente')$q$,
+  $q$insert into attendance (player_id, date, status) values ('00000000-0000-0000-0000-0000000000a1', pg_temp.giorno(), 'presente')$q$,
   'row-level security');
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
 do $$ begin
   assert (select status from attendance where player_id = '00000000-0000-0000-0000-0000000000e2'
-          and date = (now() at time zone 'Europe/Rome')::date) = 'ritardo', 'dopo le 18:30 il giocatore non modifica';
+          and date = pg_temp.giorno()) = 'ritardo', 'dopo le 18:30 il giocatore non modifica';
 end $$;
 update attendance set status = 'presente', note = null
-  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = (now() at time zone 'Europe/Rome')::date;
+  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = pg_temp.giorno();
 reset role;
 select pg_temp.as_user(null);
 select attendance_tick();
 select attendance_tick();
 do $$ begin
   assert (select status from attendance where player_id = '00000000-0000-0000-0000-0000000000e2'
-          and date = (now() at time zone 'Europe/Rome')::date) = 'presente', 'il Direttivo corregge dopo le 18:30';
+          and date = pg_temp.giorno()) = 'presente', 'il Direttivo corregge dopo le 18:30';
   assert (select set_by from attendance where player_id = '00000000-0000-0000-0000-0000000000e2'
-          and date = (now() at time zone 'Europe/Rome')::date) = '00000000-0000-0000-0000-00000000000d',
+          and date = pg_temp.giorno()) = '00000000-0000-0000-0000-00000000000d',
     'la correzione del Direttivo resta registrata';
   assert (select count(*) from attendance where auto) = 3, 'assenze automatiche per chi non ha risposto';
   assert (select count(*) from net.calls where body->>'kind' = 'attendance_auto_absent') = 1, 'un solo avviso di assenza';
@@ -643,18 +652,18 @@ end $$;
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 update attendance set status = 'presente'
-  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = (now() at time zone 'Europe/Rome')::date;
+  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = pg_temp.giorno();
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
 do $$ begin
   assert (select auto from attendance where player_id = '00000000-0000-0000-0000-0000000000a1'
-          and date = (now() at time zone 'Europe/Rome')::date), 'il giocatore non toglie l''assenza automatica';
+          and date = pg_temp.giorno()), 'il giocatore non toglie l''assenza automatica';
 end $$;
 update attendance set status = 'presente'
-  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = (now() at time zone 'Europe/Rome')::date;
+  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = pg_temp.giorno();
 reset role;
 do $$ begin
   assert (select not auto and set_by = '00000000-0000-0000-0000-00000000000d' from attendance
-          where player_id = '00000000-0000-0000-0000-0000000000a1' and date = (now() at time zone 'Europe/Rome')::date),
+          where player_id = '00000000-0000-0000-0000-0000000000a1' and date = pg_temp.giorno()),
     'corretta dal Direttivo';
   assert (select count(*) from cron.job where jobname = 'presenze' and schedule = '* * * * *') = 1,
     'controllo delle presenze ogni minuto';
@@ -1700,7 +1709,7 @@ do $$ begin
   assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000e2') = 'giocatore',
     'un giocatore non promuove gli altri';
 end $$;
-update profiles set club_role = 'direttivo', direttivo_roles = array['capitano', 'gestore']
+update profiles set club_role = 'direttivo', direttivo_roles = array['presenze', 'capitano']
   where id = '00000000-0000-0000-0000-0000000000e1';
 reset role;
 do $$ begin
@@ -1708,7 +1717,7 @@ do $$ begin
     'promosso nel Direttivo';
   assert (select body from messages where meta->>'type' = 'direttivo'
           and meta->>'member' = '00000000-0000-0000-0000-0000000000e1')
-         like '% è entrato nel Direttivo (Capitano, Gestore) · nominato da %.', 'avviso della promozione';
+         like '% è entrato nel Direttivo (Capitano, Resp. Presenze) · nominato da %.', 'avviso della promozione';
 end $$;
 -- Retrocessione: le etichette si azzerano e resta traccia.
 set role authenticated;
@@ -1733,7 +1742,7 @@ select pg_temp.expect_error(
   'almeno un membro del Direttivo');
 select pg_temp.expect_error($q$select delete_my_account()$q$, 'ultimo membro del Direttivo');
 -- Con un altro Direttivo sì (tutti hanno gli stessi poteri, anche su sé stessi).
-update profiles set club_role = 'direttivo', direttivo_roles = array['organizzatore']
+update profiles set club_role = 'direttivo', direttivo_roles = array['tornei']
   where id = '00000000-0000-0000-0000-0000000000e2';
 update profiles set club_role = 'giocatore' where id = '00000000-0000-0000-0000-00000000000d';
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
@@ -2032,7 +2041,7 @@ do $$ begin
     'voti eliminati con il sondaggio';
 end $$;
 
--- ================================================================ promemoria partita (0031)
+-- ================================================================ promemoria partita (0031, 0034)
 -- Partite di lunedì 2 novembre 2026 alle 21:30 (ora italiana): m1 in calendario da giorni,
 -- m2 creata alle 21:00 (ha già avuto la sua notifica), un allenamento che non conta.
 reset role;
@@ -2050,22 +2059,26 @@ create function pg_temp.reminders(p_when text) returns int language sql as $$
   select count(*)::int from net.calls
   where body->>'kind' = 'match_reminder' and body->>'when' = p_when
 $$;
-select set_config('milanac.now', '2026-11-02 20:20 Europe/Rome', false);
-select match_reminders_tick();
-do $$ begin
-  assert pg_temp.reminders('ora') + pg_temp.reminders('lobby') = 0, 'più di un''ora prima: niente';
-end $$;
+-- Un'ora prima non parte più nulla: i convocati vanno in party trenta minuti prima.
 select set_config('milanac.now', '2026-11-02 20:31 Europe/Rome', false);
 select match_reminders_tick();
+select set_config('milanac.now', '2026-11-02 20:55 Europe/Rome', false);
 select match_reminders_tick();
 do $$ begin
-  assert pg_temp.reminders('ora') = 1, 'un''ora prima, una volta sola e solo per m1';
-  assert (select body->>'id' from net.calls where body->>'when' = 'ora')
-         = '00000000-0000-0000-0000-0000000006e1', 'l''avviso dell''ora è di m1';
+  assert pg_temp.reminders('party') + pg_temp.reminders('lobby') = 0, 'più di mezz''ora prima: niente';
+  assert pg_temp.reminders('ora') = 0, 'niente più avviso un''ora prima';
+end $$;
+select set_config('milanac.now', '2026-11-02 21:01 Europe/Rome', false);
+select match_reminders_tick();
+select match_reminders_tick();
+do $$ begin
+  assert pg_temp.reminders('party') = 1, 'trenta minuti prima, una volta sola e solo per m1';
+  assert (select body->>'id' from net.calls where body->>'when' = 'party')
+         = '00000000-0000-0000-0000-0000000006e1', 'l''avviso del party è di m1';
   assert pg_temp.reminders('lobby') = 0, 'la lobby non ancora';
 end $$;
 -- m3: in calendario da giorni ma il controllo di pg_cron non è girato fino a 9 minuti
--- prima: niente "tra un'ora" in ritardo, solo la lobby.
+-- prima: niente "tutti in party" in ritardo, solo la lobby.
 insert into events (id, type, title, starts_at, team, created_at) values
   ('00000000-0000-0000-0000-0000000006e4', 'torneo', 'Coppa vs Falchi',
    '2026-11-02 21:30 Europe/Rome', 'milanac', '2026-10-20 12:00 Europe/Rome');
@@ -2073,7 +2086,7 @@ select set_config('milanac.now', '2026-11-02 21:21 Europe/Rome', false);
 select match_reminders_tick();
 select match_reminders_tick();
 do $$ begin
-  assert pg_temp.reminders('ora') = 1, 'niente "tra un''ora" a 9 minuti dall''inizio';
+  assert pg_temp.reminders('party') = 1, 'niente "tutti in party" a 9 minuti dall''inizio';
   assert pg_temp.reminders('lobby') = 3, 'lobby per le tre partite, una volta sola';
   assert not exists (select 1 from net.calls where body->>'id' = '00000000-0000-0000-0000-0000000006e3'
                      and body->>'kind' = 'match_reminder'), 'l''allenamento non ha promemoria';
@@ -2081,20 +2094,25 @@ end $$;
 select set_config('milanac.now', '2026-11-02 21:45 Europe/Rome', false);
 select match_reminders_tick();
 do $$ begin
-  assert pg_temp.reminders('ora') + pg_temp.reminders('lobby') = 4, 'a partita iniziata niente di nuovo';
+  assert pg_temp.reminders('party') + pg_temp.reminders('lobby') = 4, 'a partita iniziata niente di nuovo';
 end $$;
 -- La partita m3 si sposta a martedì: i promemoria ripartono per il nuovo orario.
 update events set starts_at = '2026-11-03 21:30 Europe/Rome'
   where id = '00000000-0000-0000-0000-0000000006e4';
-select set_config('milanac.now', '2026-11-03 20:31 Europe/Rome', false);
+select set_config('milanac.now', '2026-11-03 21:01 Europe/Rome', false);
 select match_reminders_tick();
 select set_config('milanac.now', '2026-11-03 21:21 Europe/Rome', false);
 select match_reminders_tick();
 select match_reminders_tick();
 do $$ begin
-  assert pg_temp.reminders('ora') = 2 and pg_temp.reminders('lobby') = 4,
-    'partita spostata: di nuovo "tra un''ora" e lobby, una volta sola';
+  assert pg_temp.reminders('party') = 2 and pg_temp.reminders('lobby') = 4,
+    'partita spostata: di nuovo "tutti in party" e lobby, una volta sola';
+  assert (select count(*) from event_reminders where kind not in ('party', 'lobby', 'chiamata')) = 0,
+    'solo i tipi nuovi';
 end $$;
+select pg_temp.expect_error(
+  $q$insert into event_reminders (event_id, kind, starts_at) values ('00000000-0000-0000-0000-0000000006e1', 'ora', now())$q$,
+  'event_reminders_kind_check');
 
 -- La chiamata in lobby: solo il Direttivo, solo per le partite e nelle ore della partita,
 -- al massimo una ogni 3 minuti.
@@ -2358,3 +2376,118 @@ select pg_temp.expect_error($q$select set_pieces_line('{}')$q$, 'permission deni
 reset role;
 select pg_temp.as_user(null);
 delete from formations where id = current_setting('test.battitori')::uuid;
+
+-- ================================================================ regolamento (0034)
+-- Serate dal lunedì al venerdì: sabato e domenica senza eventi niente promemoria né assenze;
+-- con un evento (non una riunione) valgono per chi gioca nella squadra dell'evento.
+-- Gennaio 2030: venerdì 4, sabato 5, domenica 6, sabato 12 e sabato 19.
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+create function pg_temp.membri(p_team text) returns int language sql as $$
+  select count(*)::int from profiles
+  where active and club_role <> 'pending' and (p_team is null or p_team = any(teams))
+$$;
+create function pg_temp.avvisi(p_kind text, p_day text) returns int language sql as $$
+  select coalesce(sum(jsonb_array_length(body->'users')), 0)::int from net.calls
+  where body->>'kind' = p_kind and body->>'day' = p_day
+$$;
+do $$ begin
+  assert extract(isodow from date '2030-01-04') = 5 and extract(isodow from date '2030-01-05') = 6
+     and extract(isodow from date '2030-01-06') = 7, 'date delle prove';
+  assert club_evening('2030-01-04', array['milanac']), 'venerdì: serata';
+  assert not club_evening('2030-01-05', array['milanac', 'futuro']), 'sabato senza eventi: niente serata';
+  assert pg_temp.membri(null) > pg_temp.membri('futuro') and pg_temp.membri('futuro') > 0,
+    'ci sono giocatori solo del Milan AC e giocatori del Futuro';
+end $$;
+-- Sabato 5: c'è solo una riunione, che non chiede presenze.
+insert into events (type, title, starts_at, created_at) values
+  ('riunione', 'Riunione direttivo', '2030-01-05 21:30 Europe/Rome', '2030-01-01 12:00 Europe/Rome');
+select set_config('milanac.now', '2030-01-05 18:05 Europe/Rome', false);
+select attendance_tick();
+select set_config('milanac.now', '2030-01-05 18:31 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' like 'attendance%') = 0,
+    'sabato senza eventi: niente promemoria né avvisi di assenza';
+  assert (select count(*) from attendance where date = '2030-01-05') = 0, 'sabato: nessuna assenza automatica';
+  assert (select count(*) from daily_jobs where day = '2030-01-05') = 0, 'il sabato vuoto non si segna';
+end $$;
+-- Domenica 6: una partita del Futuro in calendario da giorni.
+insert into events (type, title, starts_at, team, created_at) values
+  ('torneo', 'Coppa vs Lupi', '2030-01-06 21:30 Europe/Rome', 'futuro', '2030-01-01 12:00 Europe/Rome');
+select set_config('milanac.now', '2030-01-06 18:05 Europe/Rome', false);
+select attendance_tick();
+select attendance_tick();
+select set_config('milanac.now', '2030-01-06 18:31 Europe/Rome', false);
+select attendance_tick();
+select attendance_tick();
+do $$ begin
+  assert club_evening('2030-01-06', array['futuro']) and not club_evening('2030-01-06', array['milanac']),
+    'domenica: serata solo per il Futuro';
+  assert pg_temp.avvisi('attendance_reminder', '2030-01-06') = pg_temp.membri('futuro'),
+    'promemoria della domenica a chi gioca nel Futuro, una volta sola';
+  assert pg_temp.avvisi('attendance_auto_absent', '2030-01-06') = pg_temp.membri('futuro'),
+    'assenze automatiche della domenica per il Futuro';
+  assert (select count(*) from attendance a join profiles p on p.id = a.player_id
+          where a.date = '2030-01-06' and not 'futuro' = any(p.teams)) = 0,
+    'chi gioca solo nel Milan AC non risulta assente';
+end $$;
+-- Venerdì 4, senza eventi: l'allenamento c'è per tutti, come sempre.
+select set_config('milanac.now', '2030-01-04 18:05 Europe/Rome', false);
+select attendance_tick();
+select set_config('milanac.now', '2030-01-04 18:31 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert pg_temp.avvisi('attendance_reminder', '2030-01-04') = pg_temp.membri(null), 'venerdì: promemoria a tutti';
+  assert (select count(*) from attendance where date = '2030-01-04' and auto) = pg_temp.membri(null),
+    'venerdì: assenze automatiche per tutti';
+end $$;
+-- Sabato 12: un'amichevole messa in calendario dopo le 18:30 non fa assenze (nessuno ha
+-- potuto rispondere).
+select set_config('milanac.now', '2030-01-12 19:05 Europe/Rome', false);
+insert into events (type, title, starts_at, created_at) values
+  ('amichevole', 'Amichevole vs Orsi', '2030-01-12 22:00 Europe/Rome', '2030-01-12 19:00 Europe/Rome');
+select attendance_tick();
+do $$ begin
+  assert (select count(*) from attendance where date = '2030-01-12') = 0, 'evento dopo la scadenza: niente assenze';
+  assert (select count(*) from daily_jobs where day = '2030-01-12') = 0, 'e il giorno non si segna';
+end $$;
+-- Sabato 19: alle 18:05 non c'è niente; l'evento messo alle 18:10 fa partire il promemoria.
+select set_config('milanac.now', '2030-01-19 18:05 Europe/Rome', false);
+select attendance_tick();
+insert into events (type, title, starts_at, created_at) values
+  ('torneo', 'Torneo vs Falchi', '2030-01-19 21:30 Europe/Rome', '2030-01-19 18:10 Europe/Rome');
+select set_config('milanac.now', '2030-01-19 18:11 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert pg_temp.avvisi('attendance_reminder', '2030-01-19') = pg_temp.membri(null),
+    'evento del sabato messo prima della scadenza: promemoria a tutti';
+end $$;
+select set_config('milanac.now', '', false);
+
+-- Etichette del Direttivo come nell'organigramma; i nomi di prima si traducono.
+do $$ begin
+  assert direttivo_roles_normalized(array['reclutatore', 'gestore', 'organizzatore', 'capitano', 'capitano'])
+         = array['capitano', 'reclutamento', 'tornei'], 'nomi di prima tradotti, in ordine e senza doppioni';
+  assert direttivo_roles_normalized(array['gestore']) = '{}', 'Gestore sparisce';
+  assert direttivo_role_label('vicecapitano') = 'Vice-capitano'
+     and direttivo_role_label('comunicazione') = 'Resp. Comunicazioni e Marketing'
+     and direttivo_role_label('it') = 'Resp. IT', 'etichette';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update profiles set direttivo_roles = array['organizzatore', 'gestore', 'it', 'presidente']
+  where id = '00000000-0000-0000-0000-0000000000e2';
+select pg_temp.expect_error(
+  $q$update profiles set direttivo_roles = array['allenatore'] where id = '00000000-0000-0000-0000-0000000000e2'$q$,
+  'profiles_direttivo_roles_check');
+reset role;
+do $$ begin
+  assert (select direttivo_roles from profiles where id = '00000000-0000-0000-0000-0000000000e2')
+         = array['presidente', 'tornei', 'it'], 'app vecchia: etichette tradotte al salvataggio';
+  assert (select count(*) from profiles
+          where not direttivo_roles <@ array['presidente', 'fondatore', 'capitano', 'vicecapitano',
+                                             'comunicazione', 'tecnico', 'reclutamento', 'tornei',
+                                             'presenze', 'it']) = 0, 'solo etichette nuove';
+end $$;

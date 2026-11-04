@@ -445,7 +445,7 @@ class _InfoCard extends StatelessWidget {
         'Ruolo nel club',
         direttivo.isEmpty
             ? member.roleLabel
-            : '${member.roleLabel} · ${direttivo.toLowerCase()}',
+            : '${member.roleLabel} · $direttivo',
       ),
       ('Nel club dal', DateFormat('d MMMM yyyy', 'it').format(member.joinedAt)),
       if (member.motto != null && member.motto!.trim().isNotEmpty)

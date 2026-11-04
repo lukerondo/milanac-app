@@ -3,12 +3,19 @@ import 'notify_prefs.dart';
 
 enum ClubRole { direttivo, giocatore, pending }
 
-/// Etichette di chi fa parte del Direttivo (anche più d'una, senza poteri diversi).
+/// Ruoli di chi fa parte del Direttivo, come nell'organigramma del regolamento (anche
+/// più d'uno, senza poteri diversi: nel Direttivo tutti possono le stesse cose).
 enum DirettivoRole {
+  presidente('Presidente'),
+  fondatore('Fondatore'),
   capitano('Capitano'),
-  reclutatore('Reclutatore'),
-  organizzatore('Organizzatore'),
-  gestore('Gestore');
+  vicecapitano('Vice-capitano'),
+  comunicazione('Resp. Comunicazioni e Marketing'),
+  tecnico('Resp. Tecnico/Tattico'),
+  reclutamento('Resp. Reclutamento'),
+  tornei('Resp. Tornei e Amichevoli'),
+  presenze('Resp. Presenze'),
+  it('Resp. IT');
 
   const DirettivoRole(this.label);
   final String label;
@@ -162,7 +169,7 @@ class Profile {
     lastName: 'Direttivo',
     gamertag: 'MILANAC_Demo',
     role: ClubRole.direttivo,
-    direttivoRoles: [DirettivoRole.capitano, DirettivoRole.gestore],
+    direttivoRoles: [DirettivoRole.capitano, DirettivoRole.presenze],
     platform: 'ps5',
     registrationCompleted: true,
     rulesAcceptedVersion: 1,
