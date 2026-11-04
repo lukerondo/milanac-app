@@ -2,7 +2,8 @@
 // Viene chiamata dal database (trigger, pg_cron + pg_net) con l'intestazione x-milanac-secret.
 //
 // Eventi gestiti:
-//   { kind: "formation", id }               → ai membri della squadra: titolare (con ruolo) o panchina
+//   { kind: "formation", id }               → ai membri della squadra: titolare (con ruolo e le palle
+//                                             inattive che batte, se c'è posto) o panchina
 //   { kind: "chat_message", id }            → ai membri del canale, escluso l'autore e chi l'ha silenziato
 //                                             (un replay della lavagna: "Nuovo schema con audio";
 //                                             nella Sala Direttivo anche l'avviso di un nuovo ingresso)
@@ -138,6 +139,11 @@ async function formationPushes(db: SupabaseClient, formationId: string): Promise
   const teamName = TEAM_NAMES[team] ?? "Milan AC";
   const { data: slots } = await db
     .from("formation_slots").select("label, player_id").eq("formation_id", formationId);
+  // Chi batte le palle inattive (migrazione 0035). A parte: senza la colonna (database non
+  // ancora aggiornato) la lettura non riesce e le notifiche partono come prima.
+  const { data: pieces } = await db
+    .from("formations").select("published_set_pieces").eq("id", formationId).maybeSingle();
+  const takers = (pieces?.published_set_pieces ?? {}) as Record<string, string>;
   // Solo i giocatori di quella squadra (chi è in entrambe riceve entrambe le formazioni).
   const starters = new Map((slots ?? []).filter((s) => s.player_id).map((s) => [s.player_id, s.label]));
   return (await members(db, team)).map((m) => {
@@ -145,11 +151,30 @@ async function formationPushes(db: SupabaseClient, formationId: string): Promise
     return {
       userId: m.id,
       title: `📋 ${teamName}: formazione pubblicata`,
-      body: role ? `Sei titolare: ${role}. Forza ${teamName}!` : "Parti dalla panchina: tieniti pronto!",
+      body: role ? starterBody(role, teamName, setPiecesOf(takers, m.id)) : "Parti dalla panchina: tieniti pronto!",
       route: `/formazione?squadra=${team}`,
       data: { team },
     };
   });
+}
+
+/// "rigori, punizioni e angoli": le palle inattive che batte [playerId] ("" se nessuna).
+function setPiecesOf(takers: Record<string, string>, playerId: string): string {
+  const sx = takers.angoli_sx === playerId, dx = takers.angoli_dx === playerId;
+  const roles = [
+    ...(takers.rigori === playerId ? ["rigori"] : []),
+    ...(takers.punizioni === playerId ? ["punizioni"] : []),
+    ...(sx && dx ? ["angoli"] : sx ? ["angoli da sinistra"] : dx ? ["angoli da destra"] : []),
+  ];
+  return roles.length < 2 ? roles.join("") : `${roles.slice(0, -1).join(", ")} e ${roles[roles.length - 1]}`;
+}
+
+/// "Sei titolare: ATT. Forza Milan AC!"; a chi batte anche "batti rigori e punizioni", ma
+/// solo se c'è posto (al massimo 90 caratteri): altrimenti il testo di sempre.
+function starterBody(role: string, teamName: string, setPieces: string): string {
+  const plain = `Sei titolare: ${role}. Forza ${teamName}!`;
+  const withSetPieces = `Sei titolare: ${role}, batti ${setPieces}. Forza ${teamName}!`;
+  return setPieces && withSetPieces.length <= 90 ? withSetPieces : plain;
 }
 
 // ------------------------------------------------------------------ risultato
