@@ -1,6 +1,8 @@
 /// Il Regolamento ufficiale 2026 e la storia del club, dal documento del Direttivo
-/// (novembre 2026), corretti solo negli errori di battitura. In produzione arrivano con la
-/// migrazione 0033; qui li usano la demo e i test (un test controlla che coincidano).
+/// (novembre 2026): testi, grassetto e titoli come nel documento, corretti negli errori di
+/// battitura; le righe in cima e l'organigramma nel formato dell'app (vedi la migrazione).
+/// In produzione arrivano con la migrazione 0033; qui li usano la demo e i test (un test
+/// controlla che coincidano).
 library;
 
 /// Gli articoli in ordine: grassetto con **testo**, paragrafi separati da una riga
@@ -9,8 +11,9 @@ const regolamento2026 = <({String title, String body})>[
   (
     title: 'Regolamento ufficiale 2026',
     body:
-        'MILANAC · MILANAC FUTURO\n'
-        'Milano siamo noi\n\n'
+        '**MILANAC**\n'
+        '**MILANAC FUTURO**\n'
+        '**MILANO SIAMO NOI**\n\n'
         '“I nostri colori saranno il rosso, come il cuore che arde per '
         'la vittoria ed il nero come la notte che avvolgerà i sogni '
         'degli avversari. Saremo una legione infernale che danza sui '
@@ -34,11 +37,11 @@ const regolamento2026 = <({String title, String body})>[
         'RESPONSABILE IT: Francesco De Vietro',
   ),
   (
-    title: 'Art. 1 – Presenza e comunicazione',
+    title: '1. Presenza e Comunicazione',
     body:
         '**Disponibilità:** Le sessioni di allenamento, il campionato, i '
-        'vari tornei e le amichevoli si tengono dal LUNEDÌ AL VENERDÌ '
-        'dalle ore 21:30 alle 23:30.\n\n'
+        'vari tornei e le amichevoli si tengono dal **LUNEDÌ AL VENERDÌ '
+        'dalle ore 21:30 alle 23:30.**\n\n'
         'Ogni giocatore deve comunicare la propria disponibilità tramite '
         "l'applicazione del MILANAC per le partite e gli allenamenti "
         'entro le ore 18:30.\n\n'
@@ -74,7 +77,7 @@ const regolamento2026 = <({String title, String body})>[
         'e giocatori sono ammessi in questi canali.',
   ),
   (
-    title: 'Art. 2 – Comportamento e disciplina',
+    title: '2. Comportamento e Disciplina',
     body:
         '**Rispetto:** È fatto obbligo da parte di tutti i membri il '
         'rispetto reciproco, verso i propri compagni di squadra, verso '
@@ -101,7 +104,7 @@ const regolamento2026 = <({String title, String body})>[
         'giocatori del club.',
   ),
   (
-    title: 'Art. 3 – Dinamiche di gioco',
+    title: '3. Dinamiche di Gioco',
     body:
         '**Ruoli e Tattiche:** Ogni giocatore deve impegnarsi a '
         'rispettare il proprio ruolo e le tattiche di squadra stabilite. '
@@ -119,7 +122,7 @@ const regolamento2026 = <({String title, String body})>[
         'essere convocato dallo staff tecnico.',
   ),
   (
-    title: 'Art. 4 – Gestione della squadra e sanzioni',
+    title: '4. Gestione della Squadra e Sanzioni',
     body:
         '**Suddivisione delle responsabilità:** Il presidente, il '
         'direttivo, il capitano ed il vice-capitano sono i responsabili '
@@ -133,7 +136,7 @@ const regolamento2026 = <({String title, String body})>[
         'seconda della gravità e della frequenza delle infrazioni.',
   ),
   (
-    title: 'Art. 5 – Candidature staff e obiettivi',
+    title: '5. Candidature Staff & Obiettivi',
     body:
         '**Candidature Staff:** Ogni membro appartenente alla squadra '
         'potrà, dopo un periodo di 6 mesi dal suo ingresso, fare '
@@ -142,7 +145,7 @@ const regolamento2026 = <({String title, String body})>[
         'Direttivo.\n\n'
         'TUTTI quanti i membri del club sono FONDAMENTALI per la '
         'riuscita del progetto. Si cresce tutti assieme.\n\n'
-        "**Obiettivi e Visione del Club:** L'ambizione del Club è quella "
+        '**Obiettivi e Visione del Club:** L’ambizione del Club è quella '
         "di affermarsi ed essere riconosciuto all'interno delle "
         'competizioni nazionali ed internazionali come un gruppo solido '
         'di amici, rispettoso delle regole, elegante, ed essere '
