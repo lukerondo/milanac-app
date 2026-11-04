@@ -202,7 +202,19 @@ void _text(
   tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
 }
 
-/// Il PDF: titolo, data, modulo, l'immagine del campo e la panchina.
+/// "Rigori: Marco Rossi · Punizioni: Luca Bianchi · …": chi batte le palle inattive, per
+/// il PDF (null se nessuno; chi non è più nel club non compare).
+String? setPiecesPdfText(Formation formation, Map<String, Member> members) {
+  final parts = [
+    for (final role in SetPiece.values)
+      if (members[formation.setPieces[role]] case final m?)
+        '${role.label}: ${m.displayName}',
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
+}
+
+/// Il PDF: titolo, data, modulo, l'immagine del campo, la panchina e chi batte le palle
+/// inattive.
 Future<Uint8List> buildFormationPdf({
   required Formation formation,
   required Map<String, Member> members,
@@ -229,6 +241,7 @@ Future<Uint8List> buildFormationPdf({
       if (members[formation.players[i]] case final m?)
         '${slot.label} ${m.displayName}',
   ];
+  final setPieces = setPiecesPdfText(formation, members);
   // Sul foglio bianco i titoli sono in oro scuro, la riga in oro pieno.
   final title = PdfColor.fromInt(MilanacColors.goldDeep.toARGB32());
   final gold = PdfColor.fromInt(MilanacColors.gold.toARGB32());
@@ -266,7 +279,16 @@ Future<Uint8List> buildFormationPdf({
           pw.SizedBox(height: 10),
           pw.Container(height: 2, color: gold),
           pw.SizedBox(height: 12),
-          pw.Center(child: pw.Image(pw.MemoryImage(image), height: 560)),
+          // Il campo prende lo spazio che resta (fino a 560 punti): con elenchi lunghi
+          // si rimpicciolisce invece di spingere il resto fuori dalla pagina.
+          pw.Expanded(
+            child: pw.Center(
+              child: pw.ConstrainedBox(
+                constraints: const pw.BoxConstraints(maxHeight: 560),
+                child: pw.Image(pw.MemoryImage(image)),
+              ),
+            ),
+          ),
           pw.SizedBox(height: 12),
           pw.Text(
             'TITOLARI',
@@ -287,7 +309,18 @@ Future<Uint8List> buildFormationPdf({
                 : bench.map((m) => m.displayName).join(' · '),
             style: pw.TextStyle(font: regular, fontSize: 10),
           ),
-          pw.Spacer(),
+          if (setPieces != null) ...[
+            pw.SizedBox(height: 6),
+            pw.Text(
+              'PALLE INATTIVE',
+              style: pw.TextStyle(font: bold, fontSize: 12, color: title),
+            ),
+            pw.Text(
+              setPieces,
+              style: pw.TextStyle(font: regular, fontSize: 10),
+            ),
+          ],
+          pw.SizedBox(height: 8),
           pw.Text(
             'MILANAC Pro Club · generato dall\'app',
             style: pw.TextStyle(
@@ -339,6 +372,10 @@ Future<void> shareFormationPdf(
           : italianClock(formation.publishedAt!),
     );
     final day = DateFormat('yyyy-MM-dd').format(italianDay(DateTime.now()));
+    final setPieces = setPiecesLine(
+      formation.setPieces,
+      (id) => members[id]?.displayName,
+    );
     await SharePlus.instance.share(
       ShareParams(
         files: [
@@ -349,7 +386,10 @@ Future<void> shareFormationPdf(
           ),
         ],
         subject: 'Formazione ${formation.team.label}',
-        text: 'Formazione ${formation.team.label} (${formation.module})',
+        text: [
+          'Formazione ${formation.team.label} (${formation.module})',
+          ?setPieces,
+        ].join('\n'),
       ),
     );
   } catch (e) {
