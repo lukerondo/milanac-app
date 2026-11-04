@@ -32,77 +32,87 @@ const _mirrorRole = {
 
 const _por = ['POR'];
 
-/// Angolo da sinistra: il battitore sulla bandierina, cinque in area sulle zone
-/// (primo palo, davanti al portiere, dischetto, secondo palo, inserimento sul
-/// secondo), uno al limite, tre a coprire la ripartenza.
+// Gli schemi sono disegnati sullo schermo, non solo sul campo: il gettone è largo
+// l'8,4% della lavagna (circa 0,09 del campo in larghezza e 0,06 in altezza) e sotto
+// ha il cognome (alto circa 0,03, largo fino a 0,15). Nessun gettone ne tocca un
+// altro, nessun cognome finisce su un gettone o su un altro cognome (anche con i
+// cognomi lunghi), le zone di battuta restano libere quanto basta per vedersi e il
+// portiere sta sopra 0,94, così il suo nome resta nella lavagna.
+
+/// Angolo da sinistra: il battitore alla bandierina e il corto accanto a lui; in area
+/// chi attacca il primo palo, chi blocca il portiere, chi va sul dischetto e chi sul
+/// secondo palo, partendo appena fuori dalle zone (che così si vedono); uno arriva da
+/// dietro sul secondo palo, uno al limite per la respinta, due a coprire.
 const _cornerLeft = [
-  _Spot(.5, .9, _por),
-  _Spot(.06, .04, ['CC', 'COC', 'AS', 'ES', 'AD', 'ED', 'CDC']),
-  _Spot(.41, .055, ['ATT', 'DC', 'AS', 'AD']),
-  _Spot(.5, .11, ['DC', 'ATT', 'CDC']),
-  _Spot(.63, .06, ['DC', 'ATT', 'AD', 'AS']),
-  _Spot(.5, .028, ['ATT', 'AS', 'AD', 'COC', 'DC']),
-  _Spot(.71, .125, ['AD', 'ED', 'AS', 'ATT', 'DC', 'COC']),
-  _Spot(.46, .2, ['COC', 'CC', 'CDC']),
-  _Spot(.3, .42, ['TS', 'CDC', 'DC', 'ES']),
-  _Spot(.7, .42, ['TD', 'CDC', 'DC', 'ED']),
-  _Spot(.5, .36, ['CDC', 'CC', 'TS', 'TD']),
+  _Spot(.5, .935, _por),
+  _Spot(.071, .065, ['CC', 'COC', 'AS', 'ES', 'AD', 'ED', 'CDC']),
+  _Spot(.355, .108, ['ATT', 'DC', 'AS', 'AD']),
+  _Spot(.614, .125, ['DC', 'ATT', 'CDC']),
+  _Spot(.73, .039, ['DC', 'ATT', 'AD', 'AS']),
+  _Spot(.5, .03, ['ATT', 'AS', 'AD', 'COC', 'DC']),
+  _Spot(.833, .142, ['CC', 'COC', 'ES', 'ED', 'AD', 'AS']),
+  _Spot(.5, .241, ['CDC', 'COC', 'CC']),
+  _Spot(.2, .116, ['CC', 'COC', 'AS', 'AD', 'ES', 'ED', 'TS']),
+  _Spot(.28, .45, ['TS', 'CDC', 'DC', 'ES']),
+  _Spot(.72, .45, ['TD', 'CDC', 'DC', 'ED']),
 ];
 
-/// Punizione centrale a 25 metri: battitore e un secondo sul pallone, quattro sulla
-/// linea della difesa pronti a entrare, il corto, uno sulla seconda palla, due dietro.
+/// Punizione centrale a 25 metri: il battitore e un secondo ai lati del pallone,
+/// quattro sulla linea della difesa (al limite dell'area) pronti a entrare sulle zone,
+/// il corto vicino alla sua zona, uno sulla seconda palla, due dietro.
 const _freeKick = [
-  _Spot(.5, .9, _por),
-  _Spot(.46, .275, ['COC', 'CC', 'AS', 'AD', 'ATT']),
-  _Spot(.55, .275, ['CC', 'COC', 'AD', 'AS']),
-  _Spot(.36, .155, ['DC', 'ATT', 'AS']),
-  _Spot(.46, .15, ['ATT', 'DC']),
-  _Spot(.56, .15, ['DC', 'ATT']),
-  _Spot(.66, .155, ['AS', 'AD', 'ATT', 'DC', 'COC']),
-  _Spot(.64, .28, ['AD', 'ED', 'CC']),
-  _Spot(.5, .37, ['CDC', 'CC']),
-  _Spot(.28, .48, ['TS', 'DC', 'CDC']),
-  _Spot(.72, .48, ['TD', 'DC', 'CDC']),
+  _Spot(.5, .935, _por),
+  _Spot(.415, .262, ['COC', 'CC', 'AS', 'AD', 'ATT']),
+  _Spot(.585, .262, ['CC', 'COC', 'AD', 'AS']),
+  _Spot(.165, .15, ['DC', 'ATT', 'AS']),
+  _Spot(.325, .15, ['ATT', 'DC']),
+  _Spot(.675, .15, ['DC', 'ATT']),
+  _Spot(.835, .15, ['AS', 'AD', 'ATT', 'DC', 'COC']),
+  _Spot(.8, .3, ['AD', 'ED', 'CC']),
+  _Spot(.5, .38, ['CDC', 'CC']),
+  _Spot(.28, .5, ['TS', 'DC', 'CDC']),
+  _Spot(.72, .5, ['TD', 'DC', 'CDC']),
 ];
 
-/// Rigore: il battitore a pochi passi dal dischetto, gli altri fuori dall'area e
-/// dalla lunetta pronti sulla ribattuta, uno sulla seconda palla, tre dietro.
+/// Rigore: il battitore dietro il pallone, quattro sulla linea dell'area (fuori anche
+/// dalla lunetta) pronti sulla ribattuta, uno sulla seconda palla, quattro dietro.
 const _penalty = [
-  _Spot(.5, .9, _por),
-  _Spot(.5, .145, ['ATT', 'COC', 'AS', 'AD', 'CC']),
-  _Spot(.36, .155, ['ATT', 'AS', 'AD', 'COC', 'DC']),
-  _Spot(.64, .155, ['AS', 'AD', 'ATT', 'COC', 'DC']),
-  _Spot(.27, .16, ['DC', 'AS', 'CC']),
-  _Spot(.73, .16, ['DC', 'AD', 'CC']),
-  _Spot(.5, .21, ['COC', 'CC', 'CDC']),
-  _Spot(.5, .3, ['CDC', 'CC']),
-  _Spot(.3, .45, ['TS', 'CDC', 'DC']),
-  _Spot(.7, .45, ['TD', 'CDC', 'DC']),
-  _Spot(.5, .55, ['DC', 'CDC', 'CC']),
+  _Spot(.5, .935, _por),
+  _Spot(.5, .15, ['ATT', 'COC', 'AS', 'AD', 'CC']),
+  _Spot(.33, .16, ['ATT', 'AS', 'AD', 'COC', 'DC']),
+  _Spot(.67, .16, ['AS', 'AD', 'ATT', 'COC', 'DC']),
+  _Spot(.17, .16, ['DC', 'AS', 'CC']),
+  _Spot(.83, .16, ['DC', 'AD', 'CC']),
+  _Spot(.5, .25, ['COC', 'CC', 'CDC']),
+  _Spot(.5, .38, ['CDC', 'CC']),
+  _Spot(.3, .47, ['TS', 'CDC', 'DC']),
+  _Spot(.7, .47, ['TD', 'CDC', 'DC']),
+  _Spot(.5, .58, ['DC', 'CDC', 'CC']),
 ];
 
 /// Rimessa laterale a sinistra nella metà campo avversaria: chi batte sulla linea,
-/// tre appoggi (lungo la linea, incontro, dietro), due in area per la rimessa lunga,
-/// uno al limite, il largo dall'altra parte, due a coprire.
+/// tre appoggi (lungo la linea, incontro accanto alla zona del corto, dietro), due ai
+/// lati dell'area per la rimessa lunga, uno al limite, il largo dall'altra parte, due
+/// a coprire.
 const _throwIn = [
-  _Spot(.5, .9, _por),
-  _Spot(.03, .335, ['TS', 'ES', 'AS', 'CC']),
-  _Spot(.12, .22, ['AS', 'ES', 'ATT']),
-  _Spot(.15, .335, ['CC', 'COC', 'AS']),
+  _Spot(.5, .935, _por),
+  _Spot(.06, .345, ['TS', 'ES', 'AS', 'CC']),
+  _Spot(.1, .2, ['AS', 'ES', 'ATT']),
+  _Spot(.27, .33, ['CC', 'COC', 'AS']),
   _Spot(.14, .47, ['CDC', 'CC', 'DC']),
-  _Spot(.43, .08, ['ATT', 'DC']),
-  _Spot(.52, .12, ['DC', 'ATT', 'AD']),
-  _Spot(.47, .23, ['COC', 'CC']),
+  _Spot(.3, .1, ['ATT', 'DC']),
+  _Spot(.69, .1, ['DC', 'ATT', 'AD']),
+  _Spot(.5, .24, ['COC', 'CC']),
   _Spot(.85, .32, ['AD', 'ED', 'TD']),
   _Spot(.4, .5, ['DC']),
   _Spot(.62, .52, ['DC', 'TD', 'CDC']),
 ];
 
-/// Rinvio dal fondo: il portiere sul pallone nell'area piccola, i centrali aperti ai
-/// lati dell'area, i terzini alti e larghi, il mediano davanti, le mezzali, le ali e
-/// la punta a dare profondità.
+/// Rinvio dal fondo: il portiere accanto al pallone nell'area piccola, i centrali
+/// aperti ai lati dell'area, i terzini alti e larghi, il mediano davanti, le mezzali,
+/// le ali e la punta a dare profondità.
 const _goalKick = [
-  _Spot(.5, .975, _por),
+  _Spot(.56, .935, _por),
   _Spot(.26, .9, ['DC']),
   _Spot(.74, .9, ['DC']),
   _Spot(.06, .72, ['TS', 'ES']),
@@ -115,21 +125,23 @@ const _goalKick = [
   _Spot(.5, .4, ['ATT', 'COC']),
 ];
 
-/// Angolo contro (dalla nostra bandierina in basso a sinistra): portiere sulla linea,
-/// due sui pali, la zona (tre sulla linea dell'area piccola, due all'altezza del
-/// dischetto), uno sul corto, uno al limite, una punta su per la ripartenza.
+/// Angolo contro (dalla nostra bandierina in basso a sinistra): la zona nella nostra
+/// area, con il portiere in mezzo ai pali e due ai lati dell'area piccola; i due
+/// centrali al limite ai lati della zona 4, pronti ad attaccare il pallone; due
+/// all'altezza dell'area piccola sui lati, uno sul secondo palo lungo, uno sul corto,
+/// uno al limite per la respinta, una punta su per la ripartenza.
 const _cornerAgainst = [
-  _Spot(.5, .975, _por),
-  _Spot(.415, .972, ['TS', 'ES', 'CC']),
-  _Spot(.585, .972, ['TD', 'ED', 'CC']),
-  _Spot(.36, .915, ['DC', 'CDC']),
-  _Spot(.5, .912, ['DC', 'CDC']),
-  _Spot(.64, .915, ['CDC', 'DC']),
-  _Spot(.435, .865, ['CDC', 'CC']),
-  _Spot(.565, .865, ['CC', 'COC']),
-  _Spot(.16, .94, ['AS', 'ES', 'CC']),
-  _Spot(.5, .79, ['COC', 'CC', 'AD']),
-  _Spot(.55, .56, ['ATT', 'AD', 'AS']),
+  _Spot(.5, .94, _por),
+  _Spot(.335, .9, ['TS', 'ES', 'CC']),
+  _Spot(.665, .9, ['TD', 'ED', 'CC']),
+  _Spot(.37, .79, ['DC', 'CDC']),
+  _Spot(.63, .79, ['DC', 'CDC']),
+  _Spot(.21, .935, ['CDC', 'DC']),
+  _Spot(.79, .935, ['CDC', 'CC']),
+  _Spot(.82, .79, ['CC', 'COC']),
+  _Spot(.08, .84, ['AS', 'ES', 'CC']),
+  _Spot(.5, .68, ['COC', 'CC', 'AD']),
+  _Spot(.55, .52, ['ATT', 'AD', 'AS']),
 ];
 
 /// Calcio d'inizio: le posizioni del modulo della squadra, tutte nella nostra metà
@@ -205,7 +217,8 @@ enum SetPieceTemplate {
     angoloSinistra => (.02, .013),
     angoloDestra => (.98, .013),
     punizione => (.5, .24),
-    rigore => (.5, .0933),
+    // Due terzi dell'area (0,14): con i tre decimali del JSON.
+    rigore => (.5, .093),
     rimessa => (.012, .3),
     rinvio => (.42, .962),
     inizio => (.5, .5),
@@ -286,10 +299,12 @@ BoardState setPieceBoard(
         if (slotOf[i] case final j?)
           () {
             final m = rosa.where((x) => x.id == players[j]).firstOrNull;
+            // Con i decimali del JSON (i posti specchiati e quelli del calcio
+            // d'inizio si calcolano): lo schema è uguale dal vivo e nel replay.
             return BoardToken(
               id: 'f$j',
-              x: spot.x,
-              y: spot.y,
+              x: fieldCoord(spot.x),
+              y: fieldCoord(spot.y),
               playerId: m?.id,
               label: m?.shirtNumber?.toString() ?? slots[j].label,
               name: m?.displayName ?? '',

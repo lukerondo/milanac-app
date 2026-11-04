@@ -56,6 +56,7 @@ class BoardPainter extends CustomPainter {
     this.pendingArrow,
     this.selectedId,
     this.showNames = true,
+    this.showSavedZones = false,
   });
   final BoardState state;
 
@@ -63,6 +64,10 @@ class BoardPainter extends CustomPainter {
   final BoardArrow? pendingArrow;
   final String? selectedId;
   final bool showNames;
+
+  /// Le spunte delle zone con le posizioni salvate: servono a chi le salva, non a
+  /// chi guarda (immagini, anteprime, sola lettura, replay).
+  final bool showSavedZones;
 
   /// Il rettangolo delle linee del campo, dentro un margine sottile.
   static Rect fieldRect(Size size) =>
@@ -96,6 +101,46 @@ class BoardPainter extends CustomPainter {
   /// La porta: 7,32 m sui 40,32 dell'area.
   static double goalWidth(Size size) => penaltyBoxWidth(size) * 7.32 / 40.32;
 
+  /// Il rettangolo del cognome sotto il gettone [t] (null senza nome): centrato
+  /// sotto il gettone, spostato quanto basta per restare nella lavagna vicino ai
+  /// bordi.
+  static Rect? nameRect(Size size, BoardToken t) => _nameOf(size, t)?.rect;
+
+  /// Dove vanno i numeri (in pixel), come li disegna la lavagna: quelli delle zone
+  /// di battuta (se si vedono) nel primo angolo o lato della zona libero, quelli
+  /// delle linee del pallone (numero → posto) sulla linea o accanto, dove non
+  /// coprono gettoni, cognomi, pallone e gli altri numeri.
+  static ({Map<int, Offset> zones, Map<int, Offset> lines}) badges(
+    Size size,
+    BoardState state, {
+    bool showNames = true,
+  }) => _placeBadges(
+    size,
+    state,
+    state.shows(BoardOverlay.zones) ? deliveryZones(state) : const [],
+    state.shows(BoardOverlay.ballLines)
+        ? _lineShapes(size, state, showNames: showNames)
+        : const [],
+    showNames: showNames,
+  );
+
+  /// Il tratto disegnato di ogni linea del pallone (numero → da dove parte e dove
+  /// arriva la punta, in pixel), a linea finita: già accorciato su gettoni e cognomi.
+  static Map<int, ({Offset start, Offset tip})> lineSpans(
+    Size size,
+    BoardState state, {
+    bool showNames = true,
+  }) => {
+    for (final s in _lineShapes(size, state, showNames: showNames))
+      s.line.n: (start: s.at(0), tip: s.tip),
+  };
+
+  /// Raggio del numero di una zona di battuta, in pixel.
+  static double zoneBadgeRadius(Size size) => size.width * .021;
+
+  /// Raggio del numero di una linea del pallone, in pixel.
+  static double lineBadgeRadius(Size size) => _lineBadgeRadius(size);
+
   @override
   void paint(Canvas canvas, Size size) {
     _paintPitch(canvas, size);
@@ -107,6 +152,7 @@ class BoardPainter extends CustomPainter {
       pendingArrow: pendingArrow,
       selectedId: selectedId,
       showNames: showNames,
+      showSavedZones: showSavedZones,
     );
   }
 
@@ -115,7 +161,8 @@ class BoardPainter extends CustomPainter {
       old.state != state ||
       old.pendingArrow != pendingArrow ||
       old.selectedId != selectedId ||
-      old.showNames != showNames;
+      old.showNames != showNames ||
+      old.showSavedZones != showSavedZones;
 }
 
 /// La cornice del campo: angoli arrotondati e bordo sottile.
@@ -155,6 +202,7 @@ class BoardCanvas extends StatefulWidget {
     this.target,
     this.selectedId,
     this.showNames = true,
+    this.showSavedZones = false,
   });
 
   /// La lavagna da seguire (l'editor o il replay).
@@ -173,6 +221,9 @@ class BoardCanvas extends StatefulWidget {
   final ValueListenable<String?>? target;
   final String? selectedId;
   final bool showNames;
+
+  /// Le spunte delle zone con le posizioni salvate (solo per chi le salva).
+  final bool showSavedZones;
 
   @override
   State<BoardCanvas> createState() => _BoardCanvasState();
@@ -230,6 +281,7 @@ class _BoardCanvasState extends State<BoardCanvas> {
             target: widget.target,
             selectedId: widget.selectedId,
             showNames: widget.showNames,
+            showSavedZones: widget.showSavedZones,
           ),
         ),
       ),
@@ -267,6 +319,7 @@ class _PiecesLayer extends CustomPainter {
     this.target,
     this.selectedId,
     required this.showNames,
+    required this.showSavedZones,
   }) : super(
          repaint: Listenable.merge([
            board,
@@ -283,6 +336,7 @@ class _PiecesLayer extends CustomPainter {
   final ValueListenable<String?>? target;
   final String? selectedId;
   final bool showNames;
+  final bool showSavedZones;
 
   @override
   void paint(Canvas canvas, Size size) => _paintPieces(
@@ -295,6 +349,7 @@ class _PiecesLayer extends CustomPainter {
     targetId: target?.value,
     selectedId: selectedId,
     showNames: showNames,
+    showSavedZones: showSavedZones,
   );
 
   @override
@@ -305,7 +360,8 @@ class _PiecesLayer extends CustomPainter {
       old.shift != shift ||
       old.target != target ||
       old.selectedId != selectedId ||
-      old.showNames != showNames;
+      old.showNames != showNames ||
+      old.showSavedZones != showSavedZones;
 }
 
 /// Il campo notturno con le linee color oro: bordo, metà campo, cerchio e dischetto
@@ -426,11 +482,12 @@ void _paintHeat(Canvas canvas, Size size, List<HeatPoint> heat) {
 }
 
 /// Sotto: le zone della palla (posizioni per zona), le zone di battuta, le linee di
-/// reparto e del fuorigioco; poi frecce (con quella in corso di disegno, in oro), linee
-/// del pallone, gettoni con le bandierine del fuorigioco, i numeri delle zone di
-/// battuta e, sopra tutto, il pallone (in volo, se c'è un passaggio in corso). I
-/// gettoni che scivolano verso le posizioni della nuova zona ([shift]) si disegnano a
-/// metà strada, e le linee li seguono.
+/// reparto e del fuorigioco; poi le frecce dei movimenti (oro, con quella in corso di
+/// disegno), le linee del pallone (bianche), i gettoni con le bandierine del
+/// fuorigioco e il pallone (in volo, se c'è un passaggio in corso). Sopra tutto, in un
+/// passaggio a parte, i numeri: delle zone di battuta e delle linee, messi dove non
+/// coprono gettoni, cognomi e pallone. I gettoni che scivolano verso le posizioni
+/// della nuova zona ([shift]) si disegnano a metà strada, e le linee li seguono.
 void _paintPieces(
   Canvas canvas,
   Size size,
@@ -441,6 +498,7 @@ void _paintPieces(
   String? targetId,
   String? selectedId,
   bool showNames = true,
+  bool showSavedZones = false,
 }) {
   if (shift != null) {
     final e = shift.eased;
@@ -455,7 +513,7 @@ void _paintPieces(
     );
   }
   if (state.shows(BoardOverlay.zonePositions)) {
-    _paintBallZones(canvas, size, state);
+    _paintBallZones(canvas, size, state, checks: showSavedZones);
   }
   final zones = state.shows(BoardOverlay.zones)
       ? deliveryZones(state)
@@ -469,13 +527,14 @@ void _paintPieces(
   final offside = state.shows(BoardOverlay.offside) ? readOffside(state) : null;
   if (offside != null) _paintOffsideLines(canvas, size, offside);
   for (final a in state.arrows) {
-    _paintArrow(canvas, size, a, MilanacColors.ivory);
+    _paintArrow(canvas, size, a);
   }
-  if (state.shows(BoardOverlay.ballLines)) {
-    _paintBallLines(canvas, size, state.lines, flight);
-  }
+  final shapes = state.shows(BoardOverlay.ballLines)
+      ? _lineShapes(size, state, showNames: showNames)
+      : const <_LineShape>[];
+  _paintBallLines(canvas, size, shapes, flight);
   if (pendingArrow != null) {
-    _paintArrow(canvas, size, pendingArrow, MilanacColors.goldLight);
+    _paintArrow(canvas, size, pendingArrow, opacity: .75);
   }
   for (final t in state.tokens) {
     _paintToken(
@@ -492,9 +551,33 @@ void _paintPieces(
       if (offside.flagged.contains(t.id)) _paintOffsideFlag(canvas, size, t);
     }
   }
+  _paintFlyingBall(canvas, size, state, flight);
+  // I numeri sopra tutto (anche sopra il pallone), dove non coprono niente.
+  if (zones.isEmpty && shapes.isEmpty) return;
+  final badges = _placeBadges(size, state, zones, shapes, showNames: showNames);
   for (final z in zones) {
-    _paintZoneBadge(canvas, size, z);
+    _paintZoneBadge(canvas, size, z, badges.zones[z.n]!);
   }
+  for (final (i, s) in shapes.indexed) {
+    // Il numero della linea in volo compare con il pallone.
+    _lineNumber(
+      canvas,
+      size,
+      badges.lines[s.line.n]!,
+      s.line.n,
+      _lineOpacity(shapes.length, i) * _lineProgress(s.line, flight),
+    );
+  }
+}
+
+/// Il pallone, sopra i gettoni: in volo lungo la sua linea se c'è un passaggio in
+/// corso.
+void _paintFlyingBall(
+  Canvas canvas,
+  Size size,
+  BoardState state,
+  BallFlight? flight,
+) {
   final ball = state.ball;
   if (ball != null) {
     var at = BoardPainter.toPixel(size, ball.x, ball.y);
@@ -534,8 +617,14 @@ Offset crossControl(Size size, Offset p1, Offset p2) {
 }
 
 /// Posizioni per zona: le 9 zone della palla a righe sottili, quella del pallone
-/// appena accesa e un segno di spunta dove le posizioni sono salvate.
-void _paintBallZones(Canvas canvas, Size size, BoardState state) {
+/// appena accesa e, per chi le salva ([checks]), un segno di spunta dove le posizioni
+/// sono salvate.
+void _paintBallZones(
+  Canvas canvas,
+  Size size,
+  BoardState state, {
+  required bool checks,
+}) {
   final f = BoardPainter.fieldRect(size);
   final w = size.width;
   final ball = state.ball;
@@ -572,6 +661,7 @@ void _paintBallZones(Canvas canvas, Size size, BoardState state) {
       );
     }
   }
+  if (!checks) return;
   // La spunta nell'angolo in alto a destra della zona.
   final r = w * .022;
   for (final zone in state.positions.keys) {
@@ -622,20 +712,48 @@ void _paintDeliveryZone(Canvas canvas, Size size, DeliveryZone z) {
     );
 }
 
-/// Il numero della zona di battuta, nel suo angolo.
-void _paintZoneBadge(Canvas canvas, Size size, DeliveryZone z) {
+/// Dove va il numero della zona [z]: l'angolo di serie (verso la porta e il
+/// pallone) se è libero, altrimenti il primo angolo o lato libero da gettoni, cognomi,
+/// pallone e altri numeri; se nessuno lo è, quello che copre meno.
+Offset _placeZoneBadge(Size size, DeliveryZone z, _Obstacles obstacles) {
+  final f = BoardPainter.fieldRect(size);
+  final c = BoardPainter.toPixel(size, z.x, z.y);
+  final hw = z.w * f.width / 2, hh = z.h * f.height / 2;
+  final home = BoardPainter.toPixel(size, z.badgeX, z.badgeY);
+  final sx = (home.dx - c.dx).sign, sy = (home.dy - c.dy).sign;
+  final candidates = [
+    for (final (dx, dy) in [
+      (sx, sy),
+      (-sx, sy),
+      (sx, -sy),
+      (-sx, -sy),
+      (0.0, sy),
+      (0.0, -sy),
+      (sx, 0.0),
+      (-sx, 0.0),
+    ])
+      c + Offset(dx * hw, dy * hh),
+  ];
+  return obstacles.place(candidates, BoardPainter.zoneBadgeRadius(size), size);
+}
+
+/// Il numero della zona di battuta, in [at] (un angolo o un lato della zona).
+void _paintZoneBadge(Canvas canvas, Size size, DeliveryZone z, Offset at) {
   final w = size.width;
-  final r = w * .019;
-  final at = BoardPainter.toPixel(size, z.badgeX, z.badgeY);
+  final r = BoardPainter.zoneBadgeRadius(size);
+  // Quadrato con gli angoli tondi, come la zona: i numeri delle linee del pallone
+  // sono tondi, e un "2" della zona non si confonde con la seconda azione.
+  final square = RRect.fromRectAndRadius(
+    Rect.fromCircle(center: at, radius: r * .84),
+    Radius.circular(r * .34),
+  );
   canvas
-    ..drawCircle(
-      at,
-      r,
+    ..drawRRect(
+      square,
       Paint()..color = MilanacColors.black.withValues(alpha: .72),
     )
-    ..drawCircle(
-      at,
-      r,
+    ..drawRRect(
+      square,
       Paint()
         ..color = MilanacColors.ivory.withValues(alpha: .7)
         ..style = PaintingStyle.stroke
@@ -777,22 +895,29 @@ void _paintOffsideFlag(Canvas canvas, Size size, BoardToken t) {
     ..drawPath(flag, Paint()..color = MilanacColors.kitRed);
 }
 
-void _paintArrow(Canvas canvas, Size size, BoardArrow a, Color color) {
+/// Il colore delle frecce dei movimenti: oro chiaro, diverso dal bianco delle linee
+/// del pallone (il campo è lo stesso nei due temi).
+const movementArrowColor = MilanacColors.goldLight;
+
+/// La freccia di un movimento (strumento "Freccia"): oro, con la punta aperta (due
+/// tratti, non il triangolo pieno delle linee del pallone), continua o tratteggiata,
+/// con un filo scuro sotto che la stacca dall'erba e dalla heatmap.
+void _paintArrow(Canvas canvas, Size size, BoardArrow a, {double opacity = 1}) {
   final p1 = BoardPainter.toPixel(size, a.x1, a.y1);
   final p2 = BoardPainter.toPixel(size, a.x2, a.y2);
   if ((p2 - p1).distance < 4) return;
-  final paint = Paint()
-    ..color = color
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = max(1.5, size.width * .0084)
-    ..strokeCap = StrokeCap.round;
+  final w = size.width;
+  final width = max(1.5, w * .0075);
+  final outline = max(1.0, w * .0028);
   final dir = (p2 - p1) / (p2 - p1).distance;
-  final head = size.width * .034;
-  final end = p2 - dir * head * .6;
+  final n = Offset(-dir.dy, dir.dx);
+  final head = w * .036;
   final line = Path()..moveTo(p1.dx, p1.dy);
+  // La linea arriva fin dentro la punta aperta (senza superarla).
+  final end = p2 - dir * (width * .6);
   if (a.dashed) {
     final total = (end - p1).distance;
-    final dash = size.width * .022, gap = size.width * .0196;
+    final dash = w * .024, gap = w * .018;
     var d = 0.0;
     while (d < total) {
       final s = p1 + dir * d;
@@ -805,8 +930,32 @@ void _paintArrow(Canvas canvas, Size size, BoardArrow a, Color color) {
   } else {
     line.lineTo(end.dx, end.dy);
   }
-  canvas.drawPath(line, paint);
-  canvas.drawPath(_arrowHead(p2, dir, head), Paint()..color = color);
+  final chevron = Path()
+    ..moveTo(
+      p2.dx - dir.dx * head + n.dx * head * .62,
+      p2.dy - dir.dy * head + n.dy * head * .62,
+    )
+    ..lineTo(p2.dx, p2.dy)
+    ..lineTo(
+      p2.dx - dir.dx * head - n.dx * head * .62,
+      p2.dy - dir.dy * head - n.dy * head * .62,
+    );
+  Paint stroke(Color color, double width) => Paint()
+    ..color = color
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = width
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+  final shadow = stroke(
+    MilanacColors.black.withValues(alpha: .45 * opacity),
+    width + outline * 2,
+  );
+  final gold = stroke(movementArrowColor.withValues(alpha: opacity), width);
+  canvas
+    ..drawPath(line, shadow)
+    ..drawPath(chevron, shadow)
+    ..drawPath(line, gold)
+    ..drawPath(chevron, gold);
 }
 
 /// La punta di una freccia in [tip], lunga [head], nella direzione [dir].
@@ -825,97 +974,429 @@ Path _arrowHead(Offset tip, Offset dir, double head) {
     ..close();
 }
 
-/// Le linee del pallone, bianche con il numero dell'azione: le più vecchie un po'
-/// più tenui. Quella del passaggio in volo cresce con il pallone.
-void _paintBallLines(
-  Canvas canvas,
-  Size size,
-  List<BallLine> lines,
-  BallFlight? flight,
-) {
-  for (final (i, l) in lines.indexed) {
-    final age = lines.length - 1 - i;
-    _paintBallLine(
-      canvas,
-      size,
-      l,
-      opacity: max(.4, 1 - age * .05),
-      progress: flight != null && flight.kick.line == l.n ? flight.eased : 1,
+/// Raggio del numero di una linea del pallone, in pixel.
+double _lineBadgeRadius(Size size) => size.width * .02;
+
+/// Quello che un numero (delle linee o delle zone) non deve coprire: i gettoni, i
+/// loro cognomi, il pallone, i numeri già messi e il bordo della lavagna.
+class _Obstacles {
+  _Obstacles._(this._circles, this._rects);
+
+  factory _Obstacles.of(
+    Size size,
+    BoardState state, {
+    required bool showNames,
+  }) {
+    final r = BoardPainter.tokenRadius(size);
+    final ball = state.ball;
+    return _Obstacles._(
+      [
+        for (final t in state.tokens) (BoardPainter.toPixel(size, t.x, t.y), r),
+        if (ball != null)
+          (
+            BoardPainter.toPixel(size, ball.x, ball.y),
+            BoardPainter.ballRadius(size),
+          ),
+      ],
+      [
+        if (showNames)
+          for (final t in state.tokens) ?BoardPainter.nameRect(size, t),
+      ],
     );
+  }
+
+  final List<(Offset, double)> _circles;
+  final List<Rect> _rects;
+
+  void addCircle(Offset c, double r) => _circles.add((c, r));
+
+  /// Quanto il cerchio in [c] di raggio [r] entra negli ostacoli (0 = libero).
+  double overlap(Offset c, double r, Size size) {
+    var o = 0.0;
+    for (final (p, pr) in _circles) {
+      o += max(0.0, r + pr - (c - p).distance);
+    }
+    for (final rect in _rects) {
+      final near = Offset(
+        c.dx.clamp(rect.left, rect.right),
+        c.dy.clamp(rect.top, rect.bottom),
+      );
+      o += max(0.0, r - (near - c).distance);
+    }
+    return o +
+        max(0.0, r - c.dx) +
+        max(0.0, r - c.dy) +
+        max(0.0, c.dx + r - size.width) +
+        max(0.0, c.dy + r - size.height);
+  }
+
+  /// Il primo dei primi [near] [candidates] (i posti vicini alla sua linea o alla sua
+  /// zona) dove un cerchio di raggio [r] (più un pixel d'aria) non tocca niente. Se
+  /// sono tutti occupati, quello che tocca meno, purché di poco: un numero che sfiora
+  /// un gettone si legge meglio di uno lontano dalla sua linea. Altrimenti il primo
+  /// libero degli altri posti, e se non c'è, di nuovo quello vicino che tocca meno.
+  Offset place(List<Offset> candidates, double r, Size size, {int? near}) {
+    final n = min(near ?? candidates.length, candidates.length);
+    Offset? best;
+    var least = double.infinity;
+    for (final c in candidates.take(n)) {
+      final o = overlap(c, r + 1, size);
+      if (o <= 0) return c;
+      if (o < least) {
+        least = o;
+        best = c;
+      }
+    }
+    if (best != null && least <= r * .6) return best;
+    for (final c in candidates.skip(n)) {
+      if (overlap(c, r + 1, size) <= 0) return c;
+    }
+    return best ?? candidates.first;
   }
 }
 
-/// Passaggio: linea continua con la punta; conduzione: linea ondulata; tiro: linea
-/// spessa fino alla porta. Si accorciano dove toccano un gettone, così punta e numero
-/// restano fuori; un filo scuro sotto le stacca dalla heatmap.
-void _paintBallLine(
-  Canvas canvas,
+/// Quanto bisogna allontanarsi da [from] lungo [dir] (unitario) per uscire da
+/// [rect]; null se la semiretta non lo tocca.
+double? _exitFrom(Rect rect, Offset from, Offset dir) {
+  var t0 = 0.0, t1 = double.infinity;
+  for (final (o, d, lo, hi) in [
+    (from.dx, dir.dx, rect.left, rect.right),
+    (from.dy, dir.dy, rect.top, rect.bottom),
+  ]) {
+    if (d.abs() < 1e-9) {
+      if (o < lo || o > hi) return null;
+      continue;
+    }
+    var a = (lo - o) / d, b = (hi - o) / d;
+    if (a > b) (a, b) = (b, a);
+    t0 = max(t0, a);
+    t1 = min(t1, b);
+    if (t0 > t1) return null;
+  }
+  return t1;
+}
+
+/// Il cognome del gettone che sta in [p] (in pixel), se c'è.
+Rect? _nameRectAt(Size size, BoardState state, Offset p) {
+  for (final t in state.tokens) {
+    if ((BoardPainter.toPixel(size, t.x, t.y) - p).distance < .5) {
+      return BoardPainter.nameRect(size, t);
+    }
+  }
+  return null;
+}
+
+/// La forma di una linea del pallone sullo schermo, già accorciata dove tocca i
+/// gettoni e i cognomi: dritta da [start] lungo [dir] per [span] pixel, oppure (il
+/// cross) lungo la curva [curve] da [from] per [span] pixel.
+class _LineShape {
+  const _LineShape({
+    required this.line,
+    required this.head,
+    required this.start,
+    required this.dir,
+    required this.span,
+    required this.drawable,
+    this.curve,
+    this.from = 0,
+  });
+
+  final BallLine line;
+
+  /// Lunghezza della punta.
+  final double head;
+  final Offset start, dir;
+  final double span;
+  final ui.PathMetric? curve;
+  final double from;
+
+  /// C'è qualcosa da disegnare (non è una linea da un punto a sé stesso).
+  final bool drawable;
+
+  /// Il punto a [f] (da 0 a 1) del tratto disegnato.
+  Offset at(double f) =>
+      curve?.getTangentForOffset(from + span * f)!.position ??
+      start + dir * (span * f);
+
+  /// La perpendicolare alla linea a [f].
+  Offset normal(double f) {
+    final v = curve?.getTangentForOffset(from + span * f)!.vector ?? dir;
+    final d = v.distance;
+    return d < 1e-6 ? Offset(-dir.dy, dir.dx) : Offset(-v.dy, v.dx) / d;
+  }
+
+  /// La punta della freccia, a linea finita.
+  Offset get tip => at(1);
+}
+
+/// La forma della linea [l]: si accorcia dove tocca un gettone e, se passa dal
+/// cognome di chi passa o di chi riceve (le linee che arrivano da sotto, quelle che
+/// partono verso il basso), anche lì, così la punta non finisce sul nome. Una linea
+/// troppo corta per vedersi tra due gettoni vicini resta un tratto minimo con la sua
+/// punta, a metà strada: il numero c'è sempre.
+_LineShape _lineShape(
   Size size,
+  BoardState state,
   BallLine l, {
-  required double opacity,
-  required double progress,
+  required bool showNames,
 }) {
   final w = size.width;
   final r = BoardPainter.tokenRadius(size);
   final br = BoardPainter.ballRadius(size);
   final p1 = BoardPainter.toPixel(size, l.x1, l.y1);
   final p2 = BoardPainter.toPixel(size, l.x2, l.y2);
-  final trimStart = l.fromPlayer ? r * 1.05 : br * 1.1;
-  final trimEnd = l.toPlayer ? r * 1.15 : br * 1.15;
-  if (l.kind == BallLineKind.cross) {
-    _paintCross(
-      canvas,
-      size,
-      l,
-      p1,
-      p2,
-      trimStart: trimStart,
-      trimEnd: trimEnd,
-      opacity: opacity,
-      progress: progress,
-    );
-    return;
-  }
-  final full = (p2 - p1).distance;
-  final length = full - trimStart - trimEnd;
-  if (!length.isFinite || length < br) return;
-  final dir = (p2 - p1) / full;
-  final start = p1 + dir * trimStart;
-  final tip = start + dir * (length * progress);
-  final (width, head) = switch (l.kind) {
-    BallLineKind.shot => (max(2.5, w * .011), w * .036),
-    BallLineKind.pass || BallLineKind.cross => (max(1.2, w * .0055), w * .028),
-    BallLineKind.carry => (max(1.2, w * .0055), w * .024),
+  final head = switch (l.kind) {
+    BallLineKind.shot => w * .036,
+    BallLineKind.carry => w * .024,
+    BallLineKind.pass || BallLineKind.cross => w * .028,
   };
-  final stem = max(0.0, (tip - start).distance - head * .6);
-  final path = Path()..moveTo(start.dx, start.dy);
-  if (l.kind == BallLineKind.carry) {
-    // L'onda si spegne alle due estremità: parte dal giocatore e finisce nella punta.
-    final n = Offset(-dir.dy, dir.dx);
-    final amp = w * .008, wave = w * .034;
-    for (var d = 0.0; d <= stem; d += max(1.0, w * .004)) {
-      final fade = min(1.0, min(d, stem - d) / (wave / 2));
-      final p = start + dir * d + n * (amp * fade * sin(2 * pi * d / wave));
-      path.lineTo(p.dx, p.dy);
-    }
-  } else {
-    final e = start + dir * stem;
-    path.lineTo(e.dx, e.dy);
+  final minLength = head * 1.5;
+  Offset unit(Offset v, Offset fallback) =>
+      v.distance < 1e-6 ? fallback : v / v.distance;
+  final dir = unit(p2 - p1, const Offset(0, -1));
+  final control = crossControl(size, p1, p2);
+  ui.PathMetric? curve;
+  if (l.kind == BallLineKind.cross) {
+    // Le misure del percorso si leggono una volta sola (l'iteratore non riparte).
+    final metrics =
+        (Path()
+              ..moveTo(p1.dx, p1.dy)
+              ..quadraticBezierTo(control.dx, control.dy, p2.dx, p2.dy))
+            .computeMetrics()
+            .iterator;
+    if (metrics.moveNext()) curve = metrics.current;
   }
-  final outline = max(1.0, w * .0025);
+  final total = curve?.length ?? (p2 - p1).distance;
+  // Da dove esce e dove entra la linea (per il cross, le tangenti alle punte).
+  final out = curve == null ? dir : unit(control - p1, dir);
+  final into = curve == null ? dir : unit(p2 - control, dir);
+  var trimStart = l.fromPlayer ? r * 1.05 : br * 1.1;
+  var trimEnd = l.toPlayer ? r * 1.15 : br * 1.15;
+  final pad = max(1.5, w * .006);
+  final fromName = l.fromPlayer && showNames
+      ? _nameRectAt(size, state, p1)
+      : null;
+  final toName = l.toPlayer && showNames ? _nameRectAt(size, state, p2) : null;
+  final nameStart = fromName == null
+      ? 0.0
+      : (_exitFrom(fromName.inflate(pad), p1, out) ?? 0.0);
+  final nameEnd = toName == null
+      ? 0.0
+      : (_exitFrom(toName.inflate(pad), p2, -into) ?? 0.0);
+  // I cognomi si saltano solo se resta abbastanza linea da vedersi.
+  if (total - max(trimStart, nameStart) - max(trimEnd, nameEnd) >= minLength) {
+    trimStart = max(trimStart, nameStart);
+    trimEnd = max(trimEnd, nameEnd);
+  }
+  final length = total - trimStart - trimEnd;
+  if (curve != null && length >= minLength) {
+    return _LineShape(
+      line: l,
+      head: head,
+      start: p1,
+      dir: dir,
+      span: length,
+      curve: curve,
+      from: trimStart,
+      drawable: true,
+    );
+  }
+  // Dritta (o un cross troppo corto per girare); troppo corta, un tratto minimo a
+  // metà tra i due punti.
+  var start = p1 + dir * trimStart;
+  var span = length;
+  if (span < minLength) {
+    final mid = p1 + dir * (trimStart + (total - trimStart - trimEnd) / 2);
+    start = mid - dir * (minLength / 2);
+    span = minLength;
+  }
+  return _LineShape(
+    line: l,
+    head: head,
+    start: start,
+    dir: dir,
+    span: span,
+    drawable: total >= 1,
+  );
+}
+
+/// Le forme delle linee del pallone, dalla più vecchia.
+List<_LineShape> _lineShapes(
+  Size size,
+  BoardState state, {
+  required bool showNames,
+}) => [
+  for (final l in state.lines) _lineShape(size, state, l, showNames: showNames),
+];
+
+/// Dove vanno i numeri, sopra tutto e dove non coprono niente: prima quelli delle
+/// zone di battuta (stanno ferme), poi quelli delle linee dalla più nuova (la più
+/// importante sceglie per prima).
+({Map<int, Offset> zones, Map<int, Offset> lines}) _placeBadges(
+  Size size,
+  BoardState state,
+  List<DeliveryZone> zones,
+  List<_LineShape> shapes, {
+  required bool showNames,
+}) {
+  final obstacles = _Obstacles.of(size, state, showNames: showNames);
+  final zoneSpots = <int, Offset>{};
+  for (final z in zones) {
+    final at = _placeZoneBadge(size, z, obstacles);
+    obstacles.addCircle(at, BoardPainter.zoneBadgeRadius(size));
+    zoneSpots[z.n] = at;
+  }
+  final badge = _lineBadgeRadius(size);
+  final lineSpots = <int, Offset>{};
+  for (final s in shapes.reversed) {
+    final spots = _badgeSpots(s.at, s.normal, badge, s.span);
+    final at = obstacles.place(spots.candidates, badge, size, near: spots.near);
+    obstacles.addCircle(at, badge);
+    lineSpots[s.line.n] = at;
+  }
+  return (zones: zoneSpots, lines: lineSpots);
+}
+
+/// Le linee del pallone, bianche: le più vecchie un po' più tenui. Quella del
+/// passaggio in volo cresce con il pallone (il suo numero compare con lui, vedi
+/// [_paintPieces]). Passaggio: linea continua con la punta; conduzione: linea
+/// ondulata; tiro: linea spessa fino alla porta; cross: puntini che girano verso il
+/// centro del campo. Un filo scuro sotto le stacca dalla heatmap.
+void _paintBallLines(
+  Canvas canvas,
+  Size size,
+  List<_LineShape> shapes,
+  BallFlight? flight,
+) {
+  for (final (i, s) in shapes.indexed) {
+    if (!s.drawable) continue;
+    final opacity = _lineOpacity(shapes.length, i);
+    final progress = _lineProgress(s.line, flight);
+    if (s.curve case final curve?) {
+      _paintCross(
+        canvas,
+        size,
+        curve,
+        from: s.from,
+        to: s.from + s.span * progress,
+        head: s.head,
+        opacity: opacity,
+      );
+    } else {
+      _paintStraight(
+        canvas,
+        size,
+        s.line.kind,
+        s.start,
+        s.start + s.dir * (s.span * progress),
+        s.dir,
+        head: s.head,
+        opacity: opacity,
+      );
+    }
+  }
+}
+
+/// Le linee più vecchie sono un po' più tenui.
+double _lineOpacity(int count, int index) =>
+    max(.4, 1 - (count - 1 - index) * .05);
+
+/// Quanto della linea si vede: tutta, o fin dove è arrivato il pallone in volo.
+double _lineProgress(BallLine l, BallFlight? flight) =>
+    flight != null && flight.kick.line == l.n ? flight.eased : 1.0;
+
+/// I posti per il numero di una linea lunga [length]: sulla linea dal centro verso
+/// le punte, poi accanto (di qua e di là, sempre più lontano) e, se tutto è
+/// occupato, tutt'intorno al centro. [near] conta i posti sulla linea o accanto.
+({List<Offset> candidates, int near}) _badgeSpots(
+  Offset Function(double f) at,
+  Offset Function(double f) normal,
+  double badge,
+  double length,
+) {
+  const along = [.5, .38, .62, .26, .74, .15, .85, .06, .94];
+  final fractions = length < badge * 4 ? const [.5] : along;
+  final near = [
+    for (final side in const [0.0, 1.8, -1.8, 3.2, -3.2])
+      for (final f in fractions) at(f) + normal(f) * (badge * side),
+  ];
+  return (
+    candidates: [
+      ...near,
+      for (final d in const [5.0, 7.0])
+        for (var i = 0; i < 8; i++)
+          at(.5) + Offset(cos(i * pi / 4), sin(i * pi / 4)) * (badge * d),
+    ],
+    near: near.length,
+  );
+}
+
+/// Un tratto dritto da [start] a [tip] con la punta: continuo (passaggio, spesso per
+/// il tiro), ondulato (conduzione) o a puntini (cross).
+void _paintStraight(
+  Canvas canvas,
+  Size size,
+  BallLineKind kind,
+  Offset start,
+  Offset tip,
+  Offset dir, {
+  required double head,
+  required double opacity,
+}) {
+  final w = size.width;
   final shadow = MilanacColors.black.withValues(alpha: .35 * opacity);
   final color = Colors.white.withValues(alpha: opacity);
+  final outline = max(1.0, w * .0025);
   final arrowHead = _arrowHead(tip, dir, head);
+  final stem = max(0.0, (tip - start).distance - head * .6);
+  if (kind == BallLineKind.cross) {
+    final dot = max(1.1, w * .0048), step = max(4.0, w * .017);
+    for (var d = 0.0; d <= stem - head * .1; d += step) {
+      final p = start + dir * d;
+      canvas
+        ..drawCircle(p, dot + max(.8, w * .0022), Paint()..color = shadow)
+        ..drawCircle(p, dot, Paint()..color = color);
+    }
+  } else {
+    final width = kind == BallLineKind.shot
+        ? max(2.5, w * .011)
+        : max(1.2, w * .0055);
+    final path = Path()..moveTo(start.dx, start.dy);
+    if (kind == BallLineKind.carry) {
+      // L'onda si spegne alle due estremità: parte dal giocatore e finisce nella
+      // punta.
+      final n = Offset(-dir.dy, dir.dx);
+      final amp = w * .008, wave = w * .034;
+      for (var d = 0.0; d <= stem; d += max(1.0, w * .004)) {
+        final fade = min(1.0, min(d, stem - d) / (wave / 2));
+        final p = start + dir * d + n * (amp * fade * sin(2 * pi * d / wave));
+        path.lineTo(p.dx, p.dy);
+      }
+    } else {
+      final e = start + dir * stem;
+      path.lineTo(e.dx, e.dy);
+    }
+    canvas
+      ..drawPath(
+        path,
+        Paint()
+          ..color = shadow
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width + outline * 2
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      )
+      ..drawPath(
+        path,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+  }
   canvas
-    ..drawPath(
-      path,
-      Paint()
-        ..color = shadow
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width + outline * 2
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    )
     ..drawPath(
       arrowHead,
       Paint()
@@ -924,30 +1405,14 @@ void _paintBallLine(
         ..strokeWidth = outline * 2
         ..strokeJoin = StrokeJoin.round,
     )
-    ..drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    )
     ..drawPath(arrowHead, Paint()..color = color);
-  // Il numero, piccolo, all'inizio della linea.
-  _lineNumber(
-    canvas,
-    size,
-    start + dir * min(length / 2, w * .02 * 1.4),
-    l.n,
-    opacity,
-  );
 }
 
 /// Il numero dell'azione del pallone, in un cerchietto scuro.
 void _lineNumber(Canvas canvas, Size size, Offset at, int n, double opacity) {
+  if (opacity <= 0) return;
   final w = size.width;
-  final badge = w * .02;
+  final badge = _lineBadgeRadius(size);
   canvas
     ..drawCircle(
       at,
@@ -974,45 +1439,28 @@ void _lineNumber(Canvas canvas, Size size, Offset at, int n, double opacity) {
   );
 }
 
-/// Il cross: una linea a puntini che gira verso il centro del campo, con la punta
-/// nella zona di battuta.
+/// Il cross: puntini lungo la curva [curve] da [from] a [to] (distanze sulla curva),
+/// con la punta in fondo.
 void _paintCross(
   Canvas canvas,
   Size size,
-  BallLine l,
-  Offset p1,
-  Offset p2, {
-  required double trimStart,
-  required double trimEnd,
+  ui.PathMetric curve, {
+  required double from,
+  required double to,
+  required double head,
   required double opacity,
-  required double progress,
 }) {
   final w = size.width;
-  final br = BoardPainter.ballRadius(size);
-  final c = crossControl(size, p1, p2);
-  // Le misure del percorso si leggono una volta sola (l'iteratore non riparte).
-  final metrics =
-      (Path()
-            ..moveTo(p1.dx, p1.dy)
-            ..quadraticBezierTo(c.dx, c.dy, p2.dx, p2.dy))
-          .computeMetrics()
-          .iterator;
-  if (!metrics.moveNext()) return;
-  final curve = metrics.current;
-  final length = curve.length - trimStart - trimEnd;
-  if (!length.isFinite || length < br) return;
-  final end = trimStart + length * progress;
-  final head = w * .028;
   final dot = max(1.1, w * .0048), step = max(4.0, w * .017);
   final shadow = MilanacColors.black.withValues(alpha: .35 * opacity);
   final color = Colors.white.withValues(alpha: opacity);
-  for (var d = trimStart; d <= end - head * .7; d += step) {
+  for (var d = from; d <= to - head * .7; d += step) {
     final p = curve.getTangentForOffset(d)!.position;
     canvas
       ..drawCircle(p, dot + max(.8, w * .0022), Paint()..color = shadow)
       ..drawCircle(p, dot, Paint()..color = color);
   }
-  final tip = curve.getTangentForOffset(end)!;
+  final tip = curve.getTangentForOffset(to)!;
   final dir = tip.vector / max(1e-6, tip.vector.distance);
   final arrowHead = _arrowHead(tip.position, dir, head);
   canvas
@@ -1025,15 +1473,6 @@ void _paintCross(
         ..strokeJoin = StrokeJoin.round,
     )
     ..drawPath(arrowHead, Paint()..color = color);
-  _lineNumber(
-    canvas,
-    size,
-    curve
-        .getTangentForOffset(trimStart + min(length / 2, w * .02 * 1.4))!
-        .position,
-    l.n,
-    opacity,
-  );
 }
 
 /// Il pallone: bianco con le macchie nere e un'ombra morbida.
@@ -1122,21 +1561,42 @@ void _paintToken(
     color: tokenTextColor(t.side),
     maxWidth: r * 1.9,
   );
-  final surname = _surname(t.name);
-  if (showNames && surname.isNotEmpty) {
-    final fontSize = size.width * .034;
-    _text(
-      canvas,
-      surname,
-      c + Offset(0, r + fontSize * .8),
-      fontSize: fontSize,
-      fontFamily: bodyFont,
-      weight: FontWeight.w700,
-      color: MilanacColors.ivory,
-      maxWidth: r * 5,
-      shadow: true,
-    );
+  if (showNames) {
+    if (_nameOf(size, t) case (:final text, :final rect)) {
+      text.paint(canvas, rect.topLeft);
+    }
   }
+}
+
+/// Il cognome sotto il gettone [t]: il testo impaginato e il suo rettangolo (null
+/// senza nome). Centrato sotto il gettone; vicino ai bordi rientra nella lavagna
+/// invece di tagliarsi.
+({TextPainter text, Rect rect})? _nameOf(Size size, BoardToken t) {
+  final surname = _surname(t.name);
+  if (surname.isEmpty) return null;
+  final r = BoardPainter.tokenRadius(size);
+  final fontSize = size.width * .034;
+  final tp = _layout(
+    surname,
+    fontSize: fontSize,
+    fontFamily: bodyFont,
+    weight: FontWeight.w700,
+    color: MilanacColors.ivory,
+    maxWidth: r * 5,
+    shadow: true,
+  );
+  final c = BoardPainter.toPixel(size, t.x, t.y);
+  var rect = Rect.fromCenter(
+    center: c + Offset(0, r + fontSize * .8),
+    width: tp.width,
+    height: tp.height,
+  );
+  if (rect.left < 0) {
+    rect = rect.shift(Offset(-rect.left, 0));
+  } else if (rect.right > size.width) {
+    rect = rect.shift(Offset(size.width - rect.right, 0));
+  }
+  return (text: tp, rect: rect);
 }
 
 /// Sotto il gettone va il cognome (l'ultima parola del nome).
@@ -1162,6 +1622,28 @@ void _text(
   required Color color,
   double maxWidth = 200,
   bool shadow = false,
+}) {
+  final tp = _layout(
+    s,
+    fontSize: fontSize,
+    fontFamily: fontFamily,
+    weight: weight,
+    color: color,
+    maxWidth: maxWidth,
+    shadow: shadow,
+  );
+  tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+}
+
+/// Il testo impaginato (dalla memoria, se c'è già).
+TextPainter _layout(
+  String s, {
+  required double fontSize,
+  required String fontFamily,
+  required FontWeight weight,
+  required Color color,
+  required double maxWidth,
+  required bool shadow,
 }) {
   final key = (s, fontSize, fontFamily, weight, color, maxWidth, shadow);
   var tp = _texts.remove(key);
@@ -1192,7 +1674,7 @@ void _text(
   while (_texts.length > _maxTexts) {
     _texts.remove(_texts.keys.first)!.dispose();
   }
-  tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+  return tp;
 }
 
 /// Il campo è alto 1 / 0.68 volte la larghezza (come la formazione).
