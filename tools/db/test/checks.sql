@@ -181,7 +181,7 @@ do $$ begin
           where c.slug = 'comunicazioni' and m.kind = 'system' and m.meta->>'type' = 'formation') = 1,
     'formazione annunciata in Comunicazioni';
   assert (select body from messages where meta->>'type' = 'formation')
-         like 'Formazione Milan AC (4-3-3): POR Giocatore%', 'testo dell''annuncio';
+         like 'Formazione MILANAC (4-3-3): POR Giocatore%', 'testo dell''annuncio';
 end $$;
 
 -- Eliminazione account: profilo e token spariscono, la formazione resta.
@@ -835,7 +835,7 @@ do $$ begin
   assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3' and kind = 'nero_oro') = 2,
     'nero/oro per portiere e difensore';
   assert (select body from messages where meta->>'type' = 'special_cards')
-         like 'Carte speciali della _ª giornata (Milan AC 4–0 Lupi): POR e2 +5, DIF e1 +4. Blu elettrico: Rossi (tripletta contro Lupi).',
+         like 'Carte speciali della _ª giornata (MILANAC 4–0 Lupi): POR e2 +5, DIF e1 +4. Blu elettrico: Rossi (tripletta contro Lupi).',
     'annuncio in Comunicazioni';
   -- Nuova assegnazione: chi non è più in elenco perde la carta, i bonus si aggiornano, l'annuncio resta uno.
   assert assign_special_cards('00000000-0000-0000-0000-0000000000b3',
@@ -1492,7 +1492,7 @@ do $$ begin
          > now() - interval '1 hour', 'ora di pubblicazione dal server, non dal telefono';
   assert (select body from messages where meta->>'type' = 'formation'
           and meta->>'id' = current_setting('test.formazione')
-          order by created_at desc limit 1) like 'Formazione Milan AC Futuro (4-4-2): POR VERDI, DC %',
+          order by created_at desc limit 1) like 'Formazione MILANAC FUTURO (4-4-2): POR VERDI, DC %',
     'annuncio con i soli giocatori attivi (f1 è uscito dal club)';
 end $$;
 -- La bozza cambia portiere senza pubblicare: il risultato prende quello pubblicato.
@@ -1534,13 +1534,13 @@ select pg_temp.expect_error(
 select pg_temp.expect_error($q$select save_club_links('[]')$q$, 'Solo il Direttivo');
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
 select save_standings('00000000-0000-0000-0000-0000000000aa',
-  '[{"team_name": " Milan AC ", "won": 3, "drawn": 1, "goals_for": 9, "goals_against": 2, "is_us": true},
+  '[{"team_name": " MILANAC ", "won": 3, "drawn": 1, "goals_for": 9, "goals_against": 2, "is_us": true},
     {"team_name": "Rivali", "lost": 2}]');
 do $$ begin
   assert (select count(*) from tournament_standings where tournament_id = '00000000-0000-0000-0000-0000000000aa') = 2,
     'classifica salvata';
   assert (select won from tournament_standings where tournament_id = '00000000-0000-0000-0000-0000000000aa'
-          and team_name = 'Milan AC' and is_us) = 3, 'righe complete';
+          and team_name = 'MILANAC' and is_us) = 3, 'righe complete';
 end $$;
 select save_standings('00000000-0000-0000-0000-0000000000aa', '[{"team_name": "Rivali", "won": 1}]');
 select pg_temp.expect_error(
@@ -1602,7 +1602,7 @@ reset role;
 do $$ begin
   assert (select body from messages where meta->>'type' = 'new_member'
           and meta->>'member' = '00000000-0000-0000-0000-0000000000a1')
-         like 'Nuovo ingresso: Rossi (Mario Rossi) · Giocatore · Milan AC · ATT.%', 'avviso del nuovo ingresso';
+         like 'Nuovo ingresso: Rossi (Mario Rossi) · Giocatore · MILANAC · ATT.%', 'avviso del nuovo ingresso';
   assert (select c.slug from messages m join channels c on c.id = m.channel_id
           where m.meta->>'type' = 'new_member' and m.meta->>'member' = '00000000-0000-0000-0000-0000000000a1')
          = 'direttivo', 'nella Sala Direttivo';
@@ -1621,7 +1621,7 @@ reset role;
 do $$ begin
   assert (select body from messages where meta->>'type' = 'new_member'
           and meta->>'member' = '00000000-0000-0000-0000-0000000000ab')
-         = 'Nuovo ingresso: NUOVO (Nuovo Arrivato) · Giocatore · Milan AC Futuro · DC. Se non lo conoscete, toglietelo dalla Rosa.',
+         = 'Nuovo ingresso: NUOVO (Nuovo Arrivato) · Giocatore · MILANAC FUTURO · DC. Se non lo conoscete, toglietelo dalla Rosa.',
     'avviso con nome, ruolo e squadra';
   assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 1, 'e la notifica al Direttivo';
 end $$;
@@ -1915,7 +1915,7 @@ do $$ begin
 end $$;
 
 -- ================================================================ sondaggi in chat (0030)
--- Tre giocatori: 5a1 e 5a2 nella squadra Milan AC, 5a3 solo nel Futuro.
+-- Tre giocatori: 5a1 e 5a2 nella squadra MILANAC, 5a3 solo nel Futuro.
 reset role;
 select pg_temp.as_user(null);
 insert into auth.users (id, email) values
@@ -2323,7 +2323,7 @@ do $$ begin
     'battitori pubblicati';
   assert (select body from messages where meta->>'type' = 'formation'
           and meta->>'id' = current_setting('test.battitori') order by created_at desc limit 1)
-    like 'Formazione Milan AC Futuro (4-4-2): POR DIDA, ES GATTUSO, ATT PIRLO%'
+    like 'Formazione MILANAC FUTURO (4-4-2): POR DIDA, ES GATTUSO, ATT PIRLO%'
          || E'\nPalle inattive: rigori PIRLO · punizioni PIRLO · angoli sx GATTUSO, dx PIRLO',
     'annuncio con la riga dei battitori';
 end $$;
@@ -2398,7 +2398,7 @@ do $$ begin
   assert club_evening('2030-01-04', array['milanac']), 'venerdì: serata';
   assert not club_evening('2030-01-05', array['milanac', 'futuro']), 'sabato senza eventi: niente serata';
   assert pg_temp.membri(null) > pg_temp.membri('futuro') and pg_temp.membri('futuro') > 0,
-    'ci sono giocatori solo del Milan AC e giocatori del Futuro';
+    'ci sono giocatori solo del MILANAC e giocatori del Futuro';
 end $$;
 -- Sabato 5: c'è solo una riunione, che non chiede presenze.
 insert into events (type, title, starts_at, created_at) values
@@ -2431,7 +2431,7 @@ do $$ begin
     'assenze automatiche della domenica per il Futuro';
   assert (select count(*) from attendance a join profiles p on p.id = a.player_id
           where a.date = '2030-01-06' and not 'futuro' = any(p.teams)) = 0,
-    'chi gioca solo nel Milan AC non risulta assente';
+    'chi gioca solo nel MILANAC non risulta assente';
 end $$;
 -- Venerdì 4, senza eventi: l'allenamento c'è per tutti, come sempre.
 select set_config('milanac.now', '2030-01-04 18:05 Europe/Rome', false);
