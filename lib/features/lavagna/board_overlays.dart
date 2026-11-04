@@ -40,10 +40,13 @@ const deliveryZoneNames = [
   'corto',
 ];
 
-/// "1 primo palo · 2 dischetto · ..." (per i suggerimenti).
-String get deliveryZoneLegend =>
-    [for (final (i, name) in deliveryZoneNames.indexed) '${i + 1} $name']
-        .join(' · ');
+/// "1 primo palo · 2 dischetto · ..." (per i suggerimenti). Dentro ogni coppia
+/// numero e nome gli spazi non vanno a capo: la riga si spezza solo tra una zona e
+/// l'altra, mai tra "2" e "dischetto".
+String get deliveryZoneLegend => [
+  for (final (i, name) in deliveryZoneNames.indexed)
+    '${i + 1} $name'.replaceAll(' ', '\u00a0'),
+].join(' · ');
 
 /// Le cinque zone di battuta nell'area della metà campo dove si batte la palla
 /// inattiva dello schema (in alto la loro, in basso la nostra per "Angolo contro"):

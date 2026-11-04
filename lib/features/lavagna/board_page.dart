@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -53,10 +53,12 @@ enum BoardTool {
     pallone =>
       'Tocca un compagno per passargli la palla, l\'erba per giocarla nello '
           'spazio, la porta per tirare. Trascina il pallone per spostarlo o '
-          'darlo a un giocatore.',
+          'darlo a un giocatore; tocca di nuovo "Pallone" per le sue opzioni.',
     fuoco =>
       'Tieni premuto e muovi il dito: la heatmap si accumula dove insisti.',
-    freccia => 'Trascina da un punto all\'altro. Doppio tocco per le frecce tratteggiate.',
+    freccia =>
+      'Trascina da un punto all\'altro: le frecce oro sono i movimenti. Doppio '
+          'tocco per le frecce tratteggiate.',
   };
 }
 
@@ -65,20 +67,22 @@ enum BoardTool {
 const _placeBallHint =
     'Tocca il campo per mettere il pallone, o un gettone per darglielo.';
 
-/// Chi guarda soltanto: i colori e le linee.
+/// Chi guarda soltanto: i colori, le linee bianche del pallone e le frecce oro.
 const _readOnlyHint =
-    'Oro: noi · nero: avversari. Palla: linea continua il passaggio, ondulata '
-    'la conduzione, spessa il tiro, a puntini il cross.\nSolo il Direttivo '
-    'disegna sulla lavagna.';
+    'Oro: noi · nero: avversari. Linee bianche, la palla: continua il '
+    'passaggio, ondulata la conduzione, a puntini il cross, spessa il tiro. '
+    'Frecce\u00a0oro:\u00a0i\u00a0movimenti.\nSolo il Direttivo disegna sulla '
+    'lavagna.';
 
 /// Chi guarda uno schema con le posizioni per zona: può spostare solo il pallone.
 const _ballOnlyHint =
     'Sposta il pallone: vedi dove devi stare quando la palla è in quella zona.';
 
-/// "Pallone" con le zone di battuta accese: la legenda dei numeri.
+/// "Pallone" con le zone di battuta accese: la legenda dei numeri. Nelle zone il
+/// tocco è sempre un cross (a chi sta lì, o nel punto).
 String get _crossHint =>
-    'Tocca una zona per il cross: $deliveryZoneLegend. Un compagno per '
-    'passargli la palla, la porta per tirare.';
+    'Cross: tocca una zona ($deliveryZoneLegend), arriva a chi ci sta. Fuori '
+    'dalle zone: un compagno per il passaggio, la porta per il tiro.';
 
 /// "Posizioni per zona" (Direttivo): la zona del pallone e come si usa.
 String _positionsHint(int? zone, {required bool saved}) => zone == null
@@ -88,8 +92,9 @@ String _positionsHint(int? zone, {required bool saved}) => zone == null
           'giocatori e salva: quando il pallone entra in una zona salvata, '
           'vanno lì da soli.';
 
-/// Nome breve della squadra sulla lavagna.
-String _teamName(Team team) => team == Team.milanac ? 'MILANAC' : 'Futuro';
+/// Nome breve della squadra sulla lavagna: MILANAC e FUTURO, come le etichette delle
+/// squadre nel resto dell'app.
+String _teamName(Team team) => team.short;
 
 /// Apre la lavagna a schermo intero (nuova o da uno schema salvato).
 Future<void> openBoard(
@@ -210,8 +215,8 @@ BoardState _moduleBoard(
           final m = rosa.where((x) => x.id == players[i]).firstOrNull;
           return BoardToken(
             id: 'f$i',
-            x: slot.x,
-            y: slot.y,
+            x: fieldCoord(slot.x),
+            y: fieldCoord(slot.y),
             playerId: m?.id,
             label: m?.shirtNumber?.toString() ?? slot.label,
             name: m?.displayName ?? '',
@@ -365,7 +370,7 @@ class _BoardPageState extends ConsumerState<BoardPage>
       final formation = ref.read(formationProvider(team));
       final board = _moduleBoard(defaultModule, team, rosa, formation.value);
       _editor = BoardEditor(board);
-      if (rosa.isEmpty || !formation.hasValue) _fillNewBoard(board);
+      if (rosa.isEmpty || !formation.hasValue) _fillNewBoard();
     }
     _editor.addListener(_onChanged);
   }
@@ -469,10 +474,11 @@ class _BoardPageState extends ConsumerState<BoardPage>
   }
 
   /// I giocatori della lavagna nuova arrivati dalla rete: si mettono solo se nel
-  /// frattempo non si è iniziato a disegnare (niente lavoro cancellato).
-  Future<void> _fillNewBoard(BoardState first) async {
+  /// frattempo non si è iniziato a disegnare (niente lavoro cancellato; la
+  /// registrazione appena partita non conta, la lavagna è ancora quella).
+  Future<void> _fillNewBoard() async {
     final full = await _loadModule(defaultModule, Team.milanac);
-    if (!mounted || !identical(_editor.state, first) || _editor.canUndo) return;
+    if (!mounted || _editor.moves > 0) return;
     _recording ? _editor.apply(Reset(full)) : _editor.load(full);
   }
 
@@ -494,7 +500,12 @@ class _BoardPageState extends ConsumerState<BoardPage>
 
   // ---------------------------------------------------------------- gesti
 
-  (double, double) _field(Offset local) => BoardPainter.toField(_size, local);
+  /// Il punto del campo sotto il dito, con i tre decimali del JSON: le mosse dal vivo
+  /// sono le stesse che rifà il replay (anche sulle soglie delle zone).
+  (double, double) _field(Offset local) {
+    final (x, y) = BoardPainter.toField(_size, local);
+    return (fieldCoord(x), fieldCoord(y));
+  }
 
   /// Il gettone sotto il dito: il più vicino entro [reach] raggi (di serie si prende
   /// anche toccando poco fuori, bersaglio di almeno 44 px).
@@ -566,9 +577,12 @@ class _BoardPageState extends ConsumerState<BoardPage>
     );
   }
 
-  /// Pallone: un tocco su un gettone gli passa la palla, sulla porta tira, su una
-  /// zona di battuta crossa lì, sull'erba la gioca nello spazio (anche da palla
-  /// libera, da dov'è). Senza pallone in campo il tocco lo mette.
+  /// Pallone: con le zone di battuta accese un tocco in una zona è sempre un cross
+  /// (prima della porta, che sta dentro le zone del primo e del secondo palo): sul
+  /// compagno che sta lì, che riceve la palla, altrimenti libero nel punto toccato.
+  /// Fuori dalle zone un tocco su un gettone gli passa la palla, sulla porta tira,
+  /// sull'erba la gioca nello spazio (anche da palla libera, da dov'è). Senza pallone
+  /// in campo il tocco lo mette.
   void _ballTap(Offset local) {
     final ball = _editor.state.ball;
     final (x, y) = _field(local);
@@ -580,22 +594,17 @@ class _BoardPageState extends ConsumerState<BoardPage>
       return;
     }
     if (_onBall(local)) return;
-    final goal = _goalAt(local);
-    // Su una zona di battuta il cross, a meno che il dito non sia proprio su un
-    // compagno: a lui il passaggio.
-    final zone = goal == null ? _zoneAt(local) : null;
-    if (zone != null) {
-      final mate = _hit(local, reach: 1.1);
-      if (mate != null && mate.side != 'avversari') {
-        if (mate.id == ball.holder) return;
-        Haptics.light();
-        _editor.apply(KickBall(x: mate.x, y: mate.y, to: mate.id));
-      } else {
-        Haptics.light();
-        _editor.apply(KickBall(x: zone.x, y: zone.y, cross: true));
-      }
+    if (_zoneAt(local) != null) {
+      final hit = _hit(local, reach: 1.1);
+      final mate = hit != null && hit.side != 'avversari' ? hit : null;
+      if (mate != null && mate.id == ball.holder) return;
+      Haptics.light();
+      _editor.apply(
+        KickBall(x: mate?.x ?? x, y: mate?.y ?? y, to: mate?.id, cross: true),
+      );
       return;
     }
+    final goal = _goalAt(local);
     // Un gettone toccato in pieno vince sulla porta (il portiere sulla linea),
     // la porta sul gettone solo sfiorato.
     final t = _hit(local, reach: 1.1) ?? (goal == null ? _hit(local) : null);
@@ -751,15 +760,16 @@ class _BoardPageState extends ConsumerState<BoardPage>
     _notice(_dashed ? 'Frecce tratteggiate.' : 'Frecce continue.');
   }
 
-  /// Tenendo premuto un gettone lo si toglie; il pallone invece non si toglie per
-  /// sbaglio: apre le sue opzioni.
+  /// "Gettoni": tenendo premuto un gettone lo si toglie; il pallone invece non si
+  /// toglie per sbaglio: apre le sue opzioni. Negli altri strumenti la pressione
+  /// lunga non c'è (vedi [build]): un dito fermo prima di muoversi trascina lo
+  /// stesso (il pallone, un gettone, la heatmap, la freccia).
   void _onLongPressStart(LongPressStartDetails d) {
-    if (_tool != BoardTool.giocatore && _tool != BoardTool.pallone) return;
+    if (_tool != BoardTool.giocatore) return;
     if (_onBall(d.localPosition)) {
       _ballOptions();
       return;
     }
-    if (_tool != BoardTool.giocatore) return;
     final hit = _hit(d.localPosition);
     if (hit == null) return;
     Haptics.medium();
@@ -897,47 +907,10 @@ class _BoardPageState extends ConsumerState<BoardPage>
     if (choice != null && mounted) _editor.apply(choice);
   }
 
-  /// "Vista": gli interruttori di cosa si disegna sul campo (si salvano con lo schema
-  /// e finiscono nel replay). Ne arriveranno altri: il foglio li elenca tutti.
-  Future<void> _showView({
-    required bool readOnly,
-  }) => showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (c) => SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: ValueListenableBuilder<BoardState>(
-          valueListenable: _editor,
-          builder: (c, s, _) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SectionLabel('Vista'),
-              const SizedBox(height: 4),
-              Text(
-                readOnly
-                    ? 'Cosa mostrare sul campo.'
-                    : 'Cosa mostrare sul campo: si salva con lo schema e si '
-                          'vede nel replay.',
-                style: TextStyle(fontSize: 14, color: c.pal.textMuted),
-              ),
-              const SizedBox(height: 6),
-              for (final o in BoardOverlay.values)
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(o.label),
-                  subtitle: Text(o.description),
-                  value: s.shows(o),
-                  onChanged: (on) => _editor.apply(SetView(o.key, on)),
-                ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
+  /// "Vista": accende o spegne [o] (si salva con lo schema e finisce nel replay). Il
+  /// menu si chiude e il campo cambia subito.
+  void _toggleView(BoardOverlay o) =>
+      _editor.apply(SetView(o.key, !_editor.state.shows(o)));
 
   /// Modulo e squadra in alto: una lavagna nuova dal modulo, con i giocatori della
   /// formazione della squadra, o uno schema da palla inattiva (si può annullare).
@@ -1305,7 +1278,11 @@ class _BoardPageState extends ConsumerState<BoardPage>
             team: Team.parse(shown.team) ?? Team.milanac,
             title: widget.tactic?.title,
             onTap: readOnly ? null : _pickModule,
-            onView: () => _showView(readOnly: readOnly),
+            view: _ViewMenu(
+              board: _editor,
+              readOnly: readOnly,
+              onToggle: _toggleView,
+            ),
           ),
         ),
         // Come nella tavola: il campo subito sotto la barra in alto e il suggerimento
@@ -1331,6 +1308,7 @@ class _BoardPageState extends ConsumerState<BoardPage>
                             shift: _shift,
                             target: _target,
                             selectedId: _selectedId,
+                            showSavedZones: !readOnly,
                           );
                           if (ballOnly) {
                             return GestureDetector(
@@ -1352,7 +1330,11 @@ class _BoardPageState extends ConsumerState<BoardPage>
                             onDoubleTap: _tool == BoardTool.freccia
                                 ? _onDoubleTap
                                 : null,
-                            onLongPressStart: _onLongPressStart,
+                            // Solo dove serve: con la pressione lunga nell'arena un
+                            // dito fermo mezzo secondo non trascinerebbe più.
+                            onLongPressStart: _tool == BoardTool.giocatore
+                                ? _onLongPressStart
+                                : null,
                             onPanStart: _onPanStart,
                             onPanUpdate: _onPanUpdate,
                             onPanEnd: _onPanEnd,
@@ -1521,7 +1503,7 @@ class _BoardInfoBar extends StatelessWidget implements PreferredSizeWidget {
   const _BoardInfoBar({
     required this.module,
     required this.team,
-    required this.onView,
+    required this.view,
     this.title,
     this.onTap,
   });
@@ -1532,8 +1514,8 @@ class _BoardInfoBar extends StatelessWidget implements PreferredSizeWidget {
   /// Apre la scelta di modulo e squadra (null = solo da guardare).
   final VoidCallback? onTap;
 
-  /// Apre gli interruttori di "Vista".
-  final VoidCallback onView;
+  /// Il pulsante di "Vista", in fondo alla barra.
+  final Widget view;
 
   @override
   Size get preferredSize => const Size.fromHeight(47);
@@ -1565,7 +1547,7 @@ class _BoardInfoBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _ViewButton(onTap: onView),
+              view,
             ],
           ),
         );
@@ -1595,18 +1577,24 @@ class _ZoneBar extends StatelessWidget {
     final z = zone;
     return Row(
       children: [
+        // Corta, su una riga anche a 320 dp con il cestino accanto (il suggerimento
+        // sopra dice già che si salvano le posizioni della zona del pallone).
         Expanded(
-          child: FilledButton.icon(
-            onPressed: z == null ? null : () => onSave(z),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 44),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-            icon: const Icon(Icons.push_pin_outlined, size: 18),
-            label: const Text(
-              'Salva posizioni per questa zona',
-              textAlign: TextAlign.center,
-              maxLines: 2,
+          child: Tooltip(
+            message: 'Salva le posizioni per questa zona',
+            child: FilledButton.icon(
+              onPressed: z == null ? null : () => onSave(z),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 44),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              icon: const Icon(Icons.push_pin_outlined, size: 18),
+              label: const Text(
+                'Salva questa zona',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ),
@@ -1623,28 +1611,99 @@ class _ZoneBar extends StatelessWidget {
   }
 }
 
-/// "Vista": l'occhio tondo in fondo alla barra, alto come le pillole.
-class _ViewButton extends StatelessWidget {
-  const _ViewButton({required this.onTap});
-  final VoidCallback onTap;
+/// "Vista": l'occhio tondo in fondo alla barra, alto come le pillole. Apre un menu
+/// piccolo appeso all'occhio (non un foglio che copre il campo): ogni riga accende o
+/// spegne un disegno, il menu si chiude e il campo cambia subito. Si salva con lo
+/// schema e finisce nel replay; ne arriveranno altri, il menu li elenca tutti.
+class _ViewMenu extends StatelessWidget {
+  const _ViewMenu({
+    required this.board,
+    required this.readOnly,
+    required this.onToggle,
+  });
+  final ValueListenable<BoardState> board;
+  final bool readOnly;
+  final ValueChanged<BoardOverlay> onToggle;
 
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
-    final shape = CircleBorder(side: BorderSide(color: p.borderStrong));
-    return Tooltip(
-      message: 'Vista',
-      child: Material(
-        type: MaterialType.transparency,
-        shape: shape,
-        child: InkWell(
-          customBorder: shape,
-          onTap: onTap,
-          child: SizedBox.square(
-            dimension: 36,
-            child: Icon(Icons.visibility_outlined, size: 18, color: p.text),
+    return PopupMenuButton<BoardOverlay>(
+      tooltip: 'Vista',
+      position: PopupMenuPosition.under,
+      // Stretto e basso: copre solo un angolo del campo, e si chiude al tocco.
+      constraints: const BoxConstraints(maxWidth: 240),
+      menuPadding: const EdgeInsets.symmetric(vertical: 4),
+      borderRadius: BorderRadius.circular(18),
+      onSelected: onToggle,
+      itemBuilder: (c) {
+        final s = board.value;
+        return [
+          PopupMenuItem<BoardOverlay>(
+            enabled: false,
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: const SectionLabel('Vista'),
           ),
+          for (final o in BoardOverlay.values)
+            PopupMenuItem<BoardOverlay>(
+              value: o,
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _ViewRow(overlay: o, on: s.shows(o)),
+            ),
+        ];
+      },
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          shape: CircleBorder(side: BorderSide(color: p.borderStrong)),
         ),
+        child: SizedBox.square(
+          dimension: 36,
+          child: Icon(Icons.visibility_outlined, size: 18, color: p.text),
+        ),
+      ),
+    );
+  }
+}
+
+/// Una riga di "Vista": la casella (piena se acceso) e il nome; la descrizione la
+/// legge il lettore dello schermo.
+class _ViewRow extends StatelessWidget {
+  const _ViewRow({required this.overlay, required this.on});
+  final BoardOverlay overlay;
+  final bool on;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Semantics(
+      checked: on,
+      hint: overlay.description,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            on
+                ? Icons.check_box_rounded
+                : Icons.check_box_outline_blank_rounded,
+            size: 22,
+            color: on ? p.accentText : p.textMuted,
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              overlay.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: p.text,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

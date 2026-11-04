@@ -141,17 +141,13 @@ Future<void> _drag(
   if (settle) await tester.pumpAndSettle();
 }
 
-/// Accende o spegne un interruttore di "Vista".
+/// Accende o spegne un interruttore di "Vista" (il menu si chiude da solo).
 Future<void> _toggleView(WidgetTester tester, String label) async {
   await tester.tap(find.byTooltip('Vista'));
   await tester.pumpAndSettle();
-  final row = find.text(label);
-  await tester.ensureVisible(row);
+  await tester.tap(find.text(label));
   await tester.pumpAndSettle();
-  await tester.tap(row);
-  await tester.pumpAndSettle();
-  await tester.binding.handlePopRoute();
-  await tester.pumpAndSettle();
+  expect(find.text('VISTA'), findsNothing);
 }
 
 void main() {
@@ -608,14 +604,14 @@ void main() {
             height: height,
             brightness: brightness,
           );
-          expect(find.text('Salva posizioni per questa zona'), findsNothing);
+          expect(find.text('Salva questa zona'), findsNothing);
           await _toggleView(tester, 'Posizioni per zona');
           expect(_live(tester).shows(BoardOverlay.zonePositions), isTrue);
           expect(
             find.textContaining('Centrocampo · centro · da salvare'),
             findsOneWidget,
           );
-          final save = find.text('Salva posizioni per questa zona');
+          final save = find.text('Salva questa zona');
           expect(save, findsOneWidget);
           final p = tester.renderObject<RenderParagraph>(save);
           expect(p.didExceedMaxLines, isFalse);
@@ -632,6 +628,16 @@ void main() {
             find.byTooltip('Cancella le posizioni di questa zona'),
             findsOneWidget,
           );
+          // Con il cestino accanto il pulsante resta su una riga, intero.
+          final saved = tester.renderObject<RenderParagraph>(
+            find.text('Salva questa zona'),
+          );
+          expect(saved.didExceedMaxLines, isFalse);
+          expect(
+            saved.size.height,
+            lessThan(saved.text.style!.fontSize! * 2),
+            reason: 'una riga sola',
+          );
 
           // Il pallone in attacco a sinistra, la punta sul primo palo, si salva.
           await _drag(tester, (.5, .5), (.14, .2));
@@ -642,7 +648,7 @@ void main() {
           await _drag(tester, (.5, .17), (.3, .08));
           final moved = _pos(_live(tester), 'f9');
           expect(moved.$2, lessThan(.12));
-          await tester.tap(find.text('Salva posizioni per questa zona'));
+          await tester.tap(find.text('Salva questa zona'));
           await tester.pumpAndSettle();
           expect(_live(tester).positions.keys, unorderedEquals([0, 4]));
 
@@ -682,7 +688,7 @@ void main() {
 
           // Spenta, la barra se ne va.
           await _toggleView(tester, 'Posizioni per zona');
-          expect(find.text('Salva posizioni per questa zona'), findsNothing);
+          expect(find.text('Salva questa zona'), findsNothing);
           expect(_live(tester).positions.keys, [0], reason: 'restano salvate');
         },
       );
@@ -716,7 +722,7 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Salva'), findsNothing);
-        expect(find.text('Salva posizioni per questa zona'), findsNothing);
+        expect(find.text('Salva questa zona'), findsNothing);
         // La modalità si accende da sola per chi guarda.
         expect(_live(tester).shows(BoardOverlay.zonePositions), isTrue);
 

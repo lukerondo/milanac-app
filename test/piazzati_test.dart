@@ -232,18 +232,22 @@ void main() {
         expect(t.y, greaterThanOrEqualTo(.5), reason: t.id);
       }
       expect(_spotToken(ko, 1).id, 'f9', reason: 'la punta del 4-3-3');
-      // Angolo contro: la nostra bandierina in basso, portiere sulla linea, due sui pali
-      // e una punta su.
+      // Angolo contro: la nostra bandierina in basso, il portiere tra i pali (con il
+      // nome nella lavagna), la zona attorno alla nostra area e una punta su.
       final ac = board(SetPieceTemplate.angoloContro);
       expect((ac.ball!.x < .05, ac.ball!.y > .97), (true, true));
-      expect(_spotToken(ac, 0).y, greaterThan(.96));
-      expect(ac.tokens.where((t) => t.y > .96), hasLength(3));
-      expect(ac.tokens.where((t) => t.y < .65), hasLength(1));
+      expect(_spotToken(ac, 0).y, inInclusiveRange(.9, .94));
       expect(
         ac.tokens.where((t) => t.y > 1 - .14 && (t.x - .5).abs() < .237),
-        hasLength(8),
-        reason: 'la zona in area',
+        hasLength(3),
+        reason: 'in area: il portiere e due ai lati dell\'area piccola',
       );
+      expect(
+        ac.tokens.where((t) => t.y > .75),
+        hasLength(9),
+        reason: 'la zona attorno all\'area',
+      );
+      expect(ac.tokens.where((t) => t.y < .65), hasLength(1));
     },
   );
 
@@ -411,7 +415,18 @@ void main() {
       expect(deliveryZoneAt(s, z.x, z.y)?.n, z.n);
     }
     expect(deliveryZoneAt(s, .5, .6), isNull);
-    expect(deliveryZoneLegend, startsWith('1 primo palo · 2 dischetto'));
+    // La legenda va a capo solo tra una zona e l'altra: dentro "2 dischetto" gli
+    // spazi non si spezzano.
+    expect(
+      deliveryZoneLegend,
+      startsWith('1\u00a0primo\u00a0palo · 2\u00a0dischetto'),
+    );
+    final pairs = deliveryZoneLegend.split(' · ');
+    expect(pairs, hasLength(5));
+    for (final pair in pairs) {
+      expect(pair, isNot(contains(' ')), reason: pair);
+    }
+    expect(pairs[3], '4\u00a0limite\u00a0dell\'area');
     // Senza palla inattiva: la loro area, primo palo a sinistra.
     final plain = deliveryZones(const BoardState());
     expect(plain[0].x, lessThan(.5));
@@ -450,10 +465,23 @@ void main() {
     final ball = editor.state.ball!;
     expect((ball.x, ball.y, ball.holder), (z2.x, z2.y, null));
     expect(editor.lastKick!.line, 1, reason: 'il volo del cross');
-    // Un cross col "to" non va al gettone: resta nella zona.
+    // Il cross su un compagno arriva a lui: la palla gli va al piede, la linea
+    // (sempre a puntini) finisce sul gettone.
     act(const Undo());
-    act(KickBall(x: z2.x, y: z2.y, cross: true, to: 'f9'));
-    expect(editor.state.ball!.holder, isNull);
+    final f9 = editor.state.tokenById('f9')!;
+    act(KickBall(x: f9.x, y: f9.y, cross: true, to: 'f9'));
+    expect(editor.state.ball!.holder, 'f9');
+    line = editor.state.lines.single;
+    expect((line.kind, line.toPlayer), (BallLineKind.cross, true));
+    expect((line.x2, line.y2), (f9.x, f9.y));
+    expect(
+      (
+        const KickBall(x: .5, y: .1, cross: true).version,
+        KickBall(x: f9.x, y: f9.y, cross: true, to: 'f9').version,
+      ),
+      (2, 4),
+      reason: 'una versione che non lo conosce lo rifarebbe libero nella zona',
+    );
     // Poi un passaggio e un altro cross: la numerazione continua.
     act(const KickBall(x: .5, y: .2, to: 'f7'));
     act(
@@ -497,7 +525,7 @@ void main() {
 
     // Il replay rifà tutto uguale, a ogni istante.
     final data = ReplayData.fromBytes(recorder.finish(now + 500).toBytes());
-    expect(data.version, 2, reason: 'il cross non chiede una versione nuova');
+    expect(data.version, 4, reason: 'c\'è un cross su un compagno');
     expect(_json(data.finalState), _json(editor.state));
     for (final MapEntry(key: t, value: state) in live.entries) {
       expect(_json(data.stateAt(t)), state, reason: 'a $t ms');
@@ -569,10 +597,11 @@ void main() {
           // Con "Pallone" il suggerimento dà la legenda delle zone.
           await tester.tap(find.text('Pallone'));
           await tester.pumpAndSettle();
-          expect(find.textContaining('1 primo palo'), findsOneWidget);
-          expect(find.textContaining('5 corto'), findsOneWidget);
+          expect(find.textContaining('1\u00a0primo\u00a0palo'), findsOneWidget);
+          expect(find.textContaining('5\u00a0corto'), findsOneWidget);
 
-          // Un tocco sulla zona 4 (lontano dai gettoni): cross, a puntini.
+          // Un tocco sulla zona 4 (lontano dai gettoni): cross, a puntini, e la
+          // palla libera nel punto toccato.
           final z4 = deliveryZones(s)[3];
           await _tapField(tester, z4.x + .06, z4.y - .005);
           await tester.pump(const Duration(milliseconds: 100));
@@ -580,18 +609,34 @@ void main() {
           await tester.pumpAndSettle();
           s = _live(tester);
           expect(s.lines.single.kind, BallLineKind.cross);
-          expect((s.ball!.x, s.ball!.y), (z4.x, z4.y));
+          expect(s.ball!.holder, isNull);
+          expect(s.ball!.x, closeTo(z4.x + .06, .003));
+          expect(s.ball!.y, closeTo(z4.y - .005, .003));
 
-          // Sulla zona del primo palo c'è un compagno: a lui il passaggio.
-          final mate = s.tokens.firstWhere(
-            (t) => deliveryZones(s)[0].contains(t.x, t.y),
+          // Chi blocca il portiere sta sul bordo della zona del primo palo: il
+          // tocco su di lui è un cross che arriva a lui (non un passaggio).
+          final screen = _spotToken(s, 5);
+          expect(
+            deliveryZoneAt(s, screen.x, screen.y, slackX: .02, slackY: .02),
+            isNotNull,
           );
-          await _tapField(tester, mate.x, mate.y);
+          await _tapField(tester, screen.x, screen.y);
+          await tester.pumpAndSettle();
+          s = _live(tester);
+          expect(s.lines.last.kind, BallLineKind.cross);
+          expect(s.lines.last.toPlayer, isTrue);
+          expect(s.ball!.holder, screen.id);
+          expect([for (final l in s.lines) l.n], [1, 2]);
+
+          // Fuori dalle zone, un compagno: passaggio.
+          final edge = _spotToken(s, 7);
+          expect(deliveryZoneAt(s, edge.x, edge.y), isNull);
+          await _tapField(tester, edge.x, edge.y);
           await tester.pumpAndSettle();
           s = _live(tester);
           expect(s.lines.last.kind, BallLineKind.pass);
-          expect(s.ball!.holder, mate.id);
-          expect([for (final l in s.lines) l.n], [1, 2]);
+          expect(s.ball!.holder, edge.id);
+          expect([for (final l in s.lines) l.n], [1, 2, 3]);
 
           // Si salva in "Piazzati" (già scelto).
           await tester.tap(find.text('Salva'));
@@ -607,8 +652,8 @@ void main() {
           await tester.tap(find.text('Annulla').last);
           await tester.pumpAndSettle();
 
-          // Annulla: via il passaggio, il cross e poi lo schema.
-          for (var i = 0; i < 3; i++) {
+          // Annulla: via il passaggio, i due cross e poi lo schema.
+          for (var i = 0; i < 4; i++) {
             await tester.tap(find.text('Annulla'));
             await tester.pumpAndSettle();
           }

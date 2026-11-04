@@ -235,37 +235,37 @@ class BallLine {
 
 /// Gli interruttori di "Vista": cosa si disegna sopra il campo. Si salvano con la
 /// lavagna, così schemi e replay mostrano le stesse cose. Per aggiungerne uno basta
-/// un valore qui (più il suo disegno): il foglio "Vista" li elenca tutti.
+/// un valore qui (più il suo disegno): il menu "Vista" li elenca tutti, con la
+/// descrizione corta (due righe al massimo).
 enum BoardOverlay {
   ballLines(
     'bl',
     'Linee della palla',
-    'Passaggi, conduzioni (ondulate), tiri e cross (a puntini), numerati.',
+    'Bianche e numerate: passaggi, conduzioni (ondulate), cross (a puntini) e '
+        'tiri (spesse).',
     on: true,
   ),
   zones(
     'zb',
     'Zone di battuta',
-    '1 primo palo · 2 dischetto · 3 secondo palo · 4 limite dell\'area · '
-        '5 corto. Si accendono da sole negli schemi da palla inattiva.',
+    'Dove crossare: 1\u00a0primo\u00a0palo, 2\u00a0dischetto, '
+        '3\u00a0secondo\u00a0palo, 4\u00a0limite, 5\u00a0corto.',
   ),
   offside(
     'fg',
     'Fuorigioco',
-    'La linea del penultimo avversario e la bandierina su chi è oltre; in oro '
-        'la nostra linea difensiva.',
+    'La linea del penultimo avversario e chi è oltre; in oro la nostra.',
   ),
   units(
     'lr',
     'Linee di reparto',
-    'Difesa, centrocampo e attacco come dice il modulo, con i metri tra '
-        'difesa e centrocampo.',
+    'Difesa, centrocampo e attacco, con i metri tra difesa e centrocampo.',
   ),
   zonePositions(
     'pz',
     'Posizioni per zona',
-    'Dove stare con la palla in ognuna delle 9 zone del campo: spostando il '
-        'pallone, i giocatori vanno alle posizioni salvate.',
+    'Dove stare con la palla in ognuna delle 9 zone: i giocatori seguono il '
+        'pallone.',
   );
 
   const BoardOverlay(this.key, this.label, this.description, {this.on = false});
@@ -327,7 +327,17 @@ String ballZoneName(int zone) =>
 /// Dove stanno i gettoni (id → x, y) con la palla in una zona.
 typedef ZonePlan = Map<String, (double, double)>;
 
-double _r(double v) => (v * 1000).round() / 1000;
+/// Una coordinata del campo come la scrive il JSON (tre decimali, circa 7 cm): la
+/// lavagna lavora sempre con queste, così la mossa dal vivo e la stessa mossa letta
+/// dal replay danno esattamente lo stesso risultato (soglie delle zone comprese).
+double fieldCoord(double v) => (v * 1000).round() / 1000;
+
+double _r(double v) => fieldCoord(v);
+
+/// La lavagna come la rilegge il replay: passata dal JSON e ritorno.
+BoardState canonicalBoard(BoardState s) => BoardState.fromJson(
+  (jsonDecode(jsonEncode(s.toJson())) as Map).cast<String, dynamic>(),
+);
 
 /// Lo stato della lavagna: modulo di partenza, squadra, gettoni, frecce, heatmap,
 /// pallone con le sue linee, la vista, la palla inattiva dello schema e le posizioni
@@ -538,8 +548,11 @@ sealed class BoardCommand {
   Map<String, dynamic> toJson();
 
   /// La versione del replay che serve per rifarla: 2 per il pallone e la vista
-  /// (un cross, per chi non lo conosce, è un passaggio), 3 per le posizioni per zona.
+  /// (un cross, per chi non lo conosce, è un passaggio), 3 per le posizioni per zona,
+  /// 4 per il cross che arriva a un compagno (prima un cross finiva sempre libero
+  /// nella zona: il replay andrebbe diversamente).
   int get version => switch (this) {
+    KickBall(cross: true, to: _?) => 4,
     PlaceBall() ||
     GrabBall() ||
     MoveBall() ||
@@ -723,9 +736,10 @@ class DropBall extends BoardCommand {
 }
 
 /// Passaggio a un gettone ([to]), nello spazio, tiro in porta ([shot]) o cross in una
-/// zona di battuta ([cross]): il pallone parte da dov'è (dal piede di chi ce l'ha) e
-/// arriva subito, in un'azione sola; il volo lo disegna la lavagna. [x] e [y] sono
-/// l'arrivo (il gettone, il punto dell'erba, della porta o il centro della zona).
+/// zona di battuta ([cross]: sul compagno [to] che sta lì, che riceve la palla, o
+/// libero nel punto della zona): il pallone parte da dov'è (dal piede di chi ce l'ha)
+/// e arriva subito, in un'azione sola; il volo lo disegna la lavagna. [x] e [y] sono
+/// l'arrivo (il gettone, il punto dell'erba, della porta o della zona).
 class KickBall extends BoardCommand {
   const KickBall({
     required this.x,
@@ -825,6 +839,12 @@ class BoardEditor extends ChangeNotifier
 
   BallKick? _kick;
   TokenShift? _shift;
+  int _moves = 0;
+
+  /// Quante azioni sono state applicate dall'apertura (o dall'ultimo [load]): 0 =
+  /// la lavagna è com'era (l'inizio della registrazione non conta, non cambia
+  /// niente di quello che si vede).
+  int get moves => _moves;
 
   /// Chi registra le azioni (null = nessuna registrazione).
   void Function(BoardCommand command)? onCommand;
@@ -849,6 +869,7 @@ class BoardEditor extends ChangeNotifier
   /// niente registrazione.
   void load(BoardState s) {
     _state = s;
+    _moves = 0;
     _history.clear();
     _drag = null;
     _kick = null;
@@ -858,9 +879,12 @@ class BoardEditor extends ChangeNotifier
 
   /// Inizia a registrare il replay dalla lavagna attuale. La cronologia di "Annulla"
   /// riparte da qui: il replay comincia da questa lavagna e non conosce le mosse di
-  /// prima, quindi un annullamento nel vivo deve togliere solo mosse registrate.
+  /// prima, quindi un annullamento nel vivo deve togliere solo mosse registrate. La
+  /// lavagna diventa quella che il replay rileggerà dal JSON (stessi decimali), così
+  /// dal vivo e nel replay ogni mossa finisce allo stesso modo.
   ReplayRecorder startRecording({int Function()? clock}) {
     _history.clear();
+    _state = canonicalBoard(_state);
     final recorder = ReplayRecorder(_state, clock: clock);
     onCommand = recorder.record;
     notifyListeners();
@@ -889,10 +913,15 @@ class BoardEditor extends ChangeNotifier
     return holder != null ? ballAtFeet(holder) : ball?.free();
   }
 
+  /// Applica un'azione. Le coordinate si prendono come le scrive il JSON (tre
+  /// decimali, [fieldCoord]): il replay rilegge le stesse e rifà esattamente la stessa
+  /// mossa (una palla lasciata a 0,3334 dal vivo e a 0,333 nel replay cambierebbe zona).
   void apply(BoardCommand c) {
     final ballBefore = _state.ball;
+    _moves++;
     switch (c) {
-      case AddToken(:final token):
+      case AddToken(token: final added):
+        final token = added.moved(_r(added.x), _r(added.y));
         _snapshot();
         _state = _state.copyWith(
           tokens: [..._state.tokens.where((t) => t.id != token.id), token],
@@ -910,7 +939,8 @@ class BoardEditor extends ChangeNotifier
         _snapshot();
         final t = _state.tokenById(id);
         _drag = t == null ? null : (id, t.x, t.y);
-      case MoveToken(:final id, :final x, :final y):
+      case MoveToken(:final id, x: final mx, y: final my):
+        final x = _r(mx), y = _r(my);
         final moved = _state.tokenById(id)?.moved(x, y);
         _state = _state.copyWith(
           tokens: [
@@ -923,12 +953,25 @@ class BoardEditor extends ChangeNotifier
       case HeatStart():
         _snapshot();
       case Heat(:final x, :final y):
-        _state = _state.copyWith(heat: [..._state.heat, HeatPoint(x, y)]);
+        _state = _state.copyWith(
+          heat: [..._state.heat, HeatPoint(_r(x), _r(y))],
+        );
       case HeatEnd():
         break;
       case AddArrow(:final arrow):
         _snapshot();
-        _state = _state.copyWith(arrows: [..._state.arrows, arrow]);
+        _state = _state.copyWith(
+          arrows: [
+            ..._state.arrows,
+            BoardArrow(
+              x1: _r(arrow.x1),
+              y1: _r(arrow.y1),
+              x2: _r(arrow.x2),
+              y2: _r(arrow.y2),
+              dashed: arrow.dashed,
+            ),
+          ],
+        );
       case Undo():
         // La vista resta com'è (gli interruttori cambiano anche i passi da
         // annullare, vedi SetView): "Annulla" toglie mosse, non cambia come si
@@ -951,13 +994,19 @@ class BoardEditor extends ChangeNotifier
         _shift = null;
       case Reset(:final board):
         _snapshot();
-        _state = board;
+        _state = canonicalBoard(board);
         _drag = null;
         _kick = null;
         _shift = null;
       case PlaceBall(:final ball):
         _snapshot();
-        _state = _state.copyWith(ball: () => _placed(ball));
+        _state = _state.copyWith(
+          ball: () => _placed(
+            ball == null
+                ? null
+                : BoardBall(x: _r(ball.x), y: _r(ball.y), holder: ball.holder),
+          ),
+        );
         _kick = null;
       case GrabBall():
         final ball = _state.ball;
@@ -969,7 +1018,7 @@ class BoardEditor extends ChangeNotifier
       case MoveBall(:final x, :final y):
         if (_state.ball != null) {
           _state = _state.copyWith(
-            ball: () => BoardBall(x: x, y: y),
+            ball: () => BoardBall(x: _r(x), y: _r(y)),
           );
         }
       case DropBall(:final to):
@@ -1072,15 +1121,15 @@ class BoardEditor extends ChangeNotifier
   }
 
   /// Passaggio, tiro o cross: la linea numerata dal piede di chi ha la palla (o da
-  /// dove è, se è libera) all'arrivo; il pallone è subito lì.
+  /// dove è, se è libera) all'arrivo; il pallone è subito lì. Il cross su un compagno
+  /// arriva a lui (gli va al piede), senza compagno resta libero nella zona.
   void _kickBall(KickBall c) {
     final ball = _state.ball;
     if (ball == null) return;
     _snapshot();
     final from = ball.holder == null ? null : _state.tokenById(ball.holder!);
-    final to = c.shot || c.cross || c.to == null
-        ? null
-        : _state.tokenById(c.to!);
+    final to = c.shot || c.to == null ? null : _state.tokenById(c.to!);
+    final x = _r(c.x), y = _r(c.y);
     final line = BallLine(
       kind: c.shot
           ? BallLineKind.shot
@@ -1090,14 +1139,14 @@ class BoardEditor extends ChangeNotifier
       n: _state.nextBallNumber,
       x1: from?.x ?? ball.x,
       y1: from?.y ?? ball.y,
-      x2: to?.x ?? c.x,
-      y2: to?.y ?? c.y,
+      x2: to?.x ?? x,
+      y2: to?.y ?? y,
       fromPlayer: from != null,
       toPlayer: to != null,
     );
     _kick = BallKick(ball.x, ball.y, line.n);
     _state = _state.copyWith(
-      ball: () => to != null ? ballAtFeet(to) : BoardBall(x: c.x, y: c.y),
+      ball: () => to != null ? ballAtFeet(to) : BoardBall(x: x, y: y),
       lines: _state.linesWith(line),
     );
   }
@@ -1160,11 +1209,12 @@ class ReplayData {
   final int durationMs;
 
   /// L'ultima versione del formato che questa app sa leggere (2: il pallone; 3: le
-  /// posizioni per zona).
-  static const supportedVersion = 3;
+  /// posizioni per zona; 4: il cross su un compagno).
+  static const supportedVersion = 4;
 
-  /// La versione del formato: 3 con le posizioni per zona, 2 se c'è il pallone (nella
-  /// lavagna di partenza o nelle azioni), altrimenti 1.
+  /// La versione del formato: 4 con un cross su un compagno, 3 con le posizioni per
+  /// zona, 2 se c'è il pallone (nella lavagna di partenza o nelle azioni), altrimenti
+  /// 1.
   int get version =>
       max(initial.version, events.fold(1, (v, e) => max(v, e.command.version)));
 

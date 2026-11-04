@@ -689,19 +689,34 @@ void main() {
           expect((s.ball!.y, s.ball!.holder), (0.0, null));
           expect([for (final l in s.lines) l.n], [1, 2, 3]);
 
-          // Vista: le linee si nascondono (non si cancellano) e tornano.
+          // Vista: un menu piccolo appeso all'occhio; il tocco su una riga la
+          // cambia, il menu si chiude e il campo si vede subito. Le linee si
+          // nascondono (non si cancellano) e tornano.
           await tester.tap(find.byTooltip('Vista'));
           await tester.pumpAndSettle();
           expect(find.text('VISTA'), findsOneWidget);
+          final menu = tester.getRect(
+            find
+                .ancestor(
+                  of: find.text('VISTA'),
+                  matching: find.byType(Material),
+                )
+                .first,
+          );
+          final pitch = tester.getRect(find.byKey(const ValueKey('lavagna')));
+          // Appeso all'occhio: il campo resta scoperto a sinistra e in basso.
+          expect(menu.left, greaterThan(pitch.left + 16));
+          expect(menu.bottom, lessThan(pitch.bottom - pitch.height * .25));
           await tester.tap(find.text('Linee della palla'));
           await tester.pumpAndSettle();
+          expect(find.text('VISTA'), findsNothing, reason: 'il menu si chiude');
           expect(_live(tester).shows(BoardOverlay.ballLines), isFalse);
           expect(_live(tester).lines, hasLength(3));
+          await tester.tap(find.byTooltip('Vista'));
+          await tester.pumpAndSettle();
           await tester.tap(find.text('Linee della palla'));
           await tester.pumpAndSettle();
           expect(_live(tester).shows(BoardOverlay.ballLines), isTrue);
-          await tester.binding.handlePopRoute();
-          await tester.pumpAndSettle();
 
           // Annulla toglie il tiro: il pallone torna al piede del DC.
           await tester.tap(find.text('Annulla'));
@@ -831,11 +846,17 @@ void main() {
       expect(s.ball, isNotNull);
       expect(s.lines, hasLength(5));
       expect(find.textContaining('ondulata la conduzione'), findsOneWidget);
+      // Bianche le linee della palla, oro le frecce dei movimenti.
+      expect(find.textContaining('Linee bianche'), findsOneWidget);
+      expect(
+        find.textContaining('Frecce\u00a0oro:\u00a0i\u00a0movimenti'),
+        findsOneWidget,
+      );
       expect(find.text('Pallone'), findsNothing); // niente strumenti
       // La vista si cambia anche guardando soltanto.
       await tester.tap(find.byTooltip('Vista'));
       await tester.pumpAndSettle();
-      expect(find.text('Cosa mostrare sul campo.'), findsOneWidget);
+      expect(find.text('VISTA'), findsOneWidget);
       await tester.tap(find.text('Linee della palla'));
       await tester.pumpAndSettle();
       expect(_live(tester).shows(BoardOverlay.ballLines), isFalse);

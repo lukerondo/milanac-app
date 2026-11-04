@@ -233,18 +233,26 @@ del documento nella Storia; gli stessi testi stanno in
     **lavagna tattica**: campo con i gettoni dei giocatori (dalla formazione della squadra,
     con numero e nome sulla carta; anche avversari e gettoni vuoti), pennello *Fuoco* (la
     heatmap gialla e rossa si accumula dove si insiste), *Freccia* (trascina; doppio tocco
-    per le tratteggiate, che si vedono dall'icona), *Annulla*, *Pulisci* (il pallone torna a
-    centrocampo), nuova lavagna da un modulo. Il **pallone** parte dal dischetto del
+    per le tratteggiate, che si vedono dall'icona: le frecce dei movimenti sono oro con la
+    punta aperta, le linee della palla bianche), *Annulla*, *Pulisci* (il pallone torna a
+    centrocampo), nuova lavagna da un modulo. La pressione lunga c'è solo con *Gettoni*
+    (toglie il gettone; sul pallone ne apre le opzioni): con gli altri strumenti un dito
+    fermo prima di muoversi trascina lo stesso. Il **pallone** parte dal dischetto del
     centrocampo (gli schemi salvati prima non ce l'hanno: lo si mette con *Pallone* o da
     "Aggiungi un gettone"); lasciato su un gettone gli va al piede e lo segue. Con *Pallone*:
     tocco su un compagno = passaggio (il pallone vola in mezzo secondo), sull'erba = palla
     nello spazio, sulla porta = tiro; trascinandolo lo si sposta; toccando di nuovo
-    *Pallone* (o tenendo premuto il pallone) lo si rimette a centrocampo, si cancellano le
-    sue linee o lo si toglie. Ogni passaggio, conduzione (chi ha la palla trascinato con
-    *Gettoni*) e tiro lascia una linea numerata (continua, ondulata, spessa; le ultime 30).
-    *Vista* (l'occhio nella barra sotto il titolo) accende e spegne le linee della palla; gli
-    interruttori si salvano con lo schema e finiscono nel replay. Il campo ha dischetti,
-    aree di porta, porte, lunette e bandierine, ricavati dall'area di rigore.
+    *Pallone* (o, con *Gettoni*, tenendo premuto il pallone) lo si rimette a centrocampo, si
+    cancellano le sue linee o lo si toglie. Ogni passaggio, conduzione (chi ha la palla
+    trascinato con *Gettoni*) e tiro lascia una linea numerata (continua, ondulata, spessa;
+    le ultime 30): le linee si fermano prima dei gettoni e dei cognomi di chi passa e di chi
+    riceve, quelle troppo corte restano un tratto minimo, e i numeri (come quelli delle zone
+    di battuta, quadrati) si disegnano sopra tutto, sulla linea o accanto, dove non coprono
+    gettoni, cognomi o pallone (`BoardPainter.badges`). *Vista* (l'occhio nella barra sotto
+    il titolo) è un menu piccolo appeso all'occhio: ogni riga accende o spegne un disegno, il
+    menu si chiude e il campo cambia subito; gli interruttori si salvano con lo schema e
+    finiscono nel replay. Il campo ha dischetti, aree di porta, porte, lunette e bandierine,
+    ricavati dall'area di rigore.
     **Palle inattive** (`set_pieces.dart`): nel foglio "Nuova lavagna dal modulo" gli schemi
     pronti (angolo da sinistra e da destra, punizione a 25 metri da spostare, rigore,
     rimessa laterale, rinvio dal fondo, calcio d'inizio, angolo contro dalla nostra
@@ -252,20 +260,27 @@ del documento nella Storia; gli stessi testi stanno in
     pubblicata, se c'è) ai posti della situazione, scelti per ruolo; chi batte viene da
     `publishedSetPiecesProvider` (angoli, punizioni, rigori). Come un cambio di modulo si
     annullano e finiscono nel replay; il modulo diventa "Piazzati" (preselezionato al
-    salvataggio) e lo schema ricorda la palla inattiva (`piece`). Le **zone di battuta**
+    salvataggio) e lo schema ricorda la palla inattiva (`piece`). Gli schemi sono disegnati
+    per lo schermo del telefono: nessun gettone ne tocca un altro, nessun cognome finisce su
+    un gettone o su un altro cognome, il portiere sta sopra 0,94 (il nome resta nella
+    lavagna) e chi attacca le zone parte appena fuori da loro, così si vedono (un test lo
+    controlla per ogni schema con undici cognomi lunghi). Le **zone di battuta**
     (`board_overlays.dart`: 1 primo palo, 2 dischetto, 3 secondo palo, 4 limite dell'area,
     5 corto) stanno nell'area dove si batte, con il primo palo dal lato del pallone; si
     accendono da sole negli schemi dove si crossa e si cambiano in *Vista*. Con *Pallone* un
-    tocco su una zona è un **cross** (linea a puntini che gira, numerata come le altre; un
-    compagno toccato in pieno riceve il passaggio). Prima del primo pallone giocato le zone
-    seguono il pallone spostato. **Fuori possesso**, sempre da *Vista* (spenti di serie):
+    tocco su una zona è sempre un **cross** (linea a puntini che gira, numerata come le
+    altre), anche accanto alla porta: arriva al compagno che sta lì, che riceve la palla,
+    altrimenti la palla resta libera nel punto toccato. Fuori dalle zone valgono passaggio,
+    palla nello spazio e tiro. Prima del primo pallone giocato le zone seguono il pallone
+    spostato. **Fuori possesso**, sempre da *Vista* (spenti di serie):
     *Fuorigioco* (con almeno due avversari, la linea tratteggiata del penultimo dalla loro
     porta, portiere compreso, e la bandierina sui nostri oltre la linea e oltre il pallone
     nella loro metà campo; in oro la nostra linea difensiva); *Linee di reparto* (i nostri di
     movimento, dalla nostra porta in su, divisi come dice il modulo, con i metri tra difesa e
     centrocampo; niente se i gettoni non tornano col modulo); *Posizioni per zona* (9 zone
     della palla: il Direttivo mette il pallone in una zona, sistema tutti i gettoni e preme
-    "Salva posizioni per questa zona", o le cancella; poi ogni azione del pallone che lo porta
+    "Salva questa zona" (le spunte delle zone salvate le vede solo lui), o le cancella; poi
+    ogni azione del pallone che lo porta
     in una zona salvata sposta lì i giocatori, tranne chi ha la palla e chi si sta
     trascinando, dentro `BoardEditor.apply`, con lo scivolamento solo disegnato). Chi non è
     del Direttivo, in uno schema con le posizioni per zona, sposta solo il pallone e vede
@@ -454,7 +469,12 @@ riproduzione. Un passaggio o un tiro è una sola azione (`kick`): lo stato cambi
 volo del pallone (450 ms) è solo disegno, rifatto uguale nel replay seguendone il tempo. Il
 formato ha una versione (`"v"`): 1 senza pallone, 2 con il pallone, le sue linee, la vista o
 una palla inattiva (un cross, per chi non lo conosce, è un passaggio), 3 con le posizioni per
-zona (`zs` / `zc`: una versione che non le conosce non sposterebbe i giocatori). Lo
+zona (`zs` / `zc`: una versione che non le conosce non sposterebbe i giocatori), 4 con un
+cross che arriva a un compagno (prima un cross finiva sempre libero nella zona). Le
+coordinate valgono sempre con i tre decimali del JSON (`fieldCoord`): `BoardEditor.apply`
+arrotonda quelle delle azioni, `Reset` e l'inizio della registrazione passano la lavagna dal
+JSON (`canonicalBoard`), così dal vivo e nel replay ogni mossa finisce uguale, anche sulle
+soglie delle zone. Lo
 spostamento verso le posizioni di una zona è calcolato dentro `BoardEditor.apply`, quindi
 replay e "Annulla" lo rifanno uguale; lo scivolamento (400 ms) è solo disegno, come il volo.
 Gli interruttori di *Vista* cambiano anche i passi da annullare ("Annulla" non li tocca),
