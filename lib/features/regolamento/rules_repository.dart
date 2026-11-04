@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import 'regolamento_2026.dart';
 
 /// Un articolo del regolamento (bozza del Direttivo o parte di una versione pubblicata).
 class RulesArticle {
@@ -249,7 +250,8 @@ class _SupabaseRulesRepository implements RulesRepository {
   }
 }
 
-/// Regolamento di esempio per la demo e i test (l'organigramma viene dalla vecchia app).
+/// Regolamento di esempio per la demo e i test: il Regolamento ufficiale 2026, come in
+/// produzione (migrazione 0033).
 class DemoRulesRepository implements RulesRepository {
   DemoRulesRepository._();
   static final instance = DemoRulesRepository._();
@@ -264,45 +266,8 @@ class DemoRulesRepository implements RulesRepository {
   int _version = 1;
   int _nextId = 10;
   final _draft = <RulesArticle>[
-    const RulesArticle(
-      id: 'a1',
-      sortOrder: 0,
-      title: 'Organigramma',
-      body:
-          'FONDATORI: Fabio Ruggieri, Giuseppe Ruggieri, Christian Rizzi\n'
-          'RESP. COMUNICAZIONI E MARKETING: Giuseppe Ruggieri\n'
-          'RESP. TECNICO/TATTICO: Fabio Ruggieri\n'
-          'RECLUTATORE: Vincenzo Lauricella\n'
-          'RESP. TORNEI E AMICHEVOLI: Martin Farias\n'
-          'RESP. SOCIAL: Christian Rizzi',
-    ),
-    const RulesArticle(
-      id: 'a2',
-      sortOrder: 1,
-      title: 'Art. 1 – Presenze',
-      body:
-          'Gli allenamenti si tengono ogni sera alle 21:30. La presenza, il ritardo '
-          'motivato o l\'assenza vanno segnati nell\'app entro le 18:30: chi non '
-          'risponde risulta assente.',
-    ),
-    const RulesArticle(
-      id: 'a3',
-      sortOrder: 2,
-      title: 'Art. 2 – Comportamento',
-      body:
-          'Rispetto per compagni, avversari e arbitri, in campo e in chat. '
-          'Niente abbandoni a partita in corso: chi lascia la squadra in dieci '
-          'risponde al Direttivo.',
-    ),
-    const RulesArticle(
-      id: 'a4',
-      sortOrder: 3,
-      title: 'Art. 3 – Partite ufficiali',
-      body:
-          'Prima di ogni partita ufficiale aggiorna il gioco e la console. La '
-          'formazione pubblicata dal Direttivo è definitiva: chi parte dalla '
-          'panchina resta a disposizione per tutta la serata.',
-    ),
+    for (final (i, a) in regolamento2026.indexed)
+      RulesArticle(id: 'a${i + 1}', sortOrder: i, title: a.title, body: a.body),
   ];
   late List<RulesArticle> _published = List.of(_draft);
 
