@@ -2475,6 +2475,69 @@ do $$ begin
   assert pg_temp.avvisi('attendance_reminder', '2030-01-19') = pg_temp.membri(null),
     'evento del sabato messo prima della scadenza: promemoria a tutti';
 end $$;
+-- Un evento spostato conta da quando è stato spostato (scheduled_at), non da quando è stato
+-- creato. Due partite in calendario da giorni per febbraio: il torneo spostato a sabato 26
+-- alle 19:00, dopo la scadenza (niente assenze); l'amichevole spostata a domenica 27 alle
+-- 17:00, prima della scadenza (una serata normale).
+insert into events (id, type, title, starts_at, created_at) values
+  ('00000000-0000-0000-0000-0000000034a1', 'torneo', 'Torneo vs Aquile',
+   '2030-02-02 21:30 Europe/Rome', '2030-01-20 12:00 Europe/Rome'),
+  ('00000000-0000-0000-0000-0000000034a2', 'amichevole', 'Amichevole vs Tori',
+   '2030-02-03 21:30 Europe/Rome', '2030-01-20 12:00 Europe/Rome');
+do $$ begin
+  assert (select bool_and(scheduled_at = created_at) and count(*) = 2 from events
+          where id in ('00000000-0000-0000-0000-0000000034a1', '00000000-0000-0000-0000-0000000034a2')),
+    'alla creazione scheduled_at è created_at';
+  assert (select count(*) from events where scheduled_at is null) = 0, 'scheduled_at sempre presente';
+end $$;
+-- Come dall'app (il Direttivo, che salva sempre anche starts_at): se l'inizio non cambia,
+-- scheduled_at resta; e scritto a mano non cambia.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select set_config('milanac.now', '2030-01-25 10:00 Europe/Rome', false);
+update events set title = 'Torneo vs Aquile Nere', starts_at = '2030-02-02 21:30 Europe/Rome'
+  where id = '00000000-0000-0000-0000-0000000034a1';
+update events set scheduled_at = '2030-01-01 00:00 Europe/Rome'
+  where id = '00000000-0000-0000-0000-0000000034a1';
+do $$ begin
+  assert (select scheduled_at from events where id = '00000000-0000-0000-0000-0000000034a1')
+         = '2030-01-20 12:00 Europe/Rome'::timestamptz, 'stesso inizio: scheduled_at non cambia';
+end $$;
+-- Sabato 26 alle 19:00 il torneo passa a stasera alle 22:00.
+select set_config('milanac.now', '2030-01-26 19:00 Europe/Rome', false);
+update events set title = 'Torneo vs Aquile Nere', starts_at = '2030-01-26 22:00 Europe/Rome'
+  where id = '00000000-0000-0000-0000-0000000034a1';
+reset role;
+select pg_temp.as_user(null);
+select set_config('milanac.now', '2030-01-26 19:01 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert (select scheduled_at from events where id = '00000000-0000-0000-0000-0000000034a1')
+         = '2030-01-26 19:00 Europe/Rome'::timestamptz, 'spostato: scheduled_at è l''ora dello spostamento';
+  assert extract(isodow from date '2030-01-26') = 6, 'il 26 è sabato';
+  assert club_evening('2030-01-26', array['milanac', 'futuro'])
+     and not club_evening('2030-01-26', array['milanac', 'futuro'], attendance_deadline('2030-01-26')),
+    'c''è la serata, ma l''evento è arrivato dopo la scadenza';
+  assert (select count(*) from attendance where date = '2030-01-26') = 0,
+    'evento spostato su oggi dopo la scadenza: niente assenze';
+  assert (select count(*) from daily_jobs where day = '2030-01-26') = 0, 'e il giorno non si segna';
+end $$;
+-- Domenica 27 alle 17:00 l'amichevole passa a stasera: promemoria e assenze come sempre.
+select set_config('milanac.now', '2030-01-27 17:00 Europe/Rome', false);
+update events set starts_at = '2030-01-27 21:30 Europe/Rome'
+  where id = '00000000-0000-0000-0000-0000000034a2';
+select set_config('milanac.now', '2030-01-27 18:05 Europe/Rome', false);
+select attendance_tick();
+select set_config('milanac.now', '2030-01-27 18:31 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert (select scheduled_at from events where id = '00000000-0000-0000-0000-0000000034a2')
+         = '2030-01-27 17:00 Europe/Rome'::timestamptz, 'spostata alle 17:00';
+  assert pg_temp.avvisi('attendance_reminder', '2030-01-27') = pg_temp.membri(null),
+    'evento spostato prima della scadenza: promemoria a tutti';
+  assert (select count(*) from attendance where date = '2030-01-27' and auto) = pg_temp.membri(null),
+    'evento spostato prima della scadenza: assenze automatiche come sempre';
+end $$;
 select set_config('milanac.now', '', false);
 
 -- Etichette del Direttivo come nell'organigramma; i nomi di prima si traducono.

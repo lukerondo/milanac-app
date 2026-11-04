@@ -407,6 +407,9 @@ profiles      direttivo_roles tra presidente, fondatore, capitano, vicecapitano,
               comunicazione, tecnico, reclutamento, tornei, presenze, it (i nomi di prima,
               reclutatore e organizzatore, si traducono anche dalle app vecchie; gestore
               sparisce); club_evening(giorno, squadre) dice se c'è la serata
+events        + scheduled_at (quando l'evento è stato messo a quell'ora: created_at alla
+              creazione, di nuovo ogni volta che cambia starts_at; lo tiene il trigger
+              events_scheduled_at, l'app non lo legge)
 -- dalla migrazione 0035
 formations    + set_pieces (jsonb, bozza) e published_set_pieces (jsonb, congelati alla
               pubblicazione): {"rigori"|"punizioni"|"angoli_sx"|"angoli_dx": id del giocatore},
@@ -474,7 +477,8 @@ alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assen
 (una volta sola al giorno, grazie a `daily_jobs`). Dalla migrazione `0034` solo nei giorni con
 la serata (`club_evening(giorno, squadre)`): dal lunedì al venerdì per tutti; sabato e domenica
 solo con un evento (non una riunione) e solo per chi gioca nella sua squadra; un evento del
-fine settimana messo in calendario dopo le 18:30 non fa assenze. Le risposte dei giocatori sono bloccate dopo
+fine settimana messo in calendario (o spostato su quel giorno) dopo le 18:30 non fa assenze
+(conta `events.scheduled_at`). Le risposte dei giocatori sono bloccate dopo
 le 18:30 dalle policy (`attendance_open`); il Direttivo corregge sempre. Nei test l'ora si fissa
 con l'impostazione `milanac.now` (`app_now()`). Promemoria partita (migrazione `0031`):
 `match_reminders_tick()` gira ogni minuto e per le partite (torneo e amichevole) manda
