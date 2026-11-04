@@ -21,7 +21,7 @@ import 'helpers.dart';
 import 'home_test.dart';
 
 /// Titolo della card della stanza di MILANAC (il nome del canale non va a capo).
-const _cardMilan = 'Stanza vocale aperta · Milan AC';
+const _cardMilan = 'Stanza vocale aperta · MILANAC';
 
 const _generale = Channel(id: 'c-main', slug: 'main', name: 'Generale');
 
