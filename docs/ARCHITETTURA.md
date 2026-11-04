@@ -148,6 +148,12 @@ accettano al primo accesso successivo.
    erba a strisce, linee proiettate, la porta avversaria lontana), scelta modulo (4-3-3,
    4-2-3-1, 3-5-2…), 11 mini carte in piedi (overall, ruolo, foto, colori della carta
    speciale), più piccole in fondo: il Direttivo tocca una carta e assegna il giocatore.
+   Sotto il campo le **palle inattive** (come vuole il regolamento, le decide lo staff
+   tecnico): rigori, punizioni, angoli da sinistra e da destra, un titolare per ruolo (lo
+   stesso può batterne più d'uno, ogni ruolo è facoltativo). Si sceglie tra i titolari
+   (numero e nome); chi esce dal campo perde i suoi ruoli, che tornano "da scegliere",
+   quindi non si pubblica mai un battitore in panchina. I giocatori vedono i ruoli
+   assegnati sotto la formazione pubblicata.
 6. **Calendario** – vista mensile + lista; tipi evento: *Partita torneo*, *Amichevole*,
    *Allenamento*, *Riunione*, *Altro*. Solo il Direttivo crea eventi (notifica alla squadra
    o a tutti). Ogni giorno compare l'allenamento automatico delle 21:30 per la squadra che
@@ -180,8 +186,13 @@ accettano al primo accesso successivo.
 11. **Riquadro Presenze in Home** – la serata di oggi con la risposta rapida (vedi Home).
 12. **Formazione pubblicata** – una formazione per squadra; resta in bozza finché il Direttivo non
     la pubblica, poi ogni giocatore della squadra riceve la notifica personale (titolare con
-    ruolo o panchina), l'annuncio compare in *Comunicazioni* e chiunque può scaricare il
-    **PDF con le mini carte** (campo, foto, nome, ruolo, overall, panchina).
+    ruolo o panchina; a chi batte anche "batti rigori e punizioni", se c'è posto),
+    l'annuncio compare in *Comunicazioni* (con la riga "Palle inattive: rigori Rossi ·
+    punizioni Bianchi · angoli sx Verdi, dx Neri") e chiunque può scaricare il **PDF con le
+    mini carte** (campo, foto, nome, ruolo, overall, panchina, palle inattive). Per altre
+    sezioni (gli schemi da palla inattiva della lavagna) `publishedSetPiecesProvider(squadra)`
+    dà i battitori dell'ultima formazione pubblicata: `Map<SetPiece, String>` (ruolo → id del
+    giocatore, sempre un titolare).
 13. **Carta FUT** – "La mia carta" e carte in Rosa disegnate come gli oggetti di FUT (FC 24–26):
     scudo con le tacche in alto, overall e ruolo a sinistra con i PlayStyle+, la **foto caricata
     dal giocatore** sfumata dentro la carta (senza foto la sagoma grigia; sulla propria carta
@@ -344,6 +355,12 @@ events        + party_code (text, 1-40 caratteri: il codice del party della part
 event_reminders id, event_id(→ events), kind (ora | lobby | chiamata), starts_at, sent_at,
               sent_by; i due automatici una volta sola per partita e orario (se la partita
               si sposta ripartono); nessuna policy (solo il server)
+-- dalla migrazione 0035
+formations    + set_pieces (jsonb, bozza) e published_set_pieces (jsonb, congelati alla
+              pubblicazione): {"rigori"|"punizioni"|"angoli_sx"|"angoli_dx": id del giocatore},
+              ogni ruolo facoltativo; nella bozza solo titolari della bozza, in quella
+              pubblicata solo titolari pubblicati (trigger formations_set_pieces);
+              save_formation(..., p_set_pieces) li salva con modulo e posti
 -- dalla migrazione 0030
 messages      un sondaggio è un messaggio con meta {type: poll, options [2-10, 1-80
               caratteri, diverse], multiple, closed_at?} e la domanda nel testo (max 300)
@@ -354,7 +371,8 @@ poll_votes    message_id(→ messages), user_id(→ profiles), options smallint[
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
-pubblicazione formazione → notifica + annuncio in *Comunicazioni*, nuovo messaggio → notifica,
+pubblicazione formazione → notifica + annuncio in *Comunicazioni* (con la riga dei battitori,
+`set_pieces_line`), nuovo messaggio → notifica,
 nuovo evento → notifica, `chat_overview()` (non letti + ultimo messaggio per canale),
 risultato inserito → notifica alla squadra, `complete_registration()` / `accept_rules()` /
 `publish_rules()` / `set_direttivo_password()` (registrazione e regolamento), `player_stats()`
