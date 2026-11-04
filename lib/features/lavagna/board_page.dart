@@ -89,7 +89,7 @@ String _positionsHint(int? zone, {required bool saved}) => zone == null
           'vanno lì da soli.';
 
 /// Nome breve della squadra sulla lavagna.
-String _teamName(Team team) => team == Team.milanac ? 'Milan AC' : 'Futuro';
+String _teamName(Team team) => team == Team.milanac ? 'MILANAC' : 'Futuro';
 
 /// Apre la lavagna a schermo intero (nuova o da uno schema salvato).
 Future<void> openBoard(

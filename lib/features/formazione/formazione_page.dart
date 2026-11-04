@@ -125,7 +125,7 @@ String formationSummary(int onField, int ai) {
 
 /// La squadra mostrata in Formazione, nella sezione e nell'editor. All'apertura è
 /// quella chiesta dalla rotta (`?squadra=`, la chiave di questa famiglia) o, senza,
-/// quella del giocatore (Milan AC se è in entrambe). "Modifica" apre l'editor con la
+/// quella del giocatore (MILANAC se è in entrambe). "Modifica" apre l'editor con la
 /// stessa chiave, quindi sulla stessa squadra, e il pulsante del PDF nella barra in alto
 /// (che legge la stessa rotta) scarica quella.
 final formationTeamProvider = NotifierProvider.autoDispose
@@ -723,7 +723,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
   }
 }
 
-/// La fascia in alto: Milan AC | Futuro e lo stato della formazione.
+/// La fascia in alto: MILANAC | Futuro e lo stato della formazione.
 class _Band extends StatelessWidget {
   const _Band({required this.team, required this.onTeam, required this.status});
   final Team team;

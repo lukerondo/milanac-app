@@ -58,7 +58,7 @@ void main() {
     await _matchToday(container, now);
     await tester.pumpAndSettle();
 
-    expect(find.text('MATCH DAY · MILAN AC'), findsOneWidget);
+    expect(find.text('MATCH DAY · MILANAC'), findsOneWidget);
     expect(find.text('LUPI GRIGI'), findsOneWidget);
     expect(find.text("al calcio d'inizio · 21:30"), findsOneWidget);
     for (final digits in ['02', '36', '00']) {
@@ -71,7 +71,7 @@ void main() {
     expect(find.text('59'), findsOneWidget);
 
     // La partita di stasera non si ripete in "Prossima partita".
-    expect(find.text('MILAN AC – LUPI GRIGI'), findsNothing);
+    expect(find.text('MILANAC – LUPI GRIGI'), findsNothing);
     expect(find.text('PRONTI'), findsOneWidget);
     expect(find.text('La formazione non è ancora pubblicata'), findsOneWidget);
 

@@ -66,7 +66,7 @@ class Profile {
   final String? gamertag;
   final String? avatarUrl;
 
-  /// Squadre in cui gioca (Milan AC, Milan AC Futuro o entrambe).
+  /// Squadre in cui gioca (MILANAC, MILANAC FUTURO o entrambe).
   final Set<Team> teams;
 
   final String? firstName;

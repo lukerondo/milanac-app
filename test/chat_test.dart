@@ -412,7 +412,7 @@ void main() {
       'scaduto, elimina, silenzia', (tester) async {
     final recorder = FakeVoiceRecorder();
     await startChat(tester, recorder: recorder);
-    // Badge dei non letti sulla scheda Chat (2 in Generale + 1 in Milan AC).
+    // Badge dei non letti sulla scheda Chat (2 in Generale + 1 in MILANAC).
     expect(
       find.descendant(of: find.byType(NavigationBar), matching: find.text('3')),
       findsOneWidget,
@@ -423,8 +423,8 @@ void main() {
     expect(find.text('Comunicazioni'), findsOneWidget);
     expect(find.text('Luca Bianchi: Ci sono 💪'), findsOneWidget);
 
-    // Milan AC: la chat della squadra.
-    await tester.tap(find.text('Milan AC'));
+    // MILANAC: la chat della squadra.
+    await tester.tap(find.text('MILANAC'));
     await tester.pumpAndSettle();
     expect(find.text('Stasera provo la build nuova da DC'), findsOneWidget);
     await tester.tap(find.byTooltip('Indietro'));
@@ -1253,12 +1253,12 @@ void main() {
       'non letti, descrizioni dei canali senza messaggi', (tester) async {
     await startChat(tester);
     await goToSection(tester, 'Chat');
-    // La card della stanza vocale di Milan AC in cima, le cuffie accanto al nome.
+    // La card della stanza vocale di MILANAC in cima, le cuffie accanto al nome.
     expect(find.textContaining('Stanza vocale aperta'), findsOneWidget);
     expect(find.text('Marco e Luca sono dentro'), findsOneWidget);
     // Le righe si leggono intere: nome, cuffie, ultimo messaggio, ora, non letti.
     expect(
-      find.bySemanticsLabel(RegExp(r'^Milan AC\nstanza vocale aperta\n')),
+      find.bySemanticsLabel(RegExp(r'^MILANAC\nstanza vocale aperta\n')),
       findsOneWidget,
     );
     expect(find.bySemanticsLabel(RegExp(r'\n2 non letti$')), findsOneWidget);
@@ -1271,9 +1271,9 @@ void main() {
     expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
 
     // La conversazione: nome del canale e chi lo legge nella barra in alto.
-    await tester.tap(find.text('Milan AC'));
+    await tester.tap(find.text('MILANAC'));
     await tester.pumpAndSettle();
-    expect(find.text('La squadra Milan AC'), findsOneWidget);
+    expect(find.text('La squadra MILANAC'), findsOneWidget);
     await tester.tap(find.byTooltip('Indietro'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Generale'));
@@ -1371,12 +1371,12 @@ void main() {
 
       // Un tocco apre il canale; indietro si torna ai risultati.
       await searchFor(tester, 'build');
-      expect(find.text('Milan AC'), findsOneWidget);
+      expect(find.text('MILANAC'), findsOneWidget);
       expect(find.text('Andrea Neri'), findsOneWidget);
       await tester.tap(find.textContaining('build nuova', findRichText: true));
       await tester.pumpAndSettle();
       expect(find.byType(ChannelPage), findsOneWidget);
-      expect(find.text('La squadra Milan AC'), findsOneWidget);
+      expect(find.text('La squadra MILANAC'), findsOneWidget);
       expect(find.text('Stasera provo la build nuova da DC'), findsOneWidget);
       await tester.tap(find.byTooltip('Indietro'));
       await tester.pumpAndSettle();
@@ -1470,7 +1470,7 @@ void main() {
             channelId: 'c-comunicazioni',
             authorId: 'demo',
             isSystem: true,
-            body: 'Formazione Milan AC Futuro (4-3-3): POR Rossi',
+            body: 'Formazione MILANAC FUTURO (4-3-3): POR Rossi',
             meta: const {'type': 'formation', 'team': 'futuro', 'id': 'f1'},
             createdAt: now.subtract(const Duration(minutes: 30)),
           ),
@@ -1499,7 +1499,7 @@ void main() {
 
       // Dall'elenco della chat, come un giocatore qualunque.
       await openChannel(tester, 'Comunicazioni');
-      await tester.tap(find.textContaining('Formazione Milan AC Futuro'));
+      await tester.tap(find.textContaining('Formazione MILANAC FUTURO'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(location(), '/formazione?squadra=futuro');

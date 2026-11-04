@@ -17,12 +17,12 @@ import 'sections.dart';
 import 'ui.dart';
 
 /// Nome del club in alto nella Home e nel Club: dipende dalla squadra del membro
-/// (chi è solo in Milan AC Futuro vede il nome della sua squadra).
+/// (chi è solo in MILANAC FUTURO vede il nome della sua squadra).
 String clubTitleFor(Profile? profile) {
   final teams = profile?.teams ?? const {Team.milanac};
   return teams.contains(Team.milanac)
-      ? 'MILAN AC PRO CLUB'
-      : 'MILAN AC FUTURO PRO CLUB';
+      ? 'MILANAC PRO CLUB'
+      : 'MILANAC FUTURO PRO CLUB';
 }
 
 /// Struttura comune: la sezione sopra e le cinque schede sempre visibili in basso.

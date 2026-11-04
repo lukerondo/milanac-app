@@ -109,8 +109,8 @@ void main() {
     // La partita ufficiale porta alla formazione.
     expect(inPage(find.text('Vedi formazione')), findsOneWidget);
 
-    // Solo il Milan AC: l'amichevole del Futuro non c'è.
-    await tester.tap(inPage(find.widgetWithText(FilterPill, 'Milan AC')));
+    // Solo il MILANAC: l'amichevole del Futuro non c'è.
+    await tester.tap(inPage(find.widgetWithText(FilterPill, 'MILANAC')));
     await tester.pumpAndSettle();
     expect(titles(), isNot(contains('Amichevole vs Real Brianza')));
     expect(titles(), contains('Allenamento schemi calci piazzati'));
@@ -157,7 +157,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilterPill, 'Tutte'));
     await tester.pumpAndSettle();
 
-    // La partita del Futuro: la sua formazione (chi la guarda è del Milan AC).
+    // La partita del Futuro: la sua formazione (chi la guarda è del MILANAC).
     final futuro = find.ancestor(
       of: find.text('Coppa Riserve – 1ª giornata'),
       matching: find.byType(EventRow),
@@ -167,7 +167,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.textContaining('La formazione di Milan AC Futuro non è ancora'),
+      find.textContaining('La formazione di MILANAC FUTURO non è ancora'),
       findsOneWidget,
     );
 
@@ -183,6 +183,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('FORMAZIONE'), findsOneWidget);
-    expect(find.textContaining('Milan AC Futuro'), findsNothing);
+    expect(find.textContaining('MILANAC FUTURO'), findsNothing);
   });
 }

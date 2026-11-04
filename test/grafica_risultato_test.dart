@@ -74,7 +74,7 @@ void main() {
         player('p2', 'Marco Rossi'),
         player('p3', 'Luca Bianchi'),
       ]),
-      'Milan AC 3 – 1 Dinamo Pixel\n'
+      'MILANAC 3 – 1 Dinamo Pixel\n'
       'FVPA Serie B · 2ª giornata\n'
       "Marcatori: Rossi 52' 67', Bianchi 88'\n"
       "Gol Dinamo Pixel: 18'\n"
@@ -90,7 +90,7 @@ void main() {
     );
     expect(
       resultShareText(soon, const []),
-      'Milan AC – Lupi\nAmichevole · in trasferta\nMILANAC Pro Club',
+      'MILANAC – Lupi\nAmichevole · in trasferta\nMILANAC Pro Club',
     );
   });
 
@@ -124,7 +124,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(shares, hasLength(1));
     final image = shares.single.arguments as Map;
-    expect(image['text'], 'Milan AC 3 – 1 Dinamo Pixel · MILANAC Pro Club');
+    expect(image['text'], 'MILANAC 3 – 1 Dinamo Pixel · MILANAC Pro Club');
     expect((image['uris'] ?? image['paths'] ?? image['files']), isNotNull);
     expect(find.text('Condivisione non riuscita'), findsNothing);
 

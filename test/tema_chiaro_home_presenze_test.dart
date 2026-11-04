@@ -63,13 +63,13 @@ void main() {
     await startLight(tester, now: weekdayInItalyAt(17));
 
     // Home: stasera, prossima partita, ultimo risultato e Mondo Proclub.
-    expectLight(tester, find.text('STASERA · MILAN AC'));
+    expectLight(tester, find.text('STASERA · MILANAC'));
     await scrollToEnd(tester);
     expectLight(tester, find.text('MONDO PROCLUB'));
 
     // Presenze: la serata di oggi, gli elenchi e lo storico di un giocatore.
     await goToSection(tester, 'Presenze');
-    expectLight(tester, find.text('OGGI · MILAN AC'));
+    expectLight(tester, find.text('OGGI · MILANAC'));
     final day = find
         .descendant(
           of: find.byKey(const ValueKey('presenze-giorno')),

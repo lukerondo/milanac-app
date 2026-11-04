@@ -141,8 +141,8 @@ void main() {
   testWidgets('Home: i due riquadri e la risposta per stasera', (tester) async {
     await startAppAt(tester, weekdayInItalyAt(17));
 
-    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
-    expect(find.text('STASERA · MILAN AC'), findsOneWidget);
+    expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
+    expect(find.text('STASERA · MILANAC'), findsOneWidget);
     expect(find.text('ALLENAMENTO 21:30'), findsOneWidget);
     expect(find.text('Ci sei? Rispondi entro le 18:30.'), findsOneWidget);
 
@@ -171,7 +171,7 @@ void main() {
     await startAppAt(tester, todayInItalyAt(17));
     final home = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(
-      find.text('MILAN AC – ATLETICO VIRTUALE'),
+      find.text('MILANAC – ATLETICO VIRTUALE'),
       200,
       scrollable: home,
     );

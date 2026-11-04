@@ -119,7 +119,7 @@ void main() {
     tester,
   ) async {
     await openPresenze(tester, weekdayInItalyAt(17));
-    expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+    expect(find.text('OGGI · MILANAC'), findsOneWidget);
     expect(find.text('ALLENAMENTO 21:30'), findsOneWidget);
     expect(find.text('La tua risposta, entro le 18:30'), findsOneWidget);
     await scrollTo(tester, find.text('SENZA RISPOSTA · 3'));
@@ -290,14 +290,14 @@ void main() {
     );
   });
 
-  testWidgets('riepilogo del FUTURO: non contano le risposte del Milan AC', (
+  testWidgets('riepilogo del FUTURO: non contano le risposte del MILANAC', (
     tester,
   ) async {
     await openPresenze(tester, weekdayInItalyAt(17));
     await scrollTo(tester, find.widgetWithText(OutlinedButton, 'Presente'));
     await tester.tap(find.widgetWithText(OutlinedButton, 'Presente').first);
     await tester.pumpAndSettle();
-    // Milan AC: io presente, Marco Rossi in ritardo, Neri e Bianchi senza risposta.
+    // MILANAC: io presente, Marco Rossi in ritardo, Neri e Bianchi senza risposta.
     expect(groups(tester), [
       'PRESENTI · 1',
       'IN RITARDO · 1',
@@ -321,7 +321,7 @@ void main() {
     container.read(routerProvider).go('/presenze?giorno=${dateKey(tomorrow)}');
     await tester.pumpAndSettle();
     final label = DateFormat('EEEE d MMMM', 'it').format(tomorrow);
-    expect(find.text('${label.toUpperCase()} · MILAN AC'), findsOneWidget);
+    expect(find.text('${label.toUpperCase()} · MILANAC'), findsOneWidget);
 
     await scrollTo(tester, find.widgetWithText(OutlinedButton, 'Assente'));
     await tester.tap(find.widgetWithText(OutlinedButton, 'Assente').first);
@@ -344,7 +344,7 @@ void main() {
       // Tokyo, martedì 13 ottobre all'01:00: in Italia è lunedì 12, le 18:00.
       await openPresenze(tester, DateTime.parse('2026-10-13T01:00:00+09:00'));
       expect(dayTile('Lunedì 12, oggi'), findsOneWidget);
-      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+      expect(find.text('OGGI · MILANAC'), findsOneWidget);
       expect(find.text('ALLENAMENTO 21:30'), findsOneWidget);
       expect(find.text('La tua risposta, entro le 18:30'), findsOneWidget);
     },
@@ -356,7 +356,7 @@ void main() {
     // New York, lunedì 12 ottobre alle 12:45: in Italia sono le 18:45.
     await openPresenze(tester, DateTime.parse('2026-10-12T12:45:00-04:00'));
     expect(dayTile('Lunedì 12, oggi'), findsOneWidget);
-    expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+    expect(find.text('OGGI · MILANAC'), findsOneWidget);
     await scrollTo(tester, find.textContaining('Risposte chiuse alle 18:30'));
     final button = tester.widget<OutlinedButton>(
       find.widgetWithText(OutlinedButton, 'Presente').first,
@@ -407,7 +407,7 @@ void main() {
     (tester) async {
       final container = await openPresenze(tester, italyAt(2026, 10, 12, 17));
       final router = container.read(routerProvider);
-      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+      expect(find.text('OGGI · MILANAC'), findsOneWidget);
 
       // Un altro giorno scelto toccandolo: la rotta lo segue.
       final wednesday = find.byWidgetPredicate(
@@ -417,7 +417,7 @@ void main() {
       );
       await tester.tap(wednesday);
       await tester.pumpAndSettle();
-      expect(find.text('MERCOLEDÌ 14 OTTOBRE · MILAN AC'), findsOneWidget);
+      expect(find.text('MERCOLEDÌ 14 OTTOBRE · MILANAC'), findsOneWidget);
       expect(
         router.routeInformationProvider.value.uri.toString(),
         '/presenze?giorno=2026-10-14',
@@ -426,7 +426,7 @@ void main() {
       // La notifica delle 18:00 apre `/presenze`: si torna a oggi.
       router.go('/presenze');
       await tester.pumpAndSettle();
-      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+      expect(find.text('OGGI · MILANAC'), findsOneWidget);
 
       // Lo stesso con le statistiche aperte.
       await tester.tap(find.text('Statistiche'));
@@ -434,7 +434,7 @@ void main() {
       expect(find.textContaining('puntuale'), findsWidgets);
       router.go('/presenze');
       await tester.pumpAndSettle();
-      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+      expect(find.text('OGGI · MILANAC'), findsOneWidget);
     },
   );
 
@@ -443,7 +443,7 @@ void main() {
     var now = italyAt(2026, 10, 12, 23, 50);
     final container = await startAppAt(tester, now, clock: () => now);
     await goToSection(tester, 'Presenze');
-    expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+    expect(find.text('OGGI · MILANAC'), findsOneWidget);
 
     // L'app resta aperta (o in memoria) fino al giorno dopo; la notifica riporta alla
     // stessa rotta.
@@ -451,8 +451,8 @@ void main() {
     await tester.pump(const Duration(minutes: 1));
     container.read(routerProvider).go('/presenze');
     await tester.pumpAndSettle();
-    expect(find.text('OGGI · MILAN AC'), findsOneWidget);
-    expect(find.text('LUNEDÌ 12 OTTOBRE · MILAN AC'), findsNothing);
+    expect(find.text('OGGI · MILANAC'), findsOneWidget);
+    expect(find.text('LUNEDÌ 12 OTTOBRE · MILANAC'), findsNothing);
     expect(find.text('La tua risposta, entro le 18:30'), findsOneWidget);
   });
 
@@ -470,8 +470,8 @@ void main() {
       await tester.pump(const Duration(minutes: 1));
       await tester.tap(find.text('Calendario'));
       await tester.pumpAndSettle();
-      expect(find.text('OGGI · MILAN AC'), findsOneWidget);
-      expect(find.text('LUNEDÌ 12 OTTOBRE · MILAN AC'), findsNothing);
+      expect(find.text('OGGI · MILANAC'), findsOneWidget);
+      expect(find.text('LUNEDÌ 12 OTTOBRE · MILANAC'), findsNothing);
     },
   );
 
@@ -482,7 +482,7 @@ void main() {
     container.read(routerProvider).go('/presenze?giorno=2040-06-01');
     await tester.pumpAndSettle();
     expect(find.text('DICEMBRE 2029'), findsOneWidget);
-    expect(find.text('LUNEDÌ 31 DICEMBRE · MILAN AC'), findsOneWidget);
+    expect(find.text('LUNEDÌ 31 DICEMBRE · MILANAC'), findsOneWidget);
 
     container.read(routerProvider).go('/presenze?giorno=2019-05-01');
     await tester.pumpAndSettle();

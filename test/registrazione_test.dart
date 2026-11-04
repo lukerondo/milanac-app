@@ -88,7 +88,7 @@ void main() {
     expect(find.text('Passo 2 di 3'), findsOneWidget);
 
     // Direttivo con password e ruoli; ruolo in campo obbligatorio.
-    await tester.tap(find.text('Milan AC Futuro'));
+    await tester.tap(find.text('MILANAC FUTURO'));
     await tester.tap(find.text('Direttivo'));
     await tester.pumpAndSettle();
     expect(find.text('Password del Direttivo'), findsOneWidget);
@@ -161,13 +161,13 @@ void main() {
     await tester.tap(find.text('Ho letto e accetto'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Servono 2 minuti di lettura'), findsOneWidget);
-    expect(find.text('MILAN AC PRO CLUB'), findsNothing);
+    expect(find.text('MILANAC PRO CLUB'), findsNothing);
 
     await tester.pump(const Duration(minutes: 2));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ho letto e accetto'));
     await tester.pumpAndSettle();
-    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+    expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
   });
 
   testWidgets('Giocatore: una sola squadra, niente password', (tester) async {
@@ -183,8 +183,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Password del Direttivo'), findsNothing);
 
-    // Da giocatore le squadre si escludono: scegliere Futuro toglie Milan AC.
-    await tester.tap(find.text('Milan AC Futuro'));
+    // Da giocatore le squadre si escludono: scegliere Futuro toglie MILANAC.
+    await tester.tap(find.text('MILANAC FUTURO'));
     await pickPosition(tester, 'DC');
     await tester.tap(find.text('Avanti'));
     await tester.pumpAndSettle();

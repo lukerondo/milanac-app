@@ -161,7 +161,7 @@ void main() {
   });
 
   testWidgets('Badge delle squadre leggibili in tutti e due i temi: FUTURO con '
-      'il grigio del tema, MILAN AC in oro pieno', (tester) async {
+      'il grigio del tema, MILANAC in oro pieno', (tester) async {
     /// Contrasto WCAG tra due colori (da 1 a 21).
     double contrast(Color a, Color b) {
       final (light, dark) = a.computeLuminance() > b.computeLuminance()
@@ -199,7 +199,7 @@ void main() {
           reason: '$brightness',
         );
       }
-      final milan = tester.widget<Text>(find.text('MILAN AC'));
+      final milan = tester.widget<Text>(find.text('MILANAC'));
       expect(milan.style!.color, MilanacColors.ink);
       expect(
         contrast(MilanacColors.ink, MilanacColors.gold),

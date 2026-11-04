@@ -120,7 +120,7 @@ class DirettivoPage extends ConsumerWidget {
               _TodoRow(
                 value: toPublish,
                 title: 'Formazioni da pubblicare',
-                subtitle: 'Milan AC e Futuro',
+                subtitle: 'MILANAC e Futuro',
                 onTap: () => push(const FormationEditorPage()),
               ),
               const Divider(indent: 74),
@@ -498,13 +498,13 @@ AppBar _fullScreenBar(String title) => AppBar(
   flexibleSpace: const Align(alignment: Alignment.topCenter, child: GoldRule()),
 );
 
-/// Le squadre di un giocatore ("Milan AC · Futuro").
+/// Le squadre di un giocatore ("MILANAC · Futuro").
 String _teamsLabel(Set<Team> teams) => [
   for (final t in Team.values)
     if (teams.contains(t)) teamTabLabel(t),
 ].join(' · ');
 
-/// Rosa e squadre: il Direttivo sposta i giocatori tra Milan AC e Futuro e modifica i dati.
+/// Rosa e squadre: il Direttivo sposta i giocatori tra MILANAC e Futuro e modifica i dati.
 class RosaManagementPage extends ConsumerStatefulWidget {
   const RosaManagementPage({super.key});
 

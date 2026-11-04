@@ -43,7 +43,7 @@ Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `compl
 1. **Chi sei**: nome, cognome, anno di nascita (li vedono solo l'interessato e il Direttivo:
    stanno nella tabella riservata `profile_private`), **nome sulla carta**
    (è il nome mostrato in tutta l'app: `display_name`), motto.
-2. **Squadra e ruolo**: Milan AC o Milan AC Futuro (entrambe solo per il Direttivo); "Faccio parte
+2. **Squadra e ruolo**: MILANAC o MILANAC FUTURO (entrambe solo per il Direttivo); "Faccio parte
    del Direttivo" richiede la **password del club** (solo l'hash bcrypt sta in `app_config`,
    si cambia dall'app con `set_direttivo_password`) e almeno un ruolo dell'organigramma del
    regolamento (Presidente, Fondatore, Capitano, Vice-capitano, Resp. Comunicazioni e
@@ -85,7 +85,7 @@ notifica) e il Direttivo può togliere dalla Rosa chi non conosce (`active = fal
   foto, la propria carta (ruolo, numero, stile, statistiche FUT, piattaforma, non l'overall),
   scrive in chat e
   aggiunge link. Non può cambiarsi ruolo, squadra, stato, overall o data d'ingresso (trigger).
-- **Squadre**: Milan AC e Milan AC Futuro; i giocatori stanno in una sola squadra, chi è del
+- **Squadre**: MILANAC e MILANAC FUTURO; i giocatori stanno in una sola squadra, chi è del
   Direttivo può stare in entrambe.
 - **Registrazione in corso** (`pending`): vede solo i passi della registrazione e il regolamento.
 - **Sospeso** (`active = false`): vede solo la pagina "account non attivo".
@@ -277,7 +277,7 @@ del documento nella Storia; gli stessi testi stanno in
     salva la voce e ogni azione con il suo istante (fino a 5 minuti); allo stop l'anteprima
     con il replay sincronizzato, poi "Invia in chat" (canale a scelta, predefinito Tattiche e
     Schemi) oppure elimina. I video dei creator stanno in Mondo Proclub.
-15. **Chat** – canali Generale, Milan AC, Milan AC Futuro (visibili a chi ci gioca),
+15. **Chat** – canali Generale, MILANAC, MILANAC FUTURO (visibili a chi ci gioca),
     Tattiche & Schemi, Comunicazioni (scrive solo il Direttivo: avvisi, formazioni, carte
     speciali), Sala Direttivo (riservato). In stile Telegram: bolle rosse per i propri
     messaggi e grigie per gli altri (foto e nome), separatori per giorno, "Nuovi messaggi"
@@ -367,7 +367,7 @@ app_config    + direttivo_password_hash (bcrypt)
 -- dalla migrazione 0017
 attendance    + auto (assenza automatica), set_by (chi ha corretto); nota obbligatoria per il ritardo
 daily_jobs    day, job, done_at                    -- promemoria e assenze fatti una volta al giorno
-channels      + team (milanac|futuro), direttivo_writes   -- Generale, Milan AC, Futuro, Tattiche, Comunicazioni, Direttivo
+channels      + team (milanac|futuro), direttivo_writes   -- Generale, MILANAC, Futuro, Tattiche, Comunicazioni, Direttivo
 shared_links  category(musica|video) + status(proposto|pubblicato), published_by, published_at
 news          + platform (ps5|xbox) per la categoria console
 -- dalla migrazione 0018

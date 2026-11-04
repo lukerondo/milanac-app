@@ -181,7 +181,7 @@ void main() {
   ) async {
     final repo = _Chat();
     await startChat(tester, repo: repo);
-    await openChannel(tester, 'Milan AC');
+    await openChannel(tester, 'MILANAC');
 
     expect(find.text('SONDAGGIO'), findsOneWidget);
     expect(find.text(_question), findsOneWidget);
@@ -388,7 +388,7 @@ void main() {
         ),
       ],
     );
-    await openChannel(tester, 'Milan AC');
+    await openChannel(tester, 'MILANAC');
     await tester.longPress(find.text(_question));
     await tester.pumpAndSettle();
     expect(find.text('Copia testo'), findsOneWidget);
@@ -408,7 +408,7 @@ void main() {
     tester,
   ) async {
     await startChat(tester, repo: othersPoll());
-    await openChannel(tester, 'Milan AC');
+    await openChannel(tester, 'MILANAC');
     await tester.longPress(find.text(_question));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Chiudi il sondaggio'));
@@ -440,7 +440,7 @@ void main() {
       'subito dopo aver votato da qui', (tester) async {
     final repo = _Chat();
     await startChat(tester, repo: repo);
-    await openChannel(tester, 'Milan AC');
+    await openChannel(tester, 'MILANAC');
     // Nella demo il tempo reale riporta il voto prima della risposta del server.
     await tester.tap(find.text('Giovedì'));
     await tester.pumpAndSettle();
@@ -469,7 +469,7 @@ void main() {
       )..slowVotes = StreamController<List<PollVote>>.broadcast();
       addTearDown(repo.slowVotes!.close);
       await startChat(tester, repo: repo);
-      await openChannel(tester, 'Milan AC');
+      await openChannel(tester, 'MILANAC');
       await tester.tap(find.text('Cuffie'));
       await tester.pumpAndSettle();
       expect(repo.sent, isEmpty);
@@ -509,7 +509,7 @@ void main() {
     )..slowVote = Completer<void>();
     repo.voteElsewhere('q1', 'p3', vote('q1', 'p3', {1}).options);
     await startChat(tester, repo: repo);
-    await openChannel(tester, 'Milan AC');
+    await openChannel(tester, 'MILANAC');
 
     // Si vota la prima; mentre parte arriva un messaggio e tutto scorre di un posto.
     await tester.tap(
@@ -541,7 +541,7 @@ void main() {
       'canale: la bolla lo mostra chiuso lo stesso', (tester) async {
     final repo = _Chat();
     await startChat(tester, repo: repo);
-    await openChannel(tester, 'Milan AC');
+    await openChannel(tester, 'MILANAC');
     expect(find.text('SONDAGGIO'), findsOneWidget);
     repo.closePollElsewhere('m8', inChannel: false);
     await tester.pumpAndSettle();

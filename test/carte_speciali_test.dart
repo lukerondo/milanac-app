@@ -55,7 +55,7 @@ void main() {
     await goToSection(tester, 'Carte speciali');
     expect(find.text('QUESTA SETTIMANA · 2ª GIORNATA'), findsOneWidget);
     expect(
-      find.text('Milan AC 3 – 1 Dinamo Pixel · scadono tra 5 giorni'),
+      find.text('MILANAC 3 – 1 Dinamo Pixel · scadono tra 5 giorni'),
       findsOneWidget,
     );
     // La blu elettrico del portiere, poi le nero/oro per reparto.

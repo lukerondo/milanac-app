@@ -84,15 +84,15 @@ List<Member> playingTonight(
     if (eveningEvent(events, day, teams: m.teams) != null) m,
 ];
 
-/// Squadra "principale" di un membro: Milan AC se ci gioca (anche con il Futuro).
+/// Squadra "principale" di un membro: MILANAC se ci gioca (anche con il Futuro).
 Team mainTeam(Set<Team> teams) =>
     teams.contains(Team.milanac) ? Team.milanac : Team.futuro;
 
-/// Nome della squadra nei selettori e nei filtri ("Milan AC", "Futuro").
-String teamTabLabel(Team t) => t == Team.milanac ? 'Milan AC' : 'Futuro';
+/// Nome della squadra nei selettori e nei filtri ("MILANAC", "Futuro").
+String teamTabLabel(Team t) => t == Team.milanac ? 'MILANAC' : 'Futuro';
 
 /// Titolo e dettaglio di una partita dal titolo dell'evento: "FVPA – 3ª giornata vs
-/// Atletico Virtuale" diventa "Milan AC – Atletico Virtuale" con "FVPA – 3ª giornata".
+/// Atletico Virtuale" diventa "MILANAC – Atletico Virtuale" con "FVPA – 3ª giornata".
 /// Senza "vs" nel titolo resta il titolo com'è.
 ({String title, String? detail, String? opponent}) matchHeadline(
   ClubEvent e,

@@ -278,13 +278,13 @@ void main() {
       await tester.tap(find.text('Futuro'));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('La formazione di Milan AC Futuro non è ancora'),
+        find.textContaining('La formazione di MILANAC FUTURO non è ancora'),
         findsOneWidget,
       );
       await tester.tap(find.text('Prepara la formazione'));
       await tester.pumpAndSettle();
       expect(find.text('FORMAZIONI'), findsOneWidget);
-      // Nell'editor il Futuro (Verdi), non il Milan AC (Rossi).
+      // Nell'editor il Futuro (Verdi), non il MILANAC (Rossi).
       expect(find.text('23 Verdi'), findsOneWidget);
       expect(find.text('9 Rossi'), findsNothing);
       expect(container.read(formationTeamProvider(null)), Team.futuro);
@@ -293,10 +293,10 @@ void main() {
 
   testWidgets(
     '/formazione?squadra=futuro apre la formazione del Futuro, anche a '
-    'chi gioca nel Milan AC; il PDF in alto è di quella squadra',
+    'chi gioca nel MILANAC; il PDF in alto è di quella squadra',
     (tester) async {
       final container = await startAppAt(tester, todayInItalyAt(17));
-      // Il Milan AC ha la formazione pubblicata, il Futuro no.
+      // Il MILANAC ha la formazione pubblicata, il Futuro no.
       final server = container.read(formationRepositoryProvider);
       await server.publish(await server.loadCurrent(Team.milanac));
       IconButton pdf() => tester.widget<IconButton>(
@@ -305,7 +305,7 @@ void main() {
 
       await goToPath(tester, '/formazione?squadra=futuro');
       expect(
-        find.textContaining('La formazione di Milan AC Futuro non è ancora'),
+        find.textContaining('La formazione di MILANAC FUTURO non è ancora'),
         findsOneWidget,
       );
       expect(pdf().onPressed, isNull, reason: 'il Futuro non è pubblicato');
@@ -318,7 +318,7 @@ void main() {
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
       await tester.pumpAndSettle();
 
-      // Senza squadra nella rotta: quella di chi guarda (Milan AC), pubblicata.
+      // Senza squadra nella rotta: quella di chi guarda (MILANAC), pubblicata.
       await goToPath(tester, '/formazione');
       expect(find.text('Pubblicata oggi'), findsOneWidget);
       expect(pdf().onPressed, isNotNull);
@@ -364,7 +364,7 @@ void main() {
     );
     expect(find.text('FORMAZIONE'), findsOneWidget);
     expect(
-      find.textContaining('La formazione di Milan AC Futuro non è ancora'),
+      find.textContaining('La formazione di MILANAC FUTURO non è ancora'),
       findsOneWidget,
     );
   });

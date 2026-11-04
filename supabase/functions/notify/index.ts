@@ -102,7 +102,7 @@ async function withoutMuted(db: SupabaseClient, pushes: Push[], category: string
   return pushes.filter((p) => p.always || !off.has(p.userId));
 }
 
-const TEAM_NAMES: Record<string, string> = { milanac: "Milan AC", futuro: "Milan AC Futuro" };
+const TEAM_NAMES: Record<string, string> = { milanac: "MILANAC", futuro: "MILANAC FUTURO" };
 const PLATFORM_NAMES: Record<string, string> = { ps5: "PlayStation", xbox: "Xbox" };
 
 /// Membri attivi del club (chi ha finito la registrazione), eventualmente di una squadra.
@@ -139,7 +139,7 @@ async function formationPushes(db: SupabaseClient, formationId: string): Promise
   const { data: formation } = await db
     .from("formations").select("team").eq("id", formationId).single();
   const team = formation?.team ?? "milanac";
-  const teamName = TEAM_NAMES[team] ?? "Milan AC";
+  const teamName = TEAM_NAMES[team] ?? "MILANAC";
   const { data: slots } = await db
     .from("formation_slots").select("label, player_id").eq("formation_id", formationId);
   // Chi batte le palle inattive (migrazione 0035). A parte: senza la colonna (database non
@@ -174,7 +174,7 @@ function setPiecesOf(takers: Record<string, string>, playerId: string): string {
   return roles.length < 2 ? roles.join("") : `${roles.slice(0, -1).join(", ")} e ${roles[roles.length - 1]}`;
 }
 
-/// "Sei titolare: ATT. Forza Milan AC!"; a chi batte anche "batti rigori e punizioni", ma
+/// "Sei titolare: ATT. Forza MILANAC!"; a chi batte anche "batti rigori e punizioni", ma
 /// solo se c'è posto (al massimo 90 caratteri): altrimenti il testo di sempre.
 function starterBody(role: string, teamName: string, setPieces: string): string {
   const plain = `Sei titolare: ${role}. Forza ${teamName}!`;
@@ -189,7 +189,7 @@ async function matchResultPushes(db: SupabaseClient, matchId: string): Promise<P
     .from("matches").select("id, team, opponent, home, goals_for, goals_against").eq("id", matchId).single();
   if (!match || match.goals_for == null || match.goals_against == null) return [];
   const team = match.team ?? "milanac";
-  const us = TEAM_NAMES[team] ?? "Milan AC";
+  const us = TEAM_NAMES[team] ?? "MILANAC";
   const score = match.home
     ? `${us} ${match.goals_for}–${match.goals_against} ${match.opponent}`
     : `${match.opponent} ${match.goals_against}–${match.goals_for} ${us}`;
@@ -220,7 +220,7 @@ async function eventPushes(db: SupabaseClient, eventId: string): Promise<Push[]>
   const { data: e } = await db
     .from("events").select("id, type, title, starts_at, team, location").eq("id", eventId).single();
   if (!e) return [];
-  const teamName = e.team ? TEAM_NAMES[e.team] ?? "Milan AC" : "tutto il club";
+  const teamName = e.team ? TEAM_NAMES[e.team] ?? "MILANAC" : "tutto il club";
   const kind = ({ torneo: "Partita ufficiale", amichevole: "Amichevole", allenamento: "Allenamento",
     riunione: "Riunione" } as Record<string, string>)[e.type] ?? "Evento";
   const day = dayRome(e.starts_at);
@@ -438,7 +438,7 @@ async function specialCardsWeekPushes(db: SupabaseClient, matchId: string): Prom
   const { data: msg } = await db
     .from("messages").select("body").eq("kind", "system")
     .eq("meta->>type", "special_cards").eq("meta->>match", matchId).maybeSingle();
-  // "Carte speciali della 3ª giornata (Milan AC 3–1 Rivali): POR Rossi +5, …"
+  // "Carte speciali della 3ª giornata (MILANAC 3–1 Rivali): POR Rossi +5, …"
   const body = msg?.body ?? "Guarda chi ha la carta speciale di questa settimana.";
   const title = body.match(/^Carte speciali ([^(]+)/)?.[1]?.trim();
   return (await members(db, m.team)).map((u) => ({

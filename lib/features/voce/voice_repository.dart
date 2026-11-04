@@ -189,7 +189,7 @@ class _SupabaseVoiceRepository implements VoiceRepository {
       ((await _client.rpc('voice_minutes')) as num?)?.toInt() ?? 0;
 }
 
-/// Stanze in memoria per la modalità demo e i test: in Milan AC c'è già una
+/// Stanze in memoria per la modalità demo e i test: in MILANAC c'è già una
 /// stanza aperta con Marco e Luca dentro.
 class DemoVoiceRepository implements VoiceRepository {
   DemoVoiceRepository() {

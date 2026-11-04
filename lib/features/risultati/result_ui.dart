@@ -28,9 +28,9 @@ String scoreText(ClubMatch m) => m.outcome == MatchOutcome.daGiocare
     ? '–'
     : '${m.goalsFor} – ${m.goalsAgainst}';
 
-/// Nome breve della squadra nei filtri a pillola ("Milan AC", "Futuro").
+/// Nome breve della squadra nei filtri a pillola ("MILANAC", "Futuro").
 String teamPillLabel(Team t) => switch (t) {
-  Team.milanac => 'Milan AC',
+  Team.milanac => 'MILANAC',
   Team.futuro => 'Futuro',
 };
 

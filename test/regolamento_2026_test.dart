@@ -187,7 +187,7 @@ void main() {
       for (final typo in [
         'raà',
         'eà ',
-        'del MILAN AC.',
+        'del MILANAC.',
         'LUNEDI ',
         'VENERDI ',
         'fatti salvi',

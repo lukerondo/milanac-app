@@ -92,7 +92,7 @@ void main() {
       find.widgetWithText(TextField, 'Avversario'),
       'Inter Digitale',
     );
-    await tester.enterText(find.widgetWithText(TextField, 'MILAN AC'), '4');
+    await tester.enterText(find.widgetWithText(TextField, 'MILANAC'), '4');
     await tester.enterText(find.widgetWithText(TextField, 'Avversari'), '0');
     // Con il risultato compaiono le righe dei minuti: il tasto scende.
     await tester.pumpAndSettle();

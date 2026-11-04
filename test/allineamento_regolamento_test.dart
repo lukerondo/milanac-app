@@ -87,7 +87,7 @@ void main() {
       expect(
         eveningEvent([torneoFuturo], domenica, teams: {Team.milanac}),
         isNull,
-        reason: 'la partita del Futuro non è una serata del Milan AC',
+        reason: 'la partita del Futuro non è una serata del MILANAC',
       );
 
       // La prossima serata: dal sabato il lunedì, o prima se c'è una partita.
@@ -128,7 +128,7 @@ void main() {
       'a 320 dp', (tester) async {
     await startAppAt(tester, italyAt(2026, 11, 7, 17));
     await narrow(tester);
-    expect(find.text('STASERA · MILAN AC'), findsOneWidget);
+    expect(find.text('STASERA · MILANAC'), findsOneWidget);
     expect(find.text('RIPOSO'), findsOneWidget);
     expect(
       find.textContaining('dal lunedì al venerdì, 21:30–23:30'),
@@ -144,7 +144,7 @@ void main() {
     expect(next, findsOneWidget);
     await tester.tap(next);
     await tester.pumpAndSettle();
-    expect(find.text('LUNEDÌ 9 NOVEMBRE · MILAN AC'), findsOneWidget);
+    expect(find.text('LUNEDÌ 9 NOVEMBRE · MILANAC'), findsOneWidget);
     expect(find.text('PARTITA UFFICIALE 21:30'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Presente'), findsWidgets);
   });
@@ -165,7 +165,7 @@ void main() {
         );
     await tester.pumpAndSettle();
     await narrow(tester, 360);
-    expect(find.text('MATCH DAY · MILAN AC'), findsOneWidget);
+    expect(find.text('MATCH DAY · MILANAC'), findsOneWidget);
     expect(find.text('RIPOSO'), findsNothing);
     await tester.ensureVisible(
       find.text('Promemoria: in party alle 21:00, in lobby alle 21:20'),
@@ -184,7 +184,7 @@ void main() {
     expect(dayTile('Sabato 7, oggi, riposo'), findsOneWidget);
     expect(dayTile('Venerdì 6'), findsOneWidget);
     expect(dayTile('Venerdì 6, riposo'), findsNothing);
-    expect(find.text('OGGI · MILAN AC'), findsOneWidget);
+    expect(find.text('OGGI · MILANAC'), findsOneWidget);
     expect(find.text('RIPOSO'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Presente'), findsNothing);
     expect(find.text('Chi c\'è stasera'), findsNothing);

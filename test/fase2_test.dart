@@ -88,7 +88,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: rossiCard,
-        matching: find.widgetWithText(FilterChip, 'Milan AC Futuro'),
+        matching: find.widgetWithText(FilterChip, 'MILANAC FUTURO'),
       ),
     );
     await tester.pumpAndSettle();

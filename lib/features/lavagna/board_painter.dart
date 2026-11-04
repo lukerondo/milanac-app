@@ -11,7 +11,7 @@ import 'board_overlays.dart';
 
 // Il campo, i gettoni e il pallone sono oggetti "di gioco": stessi colori nei due temi.
 
-/// Colore del gettone: oro per noi (Milan AC e Futuro), nero per gli avversari.
+/// Colore del gettone: oro per noi (MILANAC e Futuro), nero per gli avversari.
 Color tokenColor(String side) =>
     side == 'avversari' ? MilanacColors.black : MilanacColors.gold;
 

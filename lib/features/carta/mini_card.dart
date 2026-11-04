@@ -27,7 +27,7 @@ import 'fut_card_skin.dart';
       },
     };
 
-/// Squadre scritte sotto il nome delle mini carte ("MILAN AC", "FUTURO").
+/// Squadre scritte sotto il nome delle mini carte ("MILANAC", "FUTURO").
 String _teamsShort(Set<Team> teams) => [
   for (final t in Team.values)
     if (teams.contains(t)) t.short,

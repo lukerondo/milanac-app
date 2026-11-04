@@ -52,7 +52,7 @@ class VoiceRoomButton extends ConsumerWidget {
   }
 }
 
-/// Card della stanza vocale del canale: "Stanza vocale aperta · Milan AC — Marco e
+/// Card della stanza vocale del canale: "Stanza vocale aperta · MILANAC — Marco e
 /// Luca sono dentro — Entra"; se ci sei, la tua chiamata ridotta a striscia
 /// (microfono ed esci sempre a portata di dito, un tocco riapre la stanza).
 class VoiceRoomBanner extends ConsumerWidget {
