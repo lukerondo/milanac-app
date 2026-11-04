@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
 import 'board_model.dart';
+import 'board_overlays.dart';
 
 // Il campo, i gettoni e il pallone sono oggetti "di gioco": stessi colori nei due temi.
 
@@ -33,6 +34,17 @@ class BallFlight {
 
   /// Il pallone parte forte e rallenta arrivando.
   double get eased => Curves.easeOutCubic.transform(t.clamp(0.0, 1.0));
+}
+
+/// I giocatori che scivolano verso le posizioni della nuova zona, alla frazione [t]
+/// (da 0 a 1): solo disegno, lo stato della lavagna è già quello d'arrivo.
+@immutable
+class ShiftFrame {
+  const ShiftFrame(this.shift, this.t);
+  final TokenShift shift;
+  final double t;
+
+  double get eased => Curves.easeInOutCubic.transform(t.clamp(0.0, 1.0));
 }
 
 /// Disegna la lavagna: campo, heatmap, frecce, linee del pallone, gettoni e pallone
@@ -139,6 +151,7 @@ class BoardCanvas extends StatefulWidget {
     required this.board,
     this.pendingArrow,
     this.flight,
+    this.shift,
     this.target,
     this.selectedId,
     this.showNames = true,
@@ -150,8 +163,11 @@ class BoardCanvas extends StatefulWidget {
   /// Freccia in corso di disegno (dal punto iniziale al dito).
   final ValueListenable<BoardArrow?>? pendingArrow;
 
-  /// Il pallone in volo (passaggi e tiri).
+  /// Il pallone in volo (passaggi, tiri e cross).
   final ValueListenable<BallFlight?>? flight;
+
+  /// I giocatori che scivolano verso le posizioni della nuova zona.
+  final ValueListenable<ShiftFrame?>? shift;
 
   /// Il gettone che prenderebbe il pallone lasciato lì (mentre lo si trascina).
   final ValueListenable<String?>? target;
@@ -210,6 +226,7 @@ class _BoardCanvasState extends State<BoardCanvas> {
             _state,
             pendingArrow: widget.pendingArrow,
             flight: widget.flight,
+            shift: widget.shift,
             target: widget.target,
             selectedId: widget.selectedId,
             showNames: widget.showNames,
@@ -246,15 +263,23 @@ class _PiecesLayer extends CustomPainter {
     this.board, {
     this.pendingArrow,
     this.flight,
+    this.shift,
     this.target,
     this.selectedId,
     required this.showNames,
   }) : super(
-         repaint: Listenable.merge([board, ?pendingArrow, ?flight, ?target]),
+         repaint: Listenable.merge([
+           board,
+           ?pendingArrow,
+           ?flight,
+           ?shift,
+           ?target,
+         ]),
        );
   final ValueListenable<BoardState> board;
   final ValueListenable<BoardArrow?>? pendingArrow;
   final ValueListenable<BallFlight?>? flight;
+  final ValueListenable<ShiftFrame?>? shift;
   final ValueListenable<String?>? target;
   final String? selectedId;
   final bool showNames;
@@ -266,6 +291,7 @@ class _PiecesLayer extends CustomPainter {
     board.value,
     pendingArrow: pendingArrow?.value,
     flight: flight?.value,
+    shift: shift?.value,
     targetId: target?.value,
     selectedId: selectedId,
     showNames: showNames,
@@ -276,6 +302,7 @@ class _PiecesLayer extends CustomPainter {
       old.board != board ||
       old.pendingArrow != pendingArrow ||
       old.flight != flight ||
+      old.shift != shift ||
       old.target != target ||
       old.selectedId != selectedId ||
       old.showNames != showNames;
@@ -398,18 +425,49 @@ void _paintHeat(Canvas canvas, Size size, List<HeatPoint> heat) {
   canvas.restore();
 }
 
-/// Frecce (con quella in corso di disegno, in oro), linee del pallone, gettoni e, sopra
-/// tutto, il pallone (in volo, se c'è un passaggio in corso).
+/// Sotto: le zone della palla (posizioni per zona), le zone di battuta, le linee di
+/// reparto e del fuorigioco; poi frecce (con quella in corso di disegno, in oro), linee
+/// del pallone, gettoni con le bandierine del fuorigioco, i numeri delle zone di
+/// battuta e, sopra tutto, il pallone (in volo, se c'è un passaggio in corso). I
+/// gettoni che scivolano verso le posizioni della nuova zona ([shift]) si disegnano a
+/// metà strada, e le linee li seguono.
 void _paintPieces(
   Canvas canvas,
   Size size,
   BoardState state, {
   BoardArrow? pendingArrow,
   BallFlight? flight,
+  ShiftFrame? shift,
   String? targetId,
   String? selectedId,
   bool showNames = true,
 }) {
+  if (shift != null) {
+    final e = shift.eased;
+    state = state.copyWith(
+      tokens: [
+        for (final t in state.tokens)
+          if (shift.shift.from[t.id] case (final fx, final fy))
+            t.moved(fx + (t.x - fx) * e, fy + (t.y - fy) * e)
+          else
+            t,
+      ],
+    );
+  }
+  if (state.shows(BoardOverlay.zonePositions)) {
+    _paintBallZones(canvas, size, state);
+  }
+  final zones = state.shows(BoardOverlay.zones)
+      ? deliveryZones(state)
+      : const <DeliveryZone>[];
+  for (final z in zones) {
+    _paintDeliveryZone(canvas, size, z);
+  }
+  if (state.shows(BoardOverlay.units)) {
+    if (readUnits(state) case final units?) _paintUnits(canvas, size, units);
+  }
+  final offside = state.shows(BoardOverlay.offside) ? readOffside(state) : null;
+  if (offside != null) _paintOffsideLines(canvas, size, offside);
   for (final a in state.arrows) {
     _paintArrow(canvas, size, a, MilanacColors.ivory);
   }
@@ -429,20 +487,294 @@ void _paintPieces(
       showNames: showNames,
     );
   }
+  if (offside != null) {
+    for (final t in state.tokens) {
+      if (offside.flagged.contains(t.id)) _paintOffsideFlag(canvas, size, t);
+    }
+  }
+  for (final z in zones) {
+    _paintZoneBadge(canvas, size, z);
+  }
   final ball = state.ball;
   if (ball != null) {
-    var (x, y) = (ball.x, ball.y);
+    var at = BoardPainter.toPixel(size, ball.x, ball.y);
     if (flight != null) {
+      final from = BoardPainter.toPixel(
+        size,
+        flight.kick.fromX,
+        flight.kick.fromY,
+      );
       final e = flight.eased;
-      x = flight.kick.fromX + (x - flight.kick.fromX) * e;
-      y = flight.kick.fromY + (y - flight.kick.fromY) * e;
+      final cross = state.lines.any(
+        (l) => l.n == flight.kick.line && l.kind == BallLineKind.cross,
+      );
+      if (cross) {
+        // Il cross gira: il pallone segue la curva della sua linea.
+        final c = crossControl(size, from, at);
+        at = from * ((1 - e) * (1 - e)) + c * (2 * (1 - e) * e) + at * (e * e);
+      } else {
+        at = Offset.lerp(from, at, e)!;
+      }
     }
-    paintBall(
-      canvas,
-      BoardPainter.toPixel(size, x, y),
-      BoardPainter.ballRadius(size),
+    paintBall(canvas, at, BoardPainter.ballRadius(size));
+  }
+}
+
+/// Il punto di controllo della curva di un cross da [p1] a [p2] (in pixel): la palla
+/// gira verso il centro del campo, lontano dalla linea di fondo.
+Offset crossControl(Size size, Offset p1, Offset p2) {
+  final mid = (p1 + p2) / 2;
+  final d = p2 - p1;
+  final length = d.distance;
+  if (length < 1) return mid;
+  var n = Offset(-d.dy, d.dx) / length;
+  final toCenter = BoardPainter.fieldRect(size).center - mid;
+  if (n.dx * toCenter.dx + n.dy * toCenter.dy < 0) n = -n;
+  return mid + n * (length * .18);
+}
+
+/// Posizioni per zona: le 9 zone della palla a righe sottili, quella del pallone
+/// appena accesa e un segno di spunta dove le posizioni sono salvate.
+void _paintBallZones(Canvas canvas, Size size, BoardState state) {
+  final f = BoardPainter.fieldRect(size);
+  final w = size.width;
+  final ball = state.ball;
+  if (ball != null) {
+    final zone = ballZoneAt(ball.x, ball.y);
+    canvas.drawRect(
+      Rect.fromLTWH(
+        f.left + (zone % 3) * f.width / 3,
+        f.top + (zone ~/ 3) * f.height / 3,
+        f.width / 3,
+        f.height / 3,
+      ),
+      Paint()..color = MilanacColors.ivory.withValues(alpha: .06),
     );
   }
+  final grid = Paint()
+    ..color = MilanacColors.ivory.withValues(alpha: .22)
+    ..strokeWidth = max(1.0, w * .003);
+  final dash = w * .02, gap = w * .016;
+  for (final i in [1, 2]) {
+    final x = f.left + f.width * i / 3, y = f.top + f.height * i / 3;
+    for (var d = 0.0; d < f.height; d += dash + gap) {
+      canvas.drawLine(
+        Offset(x, f.top + d),
+        Offset(x, f.top + min(d + dash, f.height)),
+        grid,
+      );
+    }
+    for (var d = 0.0; d < f.width; d += dash + gap) {
+      canvas.drawLine(
+        Offset(f.left + d, y),
+        Offset(f.left + min(d + dash, f.width), y),
+        grid,
+      );
+    }
+  }
+  // La spunta nell'angolo in alto a destra della zona.
+  final r = w * .022;
+  for (final zone in state.positions.keys) {
+    final c = Offset(
+      f.left + (zone % 3 + 1) * f.width / 3 - r * 1.5,
+      f.top + (zone ~/ 3) * f.height / 3 + r * 1.5,
+    );
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()..color = MilanacColors.gold.withValues(alpha: .85),
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(c.dx - r * .5, c.dy)
+        ..lineTo(c.dx - r * .12, c.dy + r * .4)
+        ..lineTo(c.dx + r * .5, c.dy - r * .38),
+      Paint()
+        ..color = MilanacColors.ink
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(1.0, r * .26)
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+}
+
+/// Una zona di battuta: un rettangolo tenue (il numero lo mette [_paintZoneBadge],
+/// sopra i gettoni).
+void _paintDeliveryZone(Canvas canvas, Size size, DeliveryZone z) {
+  final c = BoardPainter.toPixel(size, z.x, z.y);
+  final f = BoardPainter.fieldRect(size);
+  final rect = RRect.fromRectAndRadius(
+    Rect.fromCenter(center: c, width: z.w * f.width, height: z.h * f.height),
+    Radius.circular(size.width * .012),
+  );
+  canvas
+    ..drawRRect(
+      rect,
+      Paint()..color = MilanacColors.ivory.withValues(alpha: .08),
+    )
+    ..drawRRect(
+      rect,
+      Paint()
+        ..color = MilanacColors.ivory.withValues(alpha: .4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(1.0, size.width * .003),
+    );
+}
+
+/// Il numero della zona di battuta, nel suo angolo.
+void _paintZoneBadge(Canvas canvas, Size size, DeliveryZone z) {
+  final w = size.width;
+  final r = w * .019;
+  final at = BoardPainter.toPixel(size, z.badgeX, z.badgeY);
+  canvas
+    ..drawCircle(
+      at,
+      r,
+      Paint()..color = MilanacColors.black.withValues(alpha: .72),
+    )
+    ..drawCircle(
+      at,
+      r,
+      Paint()
+        ..color = MilanacColors.ivory.withValues(alpha: .7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(.8, w * .0025),
+    );
+  _text(
+    canvas,
+    '${z.n}',
+    at,
+    fontSize: w * .025,
+    fontFamily: sportFont,
+    weight: FontWeight.w600,
+    color: MilanacColors.ivory,
+    maxWidth: r * 2.4,
+  );
+}
+
+/// Le linee di reparto: una linea d'oro per reparto (da sinistra a destra) e, al lato
+/// più libero, i metri tra la difesa e il reparto dopo.
+void _paintUnits(Canvas canvas, Size size, UnitLines units) {
+  final w = size.width;
+  final r = BoardPainter.tokenRadius(size);
+  final paint = Paint()
+    ..color = MilanacColors.goldLight.withValues(alpha: .75)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = max(1.0, w * .0045)
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+  for (final group in units.groups) {
+    final points = [
+      for (final (x, y) in group) BoardPainter.toPixel(size, x, y),
+    ];
+    if (points.length == 1) {
+      // Un reparto di uno: un trattino orizzontale.
+      final p = points.single;
+      canvas.drawLine(p - Offset(r * 1.8, 0), p + Offset(r * 1.8, 0), paint);
+      continue;
+    }
+    canvas.drawPath(Path()..addPolygon(points, false), paint);
+  }
+  // I metri: dove c'è più spazio, a sinistra o a destra.
+  final y1 = UnitLines.meanY(units.groups[0]);
+  final y2 = UnitLines.meanY(units.groups[1]);
+  final all = [for (final g in units.groups) ...g];
+  double room(double x) => all.fold(
+    double.infinity,
+    (m, p) => min(m, fieldDistance(p.$1 - x, p.$2 - (y1 + y2) / 2)),
+  );
+  final x = room(.04) >= room(.96) ? .04 : .96;
+  final top = BoardPainter.toPixel(size, x, y2);
+  final bottom = BoardPainter.toPixel(size, x, y1);
+  final bracket = Paint()
+    ..color = MilanacColors.goldLight.withValues(alpha: .85)
+    ..strokeWidth = max(1.0, w * .003);
+  final tick = w * .012;
+  canvas
+    ..drawLine(top, bottom, bracket)
+    ..drawLine(top - Offset(tick, 0), top + Offset(tick, 0), bracket)
+    ..drawLine(bottom - Offset(tick, 0), bottom + Offset(tick, 0), bracket);
+  final mid = (top + bottom) / 2;
+  final label = '${units.gapMetres} m';
+  final fontSize = w * .028;
+  final pill = RRect.fromRectAndRadius(
+    Rect.fromCenter(
+      center: mid,
+      width: fontSize * (label.length * .62 + 1.2),
+      height: fontSize * 1.5,
+    ),
+    Radius.circular(fontSize),
+  );
+  canvas.drawRRect(
+    pill,
+    Paint()..color = MilanacColors.black.withValues(alpha: .8),
+  );
+  _text(
+    canvas,
+    label,
+    mid,
+    fontSize: fontSize,
+    fontFamily: sportFont,
+    weight: FontWeight.w600,
+    color: MilanacColors.goldLight,
+    maxWidth: w * .2,
+  );
+}
+
+/// Il fuorigioco: la linea tratteggiata del penultimo avversario (avorio) e la
+/// nostra linea difensiva (oro), da una parte all'altra del campo.
+void _paintOffsideLines(Canvas canvas, Size size, OffsideReading o) {
+  final w = size.width;
+  final f = BoardPainter.fieldRect(size);
+  final dash = w * .026, gap = w * .014;
+  for (final (y, color) in [
+    (o.ourLine, MilanacColors.gold),
+    (o.line, MilanacColors.ivory),
+  ]) {
+    if (y == null) continue;
+    final py = BoardPainter.toPixel(size, 0, y).dy;
+    final shadow = Paint()
+      ..color = MilanacColors.black.withValues(alpha: .4)
+      ..strokeWidth = max(2.0, w * .007);
+    final line = Paint()
+      ..color = color.withValues(alpha: .9)
+      ..strokeWidth = max(1.0, w * .0038);
+    for (var d = 0.0; d < f.width; d += dash + gap) {
+      final a = Offset(f.left + d, py);
+      final b = Offset(f.left + min(d + dash, f.width), py);
+      canvas
+        ..drawLine(a, b, shadow)
+        ..drawLine(a, b, line);
+    }
+  }
+}
+
+/// La bandierina del guardalinee sopra il gettone in fuorigioco.
+void _paintOffsideFlag(Canvas canvas, Size size, BoardToken t) {
+  final c = BoardPainter.toPixel(size, t.x, t.y);
+  final r = BoardPainter.tokenRadius(size);
+  final foot = c + Offset(r * .75, -r * .45);
+  final top = foot - Offset(0, r * 1.3);
+  final pole = Paint()
+    ..color = MilanacColors.ivory
+    ..strokeWidth = max(1.2, r * .14)
+    ..strokeCap = StrokeCap.round;
+  canvas.drawLine(foot, top, pole);
+  final flag = Path()
+    ..moveTo(top.dx, top.dy)
+    ..lineTo(top.dx + r * .85, top.dy + r * .28)
+    ..lineTo(top.dx, top.dy + r * .62)
+    ..close();
+  canvas
+    ..drawPath(
+      flag,
+      Paint()
+        ..color = MilanacColors.black.withValues(alpha: .5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(1.0, r * .12),
+    )
+    ..drawPath(flag, Paint()..color = MilanacColors.kitRed);
 }
 
 void _paintArrow(Canvas canvas, Size size, BoardArrow a, Color color) {
@@ -528,9 +860,23 @@ void _paintBallLine(
   final br = BoardPainter.ballRadius(size);
   final p1 = BoardPainter.toPixel(size, l.x1, l.y1);
   final p2 = BoardPainter.toPixel(size, l.x2, l.y2);
-  final full = (p2 - p1).distance;
   final trimStart = l.fromPlayer ? r * 1.05 : br * 1.1;
   final trimEnd = l.toPlayer ? r * 1.15 : br * 1.15;
+  if (l.kind == BallLineKind.cross) {
+    _paintCross(
+      canvas,
+      size,
+      l,
+      p1,
+      p2,
+      trimStart: trimStart,
+      trimEnd: trimEnd,
+      opacity: opacity,
+      progress: progress,
+    );
+    return;
+  }
+  final full = (p2 - p1).distance;
   final length = full - trimStart - trimEnd;
   if (!length.isFinite || length < br) return;
   final dir = (p2 - p1) / full;
@@ -538,7 +884,7 @@ void _paintBallLine(
   final tip = start + dir * (length * progress);
   final (width, head) = switch (l.kind) {
     BallLineKind.shot => (max(2.5, w * .011), w * .036),
-    BallLineKind.pass => (max(1.2, w * .0055), w * .028),
+    BallLineKind.pass || BallLineKind.cross => (max(1.2, w * .0055), w * .028),
     BallLineKind.carry => (max(1.2, w * .0055), w * .024),
   };
   final stem = max(0.0, (tip - start).distance - head * .6);
@@ -589,8 +935,19 @@ void _paintBallLine(
     )
     ..drawPath(arrowHead, Paint()..color = color);
   // Il numero, piccolo, all'inizio della linea.
+  _lineNumber(
+    canvas,
+    size,
+    start + dir * min(length / 2, w * .02 * 1.4),
+    l.n,
+    opacity,
+  );
+}
+
+/// Il numero dell'azione del pallone, in un cerchietto scuro.
+void _lineNumber(Canvas canvas, Size size, Offset at, int n, double opacity) {
+  final w = size.width;
   final badge = w * .02;
-  final at = start + dir * min(length / 2, badge * 1.4);
   canvas
     ..drawCircle(
       at,
@@ -601,19 +958,81 @@ void _paintBallLine(
       at,
       badge,
       Paint()
-        ..color = color
+        ..color = Colors.white.withValues(alpha: opacity)
         ..style = PaintingStyle.stroke
         ..strokeWidth = max(.8, w * .0028),
     );
   _text(
     canvas,
-    '${l.n}',
+    '$n',
     at,
     fontSize: w * .025,
     fontFamily: sportFont,
     weight: FontWeight.w600,
     color: MilanacColors.ivory.withValues(alpha: opacity),
     maxWidth: badge * 2.4,
+  );
+}
+
+/// Il cross: una linea a puntini che gira verso il centro del campo, con la punta
+/// nella zona di battuta.
+void _paintCross(
+  Canvas canvas,
+  Size size,
+  BallLine l,
+  Offset p1,
+  Offset p2, {
+  required double trimStart,
+  required double trimEnd,
+  required double opacity,
+  required double progress,
+}) {
+  final w = size.width;
+  final br = BoardPainter.ballRadius(size);
+  final c = crossControl(size, p1, p2);
+  // Le misure del percorso si leggono una volta sola (l'iteratore non riparte).
+  final metrics =
+      (Path()
+            ..moveTo(p1.dx, p1.dy)
+            ..quadraticBezierTo(c.dx, c.dy, p2.dx, p2.dy))
+          .computeMetrics()
+          .iterator;
+  if (!metrics.moveNext()) return;
+  final curve = metrics.current;
+  final length = curve.length - trimStart - trimEnd;
+  if (!length.isFinite || length < br) return;
+  final end = trimStart + length * progress;
+  final head = w * .028;
+  final dot = max(1.1, w * .0048), step = max(4.0, w * .017);
+  final shadow = MilanacColors.black.withValues(alpha: .35 * opacity);
+  final color = Colors.white.withValues(alpha: opacity);
+  for (var d = trimStart; d <= end - head * .7; d += step) {
+    final p = curve.getTangentForOffset(d)!.position;
+    canvas
+      ..drawCircle(p, dot + max(.8, w * .0022), Paint()..color = shadow)
+      ..drawCircle(p, dot, Paint()..color = color);
+  }
+  final tip = curve.getTangentForOffset(end)!;
+  final dir = tip.vector / max(1e-6, tip.vector.distance);
+  final arrowHead = _arrowHead(tip.position, dir, head);
+  canvas
+    ..drawPath(
+      arrowHead,
+      Paint()
+        ..color = shadow
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(2.0, w * .005)
+        ..strokeJoin = StrokeJoin.round,
+    )
+    ..drawPath(arrowHead, Paint()..color = color);
+  _lineNumber(
+    canvas,
+    size,
+    curve
+        .getTangentForOffset(trimStart + min(length / 2, w * .02 * 1.4))!
+        .position,
+    l.n,
+    opacity,
   );
 }
 

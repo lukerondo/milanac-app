@@ -223,10 +223,36 @@ accettano al primo accesso successivo.
     *Gettoni*) e tiro lascia una linea numerata (continua, ondulata, spessa; le ultime 30).
     *Vista* (l'occhio nella barra sotto il titolo) accende e spegne le linee della palla; gli
     interruttori si salvano con lo schema e finiscono nel replay. Il campo ha dischetti,
-    aree di porta, porte, lunette e bandierine, ricavati dall'area di rigore. *Salva* mette lo
-    schema (gettoni, frecce, heatmap, pallone, linee e vista in `tactics.board`) in Tattiche
-    e schemi con l'immagine esportata; tutti lo guardano, il Direttivo lo modifica. Una riga
-    illeggibile si salta senza fermare l'elenco. *Registra* chiede il microfono e
+    aree di porta, porte, lunette e bandierine, ricavati dall'area di rigore.
+    **Palle inattive** (`set_pieces.dart`): nel foglio "Nuova lavagna dal modulo" gli schemi
+    pronti (angolo da sinistra e da destra, punizione a 25 metri da spostare, rigore,
+    rimessa laterale, rinvio dal fondo, calcio d'inizio, angolo contro dalla nostra
+    bandierina) mettono il pallone sul punto giusto e gli undici della formazione (quella
+    pubblicata, se c'è) ai posti della situazione, scelti per ruolo; chi batte viene da
+    `publishedSetPiecesProvider` (angoli, punizioni, rigori). Come un cambio di modulo si
+    annullano e finiscono nel replay; il modulo diventa "Piazzati" (preselezionato al
+    salvataggio) e lo schema ricorda la palla inattiva (`piece`). Le **zone di battuta**
+    (`board_overlays.dart`: 1 primo palo, 2 dischetto, 3 secondo palo, 4 limite dell'area,
+    5 corto) stanno nell'area dove si batte, con il primo palo dal lato del pallone; si
+    accendono da sole negli schemi dove si crossa e si cambiano in *Vista*. Con *Pallone* un
+    tocco su una zona è un **cross** (linea a puntini che gira, numerata come le altre; un
+    compagno toccato in pieno riceve il passaggio). Prima del primo pallone giocato le zone
+    seguono il pallone spostato. **Fuori possesso**, sempre da *Vista* (spenti di serie):
+    *Fuorigioco* (con almeno due avversari, la linea tratteggiata del penultimo dalla loro
+    porta, portiere compreso, e la bandierina sui nostri oltre la linea e oltre il pallone
+    nella loro metà campo; in oro la nostra linea difensiva); *Linee di reparto* (i nostri di
+    movimento, dalla nostra porta in su, divisi come dice il modulo, con i metri tra difesa e
+    centrocampo; niente se i gettoni non tornano col modulo); *Posizioni per zona* (9 zone
+    della palla: il Direttivo mette il pallone in una zona, sistema tutti i gettoni e preme
+    "Salva posizioni per questa zona", o le cancella; poi ogni azione del pallone che lo porta
+    in una zona salvata sposta lì i giocatori, tranne chi ha la palla e chi si sta
+    trascinando, dentro `BoardEditor.apply`, con lo scivolamento solo disegnato). Chi non è
+    del Direttivo, in uno schema con le posizioni per zona, sposta solo il pallone e vede
+    dove deve stare (lo schema salvato non cambia). *Salva* mette lo
+    schema (gettoni, frecce, heatmap, pallone, linee, vista, palla inattiva e posizioni per
+    zona in `tactics.board`) in Tattiche e schemi con l'immagine esportata; tutti lo
+    guardano, il Direttivo lo modifica. Una riga illeggibile si salta senza fermare
+    l'elenco. *Registra* chiede il microfono e
     salva la voce e ogni azione con il suo istante (fino a 5 minuti); allo stop l'anteprima
     con il replay sincronizzato, poi "Invia in chat" (canale a scelta, predefinito Tattiche e
     Schemi) oppure elimina. I video dei creator stanno in Mondo Proclub.
@@ -400,10 +426,17 @@ JSON con la lavagna di partenza e le azioni con l'istante (`lib/features/lavagna
 stessa macchina a stati (`BoardEditor.apply`) disegna la lavagna e rifà le mosse in
 riproduzione. Un passaggio o un tiro è una sola azione (`kick`): lo stato cambia subito e il
 volo del pallone (450 ms) è solo disegno, rifatto uguale nel replay seguendone il tempo. Il
-formato ha una versione (`"v"`): 1 senza pallone, 2 con il pallone, le sue linee o la vista.
+formato ha una versione (`"v"`): 1 senza pallone, 2 con il pallone, le sue linee, la vista o
+una palla inattiva (un cross, per chi non lo conosce, è un passaggio), 3 con le posizioni per
+zona (`zs` / `zc`: una versione che non le conosce non sposterebbe i giocatori). Lo
+spostamento verso le posizioni di una zona è calcolato dentro `BoardEditor.apply`, quindi
+replay e "Annulla" lo rifanno uguale; lo scivolamento (400 ms) è solo disegno, come il volo.
+Gli interruttori di *Vista* cambiano anche i passi da annullare ("Annulla" non li tocca),
+ma annullando una lavagna nuova torna la vista che c'era prima.
 Da questa versione l'app salta le azioni che non conosce (senza passo di "Annulla") e, per
 un replay con `"v"` più alto di quello che sa leggere, dice "Aggiorna l'app per vedere questo
-replay."; pallone, linee e vista malformati nello schema si lasciano fuori. Sondaggi:
+replay."; pallone, linee, vista, palla inattiva e posizioni malformati nello schema si
+lasciano fuori. Sondaggi:
 `vote_poll(messaggio, opzioni)` (sostituisce le scelte di prima; niente voti a sondaggio
 chiuso, fuori elenco o doppi dove se ne sceglie una) e `close_poll(messaggio)` (chi l'ha
 creato o il Direttivo; scrive `closed_at` nel meta e lo restituisce); il vincolo

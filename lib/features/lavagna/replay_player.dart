@@ -64,6 +64,11 @@ class ReplayPlayer extends ChangeNotifier
   int _kickMs = 0;
   final _flight = ValueNotifier<BallFlight?>(null);
 
+  /// Lo stesso per i giocatori che scivolano verso le posizioni di una zona.
+  TokenShift? _shift;
+  int _shiftMs = 0;
+  final _shiftFrame = ValueNotifier<ShiftFrame?>(null);
+
   int get durationMs => data.durationMs;
   bool get hasAudio => (audioUrl != null || audioFile != null) && !_audioFailed;
 
@@ -76,6 +81,9 @@ class ReplayPlayer extends ChangeNotifier
   /// Il pallone in volo all'istante corrente (passaggi e tiri, come dal vivo).
   ValueListenable<BallFlight?> get flight => _flight;
 
+  /// I giocatori che scivolano verso le posizioni di una zona all'istante corrente.
+  ValueListenable<ShiftFrame?> get shift => _shiftFrame;
+
   void _goTo(int ms) {
     if (_disposed) return;
     final target = ms.clamp(0, durationMs);
@@ -84,6 +92,7 @@ class ReplayPlayer extends ChangeNotifier
       _editor = BoardEditor(data.initial);
       _cursor = 0;
       _kick = null;
+      _shift = null;
     }
     while (_cursor < data.events.length && data.events[_cursor].t <= target) {
       final e = data.events[_cursor];
@@ -92,13 +101,21 @@ class ReplayPlayer extends ChangeNotifier
         _kick = _editor.lastKick;
         _kickMs = e.t;
       }
+      if (!identical(_editor.lastShift, _shift)) {
+        _shift = _editor.lastShift;
+        _shiftMs = e.t;
+      }
       _cursor++;
     }
     positionMs = target;
-    // A fine replay il pallone è già arrivato, anche se il tiro era l'ultima mossa.
+    // A fine replay il pallone è già arrivato, anche se il tiro era l'ultima mossa (e
+    // i giocatori sono già al loro posto).
     final kick = target < durationMs ? _kick : null;
     final t = kick == null ? 1.0 : (target - _kickMs) / ballFlightMs;
     _flight.value = kick != null && t < 1 ? BallFlight(kick, t) : null;
+    final shift = target < durationMs ? _shift : null;
+    final s = shift == null ? 1.0 : (target - _shiftMs) / zoneShiftMs;
+    _shiftFrame.value = shift != null && s < 1 ? ShiftFrame(shift, s) : null;
     notifyListeners();
   }
 
@@ -250,6 +267,7 @@ class ReplayPlayer extends ChangeNotifier
     }
     _editor.dispose();
     _flight.dispose();
+    _shiftFrame.dispose();
     super.dispose();
   }
 
@@ -278,6 +296,7 @@ class ReplayView extends StatelessWidget {
           child: BoardCanvas(
             board: player,
             flight: player.flight,
+            shift: player.shift,
             showNames: showNames,
           ),
         ),

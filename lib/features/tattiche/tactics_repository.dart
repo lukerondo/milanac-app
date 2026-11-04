@@ -7,7 +7,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import '../../core/teams.dart';
 import '../lavagna/board_model.dart';
+import '../lavagna/set_pieces.dart';
 
 const tacticsBucket = 'tactics';
 
@@ -218,11 +220,18 @@ class DemoTacticsRepository implements TacticsRepository {
           'centrale. Il terzino lato palla accorcia sull\'esterno. Se il pressing '
           'viene superato: tutti dietro la linea della palla.',
     ),
-    const Tactic(
+    Tactic(
       id: 't2',
       title: 'Calcio d\'angolo a rientrare',
-      module: 'Piazzati',
+      module: setPieceModule,
+      team: 'milanac',
       description: 'Blocco sul primo palo, inserimento del DC sul secondo.',
+      board: setPieceBoard(
+        SetPieceTemplate.angoloSinistra,
+        Team.milanac,
+        const [],
+        null,
+      ),
     ),
     Tactic(
       id: 't3',
@@ -231,6 +240,15 @@ class DemoTacticsRepository implements TacticsRepository {
       team: 'milanac',
       description: 'Il portiere apre sul DC, il CDC si abbassa tra i centrali e i terzini salgono.',
       board: demoBoard(),
+    ),
+    Tactic(
+      id: 't4',
+      title: 'Dove stare con la palla',
+      module: '4-3-3',
+      team: 'milanac',
+      description:
+          'Posizioni per zona: sposta il pallone e guarda dove va ognuno.',
+      board: demoZoneBoard(),
     ),
   ];
   final _changes = StreamController<void>.broadcast();

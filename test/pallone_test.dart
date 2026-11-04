@@ -546,7 +546,10 @@ void main() {
       expect(data.finalState.tokens, hasLength(1));
       expect(BoardCommand.fromJson(const {'k': 'boh'}), isNull);
       expect(
-        () => ReplayData.fromJson({...json, 'v': 3}),
+        () => ReplayData.fromJson({
+          ...json,
+          'v': ReplayData.supportedVersion + 1,
+        }),
         throwsA(isA<ReplayTooNew>()),
       );
       // Senza pallone resta alla versione 1; con il pallone (la demo) è la 2.

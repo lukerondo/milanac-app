@@ -156,11 +156,13 @@ BoardBall ballAtFeet(BoardToken t) {
 /// una volta e mezza (105 m di lunghezza su 68 di larghezza).
 double fieldDistance(double dx, double dy) => sqrt(dx * dx + dy * dy * 2.25);
 
-/// Che cosa ha fatto il pallone: passaggio, conduzione (palla al piede) o tiro.
+/// Che cosa ha fatto il pallone: passaggio, conduzione (palla al piede), tiro o
+/// cross in una zona di battuta.
 enum BallLineKind {
   pass('p'),
   carry('c'),
-  shot('s');
+  shot('s'),
+  cross('x');
 
   const BallLineKind(this.code);
 
@@ -238,8 +240,32 @@ enum BoardOverlay {
   ballLines(
     'bl',
     'Linee della palla',
-    'Passaggi, conduzioni (ondulate) e tiri, numerati.',
+    'Passaggi, conduzioni (ondulate), tiri e cross (a puntini), numerati.',
     on: true,
+  ),
+  zones(
+    'zb',
+    'Zone di battuta',
+    '1 primo palo · 2 dischetto · 3 secondo palo · 4 limite dell\'area · '
+        '5 corto. Si accendono da sole negli schemi da palla inattiva.',
+  ),
+  offside(
+    'fg',
+    'Fuorigioco',
+    'La linea del penultimo avversario e la bandierina su chi è oltre; in oro '
+        'la nostra linea difensiva.',
+  ),
+  units(
+    'lr',
+    'Linee di reparto',
+    'Difesa, centrocampo e attacco come dice il modulo, con i metri tra '
+        'difesa e centrocampo.',
+  ),
+  zonePositions(
+    'pz',
+    'Posizioni per zona',
+    'Dove stare con la palla in ognuna delle 9 zone del campo: spostando il '
+        'pallone, i giocatori vanno alle posizioni salvate.',
   );
 
   const BoardOverlay(this.key, this.label, this.description, {this.on = false});
@@ -253,10 +279,59 @@ enum BoardOverlay {
   final bool on;
 }
 
+/// La palla inattiva da cui parte uno schema ("Piazzati"): quale ([kind], la chiave
+/// del modello) e dove si batte. Le zone di battuta si mettono nell'area di quella
+/// metà campo e prendono da qui il primo palo e il corto.
+@immutable
+class BoardSetPiece {
+  const BoardSetPiece({required this.kind, required this.x, required this.y});
+  final String kind;
+  final double x, y;
+
+  BoardSetPiece movedTo(double x, double y) =>
+      BoardSetPiece(kind: kind, x: x, y: y);
+
+  Map<String, dynamic> toJson() => {'k': kind, 'x': _r(x), 'y': _r(y)};
+
+  /// Null se manca o è malformata (come il pallone: non deve impedire di aprire lo
+  /// schema).
+  static BoardSetPiece? tryFromJson(Object? m) {
+    if (m is! Map) return null;
+    final k = m['k'], x = m['x'], y = m['y'];
+    if (k is! String || x is! num || y is! num) return null;
+    if (!x.isFinite || !y.isFinite) return null;
+    return BoardSetPiece(
+      kind: k,
+      x: x.toDouble().clamp(0.0, 1.0),
+      y: y.toDouble().clamp(0.0, 1.0),
+    );
+  }
+}
+
+/// Le 9 zone della palla per le "Posizioni per zona": tre fasce in lunghezza (0 =
+/// attacco, in alto; 2 = difesa) per tre in larghezza (0 = sinistra), numerate da 0 a
+/// 8 per righe.
+const ballZoneCount = 9;
+
+/// La zona della palla in (x, y).
+int ballZoneAt(double x, double y) {
+  int third(double v) => (v.clamp(0.0, 1.0) * 3).floor().clamp(0, 2);
+  return third(y) * 3 + third(x);
+}
+
+/// "Attacco · sinistra", "Centrocampo · centro", "Difesa · destra"...
+String ballZoneName(int zone) =>
+    '${const ['Attacco', 'Centrocampo', 'Difesa'][zone ~/ 3 % 3]} · '
+    '${const ['sinistra', 'centro', 'destra'][zone % 3]}';
+
+/// Dove stanno i gettoni (id → x, y) con la palla in una zona.
+typedef ZonePlan = Map<String, (double, double)>;
+
 double _r(double v) => (v * 1000).round() / 1000;
 
 /// Lo stato della lavagna: modulo di partenza, squadra, gettoni, frecce, heatmap,
-/// pallone con le sue linee e la vista.
+/// pallone con le sue linee, la vista, la palla inattiva dello schema e le posizioni
+/// per zona.
 @immutable
 class BoardState {
   const BoardState({
@@ -268,6 +343,8 @@ class BoardState {
     this.ball,
     this.lines = const [],
     this.view = const {},
+    this.piece,
+    this.positions = const {},
   });
 
   final String module;
@@ -286,6 +363,12 @@ class BoardState {
   /// Gli interruttori di "Vista" diversi da quelli di serie (chiave → acceso). Le
   /// chiavi sconosciute (di una versione più nuova) restano come sono.
   final Map<String, bool> view;
+
+  /// La palla inattiva da cui parte lo schema (null per le lavagne dal modulo).
+  final BoardSetPiece? piece;
+
+  /// Le posizioni per zona: zona della palla ([ballZoneAt]) → dove stanno i gettoni.
+  final Map<int, ZonePlan> positions;
 
   /// Niente di disegnato (il pallone da solo non conta: c'è sempre).
   bool get isEmpty =>
@@ -327,8 +410,8 @@ class BoardState {
         : all;
   }
 
-  /// Copia con qualche campo cambiato. Il pallone si passa come funzione, così si
-  /// può anche togliere: `copyWith(ball: () => null)`.
+  /// Copia con qualche campo cambiato. Il pallone e la palla inattiva si passano come
+  /// funzione, così si possono anche togliere: `copyWith(ball: () => null)`.
   BoardState copyWith({
     String? module,
     String? team,
@@ -338,6 +421,8 @@ class BoardState {
     BoardBall? Function()? ball,
     List<BallLine>? lines,
     Map<String, bool>? view,
+    BoardSetPiece? Function()? piece,
+    Map<int, ZonePlan>? positions,
   }) => BoardState(
     module: module ?? this.module,
     team: team ?? this.team,
@@ -347,15 +432,21 @@ class BoardState {
     ball: ball != null ? ball() : this.ball,
     lines: lines ?? this.lines,
     view: view ?? this.view,
+    piece: piece != null ? piece() : this.piece,
+    positions: positions ?? this.positions,
   );
 
   BoardToken? tokenById(String id) =>
       tokens.where((t) => t.id == id).firstOrNull;
 
-  /// La versione del formato che serve per leggerla: 2 con il pallone (o le sue
-  /// linee, o la vista), altrimenti 1.
-  int get version =>
-      ball != null || lines.isNotEmpty || view.isNotEmpty ? 2 : 1;
+  /// La versione del formato che serve per leggerla: 3 con le posizioni per zona (una
+  /// versione che non le conosce non muoverebbe i giocatori), 2 con il pallone (o le
+  /// sue linee, la vista, la palla inattiva), altrimenti 1.
+  int get version => positions.isNotEmpty
+      ? 3
+      : ball != null || lines.isNotEmpty || view.isNotEmpty || piece != null
+      ? 2
+      : 1;
 
   Map<String, dynamic> toJson() => {
     'module': module,
@@ -366,7 +457,37 @@ class BoardState {
     if (ball != null) 'ball': ball!.toJson(),
     if (lines.isNotEmpty) 'lines': [for (final l in lines) l.toJson()],
     if (view.isNotEmpty) 'view': view,
+    if (piece != null) 'piece': piece!.toJson(),
+    if (positions.isNotEmpty)
+      'zones': {
+        for (final MapEntry(key: zone, value: plan) in positions.entries)
+          '$zone': {
+            for (final MapEntry(key: id, value: (x, y)) in plan.entries)
+              id: [_r(x), _r(y)],
+          },
+      },
   };
+
+  /// Le posizioni per zona dal JSON: le zone, i gettoni o i punti malformati si
+  /// saltano.
+  static Map<int, ZonePlan> _positionsFromJson(Object? m) {
+    if (m is! Map) return const {};
+    final out = <int, ZonePlan>{};
+    for (final MapEntry(:key, :value) in m.entries) {
+      final zone = key is String ? int.tryParse(key) : null;
+      if (zone == null || zone < 0 || zone >= ballZoneCount || value is! Map) {
+        continue;
+      }
+      final plan = <String, (double, double)>{
+        for (final MapEntry(key: k, value: p) in value.entries)
+          if ((k, p) case (final String id, [final num x, final num y])
+              when x.isFinite && y.isFinite)
+            id: (x.toDouble().clamp(0.0, 1.0), y.toDouble().clamp(0.0, 1.0)),
+      };
+      if (plan.isNotEmpty) out[zone] = plan;
+    }
+    return out;
+  }
 
   factory BoardState.fromJson(Map<String, dynamic>? m) {
     if (m == null) return const BoardState();
@@ -398,11 +519,15 @@ class BoardState {
           for (final MapEntry(:key, :value) in view.entries)
             if (key is String && value is bool) key: value,
       },
+      piece: BoardSetPiece.tryFromJson(m['piece']),
+      positions: _positionsFromJson(m['zones']),
     );
   }
 
-  /// Senza la heatmap: l'anteprima leggera da mettere nel messaggio del replay.
-  Map<String, dynamic> toPreviewJson() => {...toJson(), 'heat': const []};
+  /// Senza la heatmap (e le posizioni per zona): l'anteprima leggera da mettere nel
+  /// messaggio del replay.
+  Map<String, dynamic> toPreviewJson() =>
+      {...toJson(), 'heat': const []}..remove('zones');
 }
 
 /// Un'azione sulla lavagna. Durante la registrazione ogni azione viene salvata con il
@@ -412,7 +537,8 @@ sealed class BoardCommand {
 
   Map<String, dynamic> toJson();
 
-  /// La versione del replay che serve per rifarla: 2 per il pallone e la vista.
+  /// La versione del replay che serve per rifarla: 2 per il pallone e la vista
+  /// (un cross, per chi non lo conosce, è un passaggio), 3 per le posizioni per zona.
   int get version => switch (this) {
     PlaceBall() ||
     GrabBall() ||
@@ -421,6 +547,7 @@ sealed class BoardCommand {
     KickBall() ||
     ClearBallLines() ||
     SetView() => 2,
+    SaveZone() || ClearZone() => 3,
     Reset(:final board) => board.version,
     _ => 1,
   };
@@ -459,9 +586,12 @@ sealed class BoardCommand {
       y: (m['y'] as num).toDouble(),
       to: m['to'] as String?,
       shot: m['s'] == true,
+      cross: m['cr'] == true,
     ),
     'bl0' => const ClearBallLines(),
     'view' => SetView(m['o'] as String, m['on'] as bool),
+    'zs' => SaveZone((m['z'] as num).toInt()),
+    'zc' => ClearZone((m['z'] as num).toInt()),
     _ => null,
   };
 }
@@ -592,20 +722,22 @@ class DropBall extends BoardCommand {
   Map<String, dynamic> toJson() => {'k': 'bd', 'to': ?to};
 }
 
-/// Passaggio a un gettone ([to]), nello spazio o tiro in porta ([shot]): il pallone
-/// parte da dov'è (dal piede di chi ce l'ha) e arriva subito, in un'azione sola; il
-/// volo lo disegna la lavagna. [x] e [y] sono l'arrivo (il gettone, il punto
-/// dell'erba o della porta).
+/// Passaggio a un gettone ([to]), nello spazio, tiro in porta ([shot]) o cross in una
+/// zona di battuta ([cross]): il pallone parte da dov'è (dal piede di chi ce l'ha) e
+/// arriva subito, in un'azione sola; il volo lo disegna la lavagna. [x] e [y] sono
+/// l'arrivo (il gettone, il punto dell'erba, della porta o il centro della zona).
 class KickBall extends BoardCommand {
   const KickBall({
     required this.x,
     required this.y,
     this.to,
     this.shot = false,
+    this.cross = false,
   });
   final double x, y;
   final String? to;
   final bool shot;
+  final bool cross;
   @override
   Map<String, dynamic> toJson() => {
     'k': 'kick',
@@ -613,6 +745,7 @@ class KickBall extends BoardCommand {
     'y': _r(y),
     'to': ?to,
     if (shot) 's': true,
+    if (cross) 'cr': true,
   };
 }
 
@@ -633,8 +766,37 @@ class SetView extends BoardCommand {
   Map<String, dynamic> toJson() => {'k': 'view', 'o': key, 'on': on};
 }
 
+/// "Salva posizioni per questa zona": dove stanno adesso tutti i gettoni (nostri e
+/// avversari) diventa la posizione per la zona [zone] della palla.
+class SaveZone extends BoardCommand {
+  const SaveZone(this.zone);
+  final int zone;
+  @override
+  Map<String, dynamic> toJson() => {'k': 'zs', 'z': zone};
+}
+
+/// Via le posizioni salvate per la zona [zone].
+class ClearZone extends BoardCommand {
+  const ClearZone(this.zone);
+  final int zone;
+  @override
+  Map<String, dynamic> toJson() => {'k': 'zc', 'z': zone};
+}
+
 /// Durata del volo del pallone (passaggi e tiri), dal vivo come nel replay.
 const ballFlightMs = 450;
+
+/// Durata dello scivolamento dei giocatori verso le posizioni della nuova zona.
+const zoneShiftMs = 400;
+
+/// I giocatori che si sono spostati perché il pallone è entrato in una zona con le
+/// posizioni salvate: [from] dice dov'erano (id → x, y). Serve solo a farli scivolare:
+/// lo stato è già quello d'arrivo. Un oggetto nuovo per ogni spostamento.
+@immutable
+class TokenShift {
+  const TokenShift(this.from);
+  final ZonePlan from;
+}
 
 /// Un passaggio o un tiro appena fatto: da dove è partito il pallone e il numero
 /// della sua linea. Serve solo a disegnare il volo: lo stato è già quello d'arrivo.
@@ -662,6 +824,7 @@ class BoardEditor extends ChangeNotifier
   (String, double, double)? _drag;
 
   BallKick? _kick;
+  TokenShift? _shift;
 
   /// Chi registra le azioni (null = nessuna registrazione).
   void Function(BoardCommand command)? onCommand;
@@ -677,6 +840,11 @@ class BoardEditor extends ChangeNotifier
   /// annulla...): chi disegna ne fa vedere il volo. Un oggetto nuovo per ogni tiro.
   BallKick? get lastKick => _kick;
 
+  /// L'ultimo spostamento dei giocatori verso le posizioni di una zona, finché non si
+  /// annulla o si cambia lavagna: chi disegna li fa scivolare. Un oggetto nuovo per
+  /// ogni spostamento.
+  TokenShift? get lastShift => _shift;
+
   /// Carica una lavagna (apertura di uno schema, modulo di partenza): niente cronologia,
   /// niente registrazione.
   void load(BoardState s) {
@@ -684,6 +852,7 @@ class BoardEditor extends ChangeNotifier
     _history.clear();
     _drag = null;
     _kick = null;
+    _shift = null;
     notifyListeners();
   }
 
@@ -721,6 +890,7 @@ class BoardEditor extends ChangeNotifier
   }
 
   void apply(BoardCommand c) {
+    final ballBefore = _state.ball;
     switch (c) {
       case AddToken(:final token):
         _snapshot();
@@ -760,12 +930,14 @@ class BoardEditor extends ChangeNotifier
         _snapshot();
         _state = _state.copyWith(arrows: [..._state.arrows, arrow]);
       case Undo():
-        // La vista resta com'è: "Annulla" toglie mosse, non cambia come si guarda.
-        if (_history.isNotEmpty) {
-          _state = _history.removeLast().copyWith(view: _state.view);
-        }
+        // La vista resta com'è (gli interruttori cambiano anche i passi da
+        // annullare, vedi SetView): "Annulla" toglie mosse, non cambia come si
+        // guarda. Solo annullando una lavagna nuova (Reset) torna la vista di prima.
+        if (_history.isNotEmpty) _state = _history.removeLast();
         _kick = null;
+        _shift = null;
       case Clear():
+        // Le posizioni per zona erano dei gettoni che se ne vanno: anche loro via.
         _snapshot();
         _state = _state.copyWith(
           tokens: [],
@@ -773,13 +945,16 @@ class BoardEditor extends ChangeNotifier
           heat: [],
           lines: [],
           ball: () => BoardBall.kickOff,
+          positions: const {},
         );
         _kick = null;
+        _shift = null;
       case Reset(:final board):
         _snapshot();
         _state = board;
         _drag = null;
         _kick = null;
+        _shift = null;
       case PlaceBall(:final ball):
         _snapshot();
         _state = _state.copyWith(ball: () => _placed(ball));
@@ -802,6 +977,12 @@ class BoardEditor extends ChangeNotifier
         if (holder != null && _state.ball != null) {
           _state = _state.copyWith(ball: () => ballAtFeet(holder));
         }
+        // Prima del primo pallone giocato la palla inattiva si batte da dove la si
+        // mette (la punizione spostata): le zone di battuta la seguono.
+        final piece = _state.piece, ball = _state.ball;
+        if (piece != null && ball != null && _state.lines.isEmpty) {
+          _state = _state.copyWith(piece: () => piece.movedTo(ball.x, ball.y));
+        }
       case KickBall():
         _kickBall(c);
       case ClearBallLines():
@@ -810,29 +991,102 @@ class BoardEditor extends ChangeNotifier
         _kick = null;
       case SetView(:final key, :final on):
         final o = BoardOverlay.values.where((o) => o.key == key).firstOrNull;
-        _state = _state.copyWith(
-          view: {
-            for (final e in _state.view.entries)
-              if (e.key != key) e.key: e.value,
-            // Uguale a quello di serie non serve scriverlo.
-            if (on != o?.on) key: on,
-          },
-        );
+        Map<String, bool> switched(Map<String, bool> view) => {
+          for (final e in view.entries)
+            if (e.key != key) e.key: e.value,
+          // Uguale a quello di serie non serve scriverlo.
+          if (on != o?.on) key: on,
+        };
+        _state = _state.copyWith(view: switched(_state.view));
+        // Anche nei passi da annullare: "Annulla" non lo spegne.
+        for (var i = 0; i < _history.length; i++) {
+          _history[i] = _history[i].copyWith(view: switched(_history[i].view));
+        }
+      case SaveZone(:final zone):
+        if (zone >= 0 && zone < ballZoneCount) {
+          _snapshot();
+          _state = _state.copyWith(
+            positions: {
+              ..._state.positions,
+              zone: {for (final t in _state.tokens) t.id: (t.x, t.y)},
+            },
+          );
+        }
+      case ClearZone(:final zone):
+        if (_state.positions.containsKey(zone)) {
+          _snapshot();
+          _state = _state.copyWith(
+            positions: {
+              for (final e in _state.positions.entries)
+                if (e.key != zone) e.key: e.value,
+            },
+          );
+        }
     }
+    _followZones(c, ballBefore);
     onCommand?.call(c);
     notifyListeners();
   }
 
-  /// Passaggio o tiro: la linea numerata dal piede di chi ha la palla (o da dove
-  /// è, se è libera) all'arrivo; il pallone è subito lì.
+  /// Posizioni per zona: un'azione del pallone (trascinato, passato, crossato,
+  /// portato al piede, rimesso) che lo fa entrare in un'altra zona con le posizioni
+  /// salvate porta lì i giocatori. Chi ha la palla e chi si sta trascinando restano
+  /// dove sono: la palla la decidono loro. Tutto qui dentro, così replay e "Annulla"
+  /// (lo spostamento sta nel passo dell'azione) rifanno esattamente lo stesso.
+  void _followZones(BoardCommand c, BoardBall? before) {
+    if (c is! PlaceBall &&
+        c is! MoveBall &&
+        c is! DropBall &&
+        c is! KickBall &&
+        c is! MoveToken) {
+      return;
+    }
+    final s = _state;
+    final ball = s.ball;
+    if (ball == null ||
+        s.positions.isEmpty ||
+        !s.shows(BoardOverlay.zonePositions)) {
+      return;
+    }
+    final zone = ballZoneAt(ball.x, ball.y);
+    if (before != null && ballZoneAt(before.x, before.y) == zone) return;
+    final plan = s.positions[zone];
+    if (plan == null) return;
+    final keep = {?ball.holder, ?_drag?.$1};
+    final from = <String, (double, double)>{};
+    final tokens = [
+      for (final t in s.tokens)
+        switch (plan[t.id]) {
+          (final x, final y)
+              when !keep.contains(t.id) && (x != t.x || y != t.y) =>
+            () {
+              from[t.id] = (t.x, t.y);
+              return t.moved(x, y);
+            }(),
+          _ => t,
+        },
+    ];
+    if (from.isEmpty) return;
+    _state = s.copyWith(tokens: tokens);
+    _shift = TokenShift(from);
+  }
+
+  /// Passaggio, tiro o cross: la linea numerata dal piede di chi ha la palla (o da
+  /// dove è, se è libera) all'arrivo; il pallone è subito lì.
   void _kickBall(KickBall c) {
     final ball = _state.ball;
     if (ball == null) return;
     _snapshot();
     final from = ball.holder == null ? null : _state.tokenById(ball.holder!);
-    final to = c.shot || c.to == null ? null : _state.tokenById(c.to!);
+    final to = c.shot || c.cross || c.to == null
+        ? null
+        : _state.tokenById(c.to!);
     final line = BallLine(
-      kind: c.shot ? BallLineKind.shot : BallLineKind.pass,
+      kind: c.shot
+          ? BallLineKind.shot
+          : c.cross
+          ? BallLineKind.cross
+          : BallLineKind.pass,
       n: _state.nextBallNumber,
       x1: from?.x ?? ball.x,
       y1: from?.y ?? ball.y,
@@ -905,11 +1159,12 @@ class ReplayData {
   final List<ReplayEvent> events;
   final int durationMs;
 
-  /// L'ultima versione del formato che questa app sa leggere (2: il pallone).
-  static const supportedVersion = 2;
+  /// L'ultima versione del formato che questa app sa leggere (2: il pallone; 3: le
+  /// posizioni per zona).
+  static const supportedVersion = 3;
 
-  /// La versione del formato: 2 se c'è il pallone (nella lavagna di partenza o nelle
-  /// azioni), altrimenti 1.
+  /// La versione del formato: 3 con le posizioni per zona, 2 se c'è il pallone (nella
+  /// lavagna di partenza o nelle azioni), altrimenti 1.
   int get version =>
       max(initial.version, events.fold(1, (v, e) => max(v, e.command.version)));
 
@@ -1113,6 +1368,36 @@ BoardState demoBoard() => BoardState(
     ),
   ],
 );
+
+/// Lavagna di esempio con le posizioni per zona (demo e test): il 4-3-3 della demo,
+/// senza frecce né linee, il pallone a centrocampo e per ognuna delle 9 zone la
+/// squadra che scivola verso la palla (il portiere poco, l'avversario con lei).
+BoardState demoZoneBoard() {
+  final base = demoBoard();
+  return BoardState(
+    module: base.module,
+    team: base.team,
+    tokens: base.tokens,
+    ball: BoardBall.kickOff,
+    view: {BoardOverlay.zonePositions.key: true},
+    positions: {
+      for (var zone = 0; zone < ballZoneCount; zone++)
+        zone: () {
+          final dx = ((zone % 3 + .5) / 3 - .5),
+              dy = ((zone ~/ 3 + .5) / 3 - .5);
+          return {
+            for (final t in base.tokens)
+              t.id: t.label == '1'
+                  ? (_r(.5 + dx * .2), t.y)
+                  : (
+                      _r((t.x + dx * .4).clamp(.05, .95)),
+                      _r((t.y + dy * .45).clamp(.05, .95)),
+                    ),
+          };
+        }(),
+    },
+  );
+}
 
 /// Replay di esempio (demo): venti secondi in cui il CDC si abbassa tra i centrali,
 /// il portiere apre sul centrale che la dà al CDC, il terzino sale, riceve, conduce e

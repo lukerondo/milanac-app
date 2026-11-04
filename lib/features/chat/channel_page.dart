@@ -1833,6 +1833,7 @@ BoardState _previewBoard(Object? raw) {
           ),
       ],
       view: b.view,
+      piece: b.piece,
     );
   } catch (_) {
     return const BoardState();

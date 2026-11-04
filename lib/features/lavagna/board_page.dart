@@ -28,10 +28,12 @@ import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import '../tattiche/tactics_repository.dart';
 import 'board_model.dart';
+import 'board_overlays.dart';
 import 'board_painter.dart';
 import 'full_page.dart';
 import 'replay_pages.dart';
 import 'replay_player.dart';
+import 'set_pieces.dart';
 
 /// Strumenti della lavagna (barra in basso).
 enum BoardTool {
@@ -66,7 +68,25 @@ const _placeBallHint =
 /// Chi guarda soltanto: i colori e le linee.
 const _readOnlyHint =
     'Oro: noi · nero: avversari. Palla: linea continua il passaggio, ondulata '
-    'la conduzione, spessa il tiro.\nSolo il Direttivo disegna sulla lavagna.';
+    'la conduzione, spessa il tiro, a puntini il cross.\nSolo il Direttivo '
+    'disegna sulla lavagna.';
+
+/// Chi guarda uno schema con le posizioni per zona: può spostare solo il pallone.
+const _ballOnlyHint =
+    'Sposta il pallone: vedi dove devi stare quando la palla è in quella zona.';
+
+/// "Pallone" con le zone di battuta accese: la legenda dei numeri.
+String get _crossHint =>
+    'Tocca una zona per il cross: $deliveryZoneLegend. Un compagno per '
+    'passargli la palla, la porta per tirare.';
+
+/// "Posizioni per zona" (Direttivo): la zona del pallone e come si usa.
+String _positionsHint(int? zone, {required bool saved}) => zone == null
+    ? 'Posizioni per zona: metti il pallone in campo, sistema i giocatori e '
+          'salva le posizioni della sua zona.'
+    : '${ballZoneName(zone)} · ${saved ? 'salvata' : 'da salvare'}. Sistema i '
+          'giocatori e salva: quando il pallone entra in una zona salvata, '
+          'vanno lì da soli.';
 
 /// Nome breve della squadra sulla lavagna.
 String _teamName(Team team) => team == Team.milanac ? 'Milan AC' : 'Futuro';
@@ -222,8 +242,23 @@ class BoardPage extends ConsumerStatefulWidget {
   ConsumerState<BoardPage> createState() => _BoardPageState();
 }
 
+/// Quello che la pagina mostra della lavagna, fuori dal campo: "Annulla", modulo e
+/// squadra in alto, i suggerimenti (pallone, zone di battuta) e la barra delle
+/// posizioni per zona.
+typedef _Shown = ({
+  bool canUndo,
+  String module,
+  String team,
+  bool hasBall,
+  bool zones,
+  bool positionsMode,
+  bool hasPositions,
+  int? ballZone,
+  bool zoneSaved,
+});
+
 class _BoardPageState extends ConsumerState<BoardPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final BoardEditor _editor;
   late final AudioFocus _focus;
   BoardTool _tool = BoardTool.giocatore;
@@ -246,6 +281,12 @@ class _BoardPageState extends ConsumerState<BoardPage>
   late final AnimationController _flightClock;
   BallKick? _flying;
 
+  /// I giocatori che scivolano verso le posizioni della nuova zona: anche questo solo
+  /// disegno, rifatto uguale nel replay.
+  final _shift = ValueNotifier<ShiftFrame?>(null);
+  late final AnimationController _shiftClock;
+  TokenShift? _shifting;
+
   /// La pennellata in corso ha già messo almeno un punto (e il suo punto di
   /// annullamento).
   bool _heatStroke = false;
@@ -257,16 +298,25 @@ class _BoardPageState extends ConsumerState<BoardPage>
   int _seq = 0;
   bool _saving = false;
 
-  /// Quello che la pagina mostra della lavagna ("Annulla", modulo e squadra in
-  /// alto, il suggerimento del pallone) com'era all'ultima costruzione.
-  (bool, String, String, bool)? _shown;
+  /// Quello che la pagina mostra della lavagna com'era all'ultima costruzione.
+  _Shown? _shown;
 
-  (bool, String, String, bool) get _visible => (
-    _editor.canUndo,
-    _editor.state.module,
-    _editor.state.team,
-    _editor.state.ball != null,
-  );
+  _Shown get _visible {
+    final s = _editor.state;
+    final ball = s.ball;
+    final zone = ball == null ? null : ballZoneAt(ball.x, ball.y);
+    return (
+      canUndo: _editor.canUndo,
+      module: s.module,
+      team: s.team,
+      hasBall: ball != null,
+      zones: s.shows(BoardOverlay.zones),
+      positionsMode: s.shows(BoardOverlay.zonePositions),
+      hasPositions: s.positions.isNotEmpty,
+      ballZone: zone,
+      zoneSaved: zone != null && s.positions.containsKey(zone),
+    );
+  }
 
   // Registrazione del replay.
   late final VoiceRecorder _mic;
@@ -290,9 +340,23 @@ class _BoardPageState extends ConsumerState<BoardPage>
       vsync: this,
       duration: const Duration(milliseconds: ballFlightMs),
     )..addListener(_onFlight);
+    _shiftClock = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: zoneShiftMs),
+    )..addListener(_onShift);
     final tactic = widget.tactic;
     if (tactic != null) {
-      _editor = BoardEditor(tactic.board ?? const BoardState());
+      var board = tactic.board ?? const BoardState();
+      // Chi guarda uno schema con le posizioni per zona le vede seguire il pallone
+      // che sposta (solo qui: lo schema salvato non cambia).
+      if (widget.readOnly &&
+          board.positions.isNotEmpty &&
+          !board.shows(BoardOverlay.zonePositions)) {
+        board = board.copyWith(
+          view: {...board.view, BoardOverlay.zonePositions.key: true},
+        );
+      }
+      _editor = BoardEditor(board);
     } else {
       // Lavagna nuova: subito i gettoni del modulo, con i giocatori se rosa e
       // formazione sono già in memoria, altrimenti con le sigle dei ruoli.
@@ -307,8 +371,9 @@ class _BoardPageState extends ConsumerState<BoardPage>
   }
 
   /// La lavagna si ridisegna da sola ([BoardCanvas]): la pagina si ricostruisce solo
-  /// quando "Annulla" si accende o si spegne, o cambiano modulo e squadra. Un
-  /// passaggio o un tiro nuovo fa partire il volo del pallone.
+  /// quando cambia quello che mostra fuori dal campo ([_visible]). Un passaggio o un
+  /// tiro nuovo fa partire il volo del pallone; un cambio di zona con le posizioni
+  /// salvate, lo scivolamento dei giocatori.
   void _onChanged() {
     final kick = _editor.lastKick;
     if (!identical(kick, _flying)) {
@@ -320,6 +385,16 @@ class _BoardPageState extends ConsumerState<BoardPage>
         _flightClock.forward(from: 0);
       }
     }
+    final shift = _editor.lastShift;
+    if (!identical(shift, _shifting)) {
+      _shifting = shift;
+      if (shift == null) {
+        _shiftClock.stop();
+        _shift.value = null;
+      } else {
+        _shiftClock.forward(from: 0);
+      }
+    }
     if (mounted && _visible != _shown) setState(() {});
   }
 
@@ -327,6 +402,12 @@ class _BoardPageState extends ConsumerState<BoardPage>
     final kick = _flying;
     final t = _flightClock.value;
     _flight.value = kick == null || t >= 1 ? null : BallFlight(kick, t);
+  }
+
+  void _onShift() {
+    final shift = _shifting;
+    final t = _shiftClock.value;
+    _shift.value = shift == null || t >= 1 ? null : ShiftFrame(shift, t);
   }
 
   @override
@@ -350,6 +431,8 @@ class _BoardPageState extends ConsumerState<BoardPage>
     _pending.dispose();
     _flightClock.dispose();
     _flight.dispose();
+    _shiftClock.dispose();
+    _shift.dispose();
     _target.dispose();
     super.dispose();
   }
@@ -362,7 +445,7 @@ class _BoardPageState extends ConsumerState<BoardPage>
 
   /// Rosa e formazione della squadra, dalla rete se non sono ancora in memoria
   /// (senza rete, dopo qualche secondo restano le sigle dei ruoli).
-  Future<BoardState> _loadModule(String module, Team team) async {
+  Future<(List<Member>, Formation?)> _loadTeam(Team team) async {
     const wait = Duration(seconds: 8);
     final cached = ref.read(rosaProvider).value ?? const <Member>[];
     final rosaFuture = cached.isEmpty
@@ -377,6 +460,11 @@ class _BoardPageState extends ConsumerState<BoardPage>
     try {
       formation = await formationFuture.timeout(wait);
     } catch (_) {}
+    return (rosa, formation);
+  }
+
+  Future<BoardState> _loadModule(String module, Team team) async {
+    final (rosa, formation) = await _loadTeam(team);
     return _moduleBoard(module, team, rosa, formation);
   }
 
@@ -394,6 +482,14 @@ class _BoardPageState extends ConsumerState<BoardPage>
     final state = await _loadModule(module, team);
     if (!mounted) return;
     _editor.apply(Reset(state));
+  }
+
+  /// Uno schema da palla inattiva: come una lavagna dal modulo (si annulla, finisce
+  /// nel replay), con i battitori della formazione pubblicata.
+  Future<void> _startFromSetPiece(SetPieceTemplate template, Team team) async {
+    final (rosa, formation) = await _loadTeam(team);
+    if (!mounted) return;
+    _editor.apply(Reset(setPieceBoard(template, team, rosa, formation)));
   }
 
   // ---------------------------------------------------------------- gesti
@@ -453,9 +549,26 @@ class _BoardPageState extends ConsumerState<BoardPage>
     return (x, top ? 0.0 : 1.0);
   }
 
-  /// Pallone: un tocco su un gettone gli passa la palla, sulla porta tira, sull'erba
-  /// la gioca nello spazio (anche da palla libera, da dov'è). Senza pallone in campo
-  /// il tocco lo mette.
+  /// La zona di battuta sotto il dito, se le zone si vedono (con qualche dp di
+  /// margine: sono piccole).
+  DeliveryZone? _zoneAt(Offset local) {
+    final s = _editor.state;
+    if (!s.shows(BoardOverlay.zones)) return null;
+    final f = BoardPainter.fieldRect(_size);
+    final (x, y) = _field(local);
+    const slack = 6.0;
+    return deliveryZoneAt(
+      s,
+      x,
+      y,
+      slackX: slack / f.width,
+      slackY: slack / f.height,
+    );
+  }
+
+  /// Pallone: un tocco su un gettone gli passa la palla, sulla porta tira, su una
+  /// zona di battuta crossa lì, sull'erba la gioca nello spazio (anche da palla
+  /// libera, da dov'è). Senza pallone in campo il tocco lo mette.
   void _ballTap(Offset local) {
     final ball = _editor.state.ball;
     final (x, y) = _field(local);
@@ -467,9 +580,24 @@ class _BoardPageState extends ConsumerState<BoardPage>
       return;
     }
     if (_onBall(local)) return;
+    final goal = _goalAt(local);
+    // Su una zona di battuta il cross, a meno che il dito non sia proprio su un
+    // compagno: a lui il passaggio.
+    final zone = goal == null ? _zoneAt(local) : null;
+    if (zone != null) {
+      final mate = _hit(local, reach: 1.1);
+      if (mate != null && mate.side != 'avversari') {
+        if (mate.id == ball.holder) return;
+        Haptics.light();
+        _editor.apply(KickBall(x: mate.x, y: mate.y, to: mate.id));
+      } else {
+        Haptics.light();
+        _editor.apply(KickBall(x: zone.x, y: zone.y, cross: true));
+      }
+      return;
+    }
     // Un gettone toccato in pieno vince sulla porta (il portiere sulla linea),
     // la porta sul gettone solo sfiorato.
-    final goal = _goalAt(local);
     final t = _hit(local, reach: 1.1) ?? (goal == null ? _hit(local) : null);
     if (t != null) {
       if (t.id == ball.holder) return;
@@ -554,6 +682,14 @@ class _BoardPageState extends ConsumerState<BoardPage>
       case BoardTool.freccia:
         _arrowStart = (x, y);
     }
+  }
+
+  /// Chi guarda uno schema con le posizioni per zona prende solo il pallone (i
+  /// giocatori si mettono da soli).
+  void _onBallOnlyPanStart(DragStartDetails d) {
+    if (!_onBall(d.localPosition)) return;
+    _ballDrag = true;
+    _editor.apply(const GrabBall());
   }
 
   void _onPanUpdate(DragUpdateDetails d) {
@@ -684,13 +820,17 @@ class _BoardPageState extends ConsumerState<BoardPage>
   }
 
   Future<void> _clear() async {
+    final positions = _editor.state.positions.isNotEmpty;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Pulire la lavagna?'),
-        content: const Text(
-          'Via gettoni, frecce, heatmap e linee della palla; il pallone torna a '
-          'centrocampo (si può annullare).',
+        content: Text(
+          positions
+              ? 'Via gettoni, frecce, heatmap, linee della palla e posizioni per '
+                    'zona; il pallone torna a centrocampo (si può annullare).'
+              : 'Via gettoni, frecce, heatmap e linee della palla; il pallone '
+                    'torna a centrocampo (si può annullare).',
         ),
         actions: [
           TextButton(
@@ -800,11 +940,12 @@ class _BoardPageState extends ConsumerState<BoardPage>
   );
 
   /// Modulo e squadra in alto: una lavagna nuova dal modulo, con i giocatori della
-  /// formazione della squadra (si può annullare).
+  /// formazione della squadra, o uno schema da palla inattiva (si può annullare).
   Future<void> _pickModule() async {
     var team = Team.parse(_editor.state.team) ?? Team.milanac;
     final current = _editor.state.module;
-    final module = await showModalBottomSheet<String>(
+    final piece = _editor.state.piece?.kind;
+    final picked = await showModalBottomSheet<Object>(
       context: context,
       showDragHandle: true,
       // Alto quanto serve (con il testo grande scorre invece di traboccare).
@@ -845,13 +986,42 @@ class _BoardPageState extends ConsumerState<BoardPage>
                       ),
                   ],
                 ),
+                const SizedBox(height: 22),
+                const SectionLabel('Palle inattive'),
+                const SizedBox(height: 4),
+                Text(
+                  'Pallone sul punto giusto, i giocatori ai loro posti e chi '
+                  'batte dalla formazione pubblicata.',
+                  style: TextStyle(fontSize: 14, color: c.pal.textMuted),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final t in SetPieceTemplate.values)
+                      IntrinsicWidth(
+                        child: FilterPill(
+                          label: t.label,
+                          selected: current == setPieceModule && t.key == piece,
+                          onTap: () => Navigator.pop(c, t),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
         ),
       ),
     );
-    if (module != null && mounted) await _startFromModule(module, team);
+    if (!mounted) return;
+    switch (picked) {
+      case final String module:
+        await _startFromModule(module, team);
+      case final SetPieceTemplate template:
+        await _startFromSetPiece(template, team);
+    }
   }
 
   Future<void> _save() async {
@@ -1073,7 +1243,21 @@ class _BoardPageState extends ConsumerState<BoardPage>
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final readOnly = widget.readOnly || !isDirettivo;
     final shown = _shown = _visible;
-    final (canUndo, module, teamName, hasBall) = shown;
+    final hasBall = shown.hasBall;
+    // Chi guarda uno schema con le posizioni per zona sposta il pallone (e basta).
+    final ballOnly = readOnly && shown.hasPositions && hasBall;
+    final positionsBar = !readOnly && shown.positionsMode;
+    final hint = readOnly
+        ? (ballOnly ? _ballOnlyHint : _readOnlyHint)
+        : _recording
+        ? 'Registrazione in corso: parla, muovi gettoni e pallone, poi ferma.'
+        : shown.positionsMode
+        ? _positionsHint(shown.ballZone, saved: shown.zoneSaved)
+        : _tool == BoardTool.pallone && !hasBall
+        ? _placeBallHint
+        : _tool == BoardTool.pallone && shown.zones
+        ? _crossHint
+        : _tool.hint;
     final p = context.pal;
     return PopScope(
       canPop: !_recording && !_micBusy,
@@ -1117,8 +1301,8 @@ class _BoardPageState extends ConsumerState<BoardPage>
             const SizedBox(width: 12),
           ],
           bottom: _BoardInfoBar(
-            module: module,
-            team: Team.parse(teamName) ?? Team.milanac,
+            module: shown.module,
+            team: Team.parse(shown.team) ?? Team.milanac,
             title: widget.tactic?.title,
             onTap: readOnly ? null : _pickModule,
             onView: () => _showView(readOnly: readOnly),
@@ -1144,9 +1328,20 @@ class _BoardPageState extends ConsumerState<BoardPage>
                             board: _editor,
                             pendingArrow: _pending,
                             flight: _flight,
+                            shift: _shift,
                             target: _target,
                             selectedId: _selectedId,
                           );
+                          if (ballOnly) {
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              dragStartBehavior: DragStartBehavior.down,
+                              onPanStart: _onBallOnlyPanStart,
+                              onPanUpdate: _onPanUpdate,
+                              onPanEnd: _onPanEnd,
+                              child: board,
+                            );
+                          }
                           if (readOnly) return board;
                           return GestureDetector(
                             behavior: HitTestBehavior.opaque,
@@ -1170,14 +1365,7 @@ class _BoardPageState extends ConsumerState<BoardPage>
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  readOnly
-                      ? _readOnlyHint
-                      : _recording
-                      ? 'Registrazione in corso: parla, muovi gettoni e pallone, '
-                            'poi ferma.'
-                      : _tool == BoardTool.pallone && !hasBall
-                      ? _placeBallHint
-                      : _tool.hint,
+                  hint,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -1185,6 +1373,18 @@ class _BoardPageState extends ConsumerState<BoardPage>
                     color: p.textMuted,
                   ),
                 ),
+                if (positionsBar) ...[
+                  const SizedBox(height: 8),
+                  _ZoneBar(
+                    zone: shown.ballZone,
+                    saved: shown.zoneSaved,
+                    onSave: (zone) {
+                      Haptics.light();
+                      _editor.apply(SaveZone(zone));
+                    },
+                    onDelete: (zone) => _editor.apply(ClearZone(zone)),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1196,7 +1396,7 @@ class _BoardPageState extends ConsumerState<BoardPage>
             : _ToolBar(
                 tool: _tool,
                 dashed: _dashed,
-                canUndo: canUndo,
+                canUndo: shown.canUndo,
                 onTool: (t) {
                   // "Pallone" toccato di nuovo apre le sue opzioni.
                   if (t == BoardTool.pallone && _tool == t) {
@@ -1372,6 +1572,55 @@ class _BoardInfoBar extends StatelessWidget implements PreferredSizeWidget {
       },
     ),
   );
+}
+
+/// "Posizioni per zona" (Direttivo), sotto il suggerimento: salva dove stanno adesso
+/// i gettoni come posizioni per la zona del pallone, o le cancella (si annulla).
+class _ZoneBar extends StatelessWidget {
+  const _ZoneBar({
+    required this.zone,
+    required this.saved,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  /// La zona del pallone (null = pallone non in campo).
+  final int? zone;
+  final bool saved;
+  final ValueChanged<int> onSave;
+  final ValueChanged<int> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final z = zone;
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: z == null ? null : () => onSave(z),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            icon: const Icon(Icons.push_pin_outlined, size: 18),
+            label: const Text(
+              'Salva posizioni per questa zona',
+              textAlign: TextAlign.center,
+              maxLines: 2,
+            ),
+          ),
+        ),
+        if (z != null && saved) ...[
+          const SizedBox(width: 8),
+          IconButton.outlined(
+            tooltip: 'Cancella le posizioni di questa zona',
+            onPressed: () => onDelete(z),
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 /// "Vista": l'occhio tondo in fondo alla barra, alto come le pillole.
