@@ -10,6 +10,8 @@
 //   { kind: "rules", version }              → a tutti i membri: nuova versione del regolamento da accettare
 //   { kind: "event", id }                   → alla squadra (o a tutti): nuovo appuntamento in calendario
 //   { kind: "attendance_reminder", users }  → alle 18:00 a chi non ha ancora risposto per stasera
+//                                             (serate dal lunedì al venerdì; sabato e domenica
+//                                             solo con un evento in calendario)
 //   { kind: "attendance_auto_absent", users } → alle 18:30 a chi è risultato assente senza rispondere
 //   { kind: "video_proposed", id }          → al Direttivo: un giocatore propone un video
 //   { kind: "video_published", id }         → a chi l'ha proposto: il video è stato pubblicato
@@ -18,8 +20,9 @@
 //   { kind: "special_cards_week", match }   → alla squadra: le carte speciali della giornata
 //   { kind: "voice_room", id }              → ai membri del canale: qualcuno ha aperto la stanza vocale
 //   { kind: "match_reminder", id, when }    → alla squadra della partita, esclusi gli assenti:
-//                                             when = ora (un'ora prima), lobby (dieci minuti
-//                                             prima) o chiamata (dal Direttivo, arriva sempre)
+//                                             when = party (trenta minuti prima: tutti in party,
+//                                             come da regolamento), lobby (dieci minuti prima)
+//                                             o chiamata (dal Direttivo, arriva sempre)
 //   { kind: "cleanup" }                     → nessuna notifica: rimuove dallo Storage i file in coda
 //                                             (allegati della chat scaduti o eliminati)
 //
@@ -224,8 +227,9 @@ async function matchReminderPushes(db: SupabaseClient, eventId: string, when: un
   const time = timeRome(e.starts_at);
   const body = `${e.title} alle ${time}${e.party_code ? ` · Party: ${e.party_code}` : ""}`;
   const minutes = Math.round((new Date(e.starts_at).getTime() - Date.now()) / 60000);
-  const title = when === "ora"
-    ? (minutes >= 50 ? "⚽ Tra un'ora si gioca" : `⚽ Tra ${Math.max(minutes, 1)} minuti si gioca`)
+  // I convocati si presentano in party trenta minuti prima (regolamento).
+  const title = when === "party"
+    ? `⏰ Tra ${minutes >= 25 ? 30 : Math.max(minutes, 1)} minuti si gioca: tutti in party!`
     : when === "lobby"
     ? "🎮 Tutti in lobby!"
     : when === "chiamata"
