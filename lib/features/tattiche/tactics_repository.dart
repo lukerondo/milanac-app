@@ -7,7 +7,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
+import '../../core/teams.dart';
 import '../lavagna/board_model.dart';
+import '../lavagna/set_pieces.dart';
 
 const tacticsBucket = 'tactics';
 
@@ -54,6 +56,16 @@ class Tactic {
     team: m['team'] as String?,
   );
 
+  /// Come [Tactic.fromMap], ma una riga illeggibile dà null invece di fermare tutto
+  /// l'elenco degli schemi.
+  static Tactic? tryFromMap(Map<String, dynamic> m) {
+    try {
+      return Tactic.fromMap(m);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// I campi da scrivere. Lavagna e squadra solo se ci sono: chi modifica il testo
   /// di uno schema non deve cancellarne il disegno.
   Map<String, dynamic> toMap() => {
@@ -92,6 +104,11 @@ final tacticsProvider = StreamProvider<List<Tactic>>((ref) {
   return ref.watch(tacticsRepositoryProvider).watchAll();
 });
 
+/// Gli schemi delle righe della tabella: quelle illeggibili si saltano.
+List<Tactic> readTactics(List<Map<String, dynamic>> rows) => [
+  for (final r in rows) ?Tactic.tryFromMap(r),
+];
+
 /// Indirizzo firmato dell'immagine (vale 6 ore): si butta quando nessuno lo mostra,
 /// così la volta dopo se ne chiede uno nuovo invece di usarne uno scaduto.
 final tacticImageUrlProvider = FutureProvider.autoDispose
@@ -117,7 +134,7 @@ class _SupabaseTacticsRepository implements TacticsRepository {
       .from('tactics')
       .stream(primaryKey: ['id'])
       .order('created_at', ascending: false)
-      .map((rows) => rows.map(Tactic.fromMap).toList());
+      .map(readTactics);
 
   @override
   Future<void> save(
@@ -203,11 +220,18 @@ class DemoTacticsRepository implements TacticsRepository {
           'centrale. Il terzino lato palla accorcia sull\'esterno. Se il pressing '
           'viene superato: tutti dietro la linea della palla.',
     ),
-    const Tactic(
+    Tactic(
       id: 't2',
       title: 'Calcio d\'angolo a rientrare',
-      module: 'Piazzati',
+      module: setPieceModule,
+      team: 'milanac',
       description: 'Blocco sul primo palo, inserimento del DC sul secondo.',
+      board: setPieceBoard(
+        SetPieceTemplate.angoloSinistra,
+        Team.milanac,
+        const [],
+        null,
+      ),
     ),
     Tactic(
       id: 't3',
@@ -216,6 +240,15 @@ class DemoTacticsRepository implements TacticsRepository {
       team: 'milanac',
       description: 'Il portiere apre sul DC, il CDC si abbassa tra i centrali e i terzini salgono.',
       board: demoBoard(),
+    ),
+    Tactic(
+      id: 't4',
+      title: 'Dove stare con la palla',
+      module: '4-3-3',
+      team: 'milanac',
+      description:
+          'Posizioni per zona: sposta il pallone e guarda dove va ognuno.',
+      board: demoZoneBoard(),
     ),
   ];
   final _changes = StreamController<void>.broadcast();

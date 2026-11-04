@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,14 +28,17 @@ import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import '../tattiche/tactics_repository.dart';
 import 'board_model.dart';
+import 'board_overlays.dart';
 import 'board_painter.dart';
 import 'full_page.dart';
 import 'replay_pages.dart';
 import 'replay_player.dart';
+import 'set_pieces.dart';
 
 /// Strumenti della lavagna (barra in basso).
 enum BoardTool {
   giocatore('Gettoni', Icons.adjust_rounded),
+  pallone('Pallone', Icons.sports_soccer_rounded),
   fuoco('Fuoco', Icons.local_fire_department_rounded),
   freccia('Freccia', Icons.north_east_rounded);
 
@@ -45,11 +50,43 @@ enum BoardTool {
     giocatore =>
       'Trascina i gettoni. Oro: noi · nero: avversari.\n'
           'Tocca per aggiungere, tieni premuto per togliere.',
+    pallone =>
+      'Tocca un compagno per passargli la palla, l\'erba per giocarla nello '
+          'spazio, la porta per tirare. Trascina il pallone per spostarlo o '
+          'darlo a un giocatore.',
     fuoco =>
       'Tieni premuto e muovi il dito: la heatmap si accumula dove insisti.',
     freccia => 'Trascina da un punto all\'altro. Doppio tocco per le frecce tratteggiate.',
   };
 }
+
+/// "Pallone" quando il pallone non è in campo (uno schema di prima o tolto): il primo
+/// tocco lo mette.
+const _placeBallHint =
+    'Tocca il campo per mettere il pallone, o un gettone per darglielo.';
+
+/// Chi guarda soltanto: i colori e le linee.
+const _readOnlyHint =
+    'Oro: noi · nero: avversari. Palla: linea continua il passaggio, ondulata '
+    'la conduzione, spessa il tiro, a puntini il cross.\nSolo il Direttivo '
+    'disegna sulla lavagna.';
+
+/// Chi guarda uno schema con le posizioni per zona: può spostare solo il pallone.
+const _ballOnlyHint =
+    'Sposta il pallone: vedi dove devi stare quando la palla è in quella zona.';
+
+/// "Pallone" con le zone di battuta accese: la legenda dei numeri.
+String get _crossHint =>
+    'Tocca una zona per il cross: $deliveryZoneLegend. Un compagno per '
+    'passargli la palla, la porta per tirare.';
+
+/// "Posizioni per zona" (Direttivo): la zona del pallone e come si usa.
+String _positionsHint(int? zone, {required bool saved}) => zone == null
+    ? 'Posizioni per zona: metti il pallone in campo, sistema i giocatori e '
+          'salva le posizioni della sua zona.'
+    : '${ballZoneName(zone)} · ${saved ? 'salvata' : 'da salvare'}. Sistema i '
+          'giocatori e salva: quando il pallone entra in una zona salvata, '
+          'vanno lì da soli.';
 
 /// Nome breve della squadra sulla lavagna.
 String _teamName(Team team) => team == Team.milanac ? 'Milan AC' : 'Futuro';
@@ -153,7 +190,7 @@ class _SavedBoardPageState extends ConsumerState<SavedBoardPage> {
 }
 
 /// I gettoni ai posti del modulo con i giocatori della formazione della squadra
-/// (dove manca il giocatore resta la sigla del ruolo).
+/// (dove manca il giocatore resta la sigla del ruolo) e il pallone a centrocampo.
 BoardState _moduleBoard(
   String module,
   Team team,
@@ -182,6 +219,7 @@ BoardState _moduleBoard(
           );
         }(),
     ],
+    ball: BoardBall.kickOff,
   );
 }
 
@@ -191,8 +229,9 @@ Future<void> _quietly(Future<void> f) async {
   } catch (_) {}
 }
 
-/// La lavagna tattica: gettoni dei giocatori, pennello heatmap, frecce, annulla,
-/// schemi salvati con immagine, registrazione del replay con la voce.
+/// La lavagna tattica: gettoni dei giocatori, pallone con passaggi, conduzioni e
+/// tiri, pennello heatmap, frecce, annulla, schemi salvati con immagine,
+/// registrazione del replay con la voce.
 /// Solo il Direttivo disegna; gli altri guardano gli schemi salvati.
 class BoardPage extends ConsumerStatefulWidget {
   const BoardPage({super.key, this.tactic, this.readOnly = false});
@@ -203,7 +242,23 @@ class BoardPage extends ConsumerStatefulWidget {
   ConsumerState<BoardPage> createState() => _BoardPageState();
 }
 
-class _BoardPageState extends ConsumerState<BoardPage> {
+/// Quello che la pagina mostra della lavagna, fuori dal campo: "Annulla", modulo e
+/// squadra in alto, i suggerimenti (pallone, zone di battuta) e la barra delle
+/// posizioni per zona.
+typedef _Shown = ({
+  bool canUndo,
+  String module,
+  String team,
+  bool hasBall,
+  bool zones,
+  bool positionsMode,
+  bool hasPositions,
+  int? ballZone,
+  bool zoneSaved,
+});
+
+class _BoardPageState extends ConsumerState<BoardPage>
+    with TickerProviderStateMixin {
   late final BoardEditor _editor;
   late final AudioFocus _focus;
   BoardTool _tool = BoardTool.giocatore;
@@ -212,6 +267,25 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   String? _selectedId;
   (double, double)? _arrowStart;
   (double, double)? _lastHeat;
+
+  /// Si sta trascinando il pallone.
+  bool _ballDrag = false;
+
+  /// Il gettone che prenderebbe il pallone lasciato lì (anello bianco mentre lo si
+  /// trascina): la segue solo la lavagna.
+  final _target = ValueNotifier<String?>(null);
+
+  /// Il volo del pallone dopo un passaggio o un tiro: solo disegno (lo stato è già
+  /// quello d'arrivo), rifatto uguale nel replay.
+  final _flight = ValueNotifier<BallFlight?>(null);
+  late final AnimationController _flightClock;
+  BallKick? _flying;
+
+  /// I giocatori che scivolano verso le posizioni della nuova zona: anche questo solo
+  /// disegno, rifatto uguale nel replay.
+  final _shift = ValueNotifier<ShiftFrame?>(null);
+  late final AnimationController _shiftClock;
+  TokenShift? _shifting;
 
   /// La pennellata in corso ha già messo almeno un punto (e il suo punto di
   /// annullamento).
@@ -224,12 +298,25 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   int _seq = 0;
   bool _saving = false;
 
-  /// Quello che la pagina mostra della lavagna ("Annulla", modulo e squadra in
-  /// alto) com'era all'ultima costruzione.
-  (bool, String, String)? _shown;
+  /// Quello che la pagina mostra della lavagna com'era all'ultima costruzione.
+  _Shown? _shown;
 
-  (bool, String, String) get _visible =>
-      (_editor.canUndo, _editor.state.module, _editor.state.team);
+  _Shown get _visible {
+    final s = _editor.state;
+    final ball = s.ball;
+    final zone = ball == null ? null : ballZoneAt(ball.x, ball.y);
+    return (
+      canUndo: _editor.canUndo,
+      module: s.module,
+      team: s.team,
+      hasBall: ball != null,
+      zones: s.shows(BoardOverlay.zones),
+      positionsMode: s.shows(BoardOverlay.zonePositions),
+      hasPositions: s.positions.isNotEmpty,
+      ballZone: zone,
+      zoneSaved: zone != null && s.positions.containsKey(zone),
+    );
+  }
 
   // Registrazione del replay.
   late final VoiceRecorder _mic;
@@ -249,9 +336,27 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     super.initState();
     _focus = ref.read(audioFocusProvider.notifier);
     _mic = ref.read(replayMicProvider)();
+    _flightClock = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: ballFlightMs),
+    )..addListener(_onFlight);
+    _shiftClock = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: zoneShiftMs),
+    )..addListener(_onShift);
     final tactic = widget.tactic;
     if (tactic != null) {
-      _editor = BoardEditor(tactic.board ?? const BoardState());
+      var board = tactic.board ?? const BoardState();
+      // Chi guarda uno schema con le posizioni per zona le vede seguire il pallone
+      // che sposta (solo qui: lo schema salvato non cambia).
+      if (widget.readOnly &&
+          board.positions.isNotEmpty &&
+          !board.shows(BoardOverlay.zonePositions)) {
+        board = board.copyWith(
+          view: {...board.view, BoardOverlay.zonePositions.key: true},
+        );
+      }
+      _editor = BoardEditor(board);
     } else {
       // Lavagna nuova: subito i gettoni del modulo, con i giocatori se rosa e
       // formazione sono già in memoria, altrimenti con le sigle dei ruoli.
@@ -266,9 +371,43 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   }
 
   /// La lavagna si ridisegna da sola ([BoardCanvas]): la pagina si ricostruisce solo
-  /// quando "Annulla" si accende o si spegne, o cambiano modulo e squadra.
+  /// quando cambia quello che mostra fuori dal campo ([_visible]). Un passaggio o un
+  /// tiro nuovo fa partire il volo del pallone; un cambio di zona con le posizioni
+  /// salvate, lo scivolamento dei giocatori.
   void _onChanged() {
+    final kick = _editor.lastKick;
+    if (!identical(kick, _flying)) {
+      _flying = kick;
+      if (kick == null) {
+        _flightClock.stop();
+        _flight.value = null;
+      } else {
+        _flightClock.forward(from: 0);
+      }
+    }
+    final shift = _editor.lastShift;
+    if (!identical(shift, _shifting)) {
+      _shifting = shift;
+      if (shift == null) {
+        _shiftClock.stop();
+        _shift.value = null;
+      } else {
+        _shiftClock.forward(from: 0);
+      }
+    }
     if (mounted && _visible != _shown) setState(() {});
+  }
+
+  void _onFlight() {
+    final kick = _flying;
+    final t = _flightClock.value;
+    _flight.value = kick == null || t >= 1 ? null : BallFlight(kick, t);
+  }
+
+  void _onShift() {
+    final shift = _shifting;
+    final t = _shiftClock.value;
+    _shift.value = shift == null || t >= 1 ? null : ShiftFrame(shift, t);
   }
 
   @override
@@ -290,6 +429,11 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     _editor.removeListener(_onChanged);
     _editor.dispose();
     _pending.dispose();
+    _flightClock.dispose();
+    _flight.dispose();
+    _shiftClock.dispose();
+    _shift.dispose();
+    _target.dispose();
     super.dispose();
   }
 
@@ -301,7 +445,7 @@ class _BoardPageState extends ConsumerState<BoardPage> {
 
   /// Rosa e formazione della squadra, dalla rete se non sono ancora in memoria
   /// (senza rete, dopo qualche secondo restano le sigle dei ruoli).
-  Future<BoardState> _loadModule(String module, Team team) async {
+  Future<(List<Member>, Formation?)> _loadTeam(Team team) async {
     const wait = Duration(seconds: 8);
     final cached = ref.read(rosaProvider).value ?? const <Member>[];
     final rosaFuture = cached.isEmpty
@@ -316,6 +460,11 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     try {
       formation = await formationFuture.timeout(wait);
     } catch (_) {}
+    return (rosa, formation);
+  }
+
+  Future<BoardState> _loadModule(String module, Team team) async {
+    final (rosa, formation) = await _loadTeam(team);
     return _moduleBoard(module, team, rosa, formation);
   }
 
@@ -335,13 +484,22 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     _editor.apply(Reset(state));
   }
 
+  /// Uno schema da palla inattiva: come una lavagna dal modulo (si annulla, finisce
+  /// nel replay), con i battitori della formazione pubblicata.
+  Future<void> _startFromSetPiece(SetPieceTemplate template, Team team) async {
+    final (rosa, formation) = await _loadTeam(team);
+    if (!mounted) return;
+    _editor.apply(Reset(setPieceBoard(template, team, rosa, formation)));
+  }
+
   // ---------------------------------------------------------------- gesti
 
   (double, double) _field(Offset local) => BoardPainter.toField(_size, local);
 
-  BoardToken? _hit(Offset local) {
-    // Il gettone si prende anche toccando poco fuori (bersaglio di almeno 44 px).
-    var best = BoardPainter.tokenRadius(_size) * 1.6;
+  /// Il gettone sotto il dito: il più vicino entro [reach] raggi (di serie si prende
+  /// anche toccando poco fuori, bersaglio di almeno 44 px).
+  BoardToken? _hit(Offset local, {double reach = 1.6}) {
+    var best = BoardPainter.tokenRadius(_size) * reach;
     BoardToken? found;
     for (final t in _editor.state.tokens) {
       final d = (BoardPainter.toPixel(_size, t.x, t.y) - local).distance;
@@ -351,6 +509,106 @@ class _BoardPageState extends ConsumerState<BoardPage> {
       }
     }
     return found;
+  }
+
+  /// Il pallone sotto il dito: toccato in pieno, oppure vicino (almeno 22 dp) ma
+  /// fuori dai gettoni. Al piede di un giocatore si prende il pallone toccandolo, il
+  /// resto del gettone muove il giocatore.
+  bool _onBall(Offset local) {
+    final ball = _editor.state.ball;
+    if (ball == null) return false;
+    final d = (BoardPainter.toPixel(_size, ball.x, ball.y) - local).distance;
+    final br = BoardPainter.ballRadius(_size);
+    if (d <= max(br * 1.3, 10.0)) return true;
+    if (d > max(22.0, br * 2.5)) return false;
+    final r = BoardPainter.tokenRadius(_size);
+    return !_editor.state.tokens.any(
+      (t) => (BoardPainter.toPixel(_size, t.x, t.y) - local).distance <= r,
+    );
+  }
+
+  /// Il gettone che prende il pallone lasciato in [local] (solo da vicino).
+  BoardToken? _receiver(Offset local) => _hit(local, reach: 1.3);
+
+  /// Il punto in porta di un tiro, se il tocco è sulla porta o lì accanto (in alto
+  /// la porta avversaria, in basso la nostra): il pallone finisce tra i pali.
+  (double, double)? _goalAt(Offset local) {
+    final f = BoardPainter.fieldRect(_size);
+    final r = BoardPainter.tokenRadius(_size);
+    final half = BoardPainter.goalWidth(_size) / 2;
+    if ((local.dx - f.center.dx).abs() > half + r) return null;
+    final top = local.dy <= f.top + r * 1.5;
+    if (!top && local.dy < f.bottom - r * 1.5) return null;
+    final inside = max(0.0, half - BoardPainter.ballRadius(_size));
+    final (x, _) = _field(
+      Offset(
+        local.dx.clamp(f.center.dx - inside, f.center.dx + inside),
+        f.center.dy,
+      ),
+    );
+    return (x, top ? 0.0 : 1.0);
+  }
+
+  /// La zona di battuta sotto il dito, se le zone si vedono (con qualche dp di
+  /// margine: sono piccole).
+  DeliveryZone? _zoneAt(Offset local) {
+    final s = _editor.state;
+    if (!s.shows(BoardOverlay.zones)) return null;
+    final f = BoardPainter.fieldRect(_size);
+    final (x, y) = _field(local);
+    const slack = 6.0;
+    return deliveryZoneAt(
+      s,
+      x,
+      y,
+      slackX: slack / f.width,
+      slackY: slack / f.height,
+    );
+  }
+
+  /// Pallone: un tocco su un gettone gli passa la palla, sulla porta tira, su una
+  /// zona di battuta crossa lì, sull'erba la gioca nello spazio (anche da palla
+  /// libera, da dov'è). Senza pallone in campo il tocco lo mette.
+  void _ballTap(Offset local) {
+    final ball = _editor.state.ball;
+    final (x, y) = _field(local);
+    if (ball == null) {
+      final t = _hit(local);
+      _editor.apply(
+        PlaceBall(t != null ? ballAtFeet(t) : BoardBall(x: x, y: y)),
+      );
+      return;
+    }
+    if (_onBall(local)) return;
+    final goal = _goalAt(local);
+    // Su una zona di battuta il cross, a meno che il dito non sia proprio su un
+    // compagno: a lui il passaggio.
+    final zone = goal == null ? _zoneAt(local) : null;
+    if (zone != null) {
+      final mate = _hit(local, reach: 1.1);
+      if (mate != null && mate.side != 'avversari') {
+        if (mate.id == ball.holder) return;
+        Haptics.light();
+        _editor.apply(KickBall(x: mate.x, y: mate.y, to: mate.id));
+      } else {
+        Haptics.light();
+        _editor.apply(KickBall(x: zone.x, y: zone.y, cross: true));
+      }
+      return;
+    }
+    // Un gettone toccato in pieno vince sulla porta (il portiere sulla linea),
+    // la porta sul gettone solo sfiorato.
+    final t = _hit(local, reach: 1.1) ?? (goal == null ? _hit(local) : null);
+    if (t != null) {
+      if (t.id == ball.holder) return;
+      Haptics.light();
+      _editor.apply(KickBall(x: t.x, y: t.y, to: t.id));
+    } else if (goal != null) {
+      Haptics.medium();
+      _editor.apply(KickBall(x: goal.$1, y: goal.$2, shot: true));
+    } else {
+      _editor.apply(KickBall(x: x, y: y));
+    }
   }
 
   /// Un punto di heatmap: non dove il colore è già pieno, non oltre il limite
@@ -380,15 +638,19 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   }
 
   void _onTapUp(TapUpDetails d) {
-    final hit = _hit(d.localPosition);
     final (x, y) = _field(d.localPosition);
     switch (_tool) {
       case BoardTool.giocatore:
+        // Il pallone non si seleziona e non apre la scelta del gettone.
+        if (_onBall(d.localPosition)) return;
+        final hit = _hit(d.localPosition);
         if (hit != null) {
           setState(() => _selectedId = _selectedId == hit.id ? null : hit.id);
         } else {
           _addPlayer(x, y);
         }
+      case BoardTool.pallone:
+        _ballTap(d.localPosition);
       case BoardTool.fuoco:
         _heatAt(x, y);
         _endHeat();
@@ -400,7 +662,14 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   void _onPanStart(DragStartDetails d) {
     final (x, y) = _field(d.localPosition);
     switch (_tool) {
-      case BoardTool.giocatore:
+      case BoardTool.giocatore || BoardTool.pallone:
+        // Prima il pallone (anche al piede di un giocatore), poi i gettoni: chi ha
+        // la palla al piede la porta con sé.
+        if (_onBall(d.localPosition)) {
+          _ballDrag = true;
+          _editor.apply(const GrabBall());
+          return;
+        }
         final hit = _hit(d.localPosition);
         if (hit != null) {
           _dragId = hit.id;
@@ -415,11 +684,24 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     }
   }
 
+  /// Chi guarda uno schema con le posizioni per zona prende solo il pallone (i
+  /// giocatori si mettono da soli).
+  void _onBallOnlyPanStart(DragStartDetails d) {
+    if (!_onBall(d.localPosition)) return;
+    _ballDrag = true;
+    _editor.apply(const GrabBall());
+  }
+
   void _onPanUpdate(DragUpdateDetails d) {
     final (x, y) = _field(d.localPosition);
     switch (_tool) {
-      case BoardTool.giocatore:
-        if (_dragId != null) _editor.apply(MoveToken(_dragId!, x, y));
+      case BoardTool.giocatore || BoardTool.pallone:
+        if (_ballDrag) {
+          _editor.apply(MoveBall(x, y));
+          _target.value = _receiver(d.localPosition)?.id;
+        } else if (_dragId != null) {
+          _editor.apply(MoveToken(_dragId!, x, y));
+        }
       case BoardTool.fuoco:
         final last = _lastHeat;
         if (last == null || (x - last.$1).abs() + (y - last.$2).abs() > .012) {
@@ -441,8 +723,15 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   }
 
   /// Fine del gesto: chiude quello che era in corso (anche se nel frattempo si è
-  /// cambiato strumento).
+  /// cambiato strumento). Il pallone lasciato su un gettone gli va al piede.
   void _onPanEnd(DragEndDetails d) {
+    if (_ballDrag) {
+      _ballDrag = false;
+      final to = _target.value;
+      _target.value = null;
+      if (to != null) Haptics.light();
+      _editor.apply(DropBall(to));
+    }
     if (_dragId != null) {
       _editor.apply(const DragEnd());
       _dragId = null;
@@ -462,7 +751,14 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     _notice(_dashed ? 'Frecce tratteggiate.' : 'Frecce continue.');
   }
 
+  /// Tenendo premuto un gettone lo si toglie; il pallone invece non si toglie per
+  /// sbaglio: apre le sue opzioni.
   void _onLongPressStart(LongPressStartDetails d) {
+    if (_tool != BoardTool.giocatore && _tool != BoardTool.pallone) return;
+    if (_onBall(d.localPosition)) {
+      _ballOptions();
+      return;
+    }
     if (_tool != BoardTool.giocatore) return;
     final hit = _hit(d.localPosition);
     if (hit == null) return;
@@ -491,7 +787,7 @@ class _BoardPageState extends ConsumerState<BoardPage> {
         if (t.playerId != null) t.playerId!,
     };
     final opponent = _nextOpponentNumber();
-    final picked = await showModalBottomSheet<BoardToken>(
+    final picked = await showModalBottomSheet<Object>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -499,9 +795,15 @@ class _BoardPageState extends ConsumerState<BoardPage> {
         onBoard: onBoard,
         team: Team.parse(_editor.state.team) ?? Team.milanac,
         opponentNumber: opponent,
+        offerBall: _editor.state.ball == null,
       ),
     );
-    if (picked == null || !mounted) return;
+    if (!mounted) return;
+    if (picked is _BallPick) {
+      _editor.apply(PlaceBall(BoardBall(x: x, y: y)));
+      return;
+    }
+    if (picked is! BoardToken) return;
     _editor.apply(
       AddToken(
         BoardToken(
@@ -518,12 +820,17 @@ class _BoardPageState extends ConsumerState<BoardPage> {
   }
 
   Future<void> _clear() async {
+    final positions = _editor.state.positions.isNotEmpty;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Pulire la lavagna?'),
-        content: const Text(
-          'Via gettoni, frecce e heatmap (si può annullare).',
+        content: Text(
+          positions
+              ? 'Via gettoni, frecce, heatmap, linee della palla e posizioni per '
+                    'zona; il pallone torna a centrocampo (si può annullare).'
+              : 'Via gettoni, frecce, heatmap e linee della palla; il pallone '
+                    'torna a centrocampo (si può annullare).',
         ),
         actions: [
           TextButton(
@@ -540,12 +847,105 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     if (ok == true) _editor.apply(const Clear());
   }
 
+  /// Le opzioni del pallone (si aprono toccando di nuovo "Pallone" o tenendo premuto
+  /// il pallone): l'unico modo di toglierlo, così non sparisce per sbaglio.
+  Future<void> _ballOptions() async {
+    final s = _editor.state;
+    final choice = await showModalBottomSheet<BoardCommand>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (c) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: SectionLabel('Pallone'),
+              ),
+              ListTile(
+                leading: const _BallAvatar(),
+                title: Text(
+                  s.ball == null
+                      ? 'Metti il pallone a centrocampo'
+                      : 'Rimetti il pallone a centrocampo',
+                ),
+                onTap: () =>
+                    Navigator.pop(c, const PlaceBall(BoardBall.kickOff)),
+              ),
+              if (s.lines.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.timeline_rounded),
+                  title: const Text('Cancella le linee della palla'),
+                  subtitle: const Text('La numerazione riparte da 1.'),
+                  onTap: () => Navigator.pop(c, const ClearBallLines()),
+                ),
+              if (s.ball != null)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded),
+                  title: const Text('Togli il pallone'),
+                  onTap: () => Navigator.pop(c, const PlaceBall(null)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice != null && mounted) _editor.apply(choice);
+  }
+
+  /// "Vista": gli interruttori di cosa si disegna sul campo (si salvano con lo schema
+  /// e finiscono nel replay). Ne arriveranno altri: il foglio li elenca tutti.
+  Future<void> _showView({
+    required bool readOnly,
+  }) => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (c) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: ValueListenableBuilder<BoardState>(
+          valueListenable: _editor,
+          builder: (c, s, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SectionLabel('Vista'),
+              const SizedBox(height: 4),
+              Text(
+                readOnly
+                    ? 'Cosa mostrare sul campo.'
+                    : 'Cosa mostrare sul campo: si salva con lo schema e si '
+                          'vede nel replay.',
+                style: TextStyle(fontSize: 14, color: c.pal.textMuted),
+              ),
+              const SizedBox(height: 6),
+              for (final o in BoardOverlay.values)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(o.label),
+                  subtitle: Text(o.description),
+                  value: s.shows(o),
+                  onChanged: (on) => _editor.apply(SetView(o.key, on)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
   /// Modulo e squadra in alto: una lavagna nuova dal modulo, con i giocatori della
-  /// formazione della squadra (si può annullare).
+  /// formazione della squadra, o uno schema da palla inattiva (si può annullare).
   Future<void> _pickModule() async {
     var team = Team.parse(_editor.state.team) ?? Team.milanac;
     final current = _editor.state.module;
-    final module = await showModalBottomSheet<String>(
+    final piece = _editor.state.piece?.kind;
+    final picked = await showModalBottomSheet<Object>(
       context: context,
       showDragHandle: true,
       // Alto quanto serve (con il testo grande scorre invece di traboccare).
@@ -586,13 +986,42 @@ class _BoardPageState extends ConsumerState<BoardPage> {
                       ),
                   ],
                 ),
+                const SizedBox(height: 22),
+                const SectionLabel('Palle inattive'),
+                const SizedBox(height: 4),
+                Text(
+                  'Pallone sul punto giusto, i giocatori ai loro posti e chi '
+                  'batte dalla formazione pubblicata.',
+                  style: TextStyle(fontSize: 14, color: c.pal.textMuted),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final t in SetPieceTemplate.values)
+                      IntrinsicWidth(
+                        child: FilterPill(
+                          label: t.label,
+                          selected: current == setPieceModule && t.key == piece,
+                          onTap: () => Navigator.pop(c, t),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
         ),
       ),
     );
-    if (module != null && mounted) await _startFromModule(module, team);
+    if (!mounted) return;
+    switch (picked) {
+      case final String module:
+        await _startFromModule(module, team);
+      case final SetPieceTemplate template:
+        await _startFromSetPiece(template, team);
+    }
   }
 
   Future<void> _save() async {
@@ -814,7 +1243,21 @@ class _BoardPageState extends ConsumerState<BoardPage> {
     final isDirettivo = ref.watch(profileProvider).value?.isDirettivo ?? false;
     final readOnly = widget.readOnly || !isDirettivo;
     final shown = _shown = _visible;
-    final (canUndo, module, teamName) = shown;
+    final hasBall = shown.hasBall;
+    // Chi guarda uno schema con le posizioni per zona sposta il pallone (e basta).
+    final ballOnly = readOnly && shown.hasPositions && hasBall;
+    final positionsBar = !readOnly && shown.positionsMode;
+    final hint = readOnly
+        ? (ballOnly ? _ballOnlyHint : _readOnlyHint)
+        : _recording
+        ? 'Registrazione in corso: parla, muovi gettoni e pallone, poi ferma.'
+        : shown.positionsMode
+        ? _positionsHint(shown.ballZone, saved: shown.zoneSaved)
+        : _tool == BoardTool.pallone && !hasBall
+        ? _placeBallHint
+        : _tool == BoardTool.pallone && shown.zones
+        ? _crossHint
+        : _tool.hint;
     final p = context.pal;
     return PopScope(
       canPop: !_recording && !_micBusy,
@@ -858,10 +1301,11 @@ class _BoardPageState extends ConsumerState<BoardPage> {
             const SizedBox(width: 12),
           ],
           bottom: _BoardInfoBar(
-            module: module,
-            team: Team.parse(teamName) ?? Team.milanac,
+            module: shown.module,
+            team: Team.parse(shown.team) ?? Team.milanac,
             title: widget.tactic?.title,
             onTap: readOnly ? null : _pickModule,
+            onView: () => _showView(readOnly: readOnly),
           ),
         ),
         // Come nella tavola: il campo subito sotto la barra in alto e il suggerimento
@@ -883,11 +1327,27 @@ class _BoardPageState extends ConsumerState<BoardPage> {
                             key: const ValueKey('lavagna'),
                             board: _editor,
                             pendingArrow: _pending,
+                            flight: _flight,
+                            shift: _shift,
+                            target: _target,
                             selectedId: _selectedId,
                           );
+                          if (ballOnly) {
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              dragStartBehavior: DragStartBehavior.down,
+                              onPanStart: _onBallOnlyPanStart,
+                              onPanUpdate: _onPanUpdate,
+                              onPanEnd: _onPanEnd,
+                              child: board,
+                            );
+                          }
                           if (readOnly) return board;
                           return GestureDetector(
                             behavior: HitTestBehavior.opaque,
+                            // Il trascinamento parte da dove si è appoggiato il
+                            // dito: serve per prendere il pallone, che è piccolo.
+                            dragStartBehavior: DragStartBehavior.down,
                             onTapUp: _onTapUp,
                             onDoubleTap: _tool == BoardTool.freccia
                                 ? _onDoubleTap
@@ -905,12 +1365,7 @@ class _BoardPageState extends ConsumerState<BoardPage> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  readOnly
-                      ? 'Oro: noi · nero: avversari.\n'
-                            'Solo il Direttivo disegna sulla lavagna.'
-                      : _recording
-                      ? 'Registrazione in corso: parla e muovi i gettoni, poi ferma.'
-                      : _tool.hint,
+                  hint,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -918,6 +1373,18 @@ class _BoardPageState extends ConsumerState<BoardPage> {
                     color: p.textMuted,
                   ),
                 ),
+                if (positionsBar) ...[
+                  const SizedBox(height: 8),
+                  _ZoneBar(
+                    zone: shown.ballZone,
+                    saved: shown.zoneSaved,
+                    onSave: (zone) {
+                      Haptics.light();
+                      _editor.apply(SaveZone(zone));
+                    },
+                    onDelete: (zone) => _editor.apply(ClearZone(zone)),
+                  ),
+                ],
               ],
             ),
           ),
@@ -929,8 +1396,15 @@ class _BoardPageState extends ConsumerState<BoardPage> {
             : _ToolBar(
                 tool: _tool,
                 dashed: _dashed,
-                canUndo: canUndo,
-                onTool: (t) => setState(() => _tool = t),
+                canUndo: shown.canUndo,
+                onTool: (t) {
+                  // "Pallone" toccato di nuovo apre le sue opzioni.
+                  if (t == BoardTool.pallone && _tool == t) {
+                    _ballOptions();
+                  } else {
+                    setState(() => _tool = t);
+                  }
+                },
                 onUndo: () => _editor.apply(const Undo()),
                 onClear: _clear,
               ),
@@ -1041,11 +1515,13 @@ class _RecordingButton extends StatelessWidget {
   }
 }
 
-/// Sotto il titolo: modulo, squadra e nome dello schema (sempre su fondo scuro).
+/// Sotto il titolo: modulo, squadra, nome dello schema e "Vista" (sempre su fondo
+/// scuro).
 class _BoardInfoBar extends StatelessWidget implements PreferredSizeWidget {
   const _BoardInfoBar({
     required this.module,
     required this.team,
+    required this.onView,
     this.title,
     this.onTap,
   });
@@ -1055,6 +1531,9 @@ class _BoardInfoBar extends StatelessWidget implements PreferredSizeWidget {
 
   /// Apre la scelta di modulo e squadra (null = solo da guardare).
   final VoidCallback? onTap;
+
+  /// Apre gli interruttori di "Vista".
+  final VoidCallback onView;
 
   @override
   Size get preferredSize => const Size.fromHeight(47);
@@ -1085,12 +1564,90 @@ class _BoardInfoBar extends StatelessWidget implements PreferredSizeWidget {
                   style: TextStyle(fontSize: 14, color: p.textMuted),
                 ),
               ),
+              const SizedBox(width: 8),
+              _ViewButton(onTap: onView),
             ],
           ),
         );
       },
     ),
   );
+}
+
+/// "Posizioni per zona" (Direttivo), sotto il suggerimento: salva dove stanno adesso
+/// i gettoni come posizioni per la zona del pallone, o le cancella (si annulla).
+class _ZoneBar extends StatelessWidget {
+  const _ZoneBar({
+    required this.zone,
+    required this.saved,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  /// La zona del pallone (null = pallone non in campo).
+  final int? zone;
+  final bool saved;
+  final ValueChanged<int> onSave;
+  final ValueChanged<int> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final z = zone;
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: z == null ? null : () => onSave(z),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            icon: const Icon(Icons.push_pin_outlined, size: 18),
+            label: const Text(
+              'Salva posizioni per questa zona',
+              textAlign: TextAlign.center,
+              maxLines: 2,
+            ),
+          ),
+        ),
+        if (z != null && saved) ...[
+          const SizedBox(width: 8),
+          IconButton.outlined(
+            tooltip: 'Cancella le posizioni di questa zona',
+            onPressed: () => onDelete(z),
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// "Vista": l'occhio tondo in fondo alla barra, alto come le pillole.
+class _ViewButton extends StatelessWidget {
+  const _ViewButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final shape = CircleBorder(side: BorderSide(color: p.borderStrong));
+    return Tooltip(
+      message: 'Vista',
+      child: Material(
+        type: MaterialType.transparency,
+        shape: shape,
+        child: InkWell(
+          customBorder: shape,
+          onTap: onTap,
+          child: SizedBox.square(
+            dimension: 36,
+            child: Icon(Icons.visibility_outlined, size: 18, color: p.text),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _InfoPill extends StatelessWidget {
@@ -1138,8 +1695,9 @@ class _InfoPill extends StatelessWidget {
   }
 }
 
-/// Barra degli strumenti in basso (sempre scura): Gettoni, Fuoco, Freccia, poi
-/// Annulla e Pulisci; lo strumento attivo in oro.
+/// Barra degli strumenti in basso (sempre scura): Gettoni, Pallone, Fuoco, Freccia,
+/// poi Annulla e Pulisci; lo strumento attivo in oro. La freccia tratteggiata si vede
+/// dall'icona (l'etichetta resta corta: sei pulsanti stanno anche a 320 dp).
 class _ToolBar extends StatelessWidget {
   const _ToolBar({
     required this.tool,
@@ -1164,19 +1722,24 @@ class _ToolBar extends StatelessWidget {
         final buttons = [
           for (final t in BoardTool.values)
             _ToolButton(
-              icon: t.icon,
-              label: t == BoardTool.freccia && dashed ? 'Tratteggio' : t.label,
+              icon: t == BoardTool.freccia
+                  ? _ArrowGlyph(dashed: dashed)
+                  : Icon(t.icon),
+              label: t.label,
+              value: t == BoardTool.freccia
+                  ? (dashed ? 'tratteggiata' : 'continua')
+                  : null,
               selected: t == tool,
               onTap: () => onTool(t),
             ),
           _ToolButton(
-            icon: Icons.undo_rounded,
+            icon: const Icon(Icons.undo_rounded),
             label: 'Annulla',
             enabled: canUndo,
             onTap: onUndo,
           ),
           _ToolButton(
-            icon: Icons.delete_outline_rounded,
+            icon: const Icon(Icons.delete_outline_rounded),
             label: 'Pulisci',
             onTap: onClear,
           ),
@@ -1190,8 +1753,10 @@ class _ToolBar extends StatelessWidget {
             child: SafeArea(
               top: false,
               minimum: const EdgeInsets.only(bottom: 10),
+              // Sei pulsanti: a 320 dp ognuno è largo 48, quanto basta per
+              // "Gettoni" in grassetto.
               child: Padding(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                 child: Row(
                   children: [
                     for (final (i, b) in buttons.indexed) ...[
@@ -1214,12 +1779,18 @@ class _ToolButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.value,
     this.selected = false,
     this.enabled = true,
   });
-  final IconData icon;
+
+  /// L'icona (prende colore e misura dal pulsante).
+  final Widget icon;
   final String label;
   final VoidCallback onTap;
+
+  /// Per chi usa il lettore dello schermo (la freccia: continua o tratteggiata).
+  final String? value;
   final bool selected;
   final bool enabled;
 
@@ -1241,6 +1812,7 @@ class _ToolButton extends StatelessWidget {
       button: true,
       selected: selected,
       enabled: enabled,
+      value: value,
       child: Material(
         color: selected ? p.accentTint : Colors.transparent,
         shape: shape,
@@ -1252,16 +1824,28 @@ class _ToolButton extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 22, color: color),
+                IconTheme(
+                  data: IconThemeData(size: 22, color: color),
+                  child: icon,
+                ),
                 const SizedBox(height: 3),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                    color: color,
+                // Intera anche nel pulsante più stretto (o con il testo grande):
+                // semmai si rimpicciolisce, non si taglia.
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1271,6 +1855,99 @@ class _ToolButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// L'icona di "Freccia": la freccia continua o tratteggiata, come quella che si
+/// disegnerà.
+class _ArrowGlyph extends StatelessWidget {
+  const _ArrowGlyph({required this.dashed});
+  final bool dashed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = IconTheme.of(context);
+    return SizedBox.square(
+      dimension: theme.size ?? 24,
+      child: CustomPaint(
+        painter: _ArrowGlyphPainter(
+          dashed: dashed,
+          color: theme.color ?? MilanacColors.ivory,
+        ),
+      ),
+    );
+  }
+}
+
+class _ArrowGlyphPainter extends CustomPainter {
+  const _ArrowGlyphPainter({required this.dashed, required this.color});
+  final bool dashed;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.shortestSide;
+    final from = Offset(s * .2, s * .8), tip = Offset(s * .8, s * .2);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s * .1
+      ..strokeCap = StrokeCap.round;
+    final dir = (tip - from) / (tip - from).distance;
+    final end = tip - dir * s * .18;
+    if (dashed) {
+      // Tre trattini fino alla punta.
+      final length = (end - from).distance;
+      for (var i = 0; i < 3; i++) {
+        final a = from + dir * (length * i / 3);
+        final b = from + dir * (length * (i + .55) / 3);
+        canvas.drawLine(a, b, paint);
+      }
+    } else {
+      canvas.drawLine(from, end, paint);
+    }
+    final n = Offset(-dir.dy, dir.dx);
+    final head = s * .34;
+    canvas.drawPath(
+      Path()
+        ..moveTo(tip.dx, tip.dy)
+        ..lineTo(
+          tip.dx - dir.dx * head + n.dx * head * .5,
+          tip.dy - dir.dy * head + n.dy * head * .5,
+        )
+        ..lineTo(
+          tip.dx - dir.dx * head - n.dx * head * .5,
+          tip.dy - dir.dy * head - n.dy * head * .5,
+        )
+        ..close(),
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArrowGlyphPainter old) =>
+      old.dashed != dashed || old.color != color;
+}
+
+/// Il pallone grande come un gettone piccolo (nei fogli della lavagna).
+class _BallAvatar extends StatelessWidget {
+  const _BallAvatar();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 36,
+    height: 36,
+    alignment: Alignment.center,
+    decoration: const BoxDecoration(
+      color: MilanacColors.pitch,
+      shape: BoxShape.circle,
+    ),
+    child: const BallGlyph(size: 30),
+  );
+}
+
+/// Il pallone scelto nel foglio dei gettoni.
+class _BallPick {
+  const _BallPick();
 }
 
 /// Un gettone piccolo come sulla lavagna (nella scelta del giocatore).
@@ -1301,18 +1978,23 @@ class _TokenAvatar extends StatelessWidget {
   );
 }
 
-/// Scelta del giocatore da mettere sul campo (o un avversario, o un gettone vuoto).
+/// Scelta del giocatore da mettere sul campo (o un avversario, o un gettone vuoto, o
+/// il pallone se non c'è).
 class _PlayerSheet extends ConsumerStatefulWidget {
   const _PlayerSheet({
     required this.onBoard,
     required this.team,
     required this.opponentNumber,
+    this.offerBall = false,
   });
   final Set<String> onBoard;
   final Team team;
 
   /// Numero del prossimo avversario.
   final String opponentNumber;
+
+  /// Il pallone non è in campo (schema di prima): lo si può mettere da qui.
+  final bool offerBall;
 
   @override
   ConsumerState<_PlayerSheet> createState() => _PlayerSheetState();
@@ -1417,6 +2099,12 @@ class _PlayerSheetState extends ConsumerState<_PlayerSheet> {
                       ),
                     ),
                   ),
+                  if (widget.offerBall)
+                    ListTile(
+                      leading: const _BallAvatar(),
+                      title: const Text('Pallone'),
+                      onTap: () => Navigator.pop(context, const _BallPick()),
+                    ),
                   ListTile(
                     leading: _TokenAvatar(label: '?', side: _team.name),
                     title: const Text('Gettone senza nome'),

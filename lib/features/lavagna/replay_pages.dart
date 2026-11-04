@@ -244,7 +244,13 @@ class _ReplayPageState extends ConsumerState<ReplayPage> {
           'Il replay non è più disponibile: dopo 3 giorni sparisce dalla chat.',
         );
       }
-      final data = ReplayData.fromBytes(bytes);
+      final ReplayData data;
+      try {
+        data = ReplayData.fromBytes(bytes);
+      } on ReplayTooNew {
+        // Registrato con una versione dell'app più nuova: riprovare non serve.
+        throw const AppError('Aggiorna l\'app per vedere questo replay.');
+      }
       final audioPath = widget.message.audioPath;
       final url = audioPath == null ? '' : await repo.audioUrl(audioPath);
       if (!mounted) return;

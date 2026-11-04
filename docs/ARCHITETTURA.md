@@ -148,6 +148,12 @@ accettano al primo accesso successivo.
    erba a strisce, linee proiettate, la porta avversaria lontana), scelta modulo (4-3-3,
    4-2-3-1, 3-5-2…), 11 mini carte in piedi (overall, ruolo, foto, colori della carta
    speciale), più piccole in fondo: il Direttivo tocca una carta e assegna il giocatore.
+   Sotto il campo le **palle inattive** (come vuole il regolamento, le decide lo staff
+   tecnico): rigori, punizioni, angoli da sinistra e da destra, un titolare per ruolo (lo
+   stesso può batterne più d'uno, ogni ruolo è facoltativo). Si sceglie tra i titolari
+   (numero e nome); chi esce dal campo perde i suoi ruoli, che tornano "da scegliere",
+   quindi non si pubblica mai un battitore in panchina. I giocatori vedono i ruoli
+   assegnati sotto la formazione pubblicata.
 6. **Calendario** – vista mensile + lista; tipi evento: *Partita torneo*, *Amichevole*,
    *Allenamento*, *Riunione*, *Altro*. Solo il Direttivo crea eventi (notifica alla squadra
    o a tutti). Ogni giorno compare l'allenamento automatico delle 21:30 per la squadra che
@@ -180,8 +186,13 @@ accettano al primo accesso successivo.
 11. **Riquadro Presenze in Home** – la serata di oggi con la risposta rapida (vedi Home).
 12. **Formazione pubblicata** – una formazione per squadra; resta in bozza finché il Direttivo non
     la pubblica, poi ogni giocatore della squadra riceve la notifica personale (titolare con
-    ruolo o panchina), l'annuncio compare in *Comunicazioni* e chiunque può scaricare il
-    **PDF con le mini carte** (campo, foto, nome, ruolo, overall, panchina).
+    ruolo o panchina; a chi batte anche "batti rigori e punizioni", se c'è posto),
+    l'annuncio compare in *Comunicazioni* (con la riga "Palle inattive: rigori Rossi ·
+    punizioni Bianchi · angoli sx Verdi, dx Neri") e chiunque può scaricare il **PDF con le
+    mini carte** (campo, foto, nome, ruolo, overall, panchina, palle inattive). Per altre
+    sezioni (gli schemi da palla inattiva della lavagna) `publishedSetPiecesProvider(squadra)`
+    dà i battitori dell'ultima formazione pubblicata: `Map<SetPiece, String>` (ruolo → id del
+    giocatore, sempre un titolare).
 13. **Carta FUT** – "La mia carta" e carte in Rosa disegnate come gli oggetti di FUT (FC 24–26):
     scudo con le tacche in alto, overall e ruolo a sinistra con i PlayStyle+, la **foto caricata
     dal giocatore** sfumata dentro la carta (senza foto la sagoma grigia; sulla propria carta
@@ -201,9 +212,47 @@ accettano al primo accesso successivo.
     **lavagna tattica**: campo con i gettoni dei giocatori (dalla formazione della squadra,
     con numero e nome sulla carta; anche avversari e gettoni vuoti), pennello *Fuoco* (la
     heatmap gialla e rossa si accumula dove si insiste), *Freccia* (trascina; doppio tocco
-    per le tratteggiate), *Annulla*, *Pulisci*, nuova lavagna da un modulo. *Salva* mette lo
-    schema (gettoni, frecce, heatmap in `tactics.board`) in Tattiche e schemi con l'immagine
-    esportata; tutti lo guardano, il Direttivo lo modifica. *Registra* chiede il microfono e
+    per le tratteggiate, che si vedono dall'icona), *Annulla*, *Pulisci* (il pallone torna a
+    centrocampo), nuova lavagna da un modulo. Il **pallone** parte dal dischetto del
+    centrocampo (gli schemi salvati prima non ce l'hanno: lo si mette con *Pallone* o da
+    "Aggiungi un gettone"); lasciato su un gettone gli va al piede e lo segue. Con *Pallone*:
+    tocco su un compagno = passaggio (il pallone vola in mezzo secondo), sull'erba = palla
+    nello spazio, sulla porta = tiro; trascinandolo lo si sposta; toccando di nuovo
+    *Pallone* (o tenendo premuto il pallone) lo si rimette a centrocampo, si cancellano le
+    sue linee o lo si toglie. Ogni passaggio, conduzione (chi ha la palla trascinato con
+    *Gettoni*) e tiro lascia una linea numerata (continua, ondulata, spessa; le ultime 30).
+    *Vista* (l'occhio nella barra sotto il titolo) accende e spegne le linee della palla; gli
+    interruttori si salvano con lo schema e finiscono nel replay. Il campo ha dischetti,
+    aree di porta, porte, lunette e bandierine, ricavati dall'area di rigore.
+    **Palle inattive** (`set_pieces.dart`): nel foglio "Nuova lavagna dal modulo" gli schemi
+    pronti (angolo da sinistra e da destra, punizione a 25 metri da spostare, rigore,
+    rimessa laterale, rinvio dal fondo, calcio d'inizio, angolo contro dalla nostra
+    bandierina) mettono il pallone sul punto giusto e gli undici della formazione (quella
+    pubblicata, se c'è) ai posti della situazione, scelti per ruolo; chi batte viene da
+    `publishedSetPiecesProvider` (angoli, punizioni, rigori). Come un cambio di modulo si
+    annullano e finiscono nel replay; il modulo diventa "Piazzati" (preselezionato al
+    salvataggio) e lo schema ricorda la palla inattiva (`piece`). Le **zone di battuta**
+    (`board_overlays.dart`: 1 primo palo, 2 dischetto, 3 secondo palo, 4 limite dell'area,
+    5 corto) stanno nell'area dove si batte, con il primo palo dal lato del pallone; si
+    accendono da sole negli schemi dove si crossa e si cambiano in *Vista*. Con *Pallone* un
+    tocco su una zona è un **cross** (linea a puntini che gira, numerata come le altre; un
+    compagno toccato in pieno riceve il passaggio). Prima del primo pallone giocato le zone
+    seguono il pallone spostato. **Fuori possesso**, sempre da *Vista* (spenti di serie):
+    *Fuorigioco* (con almeno due avversari, la linea tratteggiata del penultimo dalla loro
+    porta, portiere compreso, e la bandierina sui nostri oltre la linea e oltre il pallone
+    nella loro metà campo; in oro la nostra linea difensiva); *Linee di reparto* (i nostri di
+    movimento, dalla nostra porta in su, divisi come dice il modulo, con i metri tra difesa e
+    centrocampo; niente se i gettoni non tornano col modulo); *Posizioni per zona* (9 zone
+    della palla: il Direttivo mette il pallone in una zona, sistema tutti i gettoni e preme
+    "Salva posizioni per questa zona", o le cancella; poi ogni azione del pallone che lo porta
+    in una zona salvata sposta lì i giocatori, tranne chi ha la palla e chi si sta
+    trascinando, dentro `BoardEditor.apply`, con lo scivolamento solo disegnato). Chi non è
+    del Direttivo, in uno schema con le posizioni per zona, sposta solo il pallone e vede
+    dove deve stare (lo schema salvato non cambia). *Salva* mette lo
+    schema (gettoni, frecce, heatmap, pallone, linee, vista, palla inattiva e posizioni per
+    zona in `tactics.board`) in Tattiche e schemi con l'immagine esportata; tutti lo
+    guardano, il Direttivo lo modifica. Una riga illeggibile si salta senza fermare
+    l'elenco. *Registra* chiede il microfono e
     salva la voce e ogni azione con il suo istante (fino a 5 minuti); allo stop l'anteprima
     con il replay sincronizzato, poi "Invia in chat" (canale a scelta, predefinito Tattiche e
     Schemi) oppure elimina. I video dei creator stanno in Mondo Proclub.
@@ -332,6 +381,12 @@ events        + party_code (text, 1-40 caratteri: il codice del party della part
 event_reminders id, event_id(→ events), kind (ora | lobby | chiamata), starts_at, sent_at,
               sent_by; i due automatici una volta sola per partita e orario (se la partita
               si sposta ripartono); nessuna policy (solo il server)
+-- dalla migrazione 0035
+formations    + set_pieces (jsonb, bozza) e published_set_pieces (jsonb, congelati alla
+              pubblicazione): {"rigori"|"punizioni"|"angoli_sx"|"angoli_dx": id del giocatore},
+              ogni ruolo facoltativo; nella bozza solo titolari della bozza, in quella
+              pubblicata solo titolari pubblicati (trigger formations_set_pieces);
+              save_formation(..., p_set_pieces) li salva con modulo e posti
 -- dalla migrazione 0030
 messages      un sondaggio è un messaggio con meta {type: poll, options [2-10, 1-80
               caratteri, diverse], multiple, closed_at?} e la domanda nel testo (max 300)
@@ -342,7 +397,8 @@ poll_votes    message_id(→ messages), user_id(→ profiles), options smallint[
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
-pubblicazione formazione → notifica + annuncio in *Comunicazioni*, nuovo messaggio → notifica,
+pubblicazione formazione → notifica + annuncio in *Comunicazioni* (con la riga dei battitori,
+`set_pieces_line`), nuovo messaggio → notifica,
 nuovo evento → notifica, `chat_overview()` (non letti + ultimo messaggio per canale),
 risultato inserito → notifica alla squadra, `complete_registration()` / `accept_rules()` /
 `publish_rules()` / `set_direttivo_password()` (registrazione e regolamento), `player_stats()`
@@ -367,7 +423,20 @@ vocali dopo 60 giorni, replay della lavagna dopo 3), mette i file in `storage_cl
 chiama la funzione `notify` (evento `cleanup`) che li elimina dallo Storage con la chiave di
 servizio; i messaggi eliminati accodano i loro file allo stesso modo. Il replay è un file
 JSON con la lavagna di partenza e le azioni con l'istante (`lib/features/lavagna/`): la
-stessa macchina a stati disegna la lavagna e rifà le mosse in riproduzione. Sondaggi:
+stessa macchina a stati (`BoardEditor.apply`) disegna la lavagna e rifà le mosse in
+riproduzione. Un passaggio o un tiro è una sola azione (`kick`): lo stato cambia subito e il
+volo del pallone (450 ms) è solo disegno, rifatto uguale nel replay seguendone il tempo. Il
+formato ha una versione (`"v"`): 1 senza pallone, 2 con il pallone, le sue linee, la vista o
+una palla inattiva (un cross, per chi non lo conosce, è un passaggio), 3 con le posizioni per
+zona (`zs` / `zc`: una versione che non le conosce non sposterebbe i giocatori). Lo
+spostamento verso le posizioni di una zona è calcolato dentro `BoardEditor.apply`, quindi
+replay e "Annulla" lo rifanno uguale; lo scivolamento (400 ms) è solo disegno, come il volo.
+Gli interruttori di *Vista* cambiano anche i passi da annullare ("Annulla" non li tocca),
+ma annullando una lavagna nuova torna la vista che c'era prima.
+Da questa versione l'app salta le azioni che non conosce (senza passo di "Annulla") e, per
+un replay con `"v"` più alto di quello che sa leggere, dice "Aggiorna l'app per vedere questo
+replay."; pallone, linee, vista, palla inattiva e posizioni malformati nello schema si
+lasciano fuori. Sondaggi:
 `vote_poll(messaggio, opzioni)` (sostituisce le scelte di prima; niente voti a sondaggio
 chiuso, fuori elenco o doppi dove se ne sceglie una) e `close_poll(messaggio)` (chi l'ha
 creato o il Direttivo; scrive `closed_at` nel meta e lo restituisce); il vincolo

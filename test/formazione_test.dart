@@ -192,6 +192,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Libera la posizione'));
     await tester.pumpAndSettle();
+    // In fondo, dopo le palle inattive.
+    await tester.scrollUntilVisible(find.textContaining('Andrea Neri'), 200);
     expect(
       find.textContaining('Andrea Neri'),
       findsOneWidget,

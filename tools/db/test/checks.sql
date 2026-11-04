@@ -2120,3 +2120,171 @@ do $$ begin
   assert (select registration_completed_at from profiles
           where id = '00000000-0000-0000-0000-0000000000fa') is not null, 'registrazione completa';
 end $$;
+
+-- ================================================================ palle inattive (0035)
+-- Chi batte rigori, punizioni e angoli: un titolare per ruolo (anche lo stesso per più
+-- ruoli), ogni ruolo facoltativo. Tre giocatori del Futuro: PIRLO (ATT), GATTUSO (ES),
+-- DIDA (POR).
+reset role;
+select pg_temp.as_user(null);
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-000000035a01', 'battitori1@example.com'),
+  ('00000000-0000-0000-0000-000000035a02', 'battitori2@example.com'),
+  ('00000000-0000-0000-0000-000000035a03', 'battitori3@example.com');
+update profiles set club_role = 'giocatore', active = true, teams = array['futuro'],
+  display_name = case id when '00000000-0000-0000-0000-000000035a01' then 'PIRLO'
+                         when '00000000-0000-0000-0000-000000035a02' then 'GATTUSO' else 'DIDA' end
+  where id in ('00000000-0000-0000-0000-000000035a01', '00000000-0000-0000-0000-000000035a02',
+               '00000000-0000-0000-0000-000000035a03');
+do $$ begin
+  assert valid_set_pieces('{}'), 'nessun battitore';
+  assert valid_set_pieces('{"rigori": "00000000-0000-0000-0000-000000035a01",
+                            "angoli_dx": "00000000-0000-0000-0000-000000035a01"}'), 'lo stesso su più ruoli';
+  assert not valid_set_pieces('{"corner": "00000000-0000-0000-0000-000000035a01"}'), 'solo i ruoli noti';
+  assert not valid_set_pieces('{"rigori": "PIRLO"}'), 'solo id';
+  assert not valid_set_pieces('{"rigori": null}'), 'un ruolo libero non ha la chiave';
+  assert not valid_set_pieces('{"rigori": ["00000000-0000-0000-0000-000000035a01"]}'), 'uno per ruolo';
+  assert not valid_set_pieces('[]'), 'un oggetto';
+  assert not valid_set_pieces(null), 'mai null';
+end $$;
+
+-- Solo il Direttivo li sceglie, e solo tra i titolari.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-000000035a01');
+select pg_temp.expect_error(
+  $q$select save_formation(null, 'futuro', '4-4-2', '[]', '{}')$q$, 'Solo il Direttivo');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select set_config('test.battitori', save_formation(null, 'futuro', '4-4-2',
+  '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "00000000-0000-0000-0000-000000035a03"},
+    {"slot_index": 5, "x": 0.1, "y": 0.5, "label": "ES", "player_id": "00000000-0000-0000-0000-000000035a02"},
+    {"slot_index": 9, "x": 0.3, "y": 0.2, "label": "ATT", "player_id": "00000000-0000-0000-0000-000000035a01"}]',
+  '{"rigori": "00000000-0000-0000-0000-000000035a01", "punizioni": "00000000-0000-0000-0000-000000035a01",
+    "angoli_sx": "00000000-0000-0000-0000-000000035a02", "angoli_dx": "00000000-0000-0000-0000-000000035a01"}')::text,
+  false);
+do $$ begin
+  assert (select set_pieces from formations where id = current_setting('test.battitori')::uuid)
+    = '{"rigori": "00000000-0000-0000-0000-000000035a01", "punizioni": "00000000-0000-0000-0000-000000035a01",
+        "angoli_sx": "00000000-0000-0000-0000-000000035a02", "angoli_dx": "00000000-0000-0000-0000-000000035a01"}'::jsonb,
+    'battitori salvati con la formazione';
+  assert (select published_set_pieces from formations where id = current_setting('test.battitori')::uuid) is null,
+    'ancora da pubblicare';
+end $$;
+-- Un battitore in panchina (o non valido) non si salva, e la formazione resta com'era.
+select pg_temp.expect_error(
+  $q$select save_formation(current_setting('test.battitori')::uuid, 'futuro', '4-4-2',
+    '[{"slot_index": 9, "x": 0.3, "y": 0.2, "label": "ATT", "player_id": "00000000-0000-0000-0000-000000035a01"}]',
+    '{"angoli_sx": "00000000-0000-0000-0000-000000035a02"}')$q$, 'tra i titolari');
+select pg_temp.expect_error(
+  $q$select save_formation(current_setting('test.battitori')::uuid, 'futuro', '4-4-2', '[]',
+    '{"rigori": "PIRLO"}')$q$, 'Palle inattive non valide');
+do $$ begin
+  assert (select count(*) from formation_slots where formation_id = current_setting('test.battitori')::uuid) = 3,
+    'salvataggio annullato per intero';
+end $$;
+-- Anche scrivendo direttamente in tabella (policy "scrittura direttivo").
+select pg_temp.expect_error(
+  $q$update formations set set_pieces = '{"rigori": "00000000-0000-0000-0000-00000000000d"}'
+     where id = current_setting('test.battitori')::uuid$q$, 'tra i titolari');
+select pg_temp.expect_error(
+  $q$update formations set set_pieces = '{"rigori": 7}' where id = current_setting('test.battitori')::uuid$q$,
+  'Palle inattive non valide');
+select pg_temp.expect_error(
+  $q$update formations set published_set_pieces = '["00000000-0000-0000-0000-000000035a01"]'
+     where id = current_setting('test.battitori')::uuid$q$, 'Palle inattive non valide');
+-- Un giocatore non li cambia (nessuna riga toccata), ma li legge.
+select pg_temp.as_user('00000000-0000-0000-0000-000000035a02');
+update formations set set_pieces = '{"rigori": "00000000-0000-0000-0000-000000035a02"}'
+  where id = current_setting('test.battitori')::uuid;
+do $$ begin
+  assert (select set_pieces->>'rigori' from formations where id = current_setting('test.battitori')::uuid)
+    = '00000000-0000-0000-0000-000000035a01', 'il giocatore legge i battitori e non li cambia';
+end $$;
+
+-- Un'app che non conosce i battitori (save_formation con 4 parametri) tiene quelli ancora in
+-- campo: PIRLO esce, i suoi ruoli restano liberi.
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select save_formation(current_setting('test.battitori')::uuid, 'futuro', '4-4-2',
+  '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "00000000-0000-0000-0000-000000035a03"},
+    {"slot_index": 5, "x": 0.1, "y": 0.5, "label": "ES", "player_id": "00000000-0000-0000-0000-000000035a02"}]');
+do $$ begin
+  assert (select set_pieces from formations where id = current_setting('test.battitori')::uuid)
+    = '{"angoli_sx": "00000000-0000-0000-0000-000000035a02"}'::jsonb, 'chi esce dal campo perde i suoi ruoli';
+end $$;
+
+-- Pubblicazione: i battitori "congelati" sono solo titolari pubblicati, e l'annuncio in
+-- Comunicazioni li scrive su una riga.
+select save_formation(current_setting('test.battitori')::uuid, 'futuro', '4-4-2',
+  '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "00000000-0000-0000-0000-000000035a03"},
+    {"slot_index": 5, "x": 0.1, "y": 0.5, "label": "ES", "player_id": "00000000-0000-0000-0000-000000035a02"},
+    {"slot_index": 9, "x": 0.3, "y": 0.2, "label": "ATT", "player_id": "00000000-0000-0000-0000-000000035a01"}]',
+  '{"rigori": "00000000-0000-0000-0000-000000035a01", "punizioni": "00000000-0000-0000-0000-000000035a01",
+    "angoli_sx": "00000000-0000-0000-0000-000000035a02", "angoli_dx": "00000000-0000-0000-0000-000000035a01"}');
+update formations set published_at = now(), published_by = '00000000-0000-0000-0000-00000000000d',
+  published_module = '4-4-2',
+  published_players = '{"0": "00000000-0000-0000-0000-000000035a03", "5": "00000000-0000-0000-0000-000000035a02",
+                        "9": "00000000-0000-0000-0000-000000035a01"}',
+  published_set_pieces = '{"rigori": "00000000-0000-0000-0000-000000035a01",
+                           "punizioni": "00000000-0000-0000-0000-000000035a01",
+                           "angoli_sx": "00000000-0000-0000-0000-000000035a02",
+                           "angoli_dx": "00000000-0000-0000-0000-000000035a01"}'
+  where id = current_setting('test.battitori')::uuid;
+reset role;
+do $$ begin
+  assert (select published_set_pieces->>'angoli_sx' from formations
+          where id = current_setting('test.battitori')::uuid) = '00000000-0000-0000-0000-000000035a02',
+    'battitori pubblicati';
+  assert (select body from messages where meta->>'type' = 'formation'
+          and meta->>'id' = current_setting('test.battitori') order by created_at desc limit 1)
+    like 'Formazione Milan AC Futuro (4-4-2): POR DIDA, ES GATTUSO, ATT PIRLO%'
+         || E'\nPalle inattive: rigori PIRLO · punizioni PIRLO · angoli sx GATTUSO, dx PIRLO',
+    'annuncio con la riga dei battitori';
+end $$;
+-- Un battitore che non è tra i titolari pubblicati non si pubblica (il suo ruolo resta libero).
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update formations set published_at = now() + interval '1 second',
+  published_players = '{"0": "00000000-0000-0000-0000-000000035a03", "5": "00000000-0000-0000-0000-000000035a02"}',
+  published_set_pieces = '{"rigori": "00000000-0000-0000-0000-000000035a01",
+                           "angoli_sx": "00000000-0000-0000-0000-000000035a02"}'
+  where id = current_setting('test.battitori')::uuid;
+reset role;
+do $$ begin
+  assert (select published_set_pieces from formations where id = current_setting('test.battitori')::uuid)
+    = '{"angoli_sx": "00000000-0000-0000-0000-000000035a02"}'::jsonb, 'solo i titolari pubblicati battono';
+end $$;
+-- Un'app che non conosce i battitori pubblica senza mandarli: valgono quelli della bozza.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update formations set set_pieces = '{"angoli_sx": "00000000-0000-0000-0000-000000035a02",
+                                     "angoli_dx": "00000000-0000-0000-0000-000000035a02"}'
+  where id = current_setting('test.battitori')::uuid;
+update formations set published_at = now() + interval '2 seconds',
+  published_players = '{"0": "00000000-0000-0000-0000-000000035a03", "5": "00000000-0000-0000-0000-000000035a02",
+                        "9": "00000000-0000-0000-0000-000000035a01"}'
+  where id = current_setting('test.battitori')::uuid;
+reset role;
+do $$ begin
+  assert (select published_set_pieces from formations where id = current_setting('test.battitori')::uuid)
+    = '{"angoli_sx": "00000000-0000-0000-0000-000000035a02", "angoli_dx": "00000000-0000-0000-0000-000000035a02"}'::jsonb,
+    'battitori della bozza';
+  assert (select body from messages where meta->>'type' = 'formation'
+          and meta->>'id' = current_setting('test.battitori') order by created_at desc limit 1)
+    like E'%\nPalle inattive: angoli GATTUSO', 'stesso battitore per i due angoli: una parola sola';
+  -- Senza battitori nessuna riga; chi è uscito dal club non si scrive.
+  assert set_pieces_line('{}') is null, 'nessun battitore, nessuna riga';
+  assert set_pieces_line('{"angoli_dx": "00000000-0000-0000-0000-000000035a01"}')
+    = 'Palle inattive: angoli dx PIRLO', 'solo angoli da destra';
+end $$;
+update profiles set active = false where id = '00000000-0000-0000-0000-000000035a01';
+do $$ begin
+  assert set_pieces_line('{"rigori": "00000000-0000-0000-0000-000000035a01",
+                           "punizioni": "00000000-0000-0000-0000-000000035a02"}')
+    = 'Palle inattive: punizioni GATTUSO', 'chi è uscito dal club non compare';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select pg_temp.expect_error($q$select set_pieces_line('{}')$q$, 'permission denied');
+-- La formazione di prova non resta l'ultima pubblicata del Futuro.
+reset role;
+select pg_temp.as_user(null);
+delete from formations where id = current_setting('test.battitori')::uuid;

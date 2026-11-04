@@ -26,6 +26,8 @@ import 'package:milanac/features/chat/chat_widgets.dart';
 import 'package:milanac/features/chat/voice_player.dart';
 import 'package:milanac/features/chat/voice_recorder.dart';
 import 'package:milanac/features/intro/intro_state.dart';
+import 'package:milanac/features/lavagna/board_model.dart';
+import 'package:milanac/features/lavagna/board_painter.dart';
 import 'package:milanac/main.dart';
 import 'package:milanac/shared/async_view.dart';
 import 'package:milanac/shared/gold_loader.dart';
@@ -852,6 +854,85 @@ void main() {
       expect(find.text('Schema'), findsNWidgets(2));
       expect(find.text('Pressing alto'), findsOneWidget);
       expect(find.text('Formazione pubblicata'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Replay con il pallone: la bolla lo mostra con le linee; pallone e linee '
+    'malformati non la rompono',
+    (tester) async {
+      final now = DateTime.now();
+      ChatMessage replay(String id, String title, Object board, int minutes) =>
+          ChatMessage(
+            id: id,
+            channelId: 'c-tattiche',
+            authorId: 'p2',
+            durationS: 20,
+            meta: {'type': 'replay', 'title': title, 'board': board},
+            createdAt: now.subtract(Duration(minutes: minutes)),
+          );
+      final repo = DemoChatRepository(
+        messages: [
+          replay('b1', 'Con il pallone', demoBoard().toPreviewJson(), 30),
+          replay('b2', 'Pallone rotto', {
+            'tokens': [
+              {'id': 't', 'x': .5, 'y': .5, 'l': '9'},
+            ],
+            'ball': {'x': 'a', 'y': null, 'h': 7},
+            'lines': 'nessuna',
+            'view': [1, 2],
+          }, 20),
+          // Fuori dal campo, numeri enormi, tipi sconosciuti: si sistemano o si
+          // saltano.
+          replay('b3', 'Pallone lontano', {
+            'ball': {'x': 1e300, 'y': -5, 'h': 't'},
+            'lines': [
+              {
+                'k': 'p',
+                'n': 1e300,
+                'x1': -1e300,
+                'y1': 0,
+                'x2': 1e300,
+                'y2': 2,
+              },
+              {'k': 'zz', 'n': 2, 'x1': 0, 'y1': 0, 'x2': 1, 'y2': 1},
+              for (var i = 0; i < 100; i++)
+                {'k': 'c', 'n': i, 'x1': 0, 'y1': 0, 'x2': 1, 'y2': 1},
+            ],
+          }, 10),
+        ],
+      );
+      tester.view.physicalSize = const Size(1080, 4000);
+      await startChat(tester, repo: repo);
+      tester.view.physicalSize = const Size(1080, 4000);
+      await openChannel(tester, 'Tattiche & Schemi');
+      expect(tester.takeException(), isNull);
+      expect(find.text('SCHEMA CON AUDIO'), findsNWidgets(3));
+      BoardState preview(String title) => tester
+          .widget<BoardPreview>(
+            find.descendant(
+              of: find
+                  .ancestor(of: find.text(title), matching: find.byType(Column))
+                  .first,
+              matching: find.byType(BoardPreview),
+            ),
+          )
+          .state;
+      final full = preview('Con il pallone');
+      expect(full.ball, isNotNull);
+      expect(full.lines, hasLength(5));
+      final broken = preview('Pallone rotto');
+      expect(broken.tokens, hasLength(1)); // il resto dello schema resta
+      expect(broken.ball, isNull);
+      expect(broken.lines, isEmpty);
+      final far = preview('Pallone lontano');
+      expect((far.ball!.x, far.ball!.y), (1.0, 0.0));
+      expect(far.lines, hasLength(BoardState.maxBallLines));
+      expect(far.lines.last.n, 99);
+      expect(
+        far.lines.every((l) => l.n <= 999 && l.x1 >= 0 && l.x2 <= 1),
+        isTrue,
+      );
     },
   );
 
