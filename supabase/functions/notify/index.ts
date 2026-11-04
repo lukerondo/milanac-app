@@ -145,7 +145,9 @@ async function formationPushes(db: SupabaseClient, formationId: string): Promise
     .from("formations").select("published_set_pieces").eq("id", formationId).maybeSingle();
   const takers = (pieces?.published_set_pieces ?? {}) as Record<string, string>;
   // Solo i giocatori di quella squadra (chi è in entrambe riceve entrambe le formazioni).
-  const starters = new Map((slots ?? []).filter((s) => s.player_id).map((s) => [s.player_id, s.label]));
+  const starters = new Map<string, string>(
+    (slots ?? []).filter((s) => s.player_id).map((s): [string, string] => [s.player_id, s.label]),
+  );
   return (await members(db, team)).map((m) => {
     const role = starters.get(m.id);
     return {
