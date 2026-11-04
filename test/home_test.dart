@@ -52,6 +52,20 @@ DateTime todayInItalyAt(int hour, [int minute = 0]) {
   return italyAt(t.year, t.month, t.day, hour, minute);
 }
 
+/// Come [todayInItalyAt], ma in un giorno con la serata (l'allenamento delle 21:30): oggi
+/// se è un giorno feriale, altrimenti il lunedì dopo. Sabato e domenica senza eventi la
+/// serata non c'è (regolamento), così i test sulle risposte passano anche nel fine
+/// settimana.
+DateTime weekdayInItalyAt(int hour, [int minute = 0]) {
+  final t = italianClock(DateTime.now());
+  final skip = switch (t.weekday) {
+    DateTime.saturday => 2,
+    DateTime.sunday => 1,
+    _ => 0,
+  };
+  return italyAt(t.year, t.month, t.day + skip, hour, minute);
+}
+
 /// L'istante in cui in Italia sono le [hour]:[minute] del giorno indicato.
 DateTime italyAt(int year, int month, int day, int hour, [int minute = 0]) =>
     fromItalianClock(DateTime.utc(year, month, day, hour, minute));
@@ -59,41 +73,42 @@ DateTime italyAt(int year, int month, int day, int hour, [int minute = 0]) =>
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
-  test('serata: primo evento del giorno della squadra, altrimenti allenamento '
-      '21:30', () {
-    final day = DateTime(2026, 10, 3);
-    final fallback = eveningEvent(const [], day);
+  test('serata: primo evento del giorno della squadra, altrimenti (dal lunedì '
+      'al venerdì) allenamento 21:30', () {
+    // Venerdì 2 ottobre 2026.
+    final day = DateTime(2026, 10, 2);
+    final fallback = eveningEvent(const [], day)!;
     expect(fallback.type, EventType.allenamento);
     // Gli orari degli eventi sono in ora italiana (vedi ClubEvent.startsAt).
-    expect(fallback.startsAt, DateTime.utc(2026, 10, 3, 21, 30));
+    expect(fallback.startsAt, DateTime.utc(2026, 10, 2, 21, 30));
 
     final partita = ClubEvent(
       id: 'p',
       type: EventType.amichevole,
       title: 'Amichevole',
-      startsAt: DateTime.utc(2026, 10, 3, 22),
+      startsAt: DateTime.utc(2026, 10, 2, 22),
     );
     final riunione = ClubEvent(
       id: 'r',
       type: EventType.riunione,
       title: 'Riunione',
-      startsAt: DateTime.utc(2026, 10, 3, 20),
+      startsAt: DateTime.utc(2026, 10, 2, 20),
     );
     final domani = ClubEvent(
       id: 'd',
       type: EventType.amichevole,
       title: 'Domani',
-      startsAt: DateTime.utc(2026, 10, 4, 21),
+      startsAt: DateTime.utc(2026, 10, 3, 21),
     );
     final futuro = ClubEvent(
       id: 'f',
       team: Team.futuro,
       type: EventType.torneo,
       title: 'Coppa Futuro',
-      startsAt: DateTime.utc(2026, 10, 3, 21),
+      startsAt: DateTime.utc(2026, 10, 2, 21),
     );
     expect(
-      eveningEvent([domani, riunione, partita, futuro], day).id,
+      eveningEvent([domani, riunione, partita, futuro], day)!.id,
       'f',
       reason: 'con entrambe le squadre vince il primo della serata',
     );
@@ -102,12 +117,12 @@ void main() {
         [domani, riunione, partita, futuro],
         day,
         teams: {Team.milanac},
-      ).id,
+      )!.id,
       'p',
     );
-    expect(eveningEvent([futuro, partita], day, teams: {Team.futuro}).id, 'f');
+    expect(eveningEvent([futuro, partita], day, teams: {Team.futuro})!.id, 'f');
     expect(
-      eveningEvent([futuro], day, teams: {Team.milanac}).type,
+      eveningEvent([futuro], day, teams: {Team.milanac})!.type,
       EventType.allenamento,
     );
   });
@@ -124,7 +139,7 @@ void main() {
   );
 
   testWidgets('Home: i due riquadri e la risposta per stasera', (tester) async {
-    await startAppAt(tester, todayInItalyAt(17));
+    await startAppAt(tester, weekdayInItalyAt(17));
 
     expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
     expect(find.text('STASERA · MILAN AC'), findsOneWidget);
@@ -197,7 +212,7 @@ void main() {
   });
 
   testWidgets('Home: dopo le 18:30 le risposte sono chiuse', (tester) async {
-    await startAppAt(tester, todayInItalyAt(18, 31));
+    await startAppAt(tester, weekdayInItalyAt(18, 31));
     expect(find.textContaining('Risposte chiuse alle 18:30'), findsOneWidget);
     final button = tester.widget<OutlinedButton>(
       find.widgetWithText(OutlinedButton, 'Presente'),

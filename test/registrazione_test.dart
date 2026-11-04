@@ -96,9 +96,11 @@ void main() {
       labeledField('Password del Direttivo'),
       DemoRegistrationRepository.direttivoPassword,
     );
+    // I ruoli dell'organigramma del regolamento (le etichette lunghe vanno a capo).
+    await reveal(tester, 2, find.text('Resp. Comunicazioni e Marketing'));
+    await tester.tap(find.text('Resp. Comunicazioni e Marketing'));
     await reveal(tester, 2, find.text('Capitano'));
     await tester.tap(find.text('Capitano'));
-    await tester.tap(find.text('Gestore'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Avanti'));
     await tester.pump();
@@ -132,7 +134,11 @@ void main() {
       sent.direttivoPassword,
       DemoRegistrationRepository.direttivoPassword,
     );
-    expect(sent.direttivoRoles, hasLength(2));
+    expect(sent.direttivoRoles, [
+      DirettivoRole.capitano,
+      DirettivoRole.comunicazione,
+    ]);
+    expect(sent.toParams()['p_direttivo_roles'], ['capitano', 'comunicazione']);
     expect(sent.fieldPosition, 'ATT');
     expect(sent.toParams()['p_face'], isNull);
 

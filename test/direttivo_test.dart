@@ -5,7 +5,7 @@ import 'package:milanac/features/direttivo/direttivo_page.dart';
 import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
-import 'home_test.dart' show startAppAt, todayInItalyAt;
+import 'home_test.dart' show startAppAt, todayInItalyAt, weekdayInItalyAt;
 
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
@@ -49,7 +49,7 @@ void main() {
   testWidgets(
     'Presenze di stasera: il Direttivo corregge anche dopo le 18:30',
     (tester) async {
-      await startAppAt(tester, todayInItalyAt(18, 31));
+      await startAppAt(tester, weekdayInItalyAt(18, 31));
       await goToSection(tester, 'Sala Direttivo');
       await tester.tap(find.text('Senza risposta stasera'));
       await tester.pumpAndSettle();

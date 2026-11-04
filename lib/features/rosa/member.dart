@@ -120,7 +120,7 @@ class Member {
     ClubRole.pending => 'Registrazione in corso',
   };
 
-  /// Etichette del Direttivo ("Capitano, Gestore"), vuoto per i giocatori.
+  /// Ruoli nel Direttivo ("Capitano, Resp. Presenze"), vuoto per i giocatori.
   String get direttivoLabel => direttivoRoles.map((r) => r.label).join(', ');
 
   /// Copia con i campi indicati. Gamertag, posizione, numero di maglia, stile,

@@ -15,7 +15,7 @@ import 'package:milanac/features/presenze/presenze_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import 'helpers.dart';
-import 'home_test.dart' show italyAt, startAppAt, todayInItalyAt;
+import 'home_test.dart' show italyAt, startAppAt, weekdayInItalyAt;
 
 /// L'account entrato sul telefono (null = nessuno).
 class TestAccount extends Notifier<String?> {
@@ -118,7 +118,7 @@ void main() {
   testWidgets('calendario: la serata di oggi, gli elenchi e la risposta', (
     tester,
   ) async {
-    await openPresenze(tester, todayInItalyAt(17));
+    await openPresenze(tester, weekdayInItalyAt(17));
     expect(find.text('OGGI · MILAN AC'), findsOneWidget);
     expect(find.text('ALLENAMENTO 21:30'), findsOneWidget);
     expect(find.text('La tua risposta, entro le 18:30'), findsOneWidget);
@@ -143,7 +143,7 @@ void main() {
   testWidgets('ritardo con nota obbligatoria; assenza e storico', (
     tester,
   ) async {
-    await openPresenze(tester, todayInItalyAt(17));
+    await openPresenze(tester, weekdayInItalyAt(17));
 
     await scrollTo(tester, find.widgetWithText(OutlinedButton, 'Ritardo'));
     await tester.tap(find.widgetWithText(OutlinedButton, 'Ritardo').first);
@@ -177,7 +177,7 @@ void main() {
   });
 
   testWidgets('dopo le 18:30 i pulsanti sono spenti', (tester) async {
-    await openPresenze(tester, todayInItalyAt(18, 31));
+    await openPresenze(tester, weekdayInItalyAt(18, 31));
     await scrollTo(tester, find.textContaining('Risposte chiuse alle 18:30'));
     final button = tester.widget<OutlinedButton>(
       find.widgetWithText(OutlinedButton, 'Presente').first,
@@ -293,7 +293,7 @@ void main() {
   testWidgets('riepilogo del FUTURO: non contano le risposte del Milan AC', (
     tester,
   ) async {
-    await openPresenze(tester, todayInItalyAt(17));
+    await openPresenze(tester, weekdayInItalyAt(17));
     await scrollTo(tester, find.widgetWithText(OutlinedButton, 'Presente'));
     await tester.tap(find.widgetWithText(OutlinedButton, 'Presente').first);
     await tester.pumpAndSettle();
@@ -314,7 +314,7 @@ void main() {
   testWidgets('la risposta data in anticipo non cambia la percentuale', (
     tester,
   ) async {
-    final now = todayInItalyAt(17);
+    final now = weekdayInItalyAt(17);
     final container = await openPresenze(tester, now);
     final today = italianDay(now);
     final tomorrow = DateTime(today.year, today.month, today.day + 1);
@@ -367,16 +367,16 @@ void main() {
   testWidgets('cambio d\'ora di marzo: si chiude alle 18:30 italiane', (
     tester,
   ) async {
-    // Domenica 29 marzo 2026, ora legale da stanotte: le 18:35 sono le 16:35 UTC.
-    await openPresenze(tester, italyAt(2026, 3, 29, 18, 35));
+    // Lunedì 30 marzo 2026, ora legale da domenica: le 18:35 sono le 16:35 UTC.
+    await openPresenze(tester, italyAt(2026, 3, 30, 18, 35));
     expect(find.text('MARZO 2026'), findsOneWidget);
-    expect(dayTile('Domenica 29, oggi'), findsOneWidget);
+    expect(dayTile('Lunedì 30, oggi'), findsOneWidget);
     await scrollTo(tester, find.textContaining('Risposte chiuse alle 18:30'));
   });
 
   testWidgets('la riga cambia elenco mentre lo storico è aperto: la correzione '
       'del Direttivo si salva lo stesso', (tester) async {
-    final now = todayInItalyAt(18, 29);
+    final now = weekdayInItalyAt(18, 29);
     final container = await openPresenze(tester, now);
     await scrollTo(tester, find.text('Luca Bianchi'));
     await tester.tap(find.text('Luca Bianchi'));

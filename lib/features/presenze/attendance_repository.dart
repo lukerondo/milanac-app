@@ -7,6 +7,7 @@ import '../../core/clock.dart';
 import '../../core/config.dart';
 import '../../core/italian_time.dart';
 import 'attendance.dart';
+import 'evening.dart';
 
 /// Quanti giorni di storico caricare.
 const historyDays = 60;
@@ -57,10 +58,22 @@ class _SupabaseAttendanceRepository implements AttendanceRepository {
 }
 
 /// Storico di esempio in memoria (modalità demo e test), intorno a [today]
-/// (il giorno italiano dell'orologio dell'app).
+/// (il giorno italiano dell'orologio dell'app). Come nel club, le serate sono dal lunedì
+/// al venerdì: lo storico sta sulle serate passate (una sì e una no) e la risposta già data
+/// è per la prossima serata (stasera, nei giorni feriali).
 class DemoAttendanceRepository implements AttendanceRepository {
   DemoAttendanceRepository({DateTime? today}) {
     final day = dayOnly(today ?? italianDay(DateTime.now()));
+    final past = [
+      for (var i = 1; i <= 20; i++)
+        if (DateTime(day.year, day.month, day.day - i) case final d
+            when isClubWeekday(d))
+          d,
+    ];
+    var tonight = day;
+    while (!isClubWeekday(tonight)) {
+      tonight = DateTime(tonight.year, tonight.month, tonight.day + 1);
+    }
     const pattern = {
       'p2': [
         AttendanceStatus.presente,
@@ -100,7 +113,7 @@ class DemoAttendanceRepository implements AttendanceRepository {
         _entries.add(
           AttendanceEntry(
             playerId: player,
-            date: DateTime(day.year, day.month, day.day - 2 * (i + 1)),
+            date: past[2 * i + 1],
             status: s,
             arrivalTime: s == AttendanceStatus.ritardo
                 ? '22:00'
@@ -109,11 +122,11 @@ class DemoAttendanceRepository implements AttendanceRepository {
         );
       }
     });
-    // Stasera: un giocatore ha già risposto.
+    // Stasera (o la prossima serata): un giocatore ha già risposto.
     _entries.add(
       AttendanceEntry(
         playerId: 'p2',
-        date: day,
+        date: tonight,
         status: AttendanceStatus.ritardo,
         arrivalTime: '21:50',
         note: 'Esco tardi da lavoro',

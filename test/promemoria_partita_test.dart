@@ -90,21 +90,29 @@ void main() {
     expect(await refused(match), contains('nelle ore della partita'));
   });
 
-  testWidgets('Match Day del Direttivo: quando arrivano i promemoria, poi '
-      '"Chiama" la squadra in lobby (non due volte di fila)', (tester) async {
+  testWidgets('Match Day del Direttivo: quando arrivano i promemoria (in party '
+      '30 minuti prima, in lobby 10 minuti prima), poi "Chiama" la squadra in '
+      'lobby (non due volte di fila)', (tester) async {
     var now = todayInItalyAt(18, 54);
     final container = await startAppAt(tester, now, clock: () => now);
     await _matchToday(container, now);
     await tester.pumpAndSettle();
 
-    expect(find.text('Promemoria alle 20:30 e alle 21:20'), findsOneWidget);
+    expect(
+      find.text('Promemoria: in party alle 21:00, in lobby alle 21:20'),
+      findsOneWidget,
+    );
     // Prima delle 19:30 non si chiama ancora nessuno.
     expect(find.text('Chiama'), findsNothing);
 
-    now = todayInItalyAt(20, 45);
+    // Trenta minuti prima: tutti in party (regolamento), poi la lobby.
+    now = todayInItalyAt(21, 5);
     await tester.pump(const Duration(seconds: 30));
     await tester.pumpAndSettle();
-    expect(find.text('Promemoria per la lobby alle 21:20'), findsOneWidget);
+    expect(
+      find.text('Tutti in party! Promemoria per la lobby alle 21:20'),
+      findsOneWidget,
+    );
     await tester.ensureVisible(find.text('Chiama'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Chiama'));
@@ -197,7 +205,10 @@ void main() {
             ),
           );
       await tester.pumpAndSettle();
-      expect(find.text('Promemoria alle 20:30 e alle 21:20'), findsOneWidget);
+      expect(
+        find.text('Promemoria: in party alle 21:00, in lobby alle 21:20'),
+        findsOneWidget,
+      );
       expect(
         const NotifyPrefs({NotifyCategory.partite}).toJson()['partite'],
         isFalse,
@@ -239,7 +250,10 @@ void main() {
           );
       await tester.pumpAndSettle();
       expect(find.text('Sei assente: niente promemoria'), findsOneWidget);
-      expect(find.text('Promemoria alle 20:30 e alle 21:20'), findsNothing);
+      expect(
+        find.text('Promemoria: in party alle 21:00, in lobby alle 21:20'),
+        findsNothing,
+      );
       expect(find.text('Chiama'), findsNothing);
     },
   );

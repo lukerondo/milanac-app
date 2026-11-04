@@ -79,8 +79,8 @@ void main() {
     expect(
       inPage(
         find.text(
-          "Ogni sera c'è l'allenamento alle 21:30. Qui trovi solo ciò che "
-          'cambia.',
+          'Dal lunedì al venerdì allenamento, 21:30–23:30; sabato e domenica '
+          'si gioca solo con un evento. Qui trovi solo ciò che cambia.',
         ),
       ),
       findsOneWidget,
