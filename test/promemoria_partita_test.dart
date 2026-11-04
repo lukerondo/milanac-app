@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -278,4 +280,36 @@ void main() {
       expect(find.text('Chiama'), findsOneWidget);
     },
   );
+
+  test('La funzione notify gestisce ogni promemoria che il database manda, '
+      'anche "ora" di prima della migrazione 0034', () {
+    // I workflow Database e Funzioni partono ognuno per conto suo: se la funzione nuova
+    // arriva prima della 0034, il database manda ancora "ora" (un'ora prima) e la notifica
+    // non deve andare persa. Il ramo "ora" (e questo controllo) si toglie quando la 0034 è
+    // in produzione.
+    final sent = {
+      for (final f in Directory(
+        'supabase/migrations',
+      ).listSync().whereType<File>())
+        for (final m in RegExp(
+          r"'kind', 'match_reminder',[^)]*'when', '(\w+)'",
+        ).allMatches(f.readAsStringSync()))
+          m.group(1)!,
+    };
+    expect(sent, {'ora', 'party', 'lobby', 'chiamata'});
+    final notify = File('supabase/functions/notify/index.ts')
+        .readAsStringSync();
+    final handled = {
+      for (final m in RegExp(r'when === "(\w+)"').allMatches(notify))
+        m.group(1)!,
+    };
+    expect(handled, containsAll(sent));
+    // Con il titolo di prima: "Tra un'ora si gioca".
+    expect(
+      RegExp(
+        r'''when === "ora"\s*\?\s*\(minutes >= 50 \? "⚽ Tra un'ora si gioca"''',
+      ).hasMatch(notify),
+      isTrue,
+    );
+  });
 }

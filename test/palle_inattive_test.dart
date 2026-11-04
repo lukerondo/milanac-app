@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/appearance.dart';
 import 'package:milanac/core/teams.dart';
+import 'package:milanac/core/theme.dart';
 import 'package:milanac/features/formazione/formation_repository.dart';
 import 'package:milanac/features/formazione/modules.dart';
 
@@ -301,6 +303,76 @@ void main() {
     );
   });
 
+  for (final appearance in [Appearance.chiaro, Appearance.scuro]) {
+    testWidgets('Chi batte già si vede nel foglio, anche nel tema '
+        '${appearance.label.toLowerCase()}: fondo oro, nome in oro e spunta', (
+      tester,
+    ) async {
+      final container = await startAppAt(tester, todayInItalyAt(17));
+      await container.read(appearanceProvider.notifier).set(appearance);
+      await openFormationEditor(tester);
+      final p = appearance == Appearance.chiaro
+          ? AppPalette.light
+          : AppPalette.dark;
+      // In demo i rigori sono di Rossi.
+      await openTakerSheet(tester, SetPiece.rigori);
+      Finder row(String name) =>
+          find.ancestor(of: find.text(name), matching: find.byType(ListTile));
+      Color? nameColor(String name) => tester
+          .renderObject<RenderParagraph>(find.text(name))
+          .text
+          .style
+          ?.color;
+      Color? background(String name) {
+        final ink = tester.widget<Ink>(
+          find.descendant(of: row(name), matching: find.byType(Ink)),
+        );
+        return (ink.decoration! as ShapeDecoration).color;
+      }
+
+      expect(tester.widget<ListTile>(row('9 Marco Rossi')).selected, isTrue);
+      expect(nameColor('9 Marco Rossi'), p.accentText);
+      expect(background('9 Marco Rossi'), p.accentTint);
+      expect(
+        find.descendant(
+          of: row('9 Marco Rossi'),
+          matching: find.byIcon(Icons.check_circle_rounded),
+        ),
+        findsOneWidget,
+      );
+      // Gli altri come sempre: nome nel colore del testo, senza fondo né spunta.
+      expect(tester.widget<ListTile>(row('4 Luca Bianchi')).selected, isFalse);
+      expect(nameColor('4 Luca Bianchi'), p.text);
+      expect(nameColor('9 Marco Rossi'), isNot(nameColor('4 Luca Bianchi')));
+      expect(background('4 Luca Bianchi'), isNot(p.accentTint));
+      expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+      Navigator.of(tester.element(find.text('CHI BATTE I RIGORI?'))).pop();
+      await tester.pumpAndSettle();
+
+      // Lo stesso nel foglio "Chi gioca": Rossi è già lì, non "verrà spostato".
+      await tester.ensureVisible(find.text('9 Rossi'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('9 Rossi'));
+      await tester.pumpAndSettle();
+      expect(find.text('CHI GIOCA ATT?'), findsOneWidget);
+      expect(tester.widget<ListTile>(row('Marco Rossi')).selected, isTrue);
+      expect(nameColor('Marco Rossi'), p.accentText);
+      expect(background('Marco Rossi'), p.accentTint);
+      expect(
+        find.descendant(
+          of: row('Marco Rossi'),
+          matching: find.byIcon(Icons.check_circle_rounded),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        (tester.widget<ListTile>(row('Marco Rossi')).subtitle! as Text).data,
+        'ATT',
+      );
+      expect(nameColor('Luca Bianchi'), p.text);
+    });
+  }
+
   testWidgets('Palle inattive: la sezione nascosta ai giocatori se nessuno '
       'batte', (tester) async {
     final container = await startAppAt(tester, todayInItalyAt(17));
@@ -326,7 +398,7 @@ void main() {
           // Nomi lunghi: il Futuro con Verdi, che batte quasi tutto.
           await goToSection(tester, 'Sala Direttivo');
           await scrollAndTap(tester, find.text('Formazioni da pubblicare'));
-          await tester.tap(find.text('Futuro'));
+          await tester.tap(find.text('FUTURO'));
           await tester.pumpAndSettle();
           for (final role in SetPiece.values) {
             await tester.scrollUntilVisible(

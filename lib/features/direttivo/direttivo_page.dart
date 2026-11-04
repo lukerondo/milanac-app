@@ -120,7 +120,7 @@ class DirettivoPage extends ConsumerWidget {
               _TodoRow(
                 value: toPublish,
                 title: 'Formazioni da pubblicare',
-                subtitle: 'MILANAC e Futuro',
+                subtitle: 'MILANAC e FUTURO',
                 onTap: () => push(const FormationEditorPage()),
               ),
               const Divider(indent: 74),
@@ -498,7 +498,7 @@ AppBar _fullScreenBar(String title) => AppBar(
   flexibleSpace: const Align(alignment: Alignment.topCenter, child: GoldRule()),
 );
 
-/// Le squadre di un giocatore ("MILANAC · Futuro").
+/// Le squadre di un giocatore ("MILANAC · FUTURO").
 String _teamsLabel(Set<Team> teams) => [
   for (final t in Team.values)
     if (teams.contains(t)) teamTabLabel(t),

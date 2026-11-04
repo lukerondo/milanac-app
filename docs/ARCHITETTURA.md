@@ -110,9 +110,9 @@ Il testo degli articoli è semplice: righe e paragrafi (riga vuota) restano come
 sotto il campo) e un articolo in cui ogni riga è `ETICHETTA: valore` diventa un elenco.
 L'articolo intitolato **Organigramma** si vede anche sotto la Storia (pagina `storia` di
 `pages`, senza versioni). Il **Regolamento ufficiale 2026** è arrivato con la migrazione
-`0033`: sette articoli (presentazione, organigramma, Art. 1-5) al posto della bozza, pubblicati
-come nuova versione da riaccettare (notifica `rules`, `published_by` vuoto) e i cenni storici
-del documento nella Storia; gli stessi testi stanno in
+`0033`: sette articoli (presentazione, organigramma, articoli 1-5 con i titoli del documento)
+al posto della bozza, pubblicati come nuova versione da riaccettare (notifica `rules`,
+`published_by` vuoto) e i cenni storici del documento nella Storia; gli stessi testi stanno in
 `lib/features/regolamento/regolamento_2026.dart` per la demo (un test li confronta).
 
 ## 4. Sezioni dell'app
@@ -422,6 +422,9 @@ profiles      direttivo_roles tra presidente, fondatore, capitano, vicecapitano,
               comunicazione, tecnico, reclutamento, tornei, presenze, it (i nomi di prima,
               reclutatore e organizzatore, si traducono anche dalle app vecchie; gestore
               sparisce); club_evening(giorno, squadre) dice se c'è la serata
+events        + scheduled_at (quando l'evento è stato messo a quell'ora: created_at alla
+              creazione, di nuovo ogni volta che cambia starts_at; lo tiene il trigger
+              events_scheduled_at, l'app non lo legge)
 -- dalla migrazione 0035
 formations    + set_pieces (jsonb, bozza) e published_set_pieces (jsonb, congelati alla
               pubblicazione): {"rigori"|"punizioni"|"angoli_sx"|"angoli_dx": id del giocatore},
@@ -494,7 +497,8 @@ alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assen
 (una volta sola al giorno, grazie a `daily_jobs`). Dalla migrazione `0034` solo nei giorni con
 la serata (`club_evening(giorno, squadre)`): dal lunedì al venerdì per tutti; sabato e domenica
 solo con un evento (non una riunione) e solo per chi gioca nella sua squadra; un evento del
-fine settimana messo in calendario dopo le 18:30 non fa assenze. Le risposte dei giocatori sono bloccate dopo
+fine settimana messo in calendario (o spostato su quel giorno) dopo le 18:30 non fa assenze
+(conta `events.scheduled_at`). Le risposte dei giocatori sono bloccate dopo
 le 18:30 dalle policy (`attendance_open`); il Direttivo corregge sempre. Nei test l'ora si fissa
 con l'impostazione `milanac.now` (`app_now()`). Promemoria partita (migrazione `0031`):
 `match_reminders_tick()` gira ogni minuto e per le partite (torneo e amichevole) manda

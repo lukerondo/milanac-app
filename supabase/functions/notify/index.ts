@@ -23,7 +23,8 @@
 //   { kind: "match_reminder", id, when }    → alla squadra della partita, esclusi gli assenti:
 //                                             when = party (trenta minuti prima: tutti in party,
 //                                             come da regolamento), lobby (dieci minuti prima)
-//                                             o chiamata (dal Direttivo, arriva sempre)
+//                                             o chiamata (dal Direttivo, arriva sempre); ora
+//                                             (un'ora prima) solo da un database prima della 0034
 //   { kind: "cleanup" }                     → nessuna notifica: rimuove dallo Storage i file in coda
 //                                             (allegati della chat scaduti o eliminati)
 //
@@ -254,9 +255,15 @@ async function matchReminderPushes(db: SupabaseClient, eventId: string, when: un
   const time = timeRome(e.starts_at);
   const body = `${e.title} alle ${time}${e.party_code ? ` · Party: ${e.party_code}` : ""}`;
   const minutes = Math.round((new Date(e.starts_at).getTime() - Date.now()) / 60000);
-  // I convocati si presentano in party trenta minuti prima (regolamento).
+  // I convocati si presentano in party trenta minuti prima (regolamento). "ora" (un'ora
+  // prima, con il titolo di prima) lo manda il database finché non ha la migrazione 0034: i
+  // workflow Database e Funzioni partono ognuno per conto suo e, se questa funzione arriva
+  // prima, quei promemoria non devono andare persi. Si può togliere (con il suo test in
+  // test/promemoria_partita_test.dart) quando la 0034 è in produzione.
   const title = when === "party"
     ? `⏰ Tra ${minutes >= 25 ? 30 : Math.max(minutes, 1)} minuti si gioca: tutti in party!`
+    : when === "ora"
+    ? (minutes >= 50 ? "⚽ Tra un'ora si gioca" : `⚽ Tra ${Math.max(minutes, 1)} minuti si gioca`)
     : when === "lobby"
     ? "🎮 Tutti in lobby!"
     : when === "chiamata"

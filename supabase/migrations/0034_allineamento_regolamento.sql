@@ -3,7 +3,8 @@
 --     sabato e domenica non c'è l'allenamento, quindi niente promemoria delle 18:00 né
 --     assenze automatiche delle 18:30, a meno che il Direttivo non metta un evento in
 --     calendario (una partita di torneo, un'amichevole): allora vale come una serata normale,
---     per chi gioca nella squadra dell'evento. La scadenza delle 18:30 resta.
+--     per chi gioca nella squadra dell'evento. La scadenza delle 18:30 resta; un evento messo
+--     in calendario (o spostato su quel giorno) dopo le 18:30 non fa assenze.
 --  2) I convocati si presentano in party 30 minuti prima della partita: il promemoria
 --     automatico "un'ora prima" diventa "trenta minuti prima" (tutti in party); quello dei
 --     dieci minuti prima (tutti in lobby) resta.
@@ -13,10 +14,38 @@
 --     gli stessi per tutti.
 
 -- ---------------------------------------------------------------- 1) serate dal lunedì al venerdì
+-- Quando l'evento è stato messo a quell'ora in calendario: alla creazione (created_at) e di
+-- nuovo ogni volta che cambia l'inizio. Gli eventi che ci sono già partono da created_at.
+-- L'app salva sempre anche starts_at: conta solo se cambia davvero. Chi scrive la colonna a
+-- mano non la cambia.
+alter table public.events add column if not exists scheduled_at timestamptz;
+update public.events set scheduled_at = created_at where scheduled_at is null;
+alter table public.events
+  alter column scheduled_at set default now(),
+  alter column scheduled_at set not null;
+
+-- app_now() è now() in produzione (nei test l'ora si fissa con milanac.now).
+create or replace function public.events_scheduled_at() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    new.scheduled_at := new.created_at;
+  elsif new.starts_at is distinct from old.starts_at then
+    new.scheduled_at := app_now();
+  else
+    new.scheduled_at := old.scheduled_at;
+  end if;
+  return new;
+end $$;
+drop trigger if exists events_scheduled_at on public.events;
+create trigger events_scheduled_at before insert or update of starts_at, scheduled_at
+  on public.events for each row execute function public.events_scheduled_at();
+
 -- C'è la serata del giorno p_day (italiano) per chi gioca in p_teams? Dal lunedì al venerdì
 -- sempre (l'allenamento delle 21:30, se non c'è altro); sabato e domenica solo con un evento
 -- in calendario per una di quelle squadre (o per tutti). Le riunioni non chiedono presenze.
--- Con p_before contano solo gli eventi messi in calendario prima di quell'istante.
+-- Con p_before contano solo gli eventi messi in calendario a quell'ora prima di quell'istante
+-- (scheduled_at: creati o spostati prima).
 create or replace function public.club_evening(p_day date, p_teams text[],
                                                p_before timestamptz default null)
 returns boolean
@@ -26,7 +55,7 @@ language sql stable set search_path = public as $$
                  where e.type <> 'riunione'
                    and (e.starts_at at time zone 'Europe/Rome')::date = p_day
                    and (e.team is null or e.team = any(p_teams))
-                   and (p_before is null or e.created_at < p_before))
+                   and (p_before is null or e.scheduled_at < p_before))
 $$;
 
 -- Come nella 0017, ma solo nei giorni con la serata e solo per chi ce l'ha.
@@ -58,8 +87,8 @@ begin
     end if;
   end if;
   -- 18:30: chi non ha risposto risulta assente (assenza automatica, correggibile dal Direttivo).
-  -- Un evento del fine settimana messo in calendario dopo la scadenza non fa assenze: nessuno
-  -- ha potuto rispondere.
+  -- Un evento del fine settimana messo in calendario (o spostato su oggi) dopo la scadenza
+  -- non fa assenze: nessuno ha potuto rispondere.
   if t::time >= time '18:30'
      and club_evening(today, array['milanac', 'futuro'], attendance_deadline(today))
      and not exists (select 1 from daily_jobs where day = today and job = 'assenze') then

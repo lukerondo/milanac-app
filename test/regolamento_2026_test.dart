@@ -151,6 +151,41 @@ void main() {
     expect(boldTexts(tester), ['Fabio']);
   });
 
+  testWidgets('Le righe in cima (MILANAC, MILANAC FUTURO, MILANO SIAMO NOI) '
+      'restano testo in grassetto, non un elenco', (tester) async {
+    for (final text in [
+      regolamento2026.first.body,
+      '**MILANAC**\n**MILANAC FUTURO**\n**MILANO SIAMO NOI**',
+    ]) {
+      await pumpPage(tester, Scaffold(body: ReaderBody(text)));
+      // Un solo testo (l'elenco ha un'etichetta e un valore per riga).
+      expect(
+        find.descendant(
+          of: find.byType(ReaderBody),
+          matching: find.byType(RichText),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('**'), findsNothing);
+      expect(boldTexts(tester).take(3), [
+        'MILANAC',
+        'MILANAC FUTURO',
+        'MILANO SIAMO NOI',
+      ]);
+      // Una riga ciascuna, come nel documento.
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(
+          of: find.byType(ReaderBody),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(
+        paragraph.text.toPlainText(),
+        startsWith('MILANAC\nMILANAC FUTURO\nMILANO SIAMO NOI'),
+      );
+    }
+  });
+
   group('Testi del regolamento 2026', () {
     test('sette articoli in ordine, nei limiti del database', () {
       expect(
@@ -158,11 +193,11 @@ void main() {
         [
           'Regolamento ufficiale 2026',
           'Organigramma',
-          'Art. 1 – Presenza e comunicazione',
-          'Art. 2 – Comportamento e disciplina',
-          'Art. 3 – Dinamiche di gioco',
-          'Art. 4 – Gestione della squadra e sanzioni',
-          'Art. 5 – Candidature staff e obiettivi',
+          '1. Presenza e Comunicazione',
+          '2. Comportamento e Disciplina',
+          '3. Dinamiche di Gioco',
+          '4. Gestione della Squadra e Sanzioni',
+          '5. Candidature Staff & Obiettivi',
         ],
       );
       for (final a in regolamento2026) {
@@ -199,6 +234,43 @@ void main() {
         expect(all.contains(typo), isFalse, reason: typo);
       }
       expect(organigrammaOf(_version())?.title, 'Organigramma');
+    });
+
+    test('come nel documento: le righe in cima, l\'orario in grassetto, '
+        'L’ambizione', () {
+      // Le tre righe in grassetto, una per riga, poi una riga vuota e la citazione.
+      final intro = regolamento2026.first.body.split('\n\n');
+      expect(
+        intro.first,
+        '**MILANAC**\n**MILANAC FUTURO**\n**MILANO SIAMO NOI**',
+      );
+      expect(intro[1], startsWith('“I nostri colori saranno'));
+      expect(
+        [
+          for (final s in boldSegments(intro.first.replaceAll('\n', ' ')))
+            if (s.bold) s.text,
+        ],
+        ['MILANAC', 'MILANAC FUTURO', 'MILANO SIAMO NOI'],
+      );
+      // Disponibilità: anche i giorni e l'orario delle serate in grassetto.
+      final art1 = regolamento2026[2].body.split('\n\n').first;
+      expect(
+        art1,
+        '**Disponibilità:** Le sessioni di allenamento, il campionato, i vari '
+        'tornei e le amichevoli si tengono dal **LUNEDÌ AL VENERDÌ dalle ore '
+        '21:30 alle 23:30.**',
+      );
+      expect(
+        [
+          for (final s in boldSegments(art1))
+            if (s.bold) s.text,
+        ],
+        ['Disponibilità:', 'LUNEDÌ AL VENERDÌ dalle ore 21:30 alle 23:30.'],
+      );
+      // L'apostrofo tipografico del documento.
+      final art5 = regolamento2026.last.body;
+      expect(art5, contains('**Obiettivi e Visione del Club:** L’ambizione '));
+      expect(art5, isNot(contains("L'ambizione")));
     });
 
     test('gli stessi testi della migrazione 0033', () {
@@ -259,12 +331,18 @@ void main() {
             containsAll([
               'Se stai leggendo questo documento, significa che hai passato '
                   'le selezioni e sei entrato nel MILANAC.',
+              'MILANAC',
+              'MILANAC FUTURO',
+              'MILANO SIAMO NOI',
               'Disponibilità:',
+              'LUNEDÌ AL VENERDÌ dalle ore 21:30 alle 23:30.',
               'durante',
               'Suddivisione delle responsabilità:',
               'BENVENUTO IN FAMIGLIA!',
             ]),
           );
+          expect(find.text('1. PRESENZA E COMUNICAZIONE'), findsOneWidget);
+          expect(find.text('5. CANDIDATURE STAFF & OBIETTIVI'), findsOneWidget);
           final list = tester.state<ScrollableState>(
             find.byType(Scrollable).first,
           );
@@ -302,7 +380,7 @@ void main() {
         size: const Size(320, 640),
       );
       expect(tester.takeException(), isNull);
-      expect(find.text('Art. 1 – Presenza e comunicazione'), findsOneWidget);
+      expect(find.text('1. Presenza e Comunicazione'), findsOneWidget);
       expect(find.textContaining('**'), findsNothing);
       expect(boldTexts(tester), contains('Disponibilità:'));
 

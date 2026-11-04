@@ -57,7 +57,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Squadra: il Futuro ha Neri e Verdi.
-    await tester.tap(find.widgetWithText(FilterPill, 'Futuro · 2'));
+    await tester.tap(find.widgetWithText(FilterPill, 'FUTURO · 2'));
     await tester.pumpAndSettle();
     expect(find.text('ANDREA NERI'), findsOneWidget);
     expect(find.text('PAOLO VERDI'), findsOneWidget);

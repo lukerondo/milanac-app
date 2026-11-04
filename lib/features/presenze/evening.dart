@@ -88,8 +88,9 @@ List<Member> playingTonight(
 Team mainTeam(Set<Team> teams) =>
     teams.contains(Team.milanac) ? Team.milanac : Team.futuro;
 
-/// Nome della squadra nei selettori e nei filtri ("MILANAC", "Futuro").
-String teamTabLabel(Team t) => t == Team.milanac ? 'MILANAC' : 'Futuro';
+/// Nome della squadra nei selettori e nei filtri ("MILANAC", "FUTURO"): il nome breve,
+/// maiuscolo come MILANAC accanto.
+String teamTabLabel(Team t) => t.short;
 
 /// Titolo e dettaglio di una partita dal titolo dell'evento: "FVPA – 3ª giornata vs
 /// Atletico Virtuale" diventa "MILANAC – Atletico Virtuale" con "FVPA – 3ª giornata".

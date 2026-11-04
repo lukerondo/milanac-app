@@ -723,7 +723,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
   }
 }
 
-/// La fascia in alto: MILANAC | Futuro e lo stato della formazione.
+/// La fascia in alto: MILANAC | FUTURO e lo stato della formazione.
 class _Band extends StatelessWidget {
   const _Band({required this.team, required this.onTeam, required this.status});
   final Team team;
@@ -1059,20 +1059,15 @@ Future<String?> _pickTaker(
                 ),
               ),
             for (final (m, position) in starters)
-              ListTile(
-                leading: MemberAvatar(member: m, radius: 20),
-                title: Text(
-                  _numberAndName(m),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  [
-                    position,
-                    if (formation.setPiecesOf(m.id) case final roles
-                        when roles.isNotEmpty)
-                      'batte già: ${roles.map((r) => r.short).join(', ')}',
-                  ].join(' · '),
-                ),
+              _ChoiceTile(
+                member: m,
+                title: _numberAndName(m),
+                subtitle: [
+                  position,
+                  if (formation.setPiecesOf(m.id) case final roles
+                      when roles.isNotEmpty)
+                    'batte già: ${roles.map((r) => r.short).join(', ')}',
+                ].join(' · '),
                 selected: m.id == current,
                 onTap: () => Navigator.pop(c, m.id),
               ),
@@ -1081,6 +1076,53 @@ Future<String?> _pickTaker(
       );
     },
   );
+}
+
+/// Un giocatore nei fogli di scelta (chi gioca, chi batte). La scelta di adesso si vede in
+/// tutti e due i temi: fondo oro tenue, nome in oro e la spunta (il "selezionato" del tema
+/// chiaro era il nero del testo e non si distingueva).
+class _ChoiceTile extends StatelessWidget {
+  const _ChoiceTile({
+    required this.member,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+    this.trailing,
+  });
+  final Member member;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return ListTile(
+      leading: MemberAvatar(member: member, radius: 20),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle),
+      trailing: selected
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (trailing case final t?) ...[t, const SizedBox(width: 4)],
+                Icon(
+                  Icons.check_circle_rounded,
+                  color: p.accentText,
+                  semanticLabel: 'Scelta attuale',
+                ),
+              ],
+            )
+          : trailing,
+      selected: selected,
+      selectedColor: p.accentText,
+      selectedTileColor: p.accentTint,
+      onTap: onTap,
+    );
+  }
 }
 
 /// Restituisce l'id del giocatore scelto, '' per liberare la posizione, null se annullato.
@@ -1134,19 +1176,16 @@ Future<String?> _pickPlayer(
                 onTap: () => Navigator.pop(c, ''),
               ),
             for (final m in sorted)
-              ListTile(
-                leading: MemberAvatar(member: m, radius: 20),
-                title: Text(
-                  m.displayName,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  [
-                    if (m.fieldPosition != null) m.fieldPosition!,
-                    if (formation.players.containsValue(m.id))
-                      'già in campo: verrà spostato',
-                  ].join(' · '),
-                ),
+              _ChoiceTile(
+                member: m,
+                title: m.displayName,
+                subtitle: [
+                  if (m.fieldPosition != null) m.fieldPosition!,
+                  // Chi è già in questo posto non si sposta.
+                  if (formation.players.containsValue(m.id) &&
+                      m.id != current?.id)
+                    'già in campo: verrà spostato',
+                ].join(' · '),
                 trailing: m.fieldPosition == slot.label
                     ? Icon(Icons.star_rounded, color: p.accentText)
                     : null,

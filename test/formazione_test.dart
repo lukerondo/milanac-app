@@ -261,7 +261,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('9 Rossi'), findsOneWidget);
-    await tester.tap(find.text('Futuro'));
+    await tester.tap(find.text('FUTURO'));
     await tester.pumpAndSettle();
     // Formazione del Futuro: Neri in porta e Verdi; Rossi non c'è.
     expect(find.text('23 Verdi'), findsOneWidget);
@@ -275,7 +275,7 @@ void main() {
     (tester) async {
       final container = await startAppAt(tester, todayInItalyAt(17));
       await goToSection(tester, 'Formazione');
-      await tester.tap(find.text('Futuro'));
+      await tester.tap(find.text('FUTURO'));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('La formazione di MILANAC FUTURO non è ancora'),
@@ -400,7 +400,7 @@ void main() {
     expect(pdf().onPressed, isNotNull);
 
     // Il Futuro non è pubblicato: di nuovo spento.
-    await tester.tap(find.text('Futuro'));
+    await tester.tap(find.text('FUTURO'));
     await tester.pumpAndSettle();
     expect(pdf().onPressed, isNull);
   });
@@ -415,7 +415,7 @@ void main() {
     );
     await openFormationEditor(tester);
     // Futuro: la formazione non esiste ancora.
-    await tester.tap(find.text('Futuro'));
+    await tester.tap(find.text('FUTURO'));
     await tester.pumpAndSettle();
 
     // Due cambi di modulo di fila: il secondo mentre il primo si sta salvando.
