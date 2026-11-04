@@ -305,8 +305,8 @@ void main() {
     ]);
 
     // Futuro: Andrea Neri e Paolo Verdi non hanno ancora risposto.
-    await scrollTo(tester, find.text('Futuro'), delta: -150);
-    await tester.tap(find.text('Futuro'));
+    await scrollTo(tester, find.text('FUTURO'), delta: -150);
+    await tester.tap(find.text('FUTURO'));
     await tester.pumpAndSettle();
     expect(groups(tester), ['SENZA RISPOSTA · 2']);
   });

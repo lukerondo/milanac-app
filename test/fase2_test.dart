@@ -73,7 +73,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rosa e squadre'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilterPill, 'Futuro · 2'), findsOneWidget);
+    expect(find.widgetWithText(FilterPill, 'FUTURO · 2'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Marco Rossi'),
       200,
@@ -93,14 +93,14 @@ void main() {
     );
     await tester.pumpAndSettle();
     // I filtri restano in alto.
-    expect(find.widgetWithText(FilterPill, 'Futuro · 3'), findsOneWidget);
+    expect(find.widgetWithText(FilterPill, 'FUTURO · 3'), findsOneWidget);
     tester.state<NavigatorState>(find.byType(Navigator).first).pop();
     await tester.pumpAndSettle();
 
     // Filtro FUTURO in Rosa: Neri (entrambe), Verdi e ora Rossi.
     await openSection(tester, 'Rosa completa');
     await showRosaAs(tester, RosaView.elenco);
-    await tester.tap(find.widgetWithText(FilterPill, 'Futuro · 3'));
+    await tester.tap(find.widgetWithText(FilterPill, 'FUTURO · 3'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Paolo Verdi'),

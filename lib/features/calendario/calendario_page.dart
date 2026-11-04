@@ -396,7 +396,7 @@ class _ResultRow extends StatelessWidget {
     };
     final subtitle = [
       m.competition?.replaceAll(' – ', ' · ') ?? m.kind.label,
-      if (m.team == Team.futuro) 'Futuro',
+      if (m.team == Team.futuro) Team.futuro.short,
       if (!m.home) 'in trasferta',
     ].join(' · ');
     return InkWell(

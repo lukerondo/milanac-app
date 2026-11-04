@@ -723,7 +723,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
   }
 }
 
-/// La fascia in alto: MILANAC | Futuro e lo stato della formazione.
+/// La fascia in alto: MILANAC | FUTURO e lo stato della formazione.
 class _Band extends StatelessWidget {
   const _Band({required this.team, required this.onTeam, required this.status});
   final Team team;

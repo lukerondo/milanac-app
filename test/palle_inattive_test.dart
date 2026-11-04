@@ -398,7 +398,7 @@ void main() {
           // Nomi lunghi: il Futuro con Verdi, che batte quasi tutto.
           await goToSection(tester, 'Sala Direttivo');
           await scrollAndTap(tester, find.text('Formazioni da pubblicare'));
-          await tester.tap(find.text('Futuro'));
+          await tester.tap(find.text('FUTURO'));
           await tester.pumpAndSettle();
           for (final role in SetPiece.values) {
             await tester.scrollUntilVisible(
