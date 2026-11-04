@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import 'board_model.dart';
 
-// Il campo e i gettoni sono oggetti "di gioco": stessi colori nei due temi.
+// Il campo, i gettoni e il pallone sono oggetti "di gioco": stessi colori nei due temi.
 
 /// Colore del gettone: oro per noi (Milan AC e Futuro), nero per gli avversari.
 Color tokenColor(String side) =>
@@ -23,9 +23,21 @@ final pitchBorderColor = Color.alphaBlend(
   MilanacColors.pitch,
 );
 
-/// Disegna la lavagna: campo, heatmap, frecce e gettoni (coordinate 0..1 sul campo).
-/// Per le lavagne ferme (anteprime, immagine dello schema); quella che cambia mentre
-/// si disegna o durante il replay è [BoardCanvas].
+/// Il pallone in volo (passaggio o tiro) alla frazione [t] (da 0 a 1) del volo: solo
+/// disegno, lo stato della lavagna è già quello d'arrivo.
+@immutable
+class BallFlight {
+  const BallFlight(this.kick, this.t);
+  final BallKick kick;
+  final double t;
+
+  /// Il pallone parte forte e rallenta arrivando.
+  double get eased => Curves.easeOutCubic.transform(t.clamp(0.0, 1.0));
+}
+
+/// Disegna la lavagna: campo, heatmap, frecce, linee del pallone, gettoni e pallone
+/// (coordinate 0..1 sul campo). Per le lavagne ferme (anteprime, immagine dello
+/// schema); quella che cambia mentre si disegna o durante il replay è [BoardCanvas].
 class BoardPainter extends CustomPainter {
   const BoardPainter(
     this.state, {
@@ -60,6 +72,17 @@ class BoardPainter extends CustomPainter {
 
   /// Raggio di un gettone in pixel.
   static double tokenRadius(Size size) => size.width * .042;
+
+  /// Raggio del pallone in pixel (poco più di metà gettone).
+  static double ballRadius(Size size) => size.width * .024;
+
+  /// L'area di rigore, larga e profonda; le altre misure del campo si ricavano da
+  /// lei con le proporzioni vere (40,32 × 16,5 m).
+  static double penaltyBoxWidth(Size size) => size.width * .447;
+  static double penaltyBoxDepth(Size size) => fieldRect(size).height * .14;
+
+  /// La porta: 7,32 m sui 40,32 dell'area.
+  static double goalWidth(Size size) => penaltyBoxWidth(size) * 7.32 / 40.32;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -107,13 +130,16 @@ class PitchFrame extends StatelessWidget {
 }
 
 /// La lavagna che cambia (mentre si disegna o durante il replay), a livelli: il campo
-/// non si ridisegna mai, la heatmap solo quando cambia; frecce e gettoni si
-/// ridisegnano a ogni mossa senza ricostruire la pagina.
+/// non si ridisegna mai, la heatmap solo quando cambia; frecce, linee, gettoni e
+/// pallone si ridisegnano a ogni mossa (e durante il volo del pallone) senza
+/// ricostruire la pagina.
 class BoardCanvas extends StatefulWidget {
   const BoardCanvas({
     super.key,
     required this.board,
     this.pendingArrow,
+    this.flight,
+    this.target,
     this.selectedId,
     this.showNames = true,
   });
@@ -123,6 +149,12 @@ class BoardCanvas extends StatefulWidget {
 
   /// Freccia in corso di disegno (dal punto iniziale al dito).
   final ValueListenable<BoardArrow?>? pendingArrow;
+
+  /// Il pallone in volo (passaggi e tiri).
+  final ValueListenable<BallFlight?>? flight;
+
+  /// Il gettone che prenderebbe il pallone lasciato lì (mentre lo si trascina).
+  final ValueListenable<String?>? target;
   final String? selectedId;
   final bool showNames;
 
@@ -177,6 +209,8 @@ class _BoardCanvasState extends State<BoardCanvas> {
           painter: _PiecesLayer(
             _state,
             pendingArrow: widget.pendingArrow,
+            flight: widget.flight,
+            target: widget.target,
             selectedId: widget.selectedId,
             showNames: widget.showNames,
           ),
@@ -211,15 +245,17 @@ class _PiecesLayer extends CustomPainter {
   _PiecesLayer(
     this.board, {
     this.pendingArrow,
+    this.flight,
+    this.target,
     this.selectedId,
     required this.showNames,
   }) : super(
-         repaint: pendingArrow == null
-             ? board
-             : Listenable.merge([board, pendingArrow]),
+         repaint: Listenable.merge([board, ?pendingArrow, ?flight, ?target]),
        );
   final ValueListenable<BoardState> board;
   final ValueListenable<BoardArrow?>? pendingArrow;
+  final ValueListenable<BallFlight?>? flight;
+  final ValueListenable<String?>? target;
   final String? selectedId;
   final bool showNames;
 
@@ -229,6 +265,8 @@ class _PiecesLayer extends CustomPainter {
     size,
     board.value,
     pendingArrow: pendingArrow?.value,
+    flight: flight?.value,
+    targetId: target?.value,
     selectedId: selectedId,
     showNames: showNames,
   );
@@ -237,49 +275,101 @@ class _PiecesLayer extends CustomPainter {
   bool shouldRepaint(covariant _PiecesLayer old) =>
       old.board != board ||
       old.pendingArrow != pendingArrow ||
+      old.flight != flight ||
+      old.target != target ||
       old.selectedId != selectedId ||
       old.showNames != showNames;
 }
 
-/// Il campo notturno con le linee color oro: bordo, metà campo, cerchio di
-/// centrocampo e aree di rigore (come la formazione).
+/// Il campo notturno con le linee color oro: bordo, metà campo, cerchio e dischetto
+/// di centrocampo, aree di rigore con dischetto e lunetta, aree di porta, porte e
+/// bandierine. Le misure vengono dall'area di rigore (come la formazione), con le
+/// proporzioni del campo vero.
 void _paintPitch(Canvas canvas, Size size) {
   canvas.drawRect(Offset.zero & size, Paint()..color = MilanacColors.pitch);
   final f = BoardPainter.fieldRect(size);
+  final w = size.width;
   final line = Paint()
     ..color = MilanacColors.pitchLine
     ..style = PaintingStyle.stroke
-    ..strokeWidth = max(1.0, size.width * .0042);
-  canvas.drawRRect(
-    RRect.fromRectAndRadius(f, Radius.circular(size.width * .017)),
-    line,
-  );
+    ..strokeWidth = max(1.0, w * .0042);
+  final dot = Paint()..color = MilanacColors.pitchLine;
+  final spot = max(1.5, w * .0075);
+  canvas.drawRRect(RRect.fromRectAndRadius(f, Radius.circular(w * .017)), line);
   canvas.drawLine(
     Offset(f.left, f.center.dy),
     Offset(f.right, f.center.dy),
     line,
   );
-  canvas.drawCircle(f.center, size.width * .112, line);
-  // Aree di rigore, aperte verso la linea di fondo.
-  final boxW = size.width * .447, boxH = f.height * .14;
-  final left = f.center.dx - boxW / 2, right = left + boxW;
-  canvas
-    ..drawPath(
-      Path()
-        ..moveTo(left, f.top)
-        ..lineTo(left, f.top + boxH)
-        ..lineTo(right, f.top + boxH)
-        ..lineTo(right, f.top),
-      line,
-    )
-    ..drawPath(
-      Path()
-        ..moveTo(left, f.bottom)
-        ..lineTo(left, f.bottom - boxH)
-        ..lineTo(right, f.bottom - boxH)
-        ..lineTo(right, f.bottom),
+  canvas.drawCircle(f.center, w * .112, line);
+  canvas.drawCircle(f.center, spot, dot);
+
+  final boxW = BoardPainter.penaltyBoxWidth(size);
+  final boxH = BoardPainter.penaltyBoxDepth(size);
+  final sixW = boxW * 18.32 / 40.32, sixH = boxH * 5.5 / 16.5;
+  final goalW = BoardPainter.goalWidth(size), goalD = w * .02;
+  final arcR = boxH * 9.15 / 16.5;
+  // La lunetta è l'arco del cerchio di 9,15 m dal dischetto che resta fuori
+  // dall'area (il dischetto è a 11 m, a due terzi della profondità).
+  final arcHalf = acos((boxH / 3) / arcR);
+  final goal = Paint()
+    ..color = MilanacColors.ivory.withValues(alpha: .7)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = max(1.2, w * .005);
+  final net = Paint()..color = MilanacColors.ivory.withValues(alpha: .08);
+  final cx = f.center.dx;
+  for (final top in [true, false]) {
+    // Verso il centro del campo: in giù per la porta in alto, in su per l'altra.
+    final s = top ? 1.0 : -1.0;
+    final end = top ? f.top : f.bottom;
+    Path open(double width, double depth) => Path()
+      ..moveTo(cx - width / 2, end)
+      ..lineTo(cx - width / 2, end + s * depth)
+      ..lineTo(cx + width / 2, end + s * depth)
+      ..lineTo(cx + width / 2, end);
+    // Area di rigore e area di porta, aperte verso la linea di fondo.
+    canvas
+      ..drawPath(open(boxW, boxH), line)
+      ..drawPath(open(sixW, sixH), line);
+    final penalty = Offset(cx, end + s * boxH * 2 / 3);
+    canvas
+      ..drawCircle(penalty, spot, dot)
+      ..drawArc(
+        Rect.fromCircle(center: penalty, radius: arcR),
+        (top ? pi / 2 : -pi / 2) - arcHalf,
+        2 * arcHalf,
+        false,
+        line,
+      );
+    // La porta, oltre la linea di fondo (nel margine), con un velo di rete.
+    canvas
+      ..drawRect(
+        Rect.fromLTRB(
+          cx - goalW / 2,
+          top ? end - goalD : end,
+          cx + goalW / 2,
+          top ? end : end + goalD,
+        ),
+        net,
+      )
+      ..drawPath(open(goalW, -goalD), goal);
+  }
+  // Bandierine: un quarto di cerchio in ogni angolo.
+  final corner = w * .03;
+  for (final (c, from) in [
+    (f.topLeft, 0.0),
+    (f.topRight, pi / 2),
+    (f.bottomRight, pi),
+    (f.bottomLeft, -pi / 2),
+  ]) {
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: corner),
+      from,
+      pi / 2,
+      false,
       line,
     );
+  }
 }
 
 /// Heatmap: ogni passaggio del pennello aggiunge un alone d'oro; dove si insiste
@@ -308,17 +398,23 @@ void _paintHeat(Canvas canvas, Size size, List<HeatPoint> heat) {
   canvas.restore();
 }
 
-/// Frecce (con quella in corso di disegno, in oro) e gettoni.
+/// Frecce (con quella in corso di disegno, in oro), linee del pallone, gettoni e, sopra
+/// tutto, il pallone (in volo, se c'è un passaggio in corso).
 void _paintPieces(
   Canvas canvas,
   Size size,
   BoardState state, {
   BoardArrow? pendingArrow,
+  BallFlight? flight,
+  String? targetId,
   String? selectedId,
   bool showNames = true,
 }) {
   for (final a in state.arrows) {
     _paintArrow(canvas, size, a, MilanacColors.ivory);
+  }
+  if (state.shows(BoardOverlay.ballLines)) {
+    _paintBallLines(canvas, size, state.lines, flight);
   }
   if (pendingArrow != null) {
     _paintArrow(canvas, size, pendingArrow, MilanacColors.goldLight);
@@ -329,7 +425,22 @@ void _paintPieces(
       size,
       t,
       selected: t.id == selectedId,
+      target: t.id == targetId,
       showNames: showNames,
+    );
+  }
+  final ball = state.ball;
+  if (ball != null) {
+    var (x, y) = (ball.x, ball.y);
+    if (flight != null) {
+      final e = flight.eased;
+      x = flight.kick.fromX + (x - flight.kick.fromX) * e;
+      y = flight.kick.fromY + (y - flight.kick.fromY) * e;
+    }
+    paintBall(
+      canvas,
+      BoardPainter.toPixel(size, x, y),
+      BoardPainter.ballRadius(size),
     );
   }
 }
@@ -363,42 +474,214 @@ void _paintArrow(Canvas canvas, Size size, BoardArrow a, Color color) {
     line.lineTo(end.dx, end.dy);
   }
   canvas.drawPath(line, paint);
-  // Punta.
+  canvas.drawPath(_arrowHead(p2, dir, head), Paint()..color = color);
+}
+
+/// La punta di una freccia in [tip], lunga [head], nella direzione [dir].
+Path _arrowHead(Offset tip, Offset dir, double head) {
   final n = Offset(-dir.dy, dir.dx);
-  final tip = Path()
-    ..moveTo(p2.dx, p2.dy)
+  return Path()
+    ..moveTo(tip.dx, tip.dy)
     ..lineTo(
-      p2.dx - dir.dx * head + n.dx * head * .5,
-      p2.dy - dir.dy * head + n.dy * head * .5,
+      tip.dx - dir.dx * head + n.dx * head * .5,
+      tip.dy - dir.dy * head + n.dy * head * .5,
     )
     ..lineTo(
-      p2.dx - dir.dx * head - n.dx * head * .5,
-      p2.dy - dir.dy * head - n.dy * head * .5,
+      tip.dx - dir.dx * head - n.dx * head * .5,
+      tip.dy - dir.dy * head - n.dy * head * .5,
     )
     ..close();
-  canvas.drawPath(tip, Paint()..color = color);
+}
+
+/// Le linee del pallone, bianche con il numero dell'azione: le più vecchie un po'
+/// più tenui. Quella del passaggio in volo cresce con il pallone.
+void _paintBallLines(
+  Canvas canvas,
+  Size size,
+  List<BallLine> lines,
+  BallFlight? flight,
+) {
+  for (final (i, l) in lines.indexed) {
+    final age = lines.length - 1 - i;
+    _paintBallLine(
+      canvas,
+      size,
+      l,
+      opacity: max(.4, 1 - age * .05),
+      progress: flight != null && flight.kick.line == l.n ? flight.eased : 1,
+    );
+  }
+}
+
+/// Passaggio: linea continua con la punta; conduzione: linea ondulata; tiro: linea
+/// spessa fino alla porta. Si accorciano dove toccano un gettone, così punta e numero
+/// restano fuori; un filo scuro sotto le stacca dalla heatmap.
+void _paintBallLine(
+  Canvas canvas,
+  Size size,
+  BallLine l, {
+  required double opacity,
+  required double progress,
+}) {
+  final w = size.width;
+  final r = BoardPainter.tokenRadius(size);
+  final br = BoardPainter.ballRadius(size);
+  final p1 = BoardPainter.toPixel(size, l.x1, l.y1);
+  final p2 = BoardPainter.toPixel(size, l.x2, l.y2);
+  final full = (p2 - p1).distance;
+  final trimStart = l.fromPlayer ? r * 1.05 : br * 1.1;
+  final trimEnd = l.toPlayer ? r * 1.15 : br * 1.15;
+  final length = full - trimStart - trimEnd;
+  if (!length.isFinite || length < br) return;
+  final dir = (p2 - p1) / full;
+  final start = p1 + dir * trimStart;
+  final tip = start + dir * (length * progress);
+  final (width, head) = switch (l.kind) {
+    BallLineKind.shot => (max(2.5, w * .011), w * .036),
+    BallLineKind.pass => (max(1.2, w * .0055), w * .028),
+    BallLineKind.carry => (max(1.2, w * .0055), w * .024),
+  };
+  final stem = max(0.0, (tip - start).distance - head * .6);
+  final path = Path()..moveTo(start.dx, start.dy);
+  if (l.kind == BallLineKind.carry) {
+    // L'onda si spegne alle due estremità: parte dal giocatore e finisce nella punta.
+    final n = Offset(-dir.dy, dir.dx);
+    final amp = w * .008, wave = w * .034;
+    for (var d = 0.0; d <= stem; d += max(1.0, w * .004)) {
+      final fade = min(1.0, min(d, stem - d) / (wave / 2));
+      final p = start + dir * d + n * (amp * fade * sin(2 * pi * d / wave));
+      path.lineTo(p.dx, p.dy);
+    }
+  } else {
+    final e = start + dir * stem;
+    path.lineTo(e.dx, e.dy);
+  }
+  final outline = max(1.0, w * .0025);
+  final shadow = MilanacColors.black.withValues(alpha: .35 * opacity);
+  final color = Colors.white.withValues(alpha: opacity);
+  final arrowHead = _arrowHead(tip, dir, head);
+  canvas
+    ..drawPath(
+      path,
+      Paint()
+        ..color = shadow
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width + outline * 2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    )
+    ..drawPath(
+      arrowHead,
+      Paint()
+        ..color = shadow
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = outline * 2
+        ..strokeJoin = StrokeJoin.round,
+    )
+    ..drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    )
+    ..drawPath(arrowHead, Paint()..color = color);
+  // Il numero, piccolo, all'inizio della linea.
+  final badge = w * .02;
+  final at = start + dir * min(length / 2, badge * 1.4);
+  canvas
+    ..drawCircle(
+      at,
+      badge,
+      Paint()..color = MilanacColors.black.withValues(alpha: .82 * opacity),
+    )
+    ..drawCircle(
+      at,
+      badge,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(.8, w * .0028),
+    );
+  _text(
+    canvas,
+    '${l.n}',
+    at,
+    fontSize: w * .025,
+    fontFamily: sportFont,
+    weight: FontWeight.w600,
+    color: MilanacColors.ivory.withValues(alpha: opacity),
+    maxWidth: badge * 2.4,
+  );
+}
+
+/// Il pallone: bianco con le macchie nere e un'ombra morbida.
+void paintBall(Canvas canvas, Offset c, double r) {
+  canvas.drawCircle(
+    c + Offset(r * .12, r * .38),
+    r,
+    Paint()
+      ..color = MilanacColors.black.withValues(alpha: .5)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, max(.5, r * .35)),
+  );
+  canvas.drawCircle(c, r, Paint()..color = Colors.white);
+  // Un pentagono al centro e cinque sul bordo, in direzione dei suoi vertici.
+  final patch = Paint()..color = MilanacColors.ink;
+  canvas.save();
+  canvas.clipPath(Path()..addOval(Rect.fromCircle(center: c, radius: r)));
+  canvas.drawPath(_pentagon(c, r * .36, -pi / 2), patch);
+  for (var i = 0; i < 5; i++) {
+    final a = -pi / 2 + i * 2 * pi / 5;
+    canvas.drawPath(
+      _pentagon(c + Offset(cos(a), sin(a)) * r * 1.02, r * .36, a + pi),
+      patch,
+    );
+  }
+  canvas.restore();
+  canvas.drawCircle(
+    c,
+    r,
+    Paint()
+      ..color = MilanacColors.ink.withValues(alpha: .6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = max(.6, r * .08),
+  );
+}
+
+Path _pentagon(Offset c, double r, double rotation) {
+  final p = Path();
+  for (var i = 0; i < 5; i++) {
+    final a = rotation + i * 2 * pi / 5;
+    final v = c + Offset(cos(a), sin(a)) * r;
+    i == 0 ? p.moveTo(v.dx, v.dy) : p.lineTo(v.dx, v.dy);
+  }
+  return p..close();
 }
 
 /// Gettone: cerchio oro (noi) o nero (avversari) con il bordo avorio, il numero e
-/// sotto il cognome; quello selezionato ha un anello d'oro.
+/// sotto il cognome; quello selezionato ha un anello d'oro, quello che sta per
+/// ricevere il pallone trascinato un anello bianco.
 void _paintToken(
   Canvas canvas,
   Size size,
   BoardToken t, {
   bool selected = false,
+  bool target = false,
   bool showNames = true,
 }) {
   final c = BoardPainter.toPixel(size, t.x, t.y);
   final r = BoardPainter.tokenRadius(size);
   final stroke = max(1.5, size.width * .0056);
-  if (selected) {
+  if (selected || target) {
     canvas.drawCircle(
       c,
       r + stroke * 2.5,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke
-        ..color = MilanacColors.goldLight,
+        ..strokeWidth = target ? stroke * 1.4 : stroke
+        ..color = target ? Colors.white : MilanacColors.goldLight,
     );
   }
   canvas.drawCircle(c, r, Paint()..color = tokenColor(t.side));
@@ -542,4 +825,27 @@ class BoardPreview extends StatelessWidget {
       child: CustomPaint(painter: BoardPainter(state, showNames: showNames)),
     ),
   );
+}
+
+/// Il pallone da solo, grande [size] (nei fogli della lavagna).
+class BallGlyph extends StatelessWidget {
+  const BallGlyph({super.key, this.size = 24});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: size,
+    child: const CustomPaint(painter: _BallGlyphPainter()),
+  );
+}
+
+class _BallGlyphPainter extends CustomPainter {
+  const _BallGlyphPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) =>
+      paintBall(canvas, size.center(Offset.zero), size.shortestSide * .42);
+
+  @override
+  bool shouldRepaint(covariant _BallGlyphPainter old) => false;
 }

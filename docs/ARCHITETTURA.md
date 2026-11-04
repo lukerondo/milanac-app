@@ -201,9 +201,21 @@ accettano al primo accesso successivo.
     **lavagna tattica**: campo con i gettoni dei giocatori (dalla formazione della squadra,
     con numero e nome sulla carta; anche avversari e gettoni vuoti), pennello *Fuoco* (la
     heatmap gialla e rossa si accumula dove si insiste), *Freccia* (trascina; doppio tocco
-    per le tratteggiate), *Annulla*, *Pulisci*, nuova lavagna da un modulo. *Salva* mette lo
-    schema (gettoni, frecce, heatmap in `tactics.board`) in Tattiche e schemi con l'immagine
-    esportata; tutti lo guardano, il Direttivo lo modifica. *Registra* chiede il microfono e
+    per le tratteggiate, che si vedono dall'icona), *Annulla*, *Pulisci* (il pallone torna a
+    centrocampo), nuova lavagna da un modulo. Il **pallone** parte dal dischetto del
+    centrocampo (gli schemi salvati prima non ce l'hanno: lo si mette con *Pallone* o da
+    "Aggiungi un gettone"); lasciato su un gettone gli va al piede e lo segue. Con *Pallone*:
+    tocco su un compagno = passaggio (il pallone vola in mezzo secondo), sull'erba = palla
+    nello spazio, sulla porta = tiro; trascinandolo lo si sposta; toccando di nuovo
+    *Pallone* (o tenendo premuto il pallone) lo si rimette a centrocampo, si cancellano le
+    sue linee o lo si toglie. Ogni passaggio, conduzione (chi ha la palla trascinato con
+    *Gettoni*) e tiro lascia una linea numerata (continua, ondulata, spessa; le ultime 30).
+    *Vista* (l'occhio nella barra sotto il titolo) accende e spegne le linee della palla; gli
+    interruttori si salvano con lo schema e finiscono nel replay. Il campo ha dischetti,
+    aree di porta, porte, lunette e bandierine, ricavati dall'area di rigore. *Salva* mette lo
+    schema (gettoni, frecce, heatmap, pallone, linee e vista in `tactics.board`) in Tattiche
+    e schemi con l'immagine esportata; tutti lo guardano, il Direttivo lo modifica. Una riga
+    illeggibile si salta senza fermare l'elenco. *Registra* chiede il microfono e
     salva la voce e ogni azione con il suo istante (fino a 5 minuti); allo stop l'anteprima
     con il replay sincronizzato, poi "Invia in chat" (canale a scelta, predefinito Tattiche e
     Schemi) oppure elimina. I video dei creator stanno in Mondo Proclub.
@@ -367,7 +379,13 @@ vocali dopo 60 giorni, replay della lavagna dopo 3), mette i file in `storage_cl
 chiama la funzione `notify` (evento `cleanup`) che li elimina dallo Storage con la chiave di
 servizio; i messaggi eliminati accodano i loro file allo stesso modo. Il replay è un file
 JSON con la lavagna di partenza e le azioni con l'istante (`lib/features/lavagna/`): la
-stessa macchina a stati disegna la lavagna e rifà le mosse in riproduzione. Sondaggi:
+stessa macchina a stati (`BoardEditor.apply`) disegna la lavagna e rifà le mosse in
+riproduzione. Un passaggio o un tiro è una sola azione (`kick`): lo stato cambia subito e il
+volo del pallone (450 ms) è solo disegno, rifatto uguale nel replay seguendone il tempo. Il
+formato ha una versione (`"v"`): 1 senza pallone, 2 con il pallone, le sue linee o la vista.
+Da questa versione l'app salta le azioni che non conosce (senza passo di "Annulla") e, per
+un replay con `"v"` più alto di quello che sa leggere, dice "Aggiorna l'app per vedere questo
+replay."; pallone, linee e vista malformati nello schema si lasciano fuori. Sondaggi:
 `vote_poll(messaggio, opzioni)` (sostituisce le scelte di prima; niente voti a sondaggio
 chiuso, fuori elenco o doppi dove se ne sceglie una) e `close_poll(messaggio)` (chi l'ha
 creato o il Direttivo; scrive `closed_at` nel meta e lo restituisce); il vincolo

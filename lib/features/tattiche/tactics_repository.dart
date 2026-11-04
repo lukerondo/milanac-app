@@ -54,6 +54,16 @@ class Tactic {
     team: m['team'] as String?,
   );
 
+  /// Come [Tactic.fromMap], ma una riga illeggibile dà null invece di fermare tutto
+  /// l'elenco degli schemi.
+  static Tactic? tryFromMap(Map<String, dynamic> m) {
+    try {
+      return Tactic.fromMap(m);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// I campi da scrivere. Lavagna e squadra solo se ci sono: chi modifica il testo
   /// di uno schema non deve cancellarne il disegno.
   Map<String, dynamic> toMap() => {
@@ -92,6 +102,11 @@ final tacticsProvider = StreamProvider<List<Tactic>>((ref) {
   return ref.watch(tacticsRepositoryProvider).watchAll();
 });
 
+/// Gli schemi delle righe della tabella: quelle illeggibili si saltano.
+List<Tactic> readTactics(List<Map<String, dynamic>> rows) => [
+  for (final r in rows) ?Tactic.tryFromMap(r),
+];
+
 /// Indirizzo firmato dell'immagine (vale 6 ore): si butta quando nessuno lo mostra,
 /// così la volta dopo se ne chiede uno nuovo invece di usarne uno scaduto.
 final tacticImageUrlProvider = FutureProvider.autoDispose
@@ -117,7 +132,7 @@ class _SupabaseTacticsRepository implements TacticsRepository {
       .from('tactics')
       .stream(primaryKey: ['id'])
       .order('created_at', ascending: false)
-      .map((rows) => rows.map(Tactic.fromMap).toList());
+      .map(readTactics);
 
   @override
   Future<void> save(

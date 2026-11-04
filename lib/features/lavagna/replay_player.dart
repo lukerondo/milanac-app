@@ -58,6 +58,12 @@ class ReplayPlayer extends ChangeNotifier
   BoardEditor _editor;
   int _cursor = 0;
 
+  /// L'ultimo passaggio o tiro e il suo istante: il volo del pallone segue il tempo
+  /// del replay (in pausa resta fermo a mezz'aria, come lo si vede).
+  BallKick? _kick;
+  int _kickMs = 0;
+  final _flight = ValueNotifier<BallFlight?>(null);
+
   int get durationMs => data.durationMs;
   bool get hasAudio => (audioUrl != null || audioFile != null) && !_audioFailed;
 
@@ -67,6 +73,9 @@ class ReplayPlayer extends ChangeNotifier
   @override
   BoardState get value => _editor.state;
 
+  /// Il pallone in volo all'istante corrente (passaggi e tiri, come dal vivo).
+  ValueListenable<BallFlight?> get flight => _flight;
+
   void _goTo(int ms) {
     if (_disposed) return;
     final target = ms.clamp(0, durationMs);
@@ -74,12 +83,22 @@ class ReplayPlayer extends ChangeNotifier
       _editor.dispose();
       _editor = BoardEditor(data.initial);
       _cursor = 0;
+      _kick = null;
     }
     while (_cursor < data.events.length && data.events[_cursor].t <= target) {
-      _editor.apply(data.events[_cursor].command);
+      final e = data.events[_cursor];
+      _editor.apply(e.command);
+      if (!identical(_editor.lastKick, _kick)) {
+        _kick = _editor.lastKick;
+        _kickMs = e.t;
+      }
       _cursor++;
     }
     positionMs = target;
+    // A fine replay il pallone è già arrivato, anche se il tiro era l'ultima mossa.
+    final kick = target < durationMs ? _kick : null;
+    final t = kick == null ? 1.0 : (target - _kickMs) / ballFlightMs;
+    _flight.value = kick != null && t < 1 ? BallFlight(kick, t) : null;
     notifyListeners();
   }
 
@@ -230,6 +249,7 @@ class ReplayPlayer extends ChangeNotifier
       releaseAudioLater(focus, AudioUse.replay);
     }
     _editor.dispose();
+    _flight.dispose();
     super.dispose();
   }
 
@@ -255,7 +275,11 @@ class ReplayView extends StatelessWidget {
         aspectRatio: boardAspect,
         // Si ridisegna da sola a ogni mossa; sotto si ricostruiscono solo i controlli.
         child: PitchFrame(
-          child: BoardCanvas(board: player, showNames: showNames),
+          child: BoardCanvas(
+            board: player,
+            flight: player.flight,
+            showNames: showNames,
+          ),
         ),
       ),
       const SizedBox(height: 10),
