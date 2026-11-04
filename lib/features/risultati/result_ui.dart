@@ -28,21 +28,18 @@ String scoreText(ClubMatch m) => m.outcome == MatchOutcome.daGiocare
     ? '–'
     : '${m.goalsFor} – ${m.goalsAgainst}';
 
-/// Nome breve della squadra nei filtri a pillola ("Milan AC", "Futuro").
-String teamPillLabel(Team t) => switch (t) {
-  Team.milanac => 'Milan AC',
-  Team.futuro => 'Futuro',
-};
+/// Nome breve della squadra nei filtri a pillola ("MILANAC", "FUTURO").
+String teamPillLabel(Team t) => t.short;
 
 /// Competizione e giornata con il separatore delle tavole ("FVPA Serie B · 2ª
 /// giornata"), o il tipo di partita se non c'è.
 String competitionLabel(ClubMatch m) =>
     (m.competition ?? m.kind.label).replaceAll(' – ', ' · ');
 
-/// "FVPA Serie B · 2ª giornata", "Amichevole · Futuro · in trasferta".
+/// "FVPA Serie B · 2ª giornata", "Amichevole · FUTURO · in trasferta".
 String matchSubtitle(ClubMatch m) => [
   competitionLabel(m),
-  if (m.team == Team.futuro) 'Futuro',
+  if (m.team == Team.futuro) Team.futuro.short,
   if (!m.home) 'in trasferta',
 ].join(' · ');
 

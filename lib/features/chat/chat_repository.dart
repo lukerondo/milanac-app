@@ -1049,7 +1049,7 @@ class DemoChatRepository extends ChatRepository {
     Channel(
       id: 'c-milanac',
       slug: 'milanac',
-      name: 'Milan AC',
+      name: 'MILANAC',
       description: 'La chat della prima squadra',
       icon: 'team',
       team: 'milanac',
@@ -1057,7 +1057,7 @@ class DemoChatRepository extends ChatRepository {
     Channel(
       id: 'c-futuro',
       slug: 'futuro',
-      name: 'Milan AC Futuro',
+      name: 'MILANAC FUTURO',
       description: 'La chat del Futuro',
       icon: 'team',
       team: 'futuro',

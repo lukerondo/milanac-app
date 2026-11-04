@@ -30,6 +30,12 @@ import '../rosa/member.dart';
 /// Quanto dura una partita per il Match Day: dopo, "fischio finale".
 const matchLength = Duration(minutes: 150);
 
+/// I convocati si presentano in party trenta minuti prima della partita (regolamento);
+/// dieci minuti prima tutti in lobby. A quelle ore partono i due promemoria automatici
+/// (match_reminders_tick sul server).
+const partyLead = Duration(minutes: 30);
+const lobbyLead = Duration(minutes: 10);
+
 /// Lo stemma contro l'avversario e il conto alla rovescia al calcio d'inizio (ore, minuti,
 /// secondi); poi "in corso" e il fischio finale.
 class MatchDayHeader extends ConsumerStatefulWidget {
@@ -425,9 +431,10 @@ class MatchDayExtras extends ConsumerWidget {
   }
 }
 
-/// I promemoria della partita: quando arrivano (un'ora prima e dieci minuti prima), che
-/// sono spenti (porta alle impostazioni) o che non arrivano a chi è assente (come sul
-/// server); per il Direttivo, nelle ore della partita, "Chiama" la squadra in lobby.
+/// I promemoria della partita: quando arrivano (trenta minuti prima, tutti in party come
+/// da regolamento, e dieci minuti prima, tutti in lobby), che sono spenti (porta alle
+/// impostazioni) o che non arrivano a chi è assente (come sul server); per il Direttivo,
+/// nelle ore della partita, "Chiama" la squadra in lobby.
 class _Reminders extends ConsumerStatefulWidget {
   const _Reminders({required this.event, required this.absent});
   final ClubEvent event;
@@ -444,7 +451,7 @@ class _RemindersState extends ConsumerState<_Reminders> {
   @override
   void initState() {
     super.initState();
-    // Il testo cambia con l'ora (prima i due promemoria, poi solo la lobby).
+    // Il testo cambia con l'ora (prima i due promemoria, poi il party e la lobby).
     _tick = Timer.periodic(const Duration(seconds: 30), (_) => setState(() {}));
   }
 
@@ -503,8 +510,8 @@ class _RemindersState extends ConsumerState<_Reminders> {
     final on = profile?.notifyPrefs.isOn(NotifyCategory.partite) ?? true;
     final now = italianClock(ref.watch(clockProvider)());
     final start = widget.event.startsAt;
-    final hour = start.subtract(const Duration(hours: 1));
-    final lobby = start.subtract(const Duration(minutes: 10));
+    final party = start.subtract(partyLead);
+    final lobby = start.subtract(lobbyLead);
     final canCall =
         (profile?.isDirettivo ?? false) &&
         !now.isBefore(start.subtract(lobbyCallWindow)) &&
@@ -520,10 +527,11 @@ class _RemindersState extends ConsumerState<_Reminders> {
               : 'Sei assente: niente promemoria')
         : !on
         ? 'Promemoria partita spenti'
-        : now.isBefore(hour)
-        ? 'Promemoria alle ${hm.format(hour)} e alle ${hm.format(lobby)}'
+        : now.isBefore(party)
+        ? 'Promemoria: in party alle ${hm.format(party)}, in lobby alle '
+              '${hm.format(lobby)}'
         : now.isBefore(lobby)
-        ? 'Promemoria per la lobby alle ${hm.format(lobby)}'
+        ? 'Tutti in party! Promemoria per la lobby alle ${hm.format(lobby)}'
         : 'Lobby aperta: si entra!';
     if (text == null) return const SizedBox.shrink();
     // Spenti dalle impostazioni: il tocco porta lì. Assente: non arrivano e basta.

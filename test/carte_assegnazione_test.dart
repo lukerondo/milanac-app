@@ -237,7 +237,7 @@ void main() {
     repo.cards.add([
       // Rimosso dal Direttivo dopo la carta.
       card('x1', 'p7', 'CEN', 5),
-      // Gioca solo nel Milan AC, la partita è del Futuro.
+      // Gioca solo nel MILANAC, la partita è del Futuro.
       card('x2', 'p2', 'ATT', 4),
       // Ancora della squadra.
       card('x3', 'p6', 'DIF', 3),
@@ -253,7 +253,7 @@ void main() {
     );
     expect(
       find.text(
-        'Marco Rossi non gioca più in Milan AC Futuro: salvando, la sua carta '
+        'Marco Rossi non gioca più in MILANAC FUTURO: salvando, la sua carta '
         'nero/oro si toglie.',
       ),
       findsOneWidget,
@@ -286,7 +286,7 @@ void main() {
       endsAt: now.add(const Duration(days: 7)),
     );
     final rosa = await DemoRosaRepository().watchAll().first;
-    // Futuro: Neri (anche Milan AC) e Verdi; Neri ha la blu della partita.
+    // Futuro: Neri (anche MILANAC) e Verdi; Neri ha la blu della partita.
     expect(cardCandidates(_brianza, rosa, [blue]), {'p6'});
     expect(cardCandidates(_brianza, rosa, const []), {'p4', 'p6'});
   });

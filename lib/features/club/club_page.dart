@@ -105,8 +105,8 @@ class ClubPage extends ConsumerWidget {
                     ),
                     Text(
                       count == 0
-                          ? 'Fondato a settembre 2025'
-                          : 'Fondato a settembre 2025 · $count tesserati',
+                          ? 'Fondato nel 2025'
+                          : 'Fondato nel 2025 · $count tesserati',
                       style: const TextStyle(
                         color: HeroText.secondary,
                         fontSize: 14,

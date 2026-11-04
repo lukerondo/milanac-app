@@ -293,7 +293,7 @@ class DemoRosaRepository implements RosaRepository {
       motto: 'Milano siamo noi!',
       gamertag: 'MILANAC_Demo',
       role: ClubRole.direttivo,
-      direttivoRoles: const [DirettivoRole.capitano, DirettivoRole.gestore],
+      direttivoRoles: const [DirettivoRole.capitano, DirettivoRole.presenze],
       fieldPosition: 'CC',
       shirtNumber: 10,
       joinedAt: DateTime(2025, 1, 10),

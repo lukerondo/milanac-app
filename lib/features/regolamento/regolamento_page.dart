@@ -178,7 +178,8 @@ class _StoryEditorPageState extends State<_StoryEditorPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Separa i paragrafi con una riga vuota.',
+              'Separa i paragrafi con una riga vuota. '
+              'Per il grassetto: **testo**.',
               style: TextStyle(color: context.pal.textMuted, fontSize: 14),
             ),
             const SizedBox(height: 12),

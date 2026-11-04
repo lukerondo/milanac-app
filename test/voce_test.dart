@@ -20,14 +20,14 @@ import 'package:milanac/features/voce/voice_room_sheet.dart';
 import 'helpers.dart';
 import 'home_test.dart';
 
-/// Titolo della card della stanza di Milan AC (il nome del canale non va a capo).
-const _cardMilan = 'Stanza vocale aperta · Milan AC';
+/// Titolo della card della stanza di MILANAC (il nome del canale non va a capo).
+const _cardMilan = 'Stanza vocale aperta · MILANAC';
 
 const _generale = Channel(id: 'c-main', slug: 'main', name: 'Generale');
 
 /// Canale con la stanza della demo già aperta, con dentro altri due giocatori:
 /// la propria sessione può finire mentre la stanza resta aperta.
-const _milanac = Channel(id: 'c-milanac', slug: 'milanac', name: 'Milan AC');
+const _milanac = Channel(id: 'c-milanac', slug: 'milanac', name: 'MILANAC');
 const _tattiche = Channel(
   id: 'c-tattiche',
   slug: 'tattiche',
@@ -181,7 +181,7 @@ void main() {
     final room = find.byType(VoiceRoomPage);
     Finder inRoom(Finder f) => find.descendant(of: room, matching: f);
     expect(room, findsOneWidget);
-    expect(inRoom(find.text('#MILAN AC')), findsOneWidget);
+    expect(inRoom(find.text('#MILANAC')), findsOneWidget);
     expect(inRoom(find.text('Stanza vocale · 0:00')), findsOneWidget);
     expect(inRoom(find.text('Marco')), findsOneWidget);
     expect(inRoom(find.text('Sta parlando')), findsOneWidget);
@@ -213,7 +213,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(room, findsNothing);
     expect(find.text('Sei nella stanza vocale'), findsOneWidget);
-    expect(find.text('#Milan AC · 0:00'), findsOneWidget);
+    expect(find.text('#MILANAC · 0:00'), findsOneWidget);
     await tester.tap(find.byTooltip('Riattiva il microfono'));
     await tester.pumpAndSettle();
     expect(container.read(voiceCallProvider).muted, isFalse);

@@ -13,8 +13,8 @@ import 'providers.dart';
 enum NotifyCategory {
   presenze('Presenze e promemoria'),
 
-  /// Un'ora prima della partita e dieci minuti prima (lobby). La chiamata in lobby del
-  /// Direttivo arriva sempre.
+  /// Trenta minuti prima della partita (tutti in party, come da regolamento) e dieci
+  /// minuti prima (lobby). La chiamata in lobby del Direttivo arriva sempre.
   partite('Promemoria partita'),
   chat('Chat e stanze vocali'),
   notizie('Notizie e aggiornamenti');

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -90,21 +92,29 @@ void main() {
     expect(await refused(match), contains('nelle ore della partita'));
   });
 
-  testWidgets('Match Day del Direttivo: quando arrivano i promemoria, poi '
-      '"Chiama" la squadra in lobby (non due volte di fila)', (tester) async {
+  testWidgets('Match Day del Direttivo: quando arrivano i promemoria (in party '
+      '30 minuti prima, in lobby 10 minuti prima), poi "Chiama" la squadra in '
+      'lobby (non due volte di fila)', (tester) async {
     var now = todayInItalyAt(18, 54);
     final container = await startAppAt(tester, now, clock: () => now);
     await _matchToday(container, now);
     await tester.pumpAndSettle();
 
-    expect(find.text('Promemoria alle 20:30 e alle 21:20'), findsOneWidget);
+    expect(
+      find.text('Promemoria: in party alle 21:00, in lobby alle 21:20'),
+      findsOneWidget,
+    );
     // Prima delle 19:30 non si chiama ancora nessuno.
     expect(find.text('Chiama'), findsNothing);
 
-    now = todayInItalyAt(20, 45);
+    // Trenta minuti prima: tutti in party (regolamento), poi la lobby.
+    now = todayInItalyAt(21, 5);
     await tester.pump(const Duration(seconds: 30));
     await tester.pumpAndSettle();
-    expect(find.text('Promemoria per la lobby alle 21:20'), findsOneWidget);
+    expect(
+      find.text('Tutti in party! Promemoria per la lobby alle 21:20'),
+      findsOneWidget,
+    );
     await tester.ensureVisible(find.text('Chiama'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Chiama'));
@@ -197,7 +207,10 @@ void main() {
             ),
           );
       await tester.pumpAndSettle();
-      expect(find.text('Promemoria alle 20:30 e alle 21:20'), findsOneWidget);
+      expect(
+        find.text('Promemoria: in party alle 21:00, in lobby alle 21:20'),
+        findsOneWidget,
+      );
       expect(
         const NotifyPrefs({NotifyCategory.partite}).toJson()['partite'],
         isFalse,
@@ -239,7 +252,10 @@ void main() {
           );
       await tester.pumpAndSettle();
       expect(find.text('Sei assente: niente promemoria'), findsOneWidget);
-      expect(find.text('Promemoria alle 20:30 e alle 21:20'), findsNothing);
+      expect(
+        find.text('Promemoria: in party alle 21:00, in lobby alle 21:20'),
+        findsNothing,
+      );
       expect(find.text('Chiama'), findsNothing);
     },
   );
@@ -264,4 +280,36 @@ void main() {
       expect(find.text('Chiama'), findsOneWidget);
     },
   );
+
+  test('La funzione notify gestisce ogni promemoria che il database manda, '
+      'anche "ora" di prima della migrazione 0034', () {
+    // I workflow Database e Funzioni partono ognuno per conto suo: se la funzione nuova
+    // arriva prima della 0034, il database manda ancora "ora" (un'ora prima) e la notifica
+    // non deve andare persa. Il ramo "ora" (e questo controllo) si toglie quando la 0034 è
+    // in produzione.
+    final sent = {
+      for (final f in Directory(
+        'supabase/migrations',
+      ).listSync().whereType<File>())
+        for (final m in RegExp(
+          r"'kind', 'match_reminder',[^)]*'when', '(\w+)'",
+        ).allMatches(f.readAsStringSync()))
+          m.group(1)!,
+    };
+    expect(sent, {'ora', 'party', 'lobby', 'chiamata'});
+    final notify = File('supabase/functions/notify/index.ts')
+        .readAsStringSync();
+    final handled = {
+      for (final m in RegExp(r'when === "(\w+)"').allMatches(notify))
+        m.group(1)!,
+    };
+    expect(handled, containsAll(sent));
+    // Con il titolo di prima: "Tra un'ora si gioca".
+    expect(
+      RegExp(
+        r'''when === "ora"\s*\?\s*\(minutes >= 50 \? "⚽ Tra un'ora si gioca"''',
+      ).hasMatch(notify),
+      isTrue,
+    );
+  });
 }

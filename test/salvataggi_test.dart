@@ -167,7 +167,7 @@ void main() {
 
   group('classifica', () {
     const rows = [
-      StandingRow(teamName: 'Milan AC', won: 2, goalsFor: 5, isUs: true),
+      StandingRow(teamName: 'MILANAC', won: 2, goalsFor: 5, isUs: true),
       StandingRow(teamName: 'Dinamo Pixel', lost: 2, goalsAgainst: 5),
     ];
 
@@ -181,7 +181,7 @@ void main() {
       expect(body['p_tournament'], 'tr1');
       expect(body['p_rows'], [
         {
-          'team_name': 'Milan AC',
+          'team_name': 'MILANAC',
           'won': 2,
           'drawn': 0,
           'lost': 0,

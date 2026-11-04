@@ -57,9 +57,11 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
-  /// Scorre fino in fondo la prima lista della pagina.
+  /// Scorre fino in fondo la prima lista della pagina (anche un testo lungo come il
+  /// regolamento).
   Future<void> scrollToEnd(WidgetTester tester, Finder scrollable) async {
-    for (var i = 0; i < 12; i++) {
+    final position = tester.state<ScrollableState>(scrollable).position;
+    for (var i = 0; i < 60 && (i < 12 || position.extentAfter > 0); i++) {
       await tester.drag(scrollable, const Offset(0, -600));
       await tester.pump();
     }

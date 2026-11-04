@@ -296,7 +296,7 @@ void main() {
       find.widgetWithText(TextField, 'Avversario'),
       'Atletico Joystick',
     );
-    await tester.enterText(find.widgetWithText(TextField, 'MILAN AC'), '2');
+    await tester.enterText(find.widgetWithText(TextField, 'MILANAC'), '2');
     await tester.enterText(find.widgetWithText(TextField, 'Avversari'), '0');
     await tester.enterText(
       find.widgetWithText(TextField, 'Marcatori'),

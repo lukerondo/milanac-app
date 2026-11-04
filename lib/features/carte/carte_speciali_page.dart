@@ -611,7 +611,7 @@ class SpecialCardRow extends StatelessWidget {
   }
 }
 
-/// "Milan AC 3 – 1 Dinamo Pixel": il club prima, con i suoi gol prima.
+/// "MILANAC 3 – 1 Dinamo Pixel": il club prima, con i suoi gol prima.
 String matchTitle(ClubMatch m) {
   final us = m.team.label;
   if (m.outcome == MatchOutcome.daGiocare) return '$us – ${m.opponent}';

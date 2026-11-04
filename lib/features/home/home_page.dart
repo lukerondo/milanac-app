@@ -102,6 +102,13 @@ class TonightCard extends ConsumerWidget {
     final today = italianDay(now);
     final myTeams = me?.teams ?? const {Team.milanac};
     final event = eveningEvent(events, today, teams: myTeams);
+    // Sabato e domenica senza eventi: niente serata (regolamento).
+    if (event == null) {
+      return _NoEvening(
+        team: mainTeam(myTeams),
+        next: nextEvening(events, today, teams: myTeams),
+      );
+    }
     final team = event.team ?? mainTeam(myTeams);
     // Giorno di partita: la card diventa il Match Day.
     final matchDay = event.type.isMatch && event.id.isNotEmpty;
@@ -185,6 +192,75 @@ class TonightCard extends ConsumerWidget {
                   ],
                 );
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Sabato o domenica senza eventi: la serata non c'è (le serate del club sono dal lunedì
+/// al venerdì) e si vede la prossima, dove si può già rispondere.
+class _NoEvening extends StatelessWidget {
+  const _NoEvening({required this.team, required this.next});
+  final Team team;
+  final ({DateTime day, ClubEvent event}) next;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final day = DateFormat('EEEE d MMMM', 'it').format(next.day);
+    final event = next.event;
+    return AppCard(
+      important: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionLabel('Stasera · ${team.label}', gold: true),
+          const SizedBox(height: 2),
+          Text('RIPOSO', style: _cardTitle(p, size: 24)),
+          Text(
+            'Le serate del club sono dal lunedì al venerdì, $eveningHours. '
+            'Nel fine settimana si gioca solo con un evento in calendario.',
+            style: TextStyle(color: p.textSecondary, fontSize: 15),
+          ),
+          const SizedBox(height: 14),
+          Divider(color: p.border, height: 1),
+          Semantics(
+            button: true,
+            label: 'Apri la prossima serata',
+            child: InkWell(
+              onTap: () => context.go(
+                Uri(
+                  path: '/presenze',
+                  queryParameters: {
+                    'giorno': DateFormat('yyyy-MM-dd').format(next.day),
+                  },
+                ).toString(),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Prossima serata: ${day[0].toUpperCase()}'
+                          '${day.substring(1)} · ${event.type.label} '
+                          '${DateFormat('HH:mm').format(event.startsAt)}',
+                          style: TextStyle(
+                            color: p.textSecondary,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: p.textSecondary),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -326,7 +402,7 @@ class NextMatchCard extends ConsumerWidget {
             .where(
               (e) =>
                   e.type.isMatch &&
-                  e.id != tonight.id &&
+                  e.id != tonight?.id &&
                   e.concerns(myTeams) &&
                   e.startsAt.isAfter(now.subtract(const Duration(hours: 3))),
             )

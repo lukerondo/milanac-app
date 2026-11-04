@@ -54,7 +54,7 @@ void main() {
       expect(find.text('IL TUO PROFILO'), findsOneWidget);
       expect(await back(tester), isTrue, reason: 'l\'app non si chiude');
       expect(find.text('IL TUO PROFILO'), findsNothing);
-      expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+      expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
     },
   );
 
@@ -68,7 +68,7 @@ void main() {
       expect(await back(tester), isTrue);
       expect(find.text('IL TUO PROFILO'), findsOneWidget);
       expect(await back(tester), isTrue);
-      expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+      expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
 
       // Aperte dal profilo invece tornano indietro come sempre.
       await tester.tap(find.byTooltip('Il tuo profilo').first);
@@ -78,7 +78,7 @@ void main() {
       expect(await back(tester), isTrue);
       expect(find.text('IL TUO PROFILO'), findsOneWidget);
       expect(await back(tester), isTrue);
-      expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+      expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
     },
   );
 
@@ -96,7 +96,7 @@ void main() {
     await go(container, tester, '/regolamento/scrivi');
     expect(find.text('REGOLAMENTO D\'INGRESSO'), findsOneWidget);
     expect(await back(tester), isTrue, reason: 'l\'app non si chiude');
-    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+    expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
     expect(container.read(rulesWriteLaterProvider), isTrue);
 
     // Dal promemoria della Sala Direttivo (aperto con go: niente sotto).

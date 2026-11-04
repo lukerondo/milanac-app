@@ -9,7 +9,7 @@ import 'package:milanac/features/carta/mini_card.dart';
 import 'package:milanac/shared/gold_loader.dart';
 
 import 'helpers.dart';
-import 'home_test.dart' show startAppAt, todayInItalyAt;
+import 'home_test.dart' show startAppAt, todayInItalyAt, weekdayInItalyAt;
 import 'presenze_test.dart' show openPresenze, scrollTo;
 
 /// Le vibrazioni chieste dall'app, per tipo (light, medium, heavy, selection).
@@ -65,7 +65,7 @@ void main() {
 
   testWidgets('Risposta alle presenze: vibra la conferma', (tester) async {
     final haptics = _recordHaptics(tester);
-    await openPresenze(tester, todayInItalyAt(17));
+    await openPresenze(tester, weekdayInItalyAt(17));
     await scrollTo(
       tester,
       find.widgetWithText(OutlinedButton, 'Presente'),

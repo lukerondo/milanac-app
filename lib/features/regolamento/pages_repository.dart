@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/providers.dart';
 import '../../core/config.dart';
+import 'regolamento_2026.dart';
 
 /// Pagine di testo libero modificabili dal Direttivo (tabella `pages`).
 /// Il regolamento non sta qui: vive nelle versioni di `rules_repository.dart`.
@@ -48,19 +49,9 @@ class _SupabasePagesRepository implements PagesRepository {
   }
 }
 
-/// La storia del club com'era nella vecchia app (demo e test).
+/// La storia del club come in produzione (migrazione 0033), per la demo e i test.
 class DemoPagesRepository implements PagesRepository {
-  final _content = <ClubPage, String>{
-    ClubPage.storia:
-        'Il MilanAc viene fondato a settembre 2025 da Fabio Ruggieri, il quale '
-        '(assieme a Giuseppe e Christian) crede fortemente nel progetto di ricreare '
-        'le glorie vissute dall\'AC MILAN nel campo reale, anche nel campo virtuale.\n\n'
-        'La squadra si forma lentamente ma impreziosendosi sempre di più di elementi '
-        'validi, in quanto i fondatori sono convinti che un gruppo solido sia la base '
-        'di partenza di fondamentale importanza per ottenere i risultati che i tre si '
-        'aspettano.\n\n'
-        'I colori sociali del club sono il rosso ed il nero.',
-  };
+  final _content = <ClubPage, String>{ClubPage.storia: storia2026};
 
   @override
   Future<String> load(ClubPage page) async => _content[page] ?? '';

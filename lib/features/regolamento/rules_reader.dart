@@ -84,7 +84,7 @@ class RulesReader extends StatelessWidget {
                 color: p.text,
                 fontSize: 16,
                 height: 1.55,
-                fontWeight: FontWeight.w600,
+                fontWeight: readerBold.fontWeight,
               ),
             ),
           ],
@@ -209,8 +209,40 @@ class ReaderHeading extends StatelessWidget {
   );
 }
 
-/// Testo di un articolo. Le righe "ETICHETTA: valore" (es. l'organigramma)
-/// diventano voci con l'etichetta in piccolo sopra il valore.
+/// Grassetto nel testo degli articoli e della storia: "**testo**", sulla stessa riga.
+final _bold = RegExp(r'\*\*(.+?)\*\*');
+
+/// [text] diviso in pezzi normali e in grassetto, nell'ordine. Un "**" senza il suo
+/// compagno sulla stessa riga resta com'è.
+List<({String text, bool bold})> boldSegments(String text) {
+  final out = <({String text, bool bold})>[];
+  var last = 0;
+  for (final m in _bold.allMatches(text)) {
+    if (m.start > last) {
+      out.add((text: text.substring(last, m.start), bold: false));
+    }
+    out.add((text: m.group(1)!, bold: true));
+    last = m.end;
+  }
+  if (last < text.length) out.add((text: text.substring(last), bold: false));
+  return out;
+}
+
+/// [text] con il grassetto, da mettere in un `Text.rich` (lo stile di base è quello del
+/// Text: il grassetto cambia solo il peso).
+TextSpan boldSpan(String text) => TextSpan(
+  children: [
+    for (final s in boldSegments(text))
+      TextSpan(text: s.text, style: s.bold ? readerBold : null),
+  ],
+);
+
+/// L'enfasi della lettura: il grassetto nel testo e la formula di accettazione (stesso
+/// colore del testo, solo più pesante).
+const readerBold = TextStyle(fontWeight: FontWeight.w600);
+
+/// Testo di un articolo, con il grassetto (**testo**). Le righe "ETICHETTA: valore"
+/// (es. l'organigramma) diventano voci con l'etichetta in piccolo sopra il valore.
 class ReaderBody extends StatelessWidget {
   const ReaderBody(
     this.text, {
@@ -236,8 +268,8 @@ class ReaderBody extends StatelessWidget {
     final entries = [for (final l in lines) _entry.firstMatch(l)];
     final isList = entries.isNotEmpty && entries.every((m) => m != null);
     if (!isList) {
-      return Text(
-        text.trim(),
+      return Text.rich(
+        boldSpan(text.trim()),
         style: TextStyle(color: p.text, fontSize: size, height: 1.6),
       );
     }
@@ -264,8 +296,8 @@ class ReaderBody extends StatelessWidget {
                     letterSpacing: .8,
                   ),
                 ),
-                Text(
-                  m.group(2)!.trim(),
+                Text.rich(
+                  boldSpan(m.group(2)!.trim()),
                   style: TextStyle(color: p.text, fontSize: 16, height: 1.4),
                 ),
               ],

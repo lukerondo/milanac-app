@@ -107,6 +107,81 @@ const formationModules = <String, List<SlotPosition>>{
 
 const defaultModule = '4-3-3';
 
+/// Le palle inattive: chi le batte lo decide in anticipo lo staff tecnico (regolamento).
+/// [key] è la chiave in `formations.set_pieces`, [label] il nome nell'app e nel PDF,
+/// [short] quello della riga in Comunicazioni.
+enum SetPiece {
+  rigori('rigori', 'Rigori', 'rigori'),
+  punizioni('punizioni', 'Punizioni', 'punizioni'),
+  angoliSinistra('angoli_sx', 'Angoli da sinistra', 'angoli sx'),
+  angoliDestra('angoli_dx', 'Angoli da destra', 'angoli dx');
+
+  const SetPiece(this.key, this.label, this.short);
+  final String key;
+  final String label;
+  final String short;
+
+  static SetPiece? parse(String? key) =>
+      values.where((r) => r.key == key).firstOrNull;
+}
+
+/// I battitori come li salva il database (`{"rigori": id, "angoli_sx": id, ...}`).
+Map<String, String> setPiecesJson(Map<SetPiece, String> takers) => {
+  for (final e in takers.entries) e.key.key: e.value,
+};
+
+/// I battitori letti dal database: le chiavi che l'app non conosce si ignorano.
+Map<SetPiece, String> parseSetPieces(Object? json) => switch (json) {
+  final Map<String, dynamic> m => {
+    for (final e in m.entries)
+      if ((SetPiece.parse(e.key), e.value) case (final role?, final String id))
+        role: id,
+  },
+  _ => const {},
+};
+
+/// I battitori tra i soli [players] (i titolari): i ruoli di chi non è in campo restano
+/// liberi.
+Map<SetPiece, String> setPiecesAmong(
+  Map<SetPiece, String> takers,
+  Iterable<String> players,
+) {
+  final onField = players.toSet();
+  return {
+    for (final e in takers.entries)
+      if (onField.contains(e.value)) e.key: e.value,
+  };
+}
+
+/// "Palle inattive: rigori Rossi · punizioni Bianchi · angoli sx Verdi, dx Neri", o null
+/// senza battitori: nel testo che accompagna il PDF condiviso, ed è la riga che il
+/// database aggiunge all'annuncio in Comunicazioni (`set_pieces_line`, stesse regole).
+/// [nameOf] dà il nome di un giocatore (null = non più nel club: il suo ruolo non si
+/// scrive).
+String? setPiecesLine(
+  Map<SetPiece, String> takers,
+  String? Function(String id) nameOf,
+) {
+  String? name(SetPiece role) => switch (takers[role]) {
+    final id? => nameOf(id),
+    null => null,
+  };
+  final sx = name(SetPiece.angoliSinistra), dx = name(SetPiece.angoliDestra);
+  final parts = [
+    for (final role in [SetPiece.rigori, SetPiece.punizioni])
+      if (name(role) case final n?) '${role.short} $n',
+    if (sx != null && dx != null)
+      takers[SetPiece.angoliSinistra] == takers[SetPiece.angoliDestra]
+          ? 'angoli $sx'
+          : 'angoli sx $sx, dx $dx'
+    else if (sx != null)
+      'angoli sx $sx'
+    else if (dx != null)
+      'angoli dx $dx',
+  ];
+  return parts.isEmpty ? null : 'Palle inattive: ${parts.join(' · ')}';
+}
+
 /// Formazione corrente: modulo + giocatore assegnato a ciascuna delle 11 posizioni.
 class Formation {
   const Formation({
@@ -114,10 +189,12 @@ class Formation {
     this.team = Team.milanac,
     this.module = defaultModule,
     this.players = const {},
+    this.setPieces = const {},
     this.publishedAt,
     this.updatedAt,
     this.publishedModule,
     this.publishedPlayers,
+    this.publishedSetPieces,
   });
 
   final String id;
@@ -134,16 +211,22 @@ class Formation {
   final String? publishedModule;
   final Map<int, String>? publishedPlayers;
 
+  /// I battitori dell'ultima pubblicazione (null = mai pubblicata, o pubblicata prima
+  /// dei battitori).
+  final Map<SetPiece, String>? publishedSetPieces;
+
   /// La formazione come l'hanno ricevuta i giocatori (vuota se mai pubblicata).
   Formation get publishedView => Formation(
     id: id,
     team: team,
     module: publishedModule ?? module,
     players: publishedPlayers ?? const {},
+    setPieces: publishedSetPieces ?? const {},
     publishedAt: publishedAt,
     updatedAt: publishedAt,
     publishedModule: publishedModule,
     publishedPlayers: publishedPlayers,
+    publishedSetPieces: publishedSetPieces,
   );
 
   bool get isPublished => publishedAt != null;
@@ -157,15 +240,16 @@ class Formation {
         p.day == day.day;
   }
 
-  /// Modificata dopo l'ultima pubblicazione: modulo o giocatori diversi da quelli che
-  /// hanno ricevuto i giocatori. Si confronta il contenuto, non gli orari (il salvataggio
-  /// usa l'ora del server, la pubblicazione quella del telefono).
+  /// Modificata dopo l'ultima pubblicazione: modulo, giocatori o battitori diversi da
+  /// quelli che hanno ricevuto i giocatori. Si confronta il contenuto, non gli orari (il
+  /// salvataggio usa l'ora del server, la pubblicazione quella del telefono).
   bool get hasUnpublishedChanges {
     if (publishedAt == null) return false;
-    final published = publishedPlayers ?? const <int, String>{};
+    bool differ<K>(Map<K, String> a, Map<K, String> b) =>
+        a.length != b.length || a.entries.any((e) => b[e.key] != e.value);
     return (publishedModule ?? module) != module ||
-        published.length != players.length ||
-        players.entries.any((e) => published[e.key] != e.value);
+        differ(players, publishedPlayers ?? const {}) ||
+        differ(setPieces, publishedSetPieces ?? const {});
   }
 
   /// Posizione (es. "CC") del giocatore, o null se in panchina.
@@ -179,6 +263,16 @@ class Formation {
   /// slot (0–10) → id del giocatore.
   final Map<int, String> players;
 
+  /// Chi batte le palle inattive: un titolare per ruolo (lo stesso può averne più d'uno),
+  /// ogni ruolo facoltativo.
+  final Map<SetPiece, String> setPieces;
+
+  /// I ruoli sulle palle inattive di [playerId], nell'ordine di [SetPiece].
+  List<SetPiece> setPiecesOf(String playerId) => [
+    for (final role in SetPiece.values)
+      if (setPieces[role] == playerId) role,
+  ];
+
   List<SlotPosition> get slots =>
       formationModules[module] ?? formationModules[defaultModule]!;
 
@@ -187,22 +281,28 @@ class Formation {
     Team? team,
     String? module,
     Map<int, String>? players,
+    Map<SetPiece, String>? setPieces,
     DateTime? publishedAt,
     DateTime? updatedAt,
     String? publishedModule,
     Map<int, String>? publishedPlayers,
+    Map<SetPiece, String>? publishedSetPieces,
   }) => Formation(
     id: id ?? this.id,
     team: team ?? this.team,
     module: module ?? this.module,
     players: players ?? this.players,
+    setPieces: setPieces ?? this.setPieces,
     publishedAt: publishedAt ?? this.publishedAt,
     updatedAt: updatedAt ?? this.updatedAt,
     publishedModule: publishedModule ?? this.publishedModule,
     publishedPlayers: publishedPlayers ?? this.publishedPlayers,
+    publishedSetPieces: publishedSetPieces ?? this.publishedSetPieces,
   );
 
-  /// Mette [playerId] nello [slot]; se era già in campo altrove, lo sposta.
+  /// Mette [playerId] nello [slot]; se era già in campo altrove, lo sposta. Chi esce dal
+  /// campo perde i suoi ruoli sulle palle inattive (restano da scegliere): un battitore
+  /// è sempre un titolare.
   Formation assign(int slot, String? playerId) {
     final next = Map.of(players)..removeWhere((_, p) => p == playerId);
     if (playerId == null) {
@@ -210,6 +310,19 @@ class Formation {
     } else {
       next[slot] = playerId;
     }
-    return copyWith(players: next);
+    return copyWith(
+      players: next,
+      setPieces: setPiecesAmong(setPieces, next.values),
+    );
+  }
+
+  /// Affida [role] a [playerId] (null = nessuno). Solo un titolare: per chi non è in
+  /// campo il ruolo resta libero.
+  Formation withSetPiece(SetPiece role, String? playerId) {
+    final next = Map.of(setPieces)..remove(role);
+    if (playerId != null && players.containsValue(playerId)) {
+      next[role] = playerId;
+    }
+    return copyWith(setPieces: next);
   }
 }

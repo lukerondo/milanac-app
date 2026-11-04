@@ -43,10 +43,12 @@ Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `compl
 1. **Chi sei**: nome, cognome, anno di nascita (li vedono solo l'interessato e il Direttivo:
    stanno nella tabella riservata `profile_private`), **nome sulla carta**
    (è il nome mostrato in tutta l'app: `display_name`), motto.
-2. **Squadra e ruolo**: Milan AC o Milan AC Futuro (entrambe solo per il Direttivo); "Faccio parte
+2. **Squadra e ruolo**: MILANAC o MILANAC FUTURO (entrambe solo per il Direttivo); "Faccio parte
    del Direttivo" richiede la **password del club** (solo l'hash bcrypt sta in `app_config`,
-   si cambia dall'app con `set_direttivo_password`) e almeno un'etichetta tra Capitano,
-   Reclutatore, Organizzatore, Gestore; ruolo in campo, numero, piattaforma.
+   si cambia dall'app con `set_direttivo_password`) e almeno un ruolo dell'organigramma del
+   regolamento (Presidente, Fondatore, Capitano, Vice-capitano, Resp. Comunicazioni e
+   Marketing, Resp. Tecnico/Tattico, Resp. Reclutamento, Resp. Tornei e Amichevoli, Resp.
+   Presenze, Resp. IT; migrazione `0034`); ruolo in campo, numero, piattaforma.
 3. **La tua foto** (facoltativa, si può caricare dopo): una foto vera dalla galleria, inquadrata
    nel riquadro 4:5 della carta (sposta e allarga con due dita), salvata come JPEG 720×900 in
    `avatars/<id>/foto_<ms>.jpg` (`profiles.avatar_path`) e caricata subito, prima della fine
@@ -66,9 +68,10 @@ notifica) e il Direttivo può togliere dalla Rosa chi non conosce (`active = fal
   Tutti i membri del Direttivo hanno gli stessi poteri, anche gli uni sugli altri (migrazione
   `0026`), dalla scheda del membro (Sala Direttivo → Rosa e squadre, o "Dati del membro" sulla
   sua carta):
-  - **promuove** un giocatore nel Direttivo con le etichette (Capitano, Reclutatore,
-    Organizzatore, Gestore) o lo **retrocede** (le etichette si azzerano); promozioni e
-    retrocessioni compaiono nella Sala Direttivo con chi le ha decise;
+  - **promuove** un giocatore nel Direttivo con i ruoli dell'organigramma (Presidente,
+    Fondatore, Capitano, Vice-capitano e i responsabili: sono solo etichette, i poteri sono
+    gli stessi) o lo **retrocede** (i ruoli si azzerano); promozioni e retrocessioni
+    compaiono nella Sala Direttivo con chi le ha decise;
   - **elimina definitivamente l'account** di un altro membro (`delete_member_account`, doppia
     conferma), anche di chi si è registrato ma non è mai entrato ("In attesa di entrare");
   - **toglie la foto del profilo** di un membro e **chiude una stanza vocale** per tutti
@@ -82,7 +85,7 @@ notifica) e il Direttivo può togliere dalla Rosa chi non conosce (`active = fal
   foto, la propria carta (ruolo, numero, stile, statistiche FUT, piattaforma, non l'overall),
   scrive in chat e
   aggiunge link. Non può cambiarsi ruolo, squadra, stato, overall o data d'ingresso (trigger).
-- **Squadre**: Milan AC e Milan AC Futuro; i giocatori stanno in una sola squadra, chi è del
+- **Squadre**: MILANAC e MILANAC FUTURO; i giocatori stanno in una sola squadra, chi è del
   Direttivo può stare in entrambe.
 - **Registrazione in corso** (`pending`): vede solo i passi della registrazione e il regolamento.
 - **Sospeso** (`active = false`): vede solo la pagina "account non attivo".
@@ -102,6 +105,16 @@ primo del Direttivo che entra trova l'editor del regolamento d'ingresso con la s
 Chi pubblica una versione risulta averla già accettata; tutti gli altri la leggono e la
 accettano al primo accesso successivo.
 
+Il testo degli articoli è semplice: righe e paragrafi (riga vuota) restano come scritti,
+`**testo**` è grassetto (sulla stessa riga; un `**` spaiato resta com'è, l'editor lo ricorda
+sotto il campo) e un articolo in cui ogni riga è `ETICHETTA: valore` diventa un elenco.
+L'articolo intitolato **Organigramma** si vede anche sotto la Storia (pagina `storia` di
+`pages`, senza versioni). Il **Regolamento ufficiale 2026** è arrivato con la migrazione
+`0033`: sette articoli (presentazione, organigramma, articoli 1-5 con i titoli del documento)
+al posto della bozza, pubblicati come nuova versione da riaccettare (notifica `rules`,
+`published_by` vuoto) e i cenni storici del documento nella Storia; gli stessi testi stanno in
+`lib/features/regolamento/regolamento_2026.dart` per la demo (un test li confronta).
+
 ## 4. Sezioni dell'app
 
 1. **Intro** – video MP4 incluso nell'app (il walkout della squadra, 20 s: striscioni in curva
@@ -113,11 +126,14 @@ accettano al primo accesso successivo.
 2. **Home** – due riquadri. **Mondo Proclub**: ultimo video dei creator, avviso di
    aggiornamento FC 27 e della propria console, scorciatoie a video e notizie.
    **Presenze**: la serata di oggi della propria squadra (allenamento delle 21:30 o l'evento
-   del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi. Nel giorno di una
+   del Direttivo), risposta con i tre pulsanti fino alle 18:30, conteggi. Le serate sono dal
+   **lunedì al venerdì, 21:30-23:30** (regolamento): sabato e domenica, senza un evento in
+   calendario, la card dice "Riposo" e porta alla prossima serata. Nel giorno di una
    partita diventa il **Match Day**: tabellone con lo stemma contro l'avversario e il conto
    alla rovescia al calcio d'inizio (poi "in corso" e il fischio finale), chi è pronto con i
    volti, lo stato della formazione e il codice del party da copiare (lo scrive il
-   Direttivo), quando arrivano i **promemoria** (un'ora prima e dieci minuti prima, o
+   Direttivo), quando arrivano i **promemoria** (trenta minuti prima, quando i convocati
+   devono essere in party come da regolamento, e dieci minuti prima per la lobby, o
    "spenti" con il link alle impostazioni) e, per il Direttivo, *Chiama* la squadra in
    lobby; la partita di stasera non si ripete in "Prossima partita".
 3. **Barra in basso a cinque schede** (sempre visibile, ognuna ricorda dove eri rimasto):
@@ -148,6 +164,12 @@ accettano al primo accesso successivo.
    erba a strisce, linee proiettate, la porta avversaria lontana), scelta modulo (4-3-3,
    4-2-3-1, 3-5-2…), 11 mini carte in piedi (overall, ruolo, foto, colori della carta
    speciale), più piccole in fondo: il Direttivo tocca una carta e assegna il giocatore.
+   Sotto il campo le **palle inattive** (come vuole il regolamento, le decide lo staff
+   tecnico): rigori, punizioni, angoli da sinistra e da destra, un titolare per ruolo (lo
+   stesso può batterne più d'uno, ogni ruolo è facoltativo). Si sceglie tra i titolari
+   (numero e nome); chi esce dal campo perde i suoi ruoli, che tornano "da scegliere",
+   quindi non si pubblica mai un battitore in panchina. I giocatori vedono i ruoli
+   assegnati sotto la formazione pubblicata.
 6. **Calendario** – vista mensile + lista; tipi evento: *Partita torneo*, *Amichevole*,
    *Allenamento*, *Riunione*, *Altro*. Solo il Direttivo crea eventi (notifica alla squadra
    o a tutti). Ogni giorno compare l'allenamento automatico delle 21:30 per la squadra che
@@ -167,7 +189,8 @@ accettano al primo accesso successivo.
 8. **Albo d'oro** – stagioni a schede (es. 2025/26, 2026/27), targa con il numero di trofei ed
    elenco dei trofei caricati dal Direttivo (foto o sagoma disegnata); tocco su un trofeo →
    dettaglio (competizione, data, finale, foto).
-9. **Regolamento & Storia** – una pagina con due schede, testo formattato modificabile dal Direttivo.
+9. **Regolamento & Storia** – una pagina con due schede, testo formattato modificabile dal Direttivo
+   (grassetto con `**testo**`, organigramma a elenco anche sotto la Storia).
 10. **Presenze** – settimana a colpo d'occhio (e mese intero): oggi in oro, un puntino per ogni evento. Per il
     giorno scelto: la serata della squadra, la propria risposta (*Presente* · *In ritardo*
     con orario e nota obbligatoria · *Assente* con nota facoltativa), totali e gli elenchi
@@ -175,13 +198,22 @@ accettano al primo accesso successivo.
     (anche per i giorni successivi si risponde in anticipo); alle 18:00 promemoria a chi
     non ha risposto; alle 18:30 chi non ha risposto diventa "assente, non ha risposto"
     (in grigio, conta come assenza). Dopo, solo il Direttivo corregge, e resta registrato.
-    Scheda *Statistiche*: percentuale, puntuali, ritardi e assenze per giocatore.
+    Sabato e domenica non c'è la serata (giorno più chiaro, "Riposo", niente risposte,
+    promemoria né assenze), a meno che il Direttivo non metta un evento in calendario:
+    allora vale come le altre sere per chi gioca nella squadra dell'evento.
+    Scheda *Statistiche*: percentuale, puntuali, ritardi e assenze per giocatore (contano
+    solo le serate con una risposta).
 
 11. **Riquadro Presenze in Home** – la serata di oggi con la risposta rapida (vedi Home).
 12. **Formazione pubblicata** – una formazione per squadra; resta in bozza finché il Direttivo non
     la pubblica, poi ogni giocatore della squadra riceve la notifica personale (titolare con
-    ruolo o panchina), l'annuncio compare in *Comunicazioni* e chiunque può scaricare il
-    **PDF con le mini carte** (campo, foto, nome, ruolo, overall, panchina).
+    ruolo o panchina; a chi batte anche "batti rigori e punizioni", se c'è posto),
+    l'annuncio compare in *Comunicazioni* (con la riga "Palle inattive: rigori Rossi ·
+    punizioni Bianchi · angoli sx Verdi, dx Neri") e chiunque può scaricare il **PDF con le
+    mini carte** (campo, foto, nome, ruolo, overall, panchina, palle inattive). Per altre
+    sezioni (gli schemi da palla inattiva della lavagna) `publishedSetPiecesProvider(squadra)`
+    dà i battitori dell'ultima formazione pubblicata: `Map<SetPiece, String>` (ruolo → id del
+    giocatore, sempre un titolare).
 13. **Carta FUT** – "La mia carta" e carte in Rosa disegnate come gli oggetti di FUT (FC 24–26):
     scudo con le tacche in alto, overall e ruolo a sinistra con i PlayStyle+, la **foto caricata
     dal giocatore** sfumata dentro la carta (senza foto la sagoma grigia; sulla propria carta
@@ -201,13 +233,66 @@ accettano al primo accesso successivo.
     **lavagna tattica**: campo con i gettoni dei giocatori (dalla formazione della squadra,
     con numero e nome sulla carta; anche avversari e gettoni vuoti), pennello *Fuoco* (la
     heatmap gialla e rossa si accumula dove si insiste), *Freccia* (trascina; doppio tocco
-    per le tratteggiate), *Annulla*, *Pulisci*, nuova lavagna da un modulo. *Salva* mette lo
-    schema (gettoni, frecce, heatmap in `tactics.board`) in Tattiche e schemi con l'immagine
-    esportata; tutti lo guardano, il Direttivo lo modifica. *Registra* chiede il microfono e
+    per le tratteggiate, che si vedono dall'icona: le frecce dei movimenti sono oro con la
+    punta aperta, le linee della palla bianche), *Annulla*, *Pulisci* (il pallone torna a
+    centrocampo), nuova lavagna da un modulo. La pressione lunga c'è solo con *Gettoni*
+    (toglie il gettone; sul pallone ne apre le opzioni): con gli altri strumenti un dito
+    fermo prima di muoversi trascina lo stesso. Il **pallone** parte dal dischetto del
+    centrocampo (gli schemi salvati prima non ce l'hanno: lo si mette con *Pallone* o da
+    "Aggiungi un gettone"); lasciato su un gettone gli va al piede e lo segue. Con *Pallone*:
+    tocco su un compagno = passaggio (il pallone vola in mezzo secondo), sull'erba = palla
+    nello spazio, sulla porta = tiro; trascinandolo lo si sposta; toccando di nuovo
+    *Pallone* (o, con *Gettoni*, tenendo premuto il pallone) lo si rimette a centrocampo, si
+    cancellano le sue linee o lo si toglie. Ogni passaggio, conduzione (chi ha la palla
+    trascinato con *Gettoni*) e tiro lascia una linea numerata (continua, ondulata, spessa;
+    le ultime 30): le linee si fermano prima dei gettoni e dei cognomi di chi passa e di chi
+    riceve, quelle troppo corte restano un tratto minimo, e i numeri (come quelli delle zone
+    di battuta, quadrati) si disegnano sopra tutto, sulla linea o accanto, dove non coprono
+    gettoni, cognomi o pallone (`BoardPainter.badges`). *Vista* (l'occhio nella barra sotto
+    il titolo) è un menu piccolo appeso all'occhio: ogni riga accende o spegne un disegno, il
+    menu si chiude e il campo cambia subito; gli interruttori si salvano con lo schema e
+    finiscono nel replay. Il campo ha dischetti, aree di porta, porte, lunette e bandierine,
+    ricavati dall'area di rigore.
+    **Palle inattive** (`set_pieces.dart`): nel foglio "Nuova lavagna dal modulo" gli schemi
+    pronti (angolo da sinistra e da destra, punizione a 25 metri da spostare, rigore,
+    rimessa laterale, rinvio dal fondo, calcio d'inizio, angolo contro dalla nostra
+    bandierina) mettono il pallone sul punto giusto e gli undici della formazione (quella
+    pubblicata, se c'è) ai posti della situazione, scelti per ruolo; chi batte viene da
+    `publishedSetPiecesProvider` (angoli, punizioni, rigori). Come un cambio di modulo si
+    annullano e finiscono nel replay; il modulo diventa "Piazzati" (preselezionato al
+    salvataggio) e lo schema ricorda la palla inattiva (`piece`). Gli schemi sono disegnati
+    per lo schermo del telefono: nessun gettone ne tocca un altro, nessun cognome finisce su
+    un gettone o su un altro cognome, il portiere sta sopra 0,94 (il nome resta nella
+    lavagna) e chi attacca le zone parte appena fuori da loro, così si vedono (un test lo
+    controlla per ogni schema con undici cognomi lunghi). Le **zone di battuta**
+    (`board_overlays.dart`: 1 primo palo, 2 dischetto, 3 secondo palo, 4 limite dell'area,
+    5 corto) stanno nell'area dove si batte, con il primo palo dal lato del pallone; si
+    accendono da sole negli schemi dove si crossa e si cambiano in *Vista*. Con *Pallone* un
+    tocco su una zona è sempre un **cross** (linea a puntini che gira, numerata come le
+    altre), anche accanto alla porta: arriva al compagno che sta lì, che riceve la palla,
+    altrimenti la palla resta libera nel punto toccato. Fuori dalle zone valgono passaggio,
+    palla nello spazio e tiro. Prima del primo pallone giocato le zone seguono il pallone
+    spostato. **Fuori possesso**, sempre da *Vista* (spenti di serie):
+    *Fuorigioco* (con almeno due avversari, la linea tratteggiata del penultimo dalla loro
+    porta, portiere compreso, e la bandierina sui nostri oltre la linea e oltre il pallone
+    nella loro metà campo; in oro la nostra linea difensiva); *Linee di reparto* (i nostri di
+    movimento, dalla nostra porta in su, divisi come dice il modulo, con i metri tra difesa e
+    centrocampo; niente se i gettoni non tornano col modulo); *Posizioni per zona* (9 zone
+    della palla: il Direttivo mette il pallone in una zona, sistema tutti i gettoni e preme
+    "Salva questa zona" (le spunte delle zone salvate le vede solo lui), o le cancella; poi
+    ogni azione del pallone che lo porta
+    in una zona salvata sposta lì i giocatori, tranne chi ha la palla e chi si sta
+    trascinando, dentro `BoardEditor.apply`, con lo scivolamento solo disegnato). Chi non è
+    del Direttivo, in uno schema con le posizioni per zona, sposta solo il pallone e vede
+    dove deve stare (lo schema salvato non cambia). *Salva* mette lo
+    schema (gettoni, frecce, heatmap, pallone, linee, vista, palla inattiva e posizioni per
+    zona in `tactics.board`) in Tattiche e schemi con l'immagine esportata; tutti lo
+    guardano, il Direttivo lo modifica. Una riga illeggibile si salta senza fermare
+    l'elenco. *Registra* chiede il microfono e
     salva la voce e ogni azione con il suo istante (fino a 5 minuti); allo stop l'anteprima
     con il replay sincronizzato, poi "Invia in chat" (canale a scelta, predefinito Tattiche e
     Schemi) oppure elimina. I video dei creator stanno in Mondo Proclub.
-15. **Chat** – canali Generale, Milan AC, Milan AC Futuro (visibili a chi ci gioca),
+15. **Chat** – canali Generale, MILANAC, MILANAC FUTURO (visibili a chi ci gioca),
     Tattiche & Schemi, Comunicazioni (scrive solo il Direttivo: avvisi, formazioni, carte
     speciali), Sala Direttivo (riservato). In stile Telegram: bolle rosse per i propri
     messaggi e grigie per gli altri (foto e nome), separatori per giorno, "Nuovi messaggi"
@@ -297,7 +382,7 @@ app_config    + direttivo_password_hash (bcrypt)
 -- dalla migrazione 0017
 attendance    + auto (assenza automatica), set_by (chi ha corretto); nota obbligatoria per il ritardo
 daily_jobs    day, job, done_at                    -- promemoria e assenze fatti una volta al giorno
-channels      + team (milanac|futuro), direttivo_writes   -- Generale, Milan AC, Futuro, Tattiche, Comunicazioni, Direttivo
+channels      + team (milanac|futuro), direttivo_writes   -- Generale, MILANAC, Futuro, Tattiche, Comunicazioni, Direttivo
 shared_links  category(musica|video) + status(proposto|pubblicato), published_by, published_at
 news          + platform (ps5|xbox) per la categoria console
 -- dalla migrazione 0018
@@ -329,9 +414,23 @@ profiles      + play_styles (text[]: codici dei PlayStyle, "+" in fondo per i Pl
 events        + party_code (text, 1-40 caratteri: il codice del party della partita, lo
               scrive il Direttivo e si copia dal Match Day in Home)
 -- dalla migrazione 0031
-event_reminders id, event_id(→ events), kind (ora | lobby | chiamata), starts_at, sent_at,
-              sent_by; i due automatici una volta sola per partita e orario (se la partita
-              si sposta ripartono); nessuna policy (solo il server)
+event_reminders id, event_id(→ events), kind (party | lobby | chiamata; "ora" fino alla 0034),
+              starts_at, sent_at, sent_by; i due automatici una volta sola per partita e
+              orario (se la partita si sposta ripartono); nessuna policy (solo il server)
+-- dalla migrazione 0034
+profiles      direttivo_roles tra presidente, fondatore, capitano, vicecapitano,
+              comunicazione, tecnico, reclutamento, tornei, presenze, it (i nomi di prima,
+              reclutatore e organizzatore, si traducono anche dalle app vecchie; gestore
+              sparisce); club_evening(giorno, squadre) dice se c'è la serata
+events        + scheduled_at (quando l'evento è stato messo a quell'ora: created_at alla
+              creazione, di nuovo ogni volta che cambia starts_at; lo tiene il trigger
+              events_scheduled_at, l'app non lo legge)
+-- dalla migrazione 0035
+formations    + set_pieces (jsonb, bozza) e published_set_pieces (jsonb, congelati alla
+              pubblicazione): {"rigori"|"punizioni"|"angoli_sx"|"angoli_dx": id del giocatore},
+              ogni ruolo facoltativo; nella bozza solo titolari della bozza, in quella
+              pubblicata solo titolari pubblicati (trigger formations_set_pieces);
+              save_formation(..., p_set_pieces) li salva con modulo e posti
 -- dalla migrazione 0030
 messages      un sondaggio è un messaggio con meta {type: poll, options [2-10, 1-80
               caratteri, diverse], multiple, closed_at?} e la domanda nel testo (max 300)
@@ -342,7 +441,8 @@ poll_votes    message_id(→ messages), user_id(→ profiles), options smallint[
 ```
 
 Funzioni e trigger: `notify_push` (chiama la funzione Edge `notify` tramite pg_net),
-pubblicazione formazione → notifica + annuncio in *Comunicazioni*, nuovo messaggio → notifica,
+pubblicazione formazione → notifica + annuncio in *Comunicazioni* (con la riga dei battitori,
+`set_pieces_line`), nuovo messaggio → notifica,
 nuovo evento → notifica, `chat_overview()` (non letti + ultimo messaggio per canale),
 risultato inserito → notifica alla squadra, `complete_registration()` / `accept_rules()` /
 `publish_rules()` / `set_direttivo_password()` (registrazione e regolamento), `player_stats()`
@@ -367,7 +467,25 @@ vocali dopo 60 giorni, replay della lavagna dopo 3), mette i file in `storage_cl
 chiama la funzione `notify` (evento `cleanup`) che li elimina dallo Storage con la chiave di
 servizio; i messaggi eliminati accodano i loro file allo stesso modo. Il replay è un file
 JSON con la lavagna di partenza e le azioni con l'istante (`lib/features/lavagna/`): la
-stessa macchina a stati disegna la lavagna e rifà le mosse in riproduzione. Sondaggi:
+stessa macchina a stati (`BoardEditor.apply`) disegna la lavagna e rifà le mosse in
+riproduzione. Un passaggio o un tiro è una sola azione (`kick`): lo stato cambia subito e il
+volo del pallone (450 ms) è solo disegno, rifatto uguale nel replay seguendone il tempo. Il
+formato ha una versione (`"v"`): 1 senza pallone, 2 con il pallone, le sue linee, la vista o
+una palla inattiva (un cross, per chi non lo conosce, è un passaggio), 3 con le posizioni per
+zona (`zs` / `zc`: una versione che non le conosce non sposterebbe i giocatori), 4 con un
+cross che arriva a un compagno (prima un cross finiva sempre libero nella zona). Le
+coordinate valgono sempre con i tre decimali del JSON (`fieldCoord`): `BoardEditor.apply`
+arrotonda quelle delle azioni, `Reset` e l'inizio della registrazione passano la lavagna dal
+JSON (`canonicalBoard`), così dal vivo e nel replay ogni mossa finisce uguale, anche sulle
+soglie delle zone. Lo
+spostamento verso le posizioni di una zona è calcolato dentro `BoardEditor.apply`, quindi
+replay e "Annulla" lo rifanno uguale; lo scivolamento (400 ms) è solo disegno, come il volo.
+Gli interruttori di *Vista* cambiano anche i passi da annullare ("Annulla" non li tocca),
+ma annullando una lavagna nuova torna la vista che c'era prima.
+Da questa versione l'app salta le azioni che non conosce (senza passo di "Annulla") e, per
+un replay con `"v"` più alto di quello che sa leggere, dice "Aggiorna l'app per vedere questo
+replay."; pallone, linee, vista, palla inattiva e posizioni malformati nello schema si
+lasciano fuori. Sondaggi:
 `vote_poll(messaggio, opzioni)` (sostituisce le scelte di prima; niente voti a sondaggio
 chiuso, fuori elenco o doppi dove se ne sceglie una) e `close_poll(messaggio)` (chi l'ha
 creato o il Direttivo; scrive `closed_at` nel meta e lo restituisce); il vincolo
@@ -376,11 +494,16 @@ sondaggi e lo dice.
 
 Lavori automatici con **pg_cron**: `attendance_tick()` gira ogni minuto e, in ora italiana,
 alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assenze automatiche
-(una volta sola al giorno, grazie a `daily_jobs`). Le risposte dei giocatori sono bloccate dopo
+(una volta sola al giorno, grazie a `daily_jobs`). Dalla migrazione `0034` solo nei giorni con
+la serata (`club_evening(giorno, squadre)`): dal lunedì al venerdì per tutti; sabato e domenica
+solo con un evento (non una riunione) e solo per chi gioca nella sua squadra; un evento del
+fine settimana messo in calendario (o spostato su quel giorno) dopo le 18:30 non fa assenze
+(conta `events.scheduled_at`). Le risposte dei giocatori sono bloccate dopo
 le 18:30 dalle policy (`attendance_open`); il Direttivo corregge sempre. Nei test l'ora si fissa
 con l'impostazione `milanac.now` (`app_now()`). Promemoria partita (migrazione `0031`):
 `match_reminders_tick()` gira ogni minuto e per le partite (torneo e amichevole) manda
-"Tra un'ora si gioca" (solo se la partita era già in calendario e mancano più di 15 minuti) e
+"Tra 30 minuti si gioca: tutti in party!" (dalla migrazione `0034`, come da regolamento; prima
+era un'ora prima; solo se la partita era già in calendario e mancano più di 15 minuti) e
 "Tutti in lobby" dieci minuti prima, con il codice del party, alla squadra esclusi gli assenti
 (categoria "Promemoria partita", spegnibile); `call_to_lobby(evento)` è la chiamata del
 Direttivo (da due ore prima a due ore dopo l'inizio, una ogni 3 minuti, arriva sempre).

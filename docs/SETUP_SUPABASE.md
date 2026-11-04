@@ -123,6 +123,8 @@ I file nei bucket (foto, clip, trofei) non vengono cancellati: se servono spazio
 ## 11. Lavori automatici delle presenze (pg_cron)
 La migrazione `0017` attiva l'estensione **pg_cron** e programma `attendance_tick()` ogni minuto:
 alle 18:00 (ora italiana) il promemoria a chi non ha risposto, alle 18:30 le assenze automatiche.
+Dalla `0034` solo dal lunedì al venerdì (le serate del regolamento); sabato e domenica solo se
+c'è un evento in calendario, per chi gioca nella sua squadra.
 Se il workflow Database si ferma sulla riga `create extension if not exists pg_cron`, attiva
 l'estensione a mano (Dashboard → **Database → Extensions** → cerca `pg_cron` → abilita) e rilancia
 il workflow. Per controllare: SQL Editor → `select jobname, schedule from cron.job;` e

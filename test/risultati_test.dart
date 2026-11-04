@@ -144,7 +144,7 @@ void main() {
         opponent,
       );
       await tester.enterText(
-        find.widgetWithText(TextField, 'MILAN AC'),
+        find.widgetWithText(TextField, 'MILANAC'),
         goalsFor,
       );
       await tester.enterText(
@@ -336,7 +336,7 @@ void main() {
       find.widgetWithText(TextField, 'Avversario'),
       'Atletico Joystick',
     );
-    await tester.enterText(find.widgetWithText(TextField, 'MILAN AC'), '2');
+    await tester.enterText(find.widgetWithText(TextField, 'MILANAC'), '2');
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Salva partita'));
     await tester.pumpAndSettle();

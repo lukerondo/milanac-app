@@ -39,7 +39,7 @@ class _MemberEditorState extends ConsumerState<_MemberEditor> {
   late DateTime _joinedAt = widget.member.joinedAt;
   late Set<Team> _teams = widget.member.teams;
 
-  /// Etichette nel Direttivo (Capitano, Reclutatore...): almeno una per il Direttivo.
+  /// Ruoli nel Direttivo (Capitano, Resp. Presenze...): almeno uno per il Direttivo.
   late final Set<DirettivoRole> _labels = widget.member.direttivoRoles.toSet();
   bool _labelsMissing = false;
   bool _saving = false;

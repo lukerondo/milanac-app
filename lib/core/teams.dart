@@ -4,8 +4,8 @@ import 'theme.dart';
 
 /// Le due squadre del club: un giocatore può stare in una o in entrambe.
 enum Team {
-  milanac('Milan AC', 'MILAN AC'),
-  futuro('Milan AC Futuro', 'FUTURO');
+  milanac('MILANAC', 'MILANAC'),
+  futuro('MILANAC FUTURO', 'FUTURO');
 
   const Team(this.label, this.short);
   final String label;
@@ -29,7 +29,7 @@ List<String> teamsToJson(Set<Team> teams) => [
     if (teams.contains(t)) t.name,
 ];
 
-/// Etichetta con il nome breve della squadra: MILAN AC in oro pieno (uguale nei due
+/// Etichetta con il nome breve della squadra: MILANAC in oro pieno (uguale nei due
 /// temi), FUTURO a filo con il grigio del tema in uso (un grigio fisso sul bianco del
 /// tema chiaro non si leggeva).
 class TeamBadge extends StatelessWidget {

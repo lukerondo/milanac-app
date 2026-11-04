@@ -1797,6 +1797,7 @@ BoardState _previewBoard(Object? raw) {
   try {
     final b = BoardState.fromJson(Map<String, dynamic>.from(raw));
     double fit(double v) => v.isFinite ? v.clamp(0.0, 1.0) : .5;
+    final ball = b.ball;
     return BoardState(
       module: b.module,
       team: b.team,
@@ -1812,6 +1813,27 @@ BoardState _previewBoard(Object? raw) {
           ),
       ],
       heat: [for (final h in b.heat.take(300)) HeatPoint(fit(h.x), fit(h.y))],
+      ball: ball == null
+          ? null
+          : BoardBall(x: fit(ball.x), y: fit(ball.y), holder: ball.holder),
+      lines: [
+        // Le più recenti, come sulla lavagna.
+        for (final l in b.lines.skip(
+          math.max(0, b.lines.length - BoardState.maxBallLines),
+        ))
+          BallLine(
+            kind: l.kind,
+            n: l.n.clamp(0, 999),
+            x1: fit(l.x1),
+            y1: fit(l.y1),
+            x2: fit(l.x2),
+            y2: fit(l.y2),
+            fromPlayer: l.fromPlayer,
+            toPlayer: l.toPlayer,
+          ),
+      ],
+      view: b.view,
+      piece: b.piece,
     );
   } catch (_) {
     return const BoardState();

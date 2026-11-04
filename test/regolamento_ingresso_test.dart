@@ -70,7 +70,7 @@ void main() {
       );
       await tester.tap(find.text('Più tardi'));
       await tester.pumpAndSettle();
-      expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+      expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
       expect(container.read(rulesWriteLaterProvider), isTrue);
 
       // Dalla Sala Direttivo resta il promemoria.
@@ -99,7 +99,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pubblica'));
       await tester.pumpAndSettle();
-      expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+      expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
 
       // Da ora la pagina di accettazione mostra il regolamento con l'articolo.
       container.read(routerProvider).go('/regolamento/accetta');
@@ -129,7 +129,7 @@ void main() {
     expect(find.textContaining('Entra pure'), findsOneWidget);
     await tester.tap(find.text('Entra nel club'));
     await tester.pumpAndSettle();
-    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+    expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
   });
 
   /// Club con un regolamento di un solo articolo, già pubblicato (versione 1).
@@ -248,7 +248,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Ho letto e accetto'));
       await tester.pumpAndSettle();
-      expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+      expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
     },
   );
 
@@ -281,7 +281,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ho letto e accetto'));
     await tester.pumpAndSettle();
-    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+    expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
   });
 
   testWidgets(

@@ -27,8 +27,8 @@ void main() {
     // Salta l'intro con un tocco.
     await tester.tap(find.byType(GestureDetector).first);
     await tester.pumpAndSettle();
-    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
-    expect(find.text('STASERA · MILAN AC'), findsOneWidget);
+    expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
+    expect(find.text('STASERA · MILANAC'), findsOneWidget);
     // Più in basso, Mondo Proclub in breve.
     await tester.scrollUntilVisible(
       find.text('MONDO PROCLUB'),
@@ -59,7 +59,7 @@ void main() {
     // Indietro da un'altra scheda riporta alla Home.
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.text('MILAN AC PRO CLUB'), findsOneWidget);
+    expect(find.text('MILANAC PRO CLUB'), findsOneWidget);
   });
 
   test('intro state parte da false', () {

@@ -56,6 +56,7 @@ String _capitalized(String s) =>
 
 /// Presenze: la settimana a colpo d'occhio (o il mese intero), la serata del giorno
 /// scelto con la propria risposta (entro le 18:30) e chi c'è; scheda con le statistiche.
+/// Le serate sono dal lunedì al venerdì: sabato e domenica solo con un evento.
 class PresenzePage extends ConsumerStatefulWidget {
   const PresenzePage({super.key, this.initialDay, this.initialTab});
 
@@ -466,12 +467,17 @@ class _DayTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.pal;
     final dot = _dotColor(p, events);
+    // Sabato e domenica senza eventi non c'è la serata: il giorno resta più chiaro.
+    final rest =
+        !isClubWeekday(day) && !events.any((e) => e.type != EventType.riunione);
     final number = selected
         ? p.onAccent
         : !enabled
         ? p.textDisabled
         : isToday
         ? p.accentText
+        : rest
+        ? p.textMuted
         : p.text;
     final weekday = DateFormat('E', 'it').format(day).toUpperCase();
     final label = [
@@ -481,6 +487,7 @@ class _DayTile extends StatelessWidget {
         'partita'
       else if (events.isNotEmpty)
         'evento',
+      if (rest) 'riposo',
     ].join(', ');
     return Semantics(
       button: true,
@@ -569,6 +576,11 @@ class _MonthGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.pal;
     final dayStyle = TextStyle(color: p.text, fontWeight: FontWeight.w600);
+    // Sabato e domenica non c'è la serata (solo con un evento, che ha il pallino).
+    final restStyle = TextStyle(
+      color: p.textMuted,
+      fontWeight: FontWeight.w600,
+    );
     final weekdayStyle = TextStyle(
       color: p.textMuted,
       fontSize: 12,
@@ -598,7 +610,7 @@ class _MonthGrid extends StatelessWidget {
       calendarStyle: CalendarStyle(
         outsideDaysVisible: false,
         defaultTextStyle: dayStyle,
-        weekendTextStyle: dayStyle,
+        weekendTextStyle: restStyle,
         disabledTextStyle: TextStyle(color: p.textDisabled),
         todayDecoration: BoxDecoration(
           shape: BoxShape.circle,
@@ -684,11 +696,14 @@ class _DayView extends ConsumerWidget {
   final ValueChanged<Team> onTeam;
   final List<Member> members;
   final List<AttendanceEntry> entries;
-  final ClubEvent event;
+
+  /// La serata del giorno; null il sabato e la domenica senza eventi.
+  final ClubEvent? event;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = context.pal;
+    final event = this.event;
     // Oggi e scadenza in ora italiana, come sul server.
     final today = italianDay(now);
     final open = answersOpen(day, now);
@@ -717,7 +732,7 @@ class _DayView extends ConsumerWidget {
         member: m,
         // Le risposte già date per i prossimi giorni non gonfiano la percentuale.
         history: historyOf(m.id, entries, today),
-        onSetStatus: isDirettivo && m.id != me?.id
+        onSetStatus: isDirettivo && m.id != me?.id && event != null
             ? (s) => answer(
                 playerId: m.id,
                 day: day,
@@ -742,71 +757,123 @@ class _DayView extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
         if (canPickTeam) _TeamPills(team: team, onTeam: onTeam),
-        _EveningCard(
-          event: event,
-          team: team,
-          day: day,
-          isToday: day == today,
-          past: day.isBefore(today),
-          open: open,
-          isMember: isMember,
-          mine: mine,
-          onAnswer: (s) => answerAttendance(
-            context,
-            ref,
-            playerId: me!.id,
-            day: day,
-            status: s,
-            current: mine,
+        if (event == null)
+          _RestCard(team: team, day: day, isToday: day == today)
+        else
+          _EveningCard(
             event: event,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Semantics(
-          label: day == today ? 'Chi c\'è stasera' : 'Chi c\'è',
-          container: true,
-          child: AppCard(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (members.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Text(
-                      'Nessun giocatore in ${team.label}.',
-                      style: TextStyle(color: p.textMuted, fontSize: 15),
-                    ),
-                  ),
-                for (final (title, status) in groups)
-                  if (withStatus(status) case final list
-                      when list.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10, bottom: 2),
-                      child: AttendanceGroupLabel(
-                        title: title,
-                        count: list.length,
-                        status: status,
-                      ),
-                    ),
-                    for (final m in list)
-                      AttendanceMemberRow(
-                        member: m,
-                        isMe: m.id == me?.id,
-                        detail: ofDay[m.id] == null
-                            ? null
-                            : attendanceDetail(ofDay[m.id]!),
-                        trailing: memberRoleLabel(m) == null
-                            ? null
-                            : RowTrailingText(memberRoleLabel(m)!),
-                        onTap: () => openHistory(m),
-                      ),
-                  ],
-              ],
+            team: team,
+            day: day,
+            isToday: day == today,
+            past: day.isBefore(today),
+            open: open,
+            isMember: isMember,
+            mine: mine,
+            onAnswer: (s) => answerAttendance(
+              context,
+              ref,
+              playerId: me!.id,
+              day: day,
+              status: s,
+              current: mine,
+              event: event,
             ),
           ),
-        ),
+        // Senza serata l'elenco serve solo se qualcuno aveva già risposto.
+        if (event != null || ofDay.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Semantics(
+            label: day == today ? 'Chi c\'è stasera' : 'Chi c\'è',
+            container: true,
+            child: AppCard(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (members.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Text(
+                        'Nessun giocatore in ${team.label}.',
+                        style: TextStyle(color: p.textMuted, fontSize: 15),
+                      ),
+                    ),
+                  for (final (title, status) in groups)
+                    if (withStatus(status) case final list
+                        when list.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10, bottom: 2),
+                        child: AttendanceGroupLabel(
+                          title: title,
+                          count: list.length,
+                          status: status,
+                        ),
+                      ),
+                      for (final m in list)
+                        AttendanceMemberRow(
+                          member: m,
+                          isMe: m.id == me?.id,
+                          detail: ofDay[m.id] == null
+                              ? null
+                              : attendanceDetail(ofDay[m.id]!),
+                          trailing: memberRoleLabel(m) == null
+                              ? null
+                              : RowTrailingText(memberRoleLabel(m)!),
+                          onTap: () => openHistory(m),
+                        ),
+                    ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
+    );
+  }
+}
+
+/// Sabato o domenica senza eventi: niente serata, niente risposte.
+class _RestCard extends StatelessWidget {
+  const _RestCard({
+    required this.team,
+    required this.day,
+    required this.isToday,
+  });
+  final Team team;
+  final DateTime day;
+  final bool isToday;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final label = isToday
+        ? 'Oggi · ${team.label}'
+        : '${DateFormat('EEEE d MMMM', 'it').format(day)} · ${team.label}';
+    return AppCard(
+      important: isToday,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionLabel(label, gold: isToday),
+          const SizedBox(height: 2),
+          Text(
+            'RIPOSO',
+            style: TextStyle(
+              fontFamily: sportFont,
+              fontWeight: FontWeight.w600,
+              fontSize: 22,
+              letterSpacing: .4,
+              color: p.text,
+            ),
+          ),
+          Text(
+            'Niente allenamento: le serate del club sono dal lunedì al venerdì, '
+            '$eveningHours. Se il Direttivo mette una partita in calendario, '
+            'si risponde qui.',
+            style: TextStyle(color: p.textSecondary, fontSize: 15),
+          ),
+        ],
+      ),
     );
   }
 }

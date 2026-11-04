@@ -59,13 +59,13 @@ void main() {
 
     // Il torneo in corso con la classifica e il sito, poi quello con le iscrizioni.
     expect(find.text('FVPA SERIE B'), findsOneWidget);
-    expect(find.text('Milan AC · in corso dal 15 settembre'), findsOneWidget);
+    expect(find.text('MILANAC · in corso dal 15 settembre'), findsOneWidget);
     expect(find.text('In corso'), findsOneWidget);
     expect(find.text('Squadra'), findsOneWidget);
     expect(find.text('Dinamo Pixel'), findsOneWidget);
     expect(find.text('Sito del torneo'), findsOneWidget);
     expect(find.text('COPPA RISERVE'), findsOneWidget);
-    expect(find.text('Milan AC Futuro · Torneo amatoriale'), findsOneWidget);
+    expect(find.text('MILANAC FUTURO · Torneo amatoriale'), findsOneWidget);
     expect(find.text('Iscrizioni'), findsOneWidget);
 
     await tester.tap(find.text('FVPA SERIE B'));

@@ -125,7 +125,7 @@ String formationSummary(int onField, int ai) {
 
 /// La squadra mostrata in Formazione, nella sezione e nell'editor. All'apertura è
 /// quella chiesta dalla rotta (`?squadra=`, la chiave di questa famiglia) o, senza,
-/// quella del giocatore (Milan AC se è in entrambe). "Modifica" apre l'editor con la
+/// quella del giocatore (MILANAC se è in entrambe). "Modifica" apre l'editor con la
 /// stessa chiave, quindi sulla stessa squadra, e il pulsante del PDF nella barra in alto
 /// (che legge la stessa rotta) scarica quella.
 final formationTeamProvider = NotifierProvider.autoDispose
@@ -624,7 +624,27 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
               'in bozza finché non pubblichi.',
               style: TextStyle(color: p.textMuted, fontSize: 14),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 22),
+            // Chi batte si sceglie tra i titolari: chi esce dal campo perde i suoi
+            // ruoli (Formation.assign), quindi non si pubblica mai un battitore in
+            // panchina.
+            _SetPiecesSection(
+              formation: formation,
+              members: allMembers,
+              onPick: (role) async {
+                final choice = await _pickTaker(
+                  context,
+                  role: role,
+                  formation: formation,
+                  members: allMembers,
+                );
+                if (choice == null) return;
+                await _update(
+                  formation.withSetPiece(role, choice.isEmpty ? null : choice),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
             // Si pubblica solo a salvataggio finito: le notifiche leggono i posti salvati.
             FilledButton.icon(
               onPressed: _pendingSaves > 0 || _publishing
@@ -675,6 +695,14 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
                 ],
               ],
             ),
+          // Ai giocatori solo i ruoli assegnati (nessuna sezione se non ce ne sono).
+          if (!canEdit &&
+              SetPiece.values.any(
+                (r) => allMembers.containsKey(formation.setPieces[r]),
+              )) ...[
+            const SizedBox(height: 22),
+            _SetPiecesSection(formation: formation, members: allMembers),
+          ],
           const SizedBox(height: 22),
           const SectionLabel('Panchina'),
           const SizedBox(height: 8),
@@ -695,7 +723,7 @@ class _FormationBoardState extends ConsumerState<FormationBoard> {
   }
 }
 
-/// La fascia in alto: Milan AC | Futuro e lo stato della formazione.
+/// La fascia in alto: MILANAC | FUTURO e lo stato della formazione.
 class _Band extends StatelessWidget {
   const _Band({required this.team, required this.onTeam, required this.status});
   final Team team;
@@ -868,6 +896,235 @@ class _BenchPill extends StatelessWidget {
   }
 }
 
+/// "9 Marco Rossi": numero di maglia (se c'è) e nome, come sulle carte in campo.
+String _numberAndName(Member m) =>
+    [if (m.shirtNumber != null) '${m.shirtNumber}', m.displayName].join(' ');
+
+IconData _setPieceIcon(SetPiece role) => switch (role) {
+  SetPiece.rigori => Icons.sports_soccer_rounded,
+  SetPiece.punizioni => Icons.gps_fixed_rounded,
+  SetPiece.angoliSinistra || SetPiece.angoliDestra => Icons.flag_rounded,
+};
+
+/// "Palle inattive": chi batte rigori, punizioni e angoli. Nell'editor (con [onPick])
+/// tutti i ruoli, da scegliere tra i titolari; ai giocatori solo quelli assegnati.
+class _SetPiecesSection extends StatelessWidget {
+  const _SetPiecesSection({
+    required this.formation,
+    required this.members,
+    this.onPick,
+  });
+  final Formation formation;
+
+  /// I membri attivi, per id: chi non c'è più non compare come battitore.
+  final Map<String, Member> members;
+  final ValueChanged<SetPiece>? onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final editable = onPick != null;
+    final roles = [
+      for (final role in SetPiece.values)
+        if (editable || members.containsKey(formation.setPieces[role])) role,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionLabel('Palle inattive'),
+        const SizedBox(height: 8),
+        if (editable) ...[
+          Text(
+            'Chi batte si sceglie tra i titolari; lo stesso giocatore può avere '
+            'più ruoli. Chi esce dal campo perde i suoi.',
+            style: TextStyle(color: p.textMuted, fontSize: 14),
+          ),
+          const SizedBox(height: 10),
+        ],
+        AppCard(
+          padding: EdgeInsets.zero,
+          radius: 14,
+          child: Column(
+            children: [
+              for (final (i, role) in roles.indexed) ...[
+                if (i > 0) Divider(height: 1, color: p.border),
+                _setPieceTile(context, role),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _setPieceTile(BuildContext context, SetPiece role) {
+    final p = context.pal;
+    final m = members[formation.setPieces[role]];
+    final position = m == null ? null : formation.positionOf(m.id);
+    return ListTile(
+      leading: IconTile(_setPieceIcon(role), size: 36),
+      title: Text(
+        role.label,
+        style: TextStyle(
+          color: p.text,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        m == null ? 'Da scegliere' : [_numberAndName(m), ?position].join(' · '),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: m == null ? p.textMuted : p.textSecondary,
+          fontSize: 14,
+        ),
+      ),
+      trailing: onPick == null && m == null
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (m != null) MemberAvatar(member: m, radius: 14),
+                if (onPick != null)
+                  Icon(Icons.chevron_right_rounded, color: p.textSecondary),
+              ],
+            ),
+      onTap: onPick == null ? null : () => onPick!(role),
+    );
+  }
+}
+
+/// Chi batte [role], tra i titolari di [formation]: l'id scelto, '' per nessuno, null se
+/// annullato.
+Future<String?> _pickTaker(
+  BuildContext context, {
+  required SetPiece role,
+  required Formation formation,
+  required Map<String, Member> members,
+}) {
+  final current = formation.setPieces[role];
+  // I titolari nell'ordine dei posti, dal portiere all'attacco.
+  final starters = [
+    for (final (i, slot) in formation.slots.indexed)
+      if (members[formation.players[i]] case final m?) (m, slot.label),
+  ];
+  final title = switch (role) {
+    SetPiece.rigori => 'CHI BATTE I RIGORI?',
+    SetPiece.punizioni => 'CHI BATTE LE PUNIZIONI?',
+    SetPiece.angoliSinistra => 'CHI BATTE GLI ANGOLI DA SINISTRA?',
+    SetPiece.angoliDestra => 'CHI BATTE GLI ANGOLI DA DESTRA?',
+  };
+  return showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (c) {
+      final p = c.pal;
+      return DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: .6,
+        maxChildSize: .9,
+        builder: (c, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.only(bottom: 16),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontFamily: sportFont,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 22,
+                  letterSpacing: .5,
+                  color: p.text,
+                ),
+              ),
+            ),
+            if (current != null)
+              ListTile(
+                leading: Icon(Icons.person_remove_rounded, color: p.danger),
+                title: const Text('Nessun battitore'),
+                subtitle: const Text('Il ruolo resta da scegliere'),
+                onTap: () => Navigator.pop(c, ''),
+              ),
+            if (starters.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                child: Text(
+                  'Nessun titolare in campo: schiera prima i giocatori, poi '
+                  'scegli chi batte.',
+                  style: TextStyle(color: p.textSecondary, fontSize: 15),
+                ),
+              ),
+            for (final (m, position) in starters)
+              _ChoiceTile(
+                member: m,
+                title: _numberAndName(m),
+                subtitle: [
+                  position,
+                  if (formation.setPiecesOf(m.id) case final roles
+                      when roles.isNotEmpty)
+                    'batte già: ${roles.map((r) => r.short).join(', ')}',
+                ].join(' · '),
+                selected: m.id == current,
+                onTap: () => Navigator.pop(c, m.id),
+              ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+/// Un giocatore nei fogli di scelta (chi gioca, chi batte). La scelta di adesso si vede in
+/// tutti e due i temi: fondo oro tenue, nome in oro e la spunta (il "selezionato" del tema
+/// chiaro era il nero del testo e non si distingueva).
+class _ChoiceTile extends StatelessWidget {
+  const _ChoiceTile({
+    required this.member,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+    this.trailing,
+  });
+  final Member member;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return ListTile(
+      leading: MemberAvatar(member: member, radius: 20),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle),
+      trailing: selected
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (trailing case final t?) ...[t, const SizedBox(width: 4)],
+                Icon(
+                  Icons.check_circle_rounded,
+                  color: p.accentText,
+                  semanticLabel: 'Scelta attuale',
+                ),
+              ],
+            )
+          : trailing,
+      selected: selected,
+      selectedColor: p.accentText,
+      selectedTileColor: p.accentTint,
+      onTap: onTap,
+    );
+  }
+}
+
 /// Restituisce l'id del giocatore scelto, '' per liberare la posizione, null se annullato.
 Future<String?> _pickPlayer(
   BuildContext context, {
@@ -919,19 +1176,16 @@ Future<String?> _pickPlayer(
                 onTap: () => Navigator.pop(c, ''),
               ),
             for (final m in sorted)
-              ListTile(
-                leading: MemberAvatar(member: m, radius: 20),
-                title: Text(
-                  m.displayName,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  [
-                    if (m.fieldPosition != null) m.fieldPosition!,
-                    if (formation.players.containsValue(m.id))
-                      'già in campo: verrà spostato',
-                  ].join(' · '),
-                ),
+              _ChoiceTile(
+                member: m,
+                title: m.displayName,
+                subtitle: [
+                  if (m.fieldPosition != null) m.fieldPosition!,
+                  // Chi è già in questo posto non si sposta.
+                  if (formation.players.containsValue(m.id) &&
+                      m.id != current?.id)
+                    'già in campo: verrà spostato',
+                ].join(' · '),
                 trailing: m.fieldPosition == slot.label
                     ? Icon(Icons.star_rounded, color: p.accentText)
                     : null,

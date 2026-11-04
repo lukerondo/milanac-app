@@ -53,7 +53,24 @@ void main() {
       team: Team.milanac,
       module: '4-3-3',
       players: {for (var i = 0; i < 11; i++) i: 'm$i'},
+      // Chi batte: Giroud i rigori, Theo punizioni e angoli da sinistra, Pulisic
+      // quelli da destra.
+      setPieces: const {
+        SetPiece.rigori: 'm9',
+        SetPiece.punizioni: 'm4',
+        SetPiece.angoliSinistra: 'm4',
+        SetPiece.angoliDestra: 'm8',
+      },
       publishedAt: DateTime(2026, 10, 10, 18),
+    );
+    expect(
+      setPiecesPdfText(formation, members),
+      'Rigori: Giroud · Punizioni: Theo · Angoli da sinistra: Theo · '
+      'Angoli da destra: Pulisic',
+    );
+    expect(
+      setPiecesPdfText(formation.copyWith(setPieces: const {}), members),
+      isNull,
     );
     // Una foto vera per il primo titolare, la sagoma per gli altri.
     final photo = await decodeImageFromList(
@@ -79,6 +96,27 @@ void main() {
       date: formation.publishedAt,
     );
     expect(String.fromCharCodes(pdf.take(4)), '%PDF');
+
+    // Con una panchina lunga e i battitori il campo si rimpicciolisce e tutto sta
+    // nella pagina (nessun errore di impaginazione).
+    final crowd = {
+      ...members,
+      for (var i = 0; i < 30; i++)
+        'b$i': Member(
+          id: 'b$i',
+          displayName: 'Riserva con un nome lungo $i',
+          role: ClubRole.giocatore,
+          joinedAt: DateTime(2025, 9, 1),
+        ),
+    };
+    final crowded = await buildFormationPdf(
+      formation: formation,
+      members: crowd,
+      bench: [for (var i = 0; i < 30; i++) crowd['b$i']!],
+      image: image,
+      date: formation.publishedAt,
+    );
+    expect(String.fromCharCodes(crowded.take(4)), '%PDF');
 
     // Copia per chi vuole vederli (fuori dal repository).
     final dir = Directory('${Directory.systemTemp.path}/milanac_formazione')

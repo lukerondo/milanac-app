@@ -36,8 +36,8 @@ List<ClubEvent> upcomingEvents(
 DateTime _dayOf(ClubEvent e) =>
     DateTime(e.startsAt.year, e.startsAt.month, e.startsAt.day);
 
-/// Calendario (scheda di Partite): solo ciò che cambia rispetto all'allenamento di ogni
-/// sera, questa settimana e più avanti, e gli ultimi risultati.
+/// Calendario (scheda di Partite): solo ciò che cambia rispetto all'allenamento delle
+/// serate (dal lunedì al venerdì), questa settimana e più avanti, e gli ultimi risultati.
 class CalendarioPage extends ConsumerStatefulWidget {
   const CalendarioPage({super.key});
 
@@ -131,8 +131,8 @@ class _CalendarioPageState extends ConsumerState<CalendarioPage> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
                   children: [
                     Text(
-                      "Ogni sera c'è l'allenamento alle "
-                      '${DateFormat('HH:mm').format(trainingOn(today).startsAt)}. '
+                      'Dal lunedì al venerdì allenamento, $eveningHours; '
+                      'sabato e domenica si gioca solo con un evento. '
                       'Qui trovi solo ciò che cambia.',
                       style: TextStyle(color: p.textSecondary, fontSize: 15),
                     ),
@@ -396,7 +396,7 @@ class _ResultRow extends StatelessWidget {
     };
     final subtitle = [
       m.competition?.replaceAll(' – ', ' · ') ?? m.kind.label,
-      if (m.team == Team.futuro) 'Futuro',
+      if (m.team == Team.futuro) Team.futuro.short,
       if (!m.home) 'in trasferta',
     ].join(' · ');
     return InkWell(

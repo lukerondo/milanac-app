@@ -18,13 +18,102 @@ begin
   perform set_config('request.jwt.claim.sub', coalesce(uid::text, ''), false);
 end $$;
 
--- Fissa "adesso" (app_now) a un orario italiano di oggi: le presenze chiudono alle 18:30.
+-- Il giorno delle prove sulle presenze: oggi se è un giorno feriale, altrimenti il lunedì
+-- dopo (le serate del club sono dal lunedì al venerdì: nel fine settimana senza eventi non
+-- partono promemoria né assenze).
+create function pg_temp.giorno() returns date language sql as $$
+  select d + case extract(isodow from d)::int when 6 then 2 when 7 then 1 else 0 end
+  from (select (now() at time zone 'Europe/Rome')::date as d) x
+$$;
+
+-- Fissa "adesso" (app_now) a un orario italiano del giorno delle prove: le presenze
+-- chiudono alle 18:30.
 create function pg_temp.at_rome(t text) returns void language plpgsql as $$
 begin
   perform set_config('milanac.now',
-    ((((now() at time zone 'Europe/Rome')::date)::text || ' ' || t)::timestamp at time zone 'Europe/Rome')::text,
+    (((pg_temp.giorno())::text || ' ' || t)::timestamp at time zone 'Europe/Rome')::text,
     false);
 end $$;
+
+-- ---------------------------------------------------------------- regolamento ufficiale 2026 (0033)
+-- Dopo le migrazioni: la versione 1 (l'organigramma della vecchia app, 0016) e la 2 con il
+-- regolamento 2026, uguale alla bozza, e la storia nuova.
+do $$
+declare
+  v jsonb := (select snapshot from rules_versions where number = 2);
+begin
+  assert (select count(*) from rules_versions) = 2, 'due versioni: quella della 0016 e il 2026';
+  assert (select max(number) from rules_versions) = 2, 'il 2026 è l''ultima versione';
+  assert (select published_by from rules_versions where number = 2) is null,
+    'pubblicata dalla migrazione, non da un membro';
+  assert (select array_agg(e->>'title' order by i) from jsonb_array_elements(v) with ordinality t(e, i))
+    = array['Regolamento ufficiale 2026', 'Organigramma', '1. Presenza e Comunicazione',
+            '2. Comportamento e Disciplina', '3. Dinamiche di Gioco',
+            '4. Gestione della Squadra e Sanzioni', '5. Candidature Staff & Obiettivi'],
+    'i 7 articoli del 2026, in ordine e con i titoli del documento';
+  assert (select array_agg(array(select jsonb_object_keys(e) order by 1)::text) from jsonb_array_elements(v) e)
+    = array_fill('{body,title}'::text, array[7]), 'stessa forma della fotografia di publish_rules()';
+  assert v = (select jsonb_agg(jsonb_build_object('title', a.title, 'body', a.body)
+                               order by a.sort_order, a.updated_at) from rules_articles a),
+    'la bozza è il regolamento pubblicato';
+  -- L'organigramma: una riga "ETICHETTA: valore" per ruolo (nell'app diventa un elenco).
+  assert (select bool_and(l ~ '^[A-ZÀ-Ý0-9 /.&-]{3,60}:\s*\S')
+          from jsonb_array_elements(v) e, regexp_split_to_table(e->>'body', '\n') l
+          where e->>'title' = 'Organigramma'), 'organigramma come elenco';
+  assert (select e->>'body' from jsonb_array_elements(v) e where e->>'title' = 'Organigramma')
+    like '%RESPONSABILE TECNICO / TATTICO: Fabio Ruggieri%RESPONSABILE IT: Francesco De Vietro',
+    'organigramma 2026';
+  -- Il grassetto (**testo**) si chiude sempre sulla stessa riga.
+  assert (select bool_and((length(l) - length(replace(l, '**', ''))) / 2 % 2 = 0)
+          from jsonb_array_elements(v) e, regexp_split_to_table(e->>'body', '\n') l),
+    'grassetto chiuso';
+  assert (select e->>'body' from jsonb_array_elements(v) e where e->>'title' like '5. %')
+    like '%**BENVENUTO IN FAMIGLIA!**', 'in chiusura il benvenuto';
+  -- Come nel documento: le tre righe in grassetto in cima, poi la citazione; l'orario delle
+  -- serate in grassetto; l'apostrofo tipografico di "L’ambizione".
+  assert (select e->>'body' from jsonb_array_elements(v) e where e->>'title' = 'Regolamento ufficiale 2026')
+    like E'**MILANAC**\n**MILANAC FUTURO**\n**MILANO SIAMO NOI**\n\n“I nostri colori%',
+    'in cima MILANAC, MILANAC FUTURO e MILANO SIAMO NOI';
+  assert (select e->>'body' from jsonb_array_elements(v) e where e->>'title' like '1. %')
+    like '**Disponibilità:** Le sessioni di allenamento, il campionato, i vari tornei e le amichevoli '
+         'si tengono dal **LUNEDÌ AL VENERDÌ dalle ore 21:30 alle 23:30.**' || E'\n%',
+    'l''orario delle serate in grassetto';
+  assert (select e->>'body' from jsonb_array_elements(v) e where e->>'title' like '5. %')
+    like '%**Obiettivi e Visione del Club:** L’ambizione del Club%', 'L’ambizione';
+  assert (select content from pages where slug = 'storia')
+    like '%nasce nel 2025 da un''idea di Fabio Ruggieri, Giuseppe Ruggieri e Christian Rizzi%',
+    'la storia nuova';
+  assert (select content from pages where slug = 'storia') like '%il rosso, il nero ed il bianco.',
+    'i colori sociali: rosso, nero e bianco';
+  assert (select count(*) from net.calls) = 0, 'senza la funzione notify nessuna chiamata';
+end $$;
+-- Rilanciata non pubblica di nuovo; se l'ultima versione è diversa (es. pubblicata dopo dal
+-- Direttivo) pubblica quella dopo con la notifica "rules", come publish_rules(), e rimette
+-- bozza e storia.
+begin;
+insert into app_config (key, value) values
+  ('notify_url', 'https://example.invalid/functions/v1/notify'), ('notify_secret', 's3greto');
+\i supabase/migrations/0033_regolamento_2026.sql
+do $$ begin
+  assert (select max(number) from rules_versions) = 2, 'rilanciata non crea un''altra versione';
+  assert (select count(*) from net.calls) = 0, 'e non manda la notifica';
+end $$;
+insert into rules_versions (number, snapshot) values (3, '[{"title": "Art. 1", "body": "Altro."}]');
+insert into rules_articles (sort_order, title, body) values (9, 'Bozza', 'Da togliere.');
+update pages set content = 'Un''altra storia.' where slug = 'storia';
+\i supabase/migrations/0033_regolamento_2026.sql
+do $$ begin
+  assert (select max(number) from rules_versions) = 4, 'versione dopo l''ultima';
+  assert (select snapshot from rules_versions where number = 4)
+         = (select snapshot from rules_versions where number = 2), 'di nuovo il regolamento 2026';
+  assert (select count(*) from rules_articles) = 7, 'la bozza è di nuovo il 2026';
+  assert (select content from pages where slug = 'storia') like '%il rosso, il nero ed il bianco.',
+    'la storia rimessa';
+  assert (select count(*) from net.calls where body->>'kind' = 'rules' and body->>'version' = '4') = 1
+         and (select count(*) from net.calls) = 1, 'una notifica del nuovo regolamento';
+  assert (select headers->>'x-milanac-secret' from net.calls) = 's3greto', 'come le altre notifiche';
+end $$;
+rollback;
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-00000000000d', 'd@example.com', '{"full_name": "Direttore"}'),
@@ -103,7 +192,7 @@ do $$ begin
           where c.slug = 'comunicazioni' and m.kind = 'system' and m.meta->>'type' = 'formation') = 1,
     'formazione annunciata in Comunicazioni';
   assert (select body from messages where meta->>'type' = 'formation')
-         like 'Formazione Milan AC (4-3-3): POR Giocatore%', 'testo dell''annuncio';
+         like 'Formazione MILANAC (4-3-3): POR Giocatore%', 'testo dell''annuncio';
 end $$;
 
 -- Eliminazione account: profilo e token spariscono, la formazione resta.
@@ -283,7 +372,7 @@ select pg_temp.expect_error(
 -- Una presenza di stasera (le risposte sono aperte alle 17:00) non produce messaggi in chat.
 select pg_temp.at_rome('17:00');
 insert into attendance (player_id, date, status)
-values ('00000000-0000-0000-0000-0000000000e1', (now() at time zone 'Europe/Rome')::date, 'presente');
+values ('00000000-0000-0000-0000-0000000000e1', pg_temp.giorno(), 'presente');
 insert into channel_mutes (channel_id) select id from channels where slug = 'tattiche';
 
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
@@ -425,10 +514,10 @@ insert into auth.users (id, email) values
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 do $$ begin
-  assert (select count(*) from rules_versions) = 1, 'chi si registra legge il regolamento (versione 1)';
+  assert (select count(*) from rules_versions) = 2, 'chi si registra legge il regolamento (versione 2, il 2026)';
   assert (select count(*) from pages where slug = 'storia') = 1, 'e la storia del club';
 end $$;
-select pg_temp.expect_error($q$select accept_rules(1)$q$, 'Completa prima');
+select pg_temp.expect_error($q$select accept_rules(2)$q$, 'Completa prima');
 select pg_temp.expect_error(
   $q$select complete_registration('', 'Rossi', 1995, 'ROSSI', null, array['milanac'], false, null, null, 'ATT', 9, 'ps5', '{}')$q$,
   'Nome non valido');
@@ -450,10 +539,10 @@ select pg_temp.expect_error($q$select accept_rules(7)$q$, 'non aggiornata');
 select pg_temp.expect_error(
   $q$update profiles set requested_role = 'direttivo' where id = '00000000-0000-0000-0000-0000000000a1'$q$,
   'Solo il Direttivo');
-select accept_rules(1);
+select accept_rules(2);
 do $$ begin
   assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 'giocatore', 'entrato come giocatore';
-  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 1, 'versione accettata';
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 2, 'versione accettata';
   assert (select count(*) from events) >= 1, 'da membro legge i dati del club';
 end $$;
 select pg_temp.expect_error($q$select publish_rules()$q$, 'Solo il Direttivo');
@@ -470,30 +559,31 @@ end $$;
 select pg_temp.expect_error(
   $q$select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['milanac', 'futuro'], true, 'prova-test', '{}', 'CC', 10, 'ps5', '{}')$q$,
   'almeno un ruolo');
-select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['futuro', 'milanac', 'milanac'], true, 'prova-test', array['capitano', 'gestore'], 'CC', 10, 'ps5', '{}');
-select accept_rules(1);
+select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['futuro', 'milanac', 'milanac'], true, 'prova-test', array['capitano', 'presenze'], 'CC', 10, 'ps5', '{}');
+select accept_rules(2);
 do $$ begin
   assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 'direttivo', 'entrato nel Direttivo';
   assert (select teams from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['milanac', 'futuro'],
     'squadre in ordine, senza doppioni';
-  assert (select direttivo_roles from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['capitano', 'gestore'], 'etichette';
+  assert (select direttivo_roles from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['capitano', 'presenze'], 'etichette';
 end $$;
 -- Nuova versione del regolamento: notifica a tutti e nuova accettazione.
-insert into rules_articles (sort_order, title, body) values (1, 'Art. 1 – Presenze', 'Rispondi entro le 18:30.');
+insert into rules_articles (sort_order, title, body) values (7, 'Art. 6 – Presenze', 'Rispondi entro le 18:30.');
 do $$ begin
-  assert (select publish_rules()) = 2, 'versione 2';
+  assert (select publish_rules()) = 3, 'versione 3';
 end $$;
 reset role;
 do $$ begin
   assert (select count(*) from net.calls where body->>'kind' = 'rules') = 1, 'notifica del nuovo regolamento';
-  assert (select jsonb_array_length(snapshot) from rules_versions where number = 2) = 2, 'due articoli nella versione 2';
+  assert (select jsonb_array_length(snapshot) from rules_versions where number = 3) = 8, 'otto articoli nella versione 3';
+  assert (select snapshot->7->>'title' from rules_versions where number = 3) = 'Art. 6 – Presenze', 'il nuovo in fondo';
 end $$;
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
-select pg_temp.expect_error($q$select accept_rules(1)$q$, 'non aggiornata');
-select accept_rules(2);
+select pg_temp.expect_error($q$select accept_rules(2)$q$, 'non aggiornata');
+select accept_rules(3);
 do $$ begin
-  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 2, 'riaccettata la versione 2';
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 3, 'riaccettata la versione 3';
   assert (select count(*) from rules_articles) = 0, 'la bozza non si legge dai giocatori';
 end $$;
 -- Cambio della password del club.
@@ -516,12 +606,12 @@ set role authenticated;
 select pg_temp.at_rome('17:00');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
 select pg_temp.expect_error(
-  $q$insert into attendance (player_id, date, status, arrival_time) values ('00000000-0000-0000-0000-0000000000e2', (now() at time zone 'Europe/Rome')::date, 'ritardo', '21:50')$q$,
+  $q$insert into attendance (player_id, date, status, arrival_time) values ('00000000-0000-0000-0000-0000000000e2', pg_temp.giorno(), 'ritardo', '21:50')$q$,
   'attendance_late_note_check');
 insert into attendance (player_id, date, status, arrival_time, note)
-values ('00000000-0000-0000-0000-0000000000e2', (now() at time zone 'Europe/Rome')::date, 'ritardo', '21:50', 'Traffico');
+values ('00000000-0000-0000-0000-0000000000e2', pg_temp.giorno(), 'ritardo', '21:50', 'Traffico');
 insert into attendance (player_id, date, status)
-values ('00000000-0000-0000-0000-0000000000e2', (now() at time zone 'Europe/Rome')::date + 1, 'presente');
+values ('00000000-0000-0000-0000-0000000000e2', pg_temp.giorno() + 1, 'presente');
 -- 18:05: il promemoria va solo a chi non ha risposto per stasera (D, a1, a2).
 select pg_temp.at_rome('18:05');
 reset role;
@@ -539,27 +629,27 @@ set role authenticated;
 select pg_temp.at_rome('18:31');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
 update attendance set status = 'presente', note = null
-  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = (now() at time zone 'Europe/Rome')::date;
+  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = pg_temp.giorno();
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 select pg_temp.expect_error(
-  $q$insert into attendance (player_id, date, status) values ('00000000-0000-0000-0000-0000000000a1', (now() at time zone 'Europe/Rome')::date, 'presente')$q$,
+  $q$insert into attendance (player_id, date, status) values ('00000000-0000-0000-0000-0000000000a1', pg_temp.giorno(), 'presente')$q$,
   'row-level security');
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
 do $$ begin
   assert (select status from attendance where player_id = '00000000-0000-0000-0000-0000000000e2'
-          and date = (now() at time zone 'Europe/Rome')::date) = 'ritardo', 'dopo le 18:30 il giocatore non modifica';
+          and date = pg_temp.giorno()) = 'ritardo', 'dopo le 18:30 il giocatore non modifica';
 end $$;
 update attendance set status = 'presente', note = null
-  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = (now() at time zone 'Europe/Rome')::date;
+  where player_id = '00000000-0000-0000-0000-0000000000e2' and date = pg_temp.giorno();
 reset role;
 select pg_temp.as_user(null);
 select attendance_tick();
 select attendance_tick();
 do $$ begin
   assert (select status from attendance where player_id = '00000000-0000-0000-0000-0000000000e2'
-          and date = (now() at time zone 'Europe/Rome')::date) = 'presente', 'il Direttivo corregge dopo le 18:30';
+          and date = pg_temp.giorno()) = 'presente', 'il Direttivo corregge dopo le 18:30';
   assert (select set_by from attendance where player_id = '00000000-0000-0000-0000-0000000000e2'
-          and date = (now() at time zone 'Europe/Rome')::date) = '00000000-0000-0000-0000-00000000000d',
+          and date = pg_temp.giorno()) = '00000000-0000-0000-0000-00000000000d',
     'la correzione del Direttivo resta registrata';
   assert (select count(*) from attendance where auto) = 3, 'assenze automatiche per chi non ha risposto';
   assert (select count(*) from net.calls where body->>'kind' = 'attendance_auto_absent') = 1, 'un solo avviso di assenza';
@@ -573,18 +663,18 @@ end $$;
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 update attendance set status = 'presente'
-  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = (now() at time zone 'Europe/Rome')::date;
+  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = pg_temp.giorno();
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
 do $$ begin
   assert (select auto from attendance where player_id = '00000000-0000-0000-0000-0000000000a1'
-          and date = (now() at time zone 'Europe/Rome')::date), 'il giocatore non toglie l''assenza automatica';
+          and date = pg_temp.giorno()), 'il giocatore non toglie l''assenza automatica';
 end $$;
 update attendance set status = 'presente'
-  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = (now() at time zone 'Europe/Rome')::date;
+  where player_id = '00000000-0000-0000-0000-0000000000a1' and date = pg_temp.giorno();
 reset role;
 do $$ begin
   assert (select not auto and set_by = '00000000-0000-0000-0000-00000000000d' from attendance
-          where player_id = '00000000-0000-0000-0000-0000000000a1' and date = (now() at time zone 'Europe/Rome')::date),
+          where player_id = '00000000-0000-0000-0000-0000000000a1' and date = pg_temp.giorno()),
     'corretta dal Direttivo';
   assert (select count(*) from cron.job where jobname = 'presenze' and schedule = '* * * * *') = 1,
     'controllo delle presenze ogni minuto';
@@ -756,7 +846,7 @@ do $$ begin
   assert (select count(*) from special_cards where match_id = '00000000-0000-0000-0000-0000000000b3' and kind = 'nero_oro') = 2,
     'nero/oro per portiere e difensore';
   assert (select body from messages where meta->>'type' = 'special_cards')
-         like 'Carte speciali della _ª giornata (Milan AC 4–0 Lupi): POR e2 +5, DIF e1 +4. Blu elettrico: Rossi (tripletta contro Lupi).',
+         like 'Carte speciali della _ª giornata (MILANAC 4–0 Lupi): POR e2 +5, DIF e1 +4. Blu elettrico: Rossi (tripletta contro Lupi).',
     'annuncio in Comunicazioni';
   -- Nuova assegnazione: chi non è più in elenco perde la carta, i bonus si aggiornano, l'annuncio resta uno.
   assert assign_special_cards('00000000-0000-0000-0000-0000000000b3',
@@ -923,10 +1013,10 @@ reset role;
 select set_config('milanac.now', '', false);
 
 -- ---------------------------------------------------------------- regolamento d'ingresso (0021)
--- Chi pubblica una versione la ha già accettata (la 2 l'ha pubblicata a2).
+-- Chi pubblica una versione la ha già accettata (la 3 l'ha pubblicata a2).
 reset role;
 do $$ begin
-  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 2,
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 3,
     'chi pubblica ha già accettato la versione';
 end $$;
 -- Con una versione pubblicata non si entra senza accettarla.
@@ -1413,7 +1503,7 @@ do $$ begin
          > now() - interval '1 hour', 'ora di pubblicazione dal server, non dal telefono';
   assert (select body from messages where meta->>'type' = 'formation'
           and meta->>'id' = current_setting('test.formazione')
-          order by created_at desc limit 1) like 'Formazione Milan AC Futuro (4-4-2): POR VERDI, DC %',
+          order by created_at desc limit 1) like 'Formazione MILANAC FUTURO (4-4-2): POR VERDI, DC %',
     'annuncio con i soli giocatori attivi (f1 è uscito dal club)';
 end $$;
 -- La bozza cambia portiere senza pubblicare: il risultato prende quello pubblicato.
@@ -1455,13 +1545,13 @@ select pg_temp.expect_error(
 select pg_temp.expect_error($q$select save_club_links('[]')$q$, 'Solo il Direttivo');
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
 select save_standings('00000000-0000-0000-0000-0000000000aa',
-  '[{"team_name": " Milan AC ", "won": 3, "drawn": 1, "goals_for": 9, "goals_against": 2, "is_us": true},
+  '[{"team_name": " MILANAC ", "won": 3, "drawn": 1, "goals_for": 9, "goals_against": 2, "is_us": true},
     {"team_name": "Rivali", "lost": 2}]');
 do $$ begin
   assert (select count(*) from tournament_standings where tournament_id = '00000000-0000-0000-0000-0000000000aa') = 2,
     'classifica salvata';
   assert (select won from tournament_standings where tournament_id = '00000000-0000-0000-0000-0000000000aa'
-          and team_name = 'Milan AC' and is_us) = 3, 'righe complete';
+          and team_name = 'MILANAC' and is_us) = 3, 'righe complete';
 end $$;
 select save_standings('00000000-0000-0000-0000-0000000000aa', '[{"team_name": "Rivali", "won": 1}]');
 select pg_temp.expect_error(
@@ -1523,7 +1613,7 @@ reset role;
 do $$ begin
   assert (select body from messages where meta->>'type' = 'new_member'
           and meta->>'member' = '00000000-0000-0000-0000-0000000000a1')
-         like 'Nuovo ingresso: Rossi (Mario Rossi) · Giocatore · Milan AC · ATT.%', 'avviso del nuovo ingresso';
+         like 'Nuovo ingresso: Rossi (Mario Rossi) · Giocatore · MILANAC · ATT.%', 'avviso del nuovo ingresso';
   assert (select c.slug from messages m join channels c on c.id = m.channel_id
           where m.meta->>'type' = 'new_member' and m.meta->>'member' = '00000000-0000-0000-0000-0000000000a1')
          = 'direttivo', 'nella Sala Direttivo';
@@ -1542,7 +1632,7 @@ reset role;
 do $$ begin
   assert (select body from messages where meta->>'type' = 'new_member'
           and meta->>'member' = '00000000-0000-0000-0000-0000000000ab')
-         = 'Nuovo ingresso: NUOVO (Nuovo Arrivato) · Giocatore · Milan AC Futuro · DC. Se non lo conoscete, toglietelo dalla Rosa.',
+         = 'Nuovo ingresso: NUOVO (Nuovo Arrivato) · Giocatore · MILANAC FUTURO · DC. Se non lo conoscete, toglietelo dalla Rosa.',
     'avviso con nome, ruolo e squadra';
   assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 1, 'e la notifica al Direttivo';
 end $$;
@@ -1630,7 +1720,7 @@ do $$ begin
   assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000e2') = 'giocatore',
     'un giocatore non promuove gli altri';
 end $$;
-update profiles set club_role = 'direttivo', direttivo_roles = array['capitano', 'gestore']
+update profiles set club_role = 'direttivo', direttivo_roles = array['presenze', 'capitano']
   where id = '00000000-0000-0000-0000-0000000000e1';
 reset role;
 do $$ begin
@@ -1638,7 +1728,7 @@ do $$ begin
     'promosso nel Direttivo';
   assert (select body from messages where meta->>'type' = 'direttivo'
           and meta->>'member' = '00000000-0000-0000-0000-0000000000e1')
-         like '% è entrato nel Direttivo (Capitano, Gestore) · nominato da %.', 'avviso della promozione';
+         like '% è entrato nel Direttivo (Capitano, Resp. Presenze) · nominato da %.', 'avviso della promozione';
 end $$;
 -- Retrocessione: le etichette si azzerano e resta traccia.
 set role authenticated;
@@ -1663,7 +1753,7 @@ select pg_temp.expect_error(
   'almeno un membro del Direttivo');
 select pg_temp.expect_error($q$select delete_my_account()$q$, 'ultimo membro del Direttivo');
 -- Con un altro Direttivo sì (tutti hanno gli stessi poteri, anche su sé stessi).
-update profiles set club_role = 'direttivo', direttivo_roles = array['organizzatore']
+update profiles set club_role = 'direttivo', direttivo_roles = array['tornei']
   where id = '00000000-0000-0000-0000-0000000000e2';
 update profiles set club_role = 'giocatore' where id = '00000000-0000-0000-0000-00000000000d';
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000e2');
@@ -1836,7 +1926,7 @@ do $$ begin
 end $$;
 
 -- ================================================================ sondaggi in chat (0030)
--- Tre giocatori: 5a1 e 5a2 nella squadra Milan AC, 5a3 solo nel Futuro.
+-- Tre giocatori: 5a1 e 5a2 nella squadra MILANAC, 5a3 solo nel Futuro.
 reset role;
 select pg_temp.as_user(null);
 insert into auth.users (id, email) values
@@ -1962,7 +2052,7 @@ do $$ begin
     'voti eliminati con il sondaggio';
 end $$;
 
--- ================================================================ promemoria partita (0031)
+-- ================================================================ promemoria partita (0031, 0034)
 -- Partite di lunedì 2 novembre 2026 alle 21:30 (ora italiana): m1 in calendario da giorni,
 -- m2 creata alle 21:00 (ha già avuto la sua notifica), un allenamento che non conta.
 reset role;
@@ -1980,22 +2070,26 @@ create function pg_temp.reminders(p_when text) returns int language sql as $$
   select count(*)::int from net.calls
   where body->>'kind' = 'match_reminder' and body->>'when' = p_when
 $$;
-select set_config('milanac.now', '2026-11-02 20:20 Europe/Rome', false);
-select match_reminders_tick();
-do $$ begin
-  assert pg_temp.reminders('ora') + pg_temp.reminders('lobby') = 0, 'più di un''ora prima: niente';
-end $$;
+-- Un'ora prima non parte più nulla: i convocati vanno in party trenta minuti prima.
 select set_config('milanac.now', '2026-11-02 20:31 Europe/Rome', false);
 select match_reminders_tick();
+select set_config('milanac.now', '2026-11-02 20:55 Europe/Rome', false);
 select match_reminders_tick();
 do $$ begin
-  assert pg_temp.reminders('ora') = 1, 'un''ora prima, una volta sola e solo per m1';
-  assert (select body->>'id' from net.calls where body->>'when' = 'ora')
-         = '00000000-0000-0000-0000-0000000006e1', 'l''avviso dell''ora è di m1';
+  assert pg_temp.reminders('party') + pg_temp.reminders('lobby') = 0, 'più di mezz''ora prima: niente';
+  assert pg_temp.reminders('ora') = 0, 'niente più avviso un''ora prima';
+end $$;
+select set_config('milanac.now', '2026-11-02 21:01 Europe/Rome', false);
+select match_reminders_tick();
+select match_reminders_tick();
+do $$ begin
+  assert pg_temp.reminders('party') = 1, 'trenta minuti prima, una volta sola e solo per m1';
+  assert (select body->>'id' from net.calls where body->>'when' = 'party')
+         = '00000000-0000-0000-0000-0000000006e1', 'l''avviso del party è di m1';
   assert pg_temp.reminders('lobby') = 0, 'la lobby non ancora';
 end $$;
 -- m3: in calendario da giorni ma il controllo di pg_cron non è girato fino a 9 minuti
--- prima: niente "tra un'ora" in ritardo, solo la lobby.
+-- prima: niente "tutti in party" in ritardo, solo la lobby.
 insert into events (id, type, title, starts_at, team, created_at) values
   ('00000000-0000-0000-0000-0000000006e4', 'torneo', 'Coppa vs Falchi',
    '2026-11-02 21:30 Europe/Rome', 'milanac', '2026-10-20 12:00 Europe/Rome');
@@ -2003,7 +2097,7 @@ select set_config('milanac.now', '2026-11-02 21:21 Europe/Rome', false);
 select match_reminders_tick();
 select match_reminders_tick();
 do $$ begin
-  assert pg_temp.reminders('ora') = 1, 'niente "tra un''ora" a 9 minuti dall''inizio';
+  assert pg_temp.reminders('party') = 1, 'niente "tutti in party" a 9 minuti dall''inizio';
   assert pg_temp.reminders('lobby') = 3, 'lobby per le tre partite, una volta sola';
   assert not exists (select 1 from net.calls where body->>'id' = '00000000-0000-0000-0000-0000000006e3'
                      and body->>'kind' = 'match_reminder'), 'l''allenamento non ha promemoria';
@@ -2011,20 +2105,25 @@ end $$;
 select set_config('milanac.now', '2026-11-02 21:45 Europe/Rome', false);
 select match_reminders_tick();
 do $$ begin
-  assert pg_temp.reminders('ora') + pg_temp.reminders('lobby') = 4, 'a partita iniziata niente di nuovo';
+  assert pg_temp.reminders('party') + pg_temp.reminders('lobby') = 4, 'a partita iniziata niente di nuovo';
 end $$;
 -- La partita m3 si sposta a martedì: i promemoria ripartono per il nuovo orario.
 update events set starts_at = '2026-11-03 21:30 Europe/Rome'
   where id = '00000000-0000-0000-0000-0000000006e4';
-select set_config('milanac.now', '2026-11-03 20:31 Europe/Rome', false);
+select set_config('milanac.now', '2026-11-03 21:01 Europe/Rome', false);
 select match_reminders_tick();
 select set_config('milanac.now', '2026-11-03 21:21 Europe/Rome', false);
 select match_reminders_tick();
 select match_reminders_tick();
 do $$ begin
-  assert pg_temp.reminders('ora') = 2 and pg_temp.reminders('lobby') = 4,
-    'partita spostata: di nuovo "tra un''ora" e lobby, una volta sola';
+  assert pg_temp.reminders('party') = 2 and pg_temp.reminders('lobby') = 4,
+    'partita spostata: di nuovo "tutti in party" e lobby, una volta sola';
+  assert (select count(*) from event_reminders where kind not in ('party', 'lobby', 'chiamata')) = 0,
+    'solo i tipi nuovi';
 end $$;
+select pg_temp.expect_error(
+  $q$insert into event_reminders (event_id, kind, starts_at) values ('00000000-0000-0000-0000-0000000006e1', 'ora', now())$q$,
+  'event_reminders_kind_check');
 
 -- La chiamata in lobby: solo il Direttivo, solo per le partite e nelle ore della partita,
 -- al massimo una ogni 3 minuti.
@@ -2119,4 +2218,350 @@ do $$ begin
   assert (select count(*) from profiles where face is not null) = 0, 'nessun volto disegnato';
   assert (select registration_completed_at from profiles
           where id = '00000000-0000-0000-0000-0000000000fa') is not null, 'registrazione completa';
+end $$;
+
+-- ================================================================ palle inattive (0035)
+-- Chi batte rigori, punizioni e angoli: un titolare per ruolo (anche lo stesso per più
+-- ruoli), ogni ruolo facoltativo. Tre giocatori del Futuro: PIRLO (ATT), GATTUSO (ES),
+-- DIDA (POR).
+reset role;
+select pg_temp.as_user(null);
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-000000035a01', 'battitori1@example.com'),
+  ('00000000-0000-0000-0000-000000035a02', 'battitori2@example.com'),
+  ('00000000-0000-0000-0000-000000035a03', 'battitori3@example.com');
+update profiles set club_role = 'giocatore', active = true, teams = array['futuro'],
+  display_name = case id when '00000000-0000-0000-0000-000000035a01' then 'PIRLO'
+                         when '00000000-0000-0000-0000-000000035a02' then 'GATTUSO' else 'DIDA' end
+  where id in ('00000000-0000-0000-0000-000000035a01', '00000000-0000-0000-0000-000000035a02',
+               '00000000-0000-0000-0000-000000035a03');
+do $$ begin
+  assert valid_set_pieces('{}'), 'nessun battitore';
+  assert valid_set_pieces('{"rigori": "00000000-0000-0000-0000-000000035a01",
+                            "angoli_dx": "00000000-0000-0000-0000-000000035a01"}'), 'lo stesso su più ruoli';
+  assert not valid_set_pieces('{"corner": "00000000-0000-0000-0000-000000035a01"}'), 'solo i ruoli noti';
+  assert not valid_set_pieces('{"rigori": "PIRLO"}'), 'solo id';
+  assert not valid_set_pieces('{"rigori": null}'), 'un ruolo libero non ha la chiave';
+  assert not valid_set_pieces('{"rigori": ["00000000-0000-0000-0000-000000035a01"]}'), 'uno per ruolo';
+  assert not valid_set_pieces('[]'), 'un oggetto';
+  assert not valid_set_pieces(null), 'mai null';
+end $$;
+
+-- Solo il Direttivo li sceglie, e solo tra i titolari.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-000000035a01');
+select pg_temp.expect_error(
+  $q$select save_formation(null, 'futuro', '4-4-2', '[]', '{}')$q$, 'Solo il Direttivo');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select set_config('test.battitori', save_formation(null, 'futuro', '4-4-2',
+  '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "00000000-0000-0000-0000-000000035a03"},
+    {"slot_index": 5, "x": 0.1, "y": 0.5, "label": "ES", "player_id": "00000000-0000-0000-0000-000000035a02"},
+    {"slot_index": 9, "x": 0.3, "y": 0.2, "label": "ATT", "player_id": "00000000-0000-0000-0000-000000035a01"}]',
+  '{"rigori": "00000000-0000-0000-0000-000000035a01", "punizioni": "00000000-0000-0000-0000-000000035a01",
+    "angoli_sx": "00000000-0000-0000-0000-000000035a02", "angoli_dx": "00000000-0000-0000-0000-000000035a01"}')::text,
+  false);
+do $$ begin
+  assert (select set_pieces from formations where id = current_setting('test.battitori')::uuid)
+    = '{"rigori": "00000000-0000-0000-0000-000000035a01", "punizioni": "00000000-0000-0000-0000-000000035a01",
+        "angoli_sx": "00000000-0000-0000-0000-000000035a02", "angoli_dx": "00000000-0000-0000-0000-000000035a01"}'::jsonb,
+    'battitori salvati con la formazione';
+  assert (select published_set_pieces from formations where id = current_setting('test.battitori')::uuid) is null,
+    'ancora da pubblicare';
+end $$;
+-- Un battitore in panchina (o non valido) non si salva, e la formazione resta com'era.
+select pg_temp.expect_error(
+  $q$select save_formation(current_setting('test.battitori')::uuid, 'futuro', '4-4-2',
+    '[{"slot_index": 9, "x": 0.3, "y": 0.2, "label": "ATT", "player_id": "00000000-0000-0000-0000-000000035a01"}]',
+    '{"angoli_sx": "00000000-0000-0000-0000-000000035a02"}')$q$, 'tra i titolari');
+select pg_temp.expect_error(
+  $q$select save_formation(current_setting('test.battitori')::uuid, 'futuro', '4-4-2', '[]',
+    '{"rigori": "PIRLO"}')$q$, 'Palle inattive non valide');
+do $$ begin
+  assert (select count(*) from formation_slots where formation_id = current_setting('test.battitori')::uuid) = 3,
+    'salvataggio annullato per intero';
+end $$;
+-- Anche scrivendo direttamente in tabella (policy "scrittura direttivo").
+select pg_temp.expect_error(
+  $q$update formations set set_pieces = '{"rigori": "00000000-0000-0000-0000-00000000000d"}'
+     where id = current_setting('test.battitori')::uuid$q$, 'tra i titolari');
+select pg_temp.expect_error(
+  $q$update formations set set_pieces = '{"rigori": 7}' where id = current_setting('test.battitori')::uuid$q$,
+  'Palle inattive non valide');
+select pg_temp.expect_error(
+  $q$update formations set published_set_pieces = '["00000000-0000-0000-0000-000000035a01"]'
+     where id = current_setting('test.battitori')::uuid$q$, 'Palle inattive non valide');
+-- Un giocatore non li cambia (nessuna riga toccata), ma li legge.
+select pg_temp.as_user('00000000-0000-0000-0000-000000035a02');
+update formations set set_pieces = '{"rigori": "00000000-0000-0000-0000-000000035a02"}'
+  where id = current_setting('test.battitori')::uuid;
+do $$ begin
+  assert (select set_pieces->>'rigori' from formations where id = current_setting('test.battitori')::uuid)
+    = '00000000-0000-0000-0000-000000035a01', 'il giocatore legge i battitori e non li cambia';
+end $$;
+
+-- Un'app che non conosce i battitori (save_formation con 4 parametri) tiene quelli ancora in
+-- campo: PIRLO esce, i suoi ruoli restano liberi.
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select save_formation(current_setting('test.battitori')::uuid, 'futuro', '4-4-2',
+  '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "00000000-0000-0000-0000-000000035a03"},
+    {"slot_index": 5, "x": 0.1, "y": 0.5, "label": "ES", "player_id": "00000000-0000-0000-0000-000000035a02"}]');
+do $$ begin
+  assert (select set_pieces from formations where id = current_setting('test.battitori')::uuid)
+    = '{"angoli_sx": "00000000-0000-0000-0000-000000035a02"}'::jsonb, 'chi esce dal campo perde i suoi ruoli';
+end $$;
+
+-- Pubblicazione: i battitori "congelati" sono solo titolari pubblicati, e l'annuncio in
+-- Comunicazioni li scrive su una riga.
+select save_formation(current_setting('test.battitori')::uuid, 'futuro', '4-4-2',
+  '[{"slot_index": 0, "x": 0.5, "y": 0.9, "label": "POR", "player_id": "00000000-0000-0000-0000-000000035a03"},
+    {"slot_index": 5, "x": 0.1, "y": 0.5, "label": "ES", "player_id": "00000000-0000-0000-0000-000000035a02"},
+    {"slot_index": 9, "x": 0.3, "y": 0.2, "label": "ATT", "player_id": "00000000-0000-0000-0000-000000035a01"}]',
+  '{"rigori": "00000000-0000-0000-0000-000000035a01", "punizioni": "00000000-0000-0000-0000-000000035a01",
+    "angoli_sx": "00000000-0000-0000-0000-000000035a02", "angoli_dx": "00000000-0000-0000-0000-000000035a01"}');
+update formations set published_at = now(), published_by = '00000000-0000-0000-0000-00000000000d',
+  published_module = '4-4-2',
+  published_players = '{"0": "00000000-0000-0000-0000-000000035a03", "5": "00000000-0000-0000-0000-000000035a02",
+                        "9": "00000000-0000-0000-0000-000000035a01"}',
+  published_set_pieces = '{"rigori": "00000000-0000-0000-0000-000000035a01",
+                           "punizioni": "00000000-0000-0000-0000-000000035a01",
+                           "angoli_sx": "00000000-0000-0000-0000-000000035a02",
+                           "angoli_dx": "00000000-0000-0000-0000-000000035a01"}'
+  where id = current_setting('test.battitori')::uuid;
+reset role;
+do $$ begin
+  assert (select published_set_pieces->>'angoli_sx' from formations
+          where id = current_setting('test.battitori')::uuid) = '00000000-0000-0000-0000-000000035a02',
+    'battitori pubblicati';
+  assert (select body from messages where meta->>'type' = 'formation'
+          and meta->>'id' = current_setting('test.battitori') order by created_at desc limit 1)
+    like 'Formazione MILANAC FUTURO (4-4-2): POR DIDA, ES GATTUSO, ATT PIRLO%'
+         || E'\nPalle inattive: rigori PIRLO · punizioni PIRLO · angoli sx GATTUSO, dx PIRLO',
+    'annuncio con la riga dei battitori';
+end $$;
+-- Un battitore che non è tra i titolari pubblicati non si pubblica (il suo ruolo resta libero).
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update formations set published_at = now() + interval '1 second',
+  published_players = '{"0": "00000000-0000-0000-0000-000000035a03", "5": "00000000-0000-0000-0000-000000035a02"}',
+  published_set_pieces = '{"rigori": "00000000-0000-0000-0000-000000035a01",
+                           "angoli_sx": "00000000-0000-0000-0000-000000035a02"}'
+  where id = current_setting('test.battitori')::uuid;
+reset role;
+do $$ begin
+  assert (select published_set_pieces from formations where id = current_setting('test.battitori')::uuid)
+    = '{"angoli_sx": "00000000-0000-0000-0000-000000035a02"}'::jsonb, 'solo i titolari pubblicati battono';
+end $$;
+-- Un'app che non conosce i battitori pubblica senza mandarli: valgono quelli della bozza.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update formations set set_pieces = '{"angoli_sx": "00000000-0000-0000-0000-000000035a02",
+                                     "angoli_dx": "00000000-0000-0000-0000-000000035a02"}'
+  where id = current_setting('test.battitori')::uuid;
+update formations set published_at = now() + interval '2 seconds',
+  published_players = '{"0": "00000000-0000-0000-0000-000000035a03", "5": "00000000-0000-0000-0000-000000035a02",
+                        "9": "00000000-0000-0000-0000-000000035a01"}'
+  where id = current_setting('test.battitori')::uuid;
+reset role;
+do $$ begin
+  assert (select published_set_pieces from formations where id = current_setting('test.battitori')::uuid)
+    = '{"angoli_sx": "00000000-0000-0000-0000-000000035a02", "angoli_dx": "00000000-0000-0000-0000-000000035a02"}'::jsonb,
+    'battitori della bozza';
+  assert (select body from messages where meta->>'type' = 'formation'
+          and meta->>'id' = current_setting('test.battitori') order by created_at desc limit 1)
+    like E'%\nPalle inattive: angoli GATTUSO', 'stesso battitore per i due angoli: una parola sola';
+  -- Senza battitori nessuna riga; chi è uscito dal club non si scrive.
+  assert set_pieces_line('{}') is null, 'nessun battitore, nessuna riga';
+  assert set_pieces_line('{"angoli_dx": "00000000-0000-0000-0000-000000035a01"}')
+    = 'Palle inattive: angoli dx PIRLO', 'solo angoli da destra';
+end $$;
+update profiles set active = false where id = '00000000-0000-0000-0000-000000035a01';
+do $$ begin
+  assert set_pieces_line('{"rigori": "00000000-0000-0000-0000-000000035a01",
+                           "punizioni": "00000000-0000-0000-0000-000000035a02"}')
+    = 'Palle inattive: punizioni GATTUSO', 'chi è uscito dal club non compare';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select pg_temp.expect_error($q$select set_pieces_line('{}')$q$, 'permission denied');
+-- La formazione di prova non resta l'ultima pubblicata del Futuro.
+reset role;
+select pg_temp.as_user(null);
+delete from formations where id = current_setting('test.battitori')::uuid;
+
+-- ================================================================ regolamento (0034)
+-- Serate dal lunedì al venerdì: sabato e domenica senza eventi niente promemoria né assenze;
+-- con un evento (non una riunione) valgono per chi gioca nella squadra dell'evento.
+-- Gennaio 2030: venerdì 4, sabato 5, domenica 6, sabato 12 e sabato 19.
+reset role;
+select pg_temp.as_user(null);
+delete from net.calls;
+create function pg_temp.membri(p_team text) returns int language sql as $$
+  select count(*)::int from profiles
+  where active and club_role <> 'pending' and (p_team is null or p_team = any(teams))
+$$;
+create function pg_temp.avvisi(p_kind text, p_day text) returns int language sql as $$
+  select coalesce(sum(jsonb_array_length(body->'users')), 0)::int from net.calls
+  where body->>'kind' = p_kind and body->>'day' = p_day
+$$;
+do $$ begin
+  assert extract(isodow from date '2030-01-04') = 5 and extract(isodow from date '2030-01-05') = 6
+     and extract(isodow from date '2030-01-06') = 7, 'date delle prove';
+  assert club_evening('2030-01-04', array['milanac']), 'venerdì: serata';
+  assert not club_evening('2030-01-05', array['milanac', 'futuro']), 'sabato senza eventi: niente serata';
+  assert pg_temp.membri(null) > pg_temp.membri('futuro') and pg_temp.membri('futuro') > 0,
+    'ci sono giocatori solo del MILANAC e giocatori del Futuro';
+end $$;
+-- Sabato 5: c'è solo una riunione, che non chiede presenze.
+insert into events (type, title, starts_at, created_at) values
+  ('riunione', 'Riunione direttivo', '2030-01-05 21:30 Europe/Rome', '2030-01-01 12:00 Europe/Rome');
+select set_config('milanac.now', '2030-01-05 18:05 Europe/Rome', false);
+select attendance_tick();
+select set_config('milanac.now', '2030-01-05 18:31 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert (select count(*) from net.calls where body->>'kind' like 'attendance%') = 0,
+    'sabato senza eventi: niente promemoria né avvisi di assenza';
+  assert (select count(*) from attendance where date = '2030-01-05') = 0, 'sabato: nessuna assenza automatica';
+  assert (select count(*) from daily_jobs where day = '2030-01-05') = 0, 'il sabato vuoto non si segna';
+end $$;
+-- Domenica 6: una partita del Futuro in calendario da giorni.
+insert into events (type, title, starts_at, team, created_at) values
+  ('torneo', 'Coppa vs Lupi', '2030-01-06 21:30 Europe/Rome', 'futuro', '2030-01-01 12:00 Europe/Rome');
+select set_config('milanac.now', '2030-01-06 18:05 Europe/Rome', false);
+select attendance_tick();
+select attendance_tick();
+select set_config('milanac.now', '2030-01-06 18:31 Europe/Rome', false);
+select attendance_tick();
+select attendance_tick();
+do $$ begin
+  assert club_evening('2030-01-06', array['futuro']) and not club_evening('2030-01-06', array['milanac']),
+    'domenica: serata solo per il Futuro';
+  assert pg_temp.avvisi('attendance_reminder', '2030-01-06') = pg_temp.membri('futuro'),
+    'promemoria della domenica a chi gioca nel Futuro, una volta sola';
+  assert pg_temp.avvisi('attendance_auto_absent', '2030-01-06') = pg_temp.membri('futuro'),
+    'assenze automatiche della domenica per il Futuro';
+  assert (select count(*) from attendance a join profiles p on p.id = a.player_id
+          where a.date = '2030-01-06' and not 'futuro' = any(p.teams)) = 0,
+    'chi gioca solo nel MILANAC non risulta assente';
+end $$;
+-- Venerdì 4, senza eventi: l'allenamento c'è per tutti, come sempre.
+select set_config('milanac.now', '2030-01-04 18:05 Europe/Rome', false);
+select attendance_tick();
+select set_config('milanac.now', '2030-01-04 18:31 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert pg_temp.avvisi('attendance_reminder', '2030-01-04') = pg_temp.membri(null), 'venerdì: promemoria a tutti';
+  assert (select count(*) from attendance where date = '2030-01-04' and auto) = pg_temp.membri(null),
+    'venerdì: assenze automatiche per tutti';
+end $$;
+-- Sabato 12: un'amichevole messa in calendario dopo le 18:30 non fa assenze (nessuno ha
+-- potuto rispondere).
+select set_config('milanac.now', '2030-01-12 19:05 Europe/Rome', false);
+insert into events (type, title, starts_at, created_at) values
+  ('amichevole', 'Amichevole vs Orsi', '2030-01-12 22:00 Europe/Rome', '2030-01-12 19:00 Europe/Rome');
+select attendance_tick();
+do $$ begin
+  assert (select count(*) from attendance where date = '2030-01-12') = 0, 'evento dopo la scadenza: niente assenze';
+  assert (select count(*) from daily_jobs where day = '2030-01-12') = 0, 'e il giorno non si segna';
+end $$;
+-- Sabato 19: alle 18:05 non c'è niente; l'evento messo alle 18:10 fa partire il promemoria.
+select set_config('milanac.now', '2030-01-19 18:05 Europe/Rome', false);
+select attendance_tick();
+insert into events (type, title, starts_at, created_at) values
+  ('torneo', 'Torneo vs Falchi', '2030-01-19 21:30 Europe/Rome', '2030-01-19 18:10 Europe/Rome');
+select set_config('milanac.now', '2030-01-19 18:11 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert pg_temp.avvisi('attendance_reminder', '2030-01-19') = pg_temp.membri(null),
+    'evento del sabato messo prima della scadenza: promemoria a tutti';
+end $$;
+-- Un evento spostato conta da quando è stato spostato (scheduled_at), non da quando è stato
+-- creato. Due partite in calendario da giorni per febbraio: il torneo spostato a sabato 26
+-- alle 19:00, dopo la scadenza (niente assenze); l'amichevole spostata a domenica 27 alle
+-- 17:00, prima della scadenza (una serata normale).
+insert into events (id, type, title, starts_at, created_at) values
+  ('00000000-0000-0000-0000-0000000034a1', 'torneo', 'Torneo vs Aquile',
+   '2030-02-02 21:30 Europe/Rome', '2030-01-20 12:00 Europe/Rome'),
+  ('00000000-0000-0000-0000-0000000034a2', 'amichevole', 'Amichevole vs Tori',
+   '2030-02-03 21:30 Europe/Rome', '2030-01-20 12:00 Europe/Rome');
+do $$ begin
+  assert (select bool_and(scheduled_at = created_at) and count(*) = 2 from events
+          where id in ('00000000-0000-0000-0000-0000000034a1', '00000000-0000-0000-0000-0000000034a2')),
+    'alla creazione scheduled_at è created_at';
+  assert (select count(*) from events where scheduled_at is null) = 0, 'scheduled_at sempre presente';
+end $$;
+-- Come dall'app (il Direttivo, che salva sempre anche starts_at): se l'inizio non cambia,
+-- scheduled_at resta; e scritto a mano non cambia.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select set_config('milanac.now', '2030-01-25 10:00 Europe/Rome', false);
+update events set title = 'Torneo vs Aquile Nere', starts_at = '2030-02-02 21:30 Europe/Rome'
+  where id = '00000000-0000-0000-0000-0000000034a1';
+update events set scheduled_at = '2030-01-01 00:00 Europe/Rome'
+  where id = '00000000-0000-0000-0000-0000000034a1';
+do $$ begin
+  assert (select scheduled_at from events where id = '00000000-0000-0000-0000-0000000034a1')
+         = '2030-01-20 12:00 Europe/Rome'::timestamptz, 'stesso inizio: scheduled_at non cambia';
+end $$;
+-- Sabato 26 alle 19:00 il torneo passa a stasera alle 22:00.
+select set_config('milanac.now', '2030-01-26 19:00 Europe/Rome', false);
+update events set title = 'Torneo vs Aquile Nere', starts_at = '2030-01-26 22:00 Europe/Rome'
+  where id = '00000000-0000-0000-0000-0000000034a1';
+reset role;
+select pg_temp.as_user(null);
+select set_config('milanac.now', '2030-01-26 19:01 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert (select scheduled_at from events where id = '00000000-0000-0000-0000-0000000034a1')
+         = '2030-01-26 19:00 Europe/Rome'::timestamptz, 'spostato: scheduled_at è l''ora dello spostamento';
+  assert extract(isodow from date '2030-01-26') = 6, 'il 26 è sabato';
+  assert club_evening('2030-01-26', array['milanac', 'futuro'])
+     and not club_evening('2030-01-26', array['milanac', 'futuro'], attendance_deadline('2030-01-26')),
+    'c''è la serata, ma l''evento è arrivato dopo la scadenza';
+  assert (select count(*) from attendance where date = '2030-01-26') = 0,
+    'evento spostato su oggi dopo la scadenza: niente assenze';
+  assert (select count(*) from daily_jobs where day = '2030-01-26') = 0, 'e il giorno non si segna';
+end $$;
+-- Domenica 27 alle 17:00 l'amichevole passa a stasera: promemoria e assenze come sempre.
+select set_config('milanac.now', '2030-01-27 17:00 Europe/Rome', false);
+update events set starts_at = '2030-01-27 21:30 Europe/Rome'
+  where id = '00000000-0000-0000-0000-0000000034a2';
+select set_config('milanac.now', '2030-01-27 18:05 Europe/Rome', false);
+select attendance_tick();
+select set_config('milanac.now', '2030-01-27 18:31 Europe/Rome', false);
+select attendance_tick();
+do $$ begin
+  assert (select scheduled_at from events where id = '00000000-0000-0000-0000-0000000034a2')
+         = '2030-01-27 17:00 Europe/Rome'::timestamptz, 'spostata alle 17:00';
+  assert pg_temp.avvisi('attendance_reminder', '2030-01-27') = pg_temp.membri(null),
+    'evento spostato prima della scadenza: promemoria a tutti';
+  assert (select count(*) from attendance where date = '2030-01-27' and auto) = pg_temp.membri(null),
+    'evento spostato prima della scadenza: assenze automatiche come sempre';
+end $$;
+select set_config('milanac.now', '', false);
+
+-- Etichette del Direttivo come nell'organigramma; i nomi di prima si traducono.
+do $$ begin
+  assert direttivo_roles_normalized(array['reclutatore', 'gestore', 'organizzatore', 'capitano', 'capitano'])
+         = array['capitano', 'reclutamento', 'tornei'], 'nomi di prima tradotti, in ordine e senza doppioni';
+  assert direttivo_roles_normalized(array['gestore']) = '{}', 'Gestore sparisce';
+  assert direttivo_role_label('vicecapitano') = 'Vice-capitano'
+     and direttivo_role_label('comunicazione') = 'Resp. Comunicazioni e Marketing'
+     and direttivo_role_label('it') = 'Resp. IT', 'etichette';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update profiles set direttivo_roles = array['organizzatore', 'gestore', 'it', 'presidente']
+  where id = '00000000-0000-0000-0000-0000000000e2';
+select pg_temp.expect_error(
+  $q$update profiles set direttivo_roles = array['allenatore'] where id = '00000000-0000-0000-0000-0000000000e2'$q$,
+  'profiles_direttivo_roles_check');
+reset role;
+do $$ begin
+  assert (select direttivo_roles from profiles where id = '00000000-0000-0000-0000-0000000000e2')
+         = array['presidente', 'tornei', 'it'], 'app vecchia: etichette tradotte al salvataggio';
+  assert (select count(*) from profiles
+          where not direttivo_roles <@ array['presidente', 'fondatore', 'capitano', 'vicecapitano',
+                                             'comunicazione', 'tecnico', 'reclutamento', 'tornei',
+                                             'presenze', 'it']) = 0, 'solo etichette nuove';
 end $$;

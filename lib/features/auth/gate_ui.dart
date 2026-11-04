@@ -194,7 +194,8 @@ class PrimaryButton extends StatelessWidget {
 }
 
 /// Scelta a pillola alta 44 (piattaforma, ruoli nel Direttivo, piede): selezionata
-/// con l'oro tenue.
+/// con l'oro tenue. Larga quanto l'etichetta, così in un Wrap le pillole stanno in fila
+/// e vanno a capo; un'etichetta più lunga dello schermo va a capo dentro la pillola.
 class ChoicePill extends StatelessWidget {
   const ChoicePill({
     super.key,
@@ -226,15 +227,18 @@ class ChoicePill extends StatelessWidget {
           borderRadius: radius,
           onTap: onTap,
           child: Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: selected ? p.accentText : p.text,
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            child: Align(
+              widthFactor: 1,
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? p.accentText : p.text,
+                ),
               ),
             ),
           ),

@@ -42,6 +42,7 @@ Notifiche a tutto il club (argomento `milanac`, solo ai membri approvati):
 
 Notifiche personali (funzione `notify`, a ogni telefono registrato):
 - **Formazione pubblicata** – ai giocatori di quella squadra: "giochi DC titolare" o "parti dalla panchina"
+  (a chi batte anche le palle inattive: "batti rigori e punizioni", se il testo resta corto)
 - **Messaggi in chat** – a tutti tranne l'autore e chi ha silenziato il canale; ritardi e assenze
   arrivano in automatico nel canale *Presenze*
 

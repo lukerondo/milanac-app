@@ -617,7 +617,7 @@ void main() {
       await tester.tap(find.text('Lavagna'));
       await tester.pumpAndSettle();
       expect(brightnessAt(find.text('Gettoni')), Brightness.dark);
-      expect(brightnessAt(find.text('Milan AC')), Brightness.dark);
+      expect(brightnessAt(find.text('MILANAC')), Brightness.dark);
       expect(
         brightnessAt(find.byKey(const ValueKey('lavagna'))),
         Brightness.light,

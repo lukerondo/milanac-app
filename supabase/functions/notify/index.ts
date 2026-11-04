@@ -2,7 +2,8 @@
 // Viene chiamata dal database (trigger, pg_cron + pg_net) con l'intestazione x-milanac-secret.
 //
 // Eventi gestiti:
-//   { kind: "formation", id }               → ai membri della squadra: titolare (con ruolo) o panchina
+//   { kind: "formation", id }               → ai membri della squadra: titolare (con ruolo e le palle
+//                                             inattive che batte, se c'è posto) o panchina
 //   { kind: "chat_message", id }            → ai membri del canale, escluso l'autore e chi l'ha silenziato
 //                                             (un replay della lavagna: "Nuovo schema con audio";
 //                                             nella Sala Direttivo anche l'avviso di un nuovo ingresso)
@@ -10,6 +11,8 @@
 //   { kind: "rules", version }              → a tutti i membri: nuova versione del regolamento da accettare
 //   { kind: "event", id }                   → alla squadra (o a tutti): nuovo appuntamento in calendario
 //   { kind: "attendance_reminder", users }  → alle 18:00 a chi non ha ancora risposto per stasera
+//                                             (serate dal lunedì al venerdì; sabato e domenica
+//                                             solo con un evento in calendario)
 //   { kind: "attendance_auto_absent", users } → alle 18:30 a chi è risultato assente senza rispondere
 //   { kind: "video_proposed", id }          → al Direttivo: un giocatore propone un video
 //   { kind: "video_published", id }         → a chi l'ha proposto: il video è stato pubblicato
@@ -18,8 +21,10 @@
 //   { kind: "special_cards_week", match }   → alla squadra: le carte speciali della giornata
 //   { kind: "voice_room", id }              → ai membri del canale: qualcuno ha aperto la stanza vocale
 //   { kind: "match_reminder", id, when }    → alla squadra della partita, esclusi gli assenti:
-//                                             when = ora (un'ora prima), lobby (dieci minuti
-//                                             prima) o chiamata (dal Direttivo, arriva sempre)
+//                                             when = party (trenta minuti prima: tutti in party,
+//                                             come da regolamento), lobby (dieci minuti prima)
+//                                             o chiamata (dal Direttivo, arriva sempre); ora
+//                                             (un'ora prima) solo da un database prima della 0034
 //   { kind: "cleanup" }                     → nessuna notifica: rimuove dallo Storage i file in coda
 //                                             (allegati della chat scaduti o eliminati)
 //
@@ -98,7 +103,7 @@ async function withoutMuted(db: SupabaseClient, pushes: Push[], category: string
   return pushes.filter((p) => p.always || !off.has(p.userId));
 }
 
-const TEAM_NAMES: Record<string, string> = { milanac: "Milan AC", futuro: "Milan AC Futuro" };
+const TEAM_NAMES: Record<string, string> = { milanac: "MILANAC", futuro: "MILANAC FUTURO" };
 const PLATFORM_NAMES: Record<string, string> = { ps5: "PlayStation", xbox: "Xbox" };
 
 /// Membri attivi del club (chi ha finito la registrazione), eventualmente di una squadra.
@@ -135,21 +140,47 @@ async function formationPushes(db: SupabaseClient, formationId: string): Promise
   const { data: formation } = await db
     .from("formations").select("team").eq("id", formationId).single();
   const team = formation?.team ?? "milanac";
-  const teamName = TEAM_NAMES[team] ?? "Milan AC";
+  const teamName = TEAM_NAMES[team] ?? "MILANAC";
   const { data: slots } = await db
     .from("formation_slots").select("label, player_id").eq("formation_id", formationId);
+  // Chi batte le palle inattive (migrazione 0035). A parte: senza la colonna (database non
+  // ancora aggiornato) la lettura non riesce e le notifiche partono come prima.
+  const { data: pieces } = await db
+    .from("formations").select("published_set_pieces").eq("id", formationId).maybeSingle();
+  const takers = (pieces?.published_set_pieces ?? {}) as Record<string, string>;
   // Solo i giocatori di quella squadra (chi è in entrambe riceve entrambe le formazioni).
-  const starters = new Map((slots ?? []).filter((s) => s.player_id).map((s) => [s.player_id, s.label]));
+  const starters = new Map<string, string>(
+    (slots ?? []).filter((s) => s.player_id).map((s): [string, string] => [s.player_id, s.label]),
+  );
   return (await members(db, team)).map((m) => {
     const role = starters.get(m.id);
     return {
       userId: m.id,
       title: `📋 ${teamName}: formazione pubblicata`,
-      body: role ? `Sei titolare: ${role}. Forza ${teamName}!` : "Parti dalla panchina: tieniti pronto!",
+      body: role ? starterBody(role, teamName, setPiecesOf(takers, m.id)) : "Parti dalla panchina: tieniti pronto!",
       route: `/formazione?squadra=${team}`,
       data: { team },
     };
   });
+}
+
+/// "rigori, punizioni e angoli": le palle inattive che batte [playerId] ("" se nessuna).
+function setPiecesOf(takers: Record<string, string>, playerId: string): string {
+  const sx = takers.angoli_sx === playerId, dx = takers.angoli_dx === playerId;
+  const roles = [
+    ...(takers.rigori === playerId ? ["rigori"] : []),
+    ...(takers.punizioni === playerId ? ["punizioni"] : []),
+    ...(sx && dx ? ["angoli"] : sx ? ["angoli da sinistra"] : dx ? ["angoli da destra"] : []),
+  ];
+  return roles.length < 2 ? roles.join("") : `${roles.slice(0, -1).join(", ")} e ${roles[roles.length - 1]}`;
+}
+
+/// "Sei titolare: ATT. Forza MILANAC!"; a chi batte anche "batti rigori e punizioni", ma
+/// solo se c'è posto (al massimo 90 caratteri): altrimenti il testo di sempre.
+function starterBody(role: string, teamName: string, setPieces: string): string {
+  const plain = `Sei titolare: ${role}. Forza ${teamName}!`;
+  const withSetPieces = `Sei titolare: ${role}, batti ${setPieces}. Forza ${teamName}!`;
+  return setPieces && withSetPieces.length <= 90 ? withSetPieces : plain;
 }
 
 // ------------------------------------------------------------------ risultato
@@ -159,7 +190,7 @@ async function matchResultPushes(db: SupabaseClient, matchId: string): Promise<P
     .from("matches").select("id, team, opponent, home, goals_for, goals_against").eq("id", matchId).single();
   if (!match || match.goals_for == null || match.goals_against == null) return [];
   const team = match.team ?? "milanac";
-  const us = TEAM_NAMES[team] ?? "Milan AC";
+  const us = TEAM_NAMES[team] ?? "MILANAC";
   const score = match.home
     ? `${us} ${match.goals_for}–${match.goals_against} ${match.opponent}`
     : `${match.opponent} ${match.goals_against}–${match.goals_for} ${us}`;
@@ -190,7 +221,7 @@ async function eventPushes(db: SupabaseClient, eventId: string): Promise<Push[]>
   const { data: e } = await db
     .from("events").select("id, type, title, starts_at, team, location").eq("id", eventId).single();
   if (!e) return [];
-  const teamName = e.team ? TEAM_NAMES[e.team] ?? "Milan AC" : "tutto il club";
+  const teamName = e.team ? TEAM_NAMES[e.team] ?? "MILANAC" : "tutto il club";
   const kind = ({ torneo: "Partita ufficiale", amichevole: "Amichevole", allenamento: "Allenamento",
     riunione: "Riunione" } as Record<string, string>)[e.type] ?? "Evento";
   const day = dayRome(e.starts_at);
@@ -224,7 +255,14 @@ async function matchReminderPushes(db: SupabaseClient, eventId: string, when: un
   const time = timeRome(e.starts_at);
   const body = `${e.title} alle ${time}${e.party_code ? ` · Party: ${e.party_code}` : ""}`;
   const minutes = Math.round((new Date(e.starts_at).getTime() - Date.now()) / 60000);
-  const title = when === "ora"
+  // I convocati si presentano in party trenta minuti prima (regolamento). "ora" (un'ora
+  // prima, con il titolo di prima) lo manda il database finché non ha la migrazione 0034: i
+  // workflow Database e Funzioni partono ognuno per conto suo e, se questa funzione arriva
+  // prima, quei promemoria non devono andare persi. Si può togliere (con il suo test in
+  // test/promemoria_partita_test.dart) quando la 0034 è in produzione.
+  const title = when === "party"
+    ? `⏰ Tra ${minutes >= 25 ? 30 : Math.max(minutes, 1)} minuti si gioca: tutti in party!`
+    : when === "ora"
     ? (minutes >= 50 ? "⚽ Tra un'ora si gioca" : `⚽ Tra ${Math.max(minutes, 1)} minuti si gioca`)
     : when === "lobby"
     ? "🎮 Tutti in lobby!"
@@ -407,7 +445,7 @@ async function specialCardsWeekPushes(db: SupabaseClient, matchId: string): Prom
   const { data: msg } = await db
     .from("messages").select("body").eq("kind", "system")
     .eq("meta->>type", "special_cards").eq("meta->>match", matchId).maybeSingle();
-  // "Carte speciali della 3ª giornata (Milan AC 3–1 Rivali): POR Rossi +5, …"
+  // "Carte speciali della 3ª giornata (MILANAC 3–1 Rivali): POR Rossi +5, …"
   const body = msg?.body ?? "Guarda chi ha la carta speciale di questa settimana.";
   const title = body.match(/^Carte speciali ([^(]+)/)?.[1]?.trim();
   return (await members(db, m.team)).map((u) => ({

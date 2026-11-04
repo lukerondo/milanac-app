@@ -122,7 +122,7 @@ class TorneiPage extends ConsumerWidget {
   }
 }
 
-/// "Milan AC · in corso dal 15 settembre", "Milan AC Futuro · Torneo amatoriale".
+/// "MILANAC · in corso dal 15 settembre", "MILANAC FUTURO · Torneo amatoriale".
 String _subtitle(Tournament t) {
   String day(DateTime d) => DateFormat('d MMMM', 'it').format(d);
   final detail = switch (t.status) {

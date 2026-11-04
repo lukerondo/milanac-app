@@ -8,15 +8,20 @@ import 'package:milanac/features/calendario/calendario_page.dart';
 import 'package:milanac/shared/ui.dart';
 
 import 'helpers.dart';
-import 'home_test.dart' show startAppAt, todayInItalyAt;
+import 'home_test.dart'
+    show italyAt, startAppAt, todayInItalyAt, weekdayInItalyAt;
 
 /// Home, Presenze, Calendario, Formazione e Sala Direttivo con l'aspetto "Chiaro": ogni
 /// schermata usa la tavolozza chiara e si apre senza errori né testo che sborda.
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
-  Future<ProviderContainer> startLight(WidgetTester tester) async {
-    final container = await startAppAt(tester, todayInItalyAt(17));
+  /// [now]: di solito oggi alle 17; per la serata, un giorno feriale.
+  Future<ProviderContainer> startLight(
+    WidgetTester tester, {
+    DateTime? now,
+  }) async {
+    final container = await startAppAt(tester, now ?? todayInItalyAt(17));
     await container.read(appearanceProvider.notifier).set(Appearance.chiaro);
     await tester.pumpAndSettle();
     return container;
@@ -55,16 +60,16 @@ void main() {
   }
 
   testWidgets('Tema chiaro: Home, Presenze e Calendario', (tester) async {
-    await startLight(tester);
+    await startLight(tester, now: weekdayInItalyAt(17));
 
     // Home: stasera, prossima partita, ultimo risultato e Mondo Proclub.
-    expectLight(tester, find.text('STASERA · MILAN AC'));
+    expectLight(tester, find.text('STASERA · MILANAC'));
     await scrollToEnd(tester);
     expectLight(tester, find.text('MONDO PROCLUB'));
 
     // Presenze: la serata di oggi, gli elenchi e lo storico di un giocatore.
     await goToSection(tester, 'Presenze');
-    expectLight(tester, find.text('OGGI · MILAN AC'));
+    expectLight(tester, find.text('OGGI · MILANAC'));
     final day = find
         .descendant(
           of: find.byKey(const ValueKey('presenze-giorno')),
@@ -115,6 +120,21 @@ void main() {
     await scrollToEnd(tester, find.byType(Scrollable).last);
     expectLight(tester, find.text('Salva evento'));
   });
+
+  testWidgets(
+    'Tema chiaro: il sabato senza eventi (riposo) in Home, Presenze e '
+    'Sala Direttivo',
+    (tester) async {
+      await startLight(tester, now: italyAt(2026, 11, 7, 17));
+      expectLight(tester, find.text('RIPOSO'));
+      await goToSection(tester, 'Presenze');
+      expectLight(tester, find.text('RIPOSO'));
+      await goToSection(tester, 'Sala Direttivo');
+      await tester.tap(find.text('Senza risposta stasera'));
+      await tester.pumpAndSettle();
+      expectLight(tester, find.textContaining('stasera niente serata'));
+    },
+  );
 
   testWidgets('Tema chiaro: Formazione e Sala Direttivo', (tester) async {
     await startLight(tester);
