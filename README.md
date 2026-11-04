@@ -88,8 +88,11 @@ social (1080×1920) non sta nel repository. Se il video manca, l'intro resta su 
    ```
    **Non** inserire mai nel repository la chiave `secret` / `service_role`.
 6. Registrati dall'app scegliendo *Faccio parte del Direttivo* con la password del Direttivo
-   (impostata nel database: vedi `docs/SETUP_SUPABASE.md`, § 8): il primo del Direttivo che entra
-   scrive e pubblica il regolamento d'ingresso.
+   (impostata nel database: vedi `docs/SETUP_SUPABASE.md`, § 8). Il Regolamento ufficiale 2026
+   e la Storia del club arrivano già pubblicati con le migrazioni (`0033`); il Direttivo li
+   modifica dalla matita in Club → Regolamento e Storia (nel testo `**testo**` è grassetto).
+   Senza nessuna versione pubblicata, il primo del Direttivo che entra scrive e pubblica il
+   regolamento d'ingresso.
    Gli altri entrano da soli, completando la registrazione e accettando il regolamento: non c'è
    un'approvazione, ma il Direttivo riceve l'avviso di ogni nuovo ingresso nella chat *Sala
    Direttivo* e può togliere dalla Rosa chi non conosce (Sala Direttivo → Rosa e squadre).

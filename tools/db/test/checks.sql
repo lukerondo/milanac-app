@@ -26,6 +26,75 @@ begin
     false);
 end $$;
 
+-- ---------------------------------------------------------------- regolamento ufficiale 2026 (0033)
+-- Dopo le migrazioni: la versione 1 (l'organigramma della vecchia app, 0016) e la 2 con il
+-- regolamento 2026, uguale alla bozza, e la storia nuova.
+do $$
+declare
+  v jsonb := (select snapshot from rules_versions where number = 2);
+begin
+  assert (select count(*) from rules_versions) = 2, 'due versioni: quella della 0016 e il 2026';
+  assert (select max(number) from rules_versions) = 2, 'il 2026 è l''ultima versione';
+  assert (select published_by from rules_versions where number = 2) is null,
+    'pubblicata dalla migrazione, non da un membro';
+  assert (select array_agg(e->>'title' order by i) from jsonb_array_elements(v) with ordinality t(e, i))
+    = array['Regolamento ufficiale 2026', 'Organigramma', 'Art. 1 – Presenza e comunicazione',
+            'Art. 2 – Comportamento e disciplina', 'Art. 3 – Dinamiche di gioco',
+            'Art. 4 – Gestione della squadra e sanzioni', 'Art. 5 – Candidature staff e obiettivi'],
+    'i 7 articoli del 2026, in ordine';
+  assert (select array_agg(array(select jsonb_object_keys(e) order by 1)::text) from jsonb_array_elements(v) e)
+    = array_fill('{body,title}'::text, array[7]), 'stessa forma della fotografia di publish_rules()';
+  assert v = (select jsonb_agg(jsonb_build_object('title', a.title, 'body', a.body)
+                               order by a.sort_order, a.updated_at) from rules_articles a),
+    'la bozza è il regolamento pubblicato';
+  -- L'organigramma: una riga "ETICHETTA: valore" per ruolo (nell'app diventa un elenco).
+  assert (select bool_and(l ~ '^[A-ZÀ-Ý0-9 /.&-]{3,60}:\s*\S')
+          from jsonb_array_elements(v) e, regexp_split_to_table(e->>'body', '\n') l
+          where e->>'title' = 'Organigramma'), 'organigramma come elenco';
+  assert (select e->>'body' from jsonb_array_elements(v) e where e->>'title' = 'Organigramma')
+    like '%RESPONSABILE TECNICO / TATTICO: Fabio Ruggieri%RESPONSABILE IT: Francesco De Vietro',
+    'organigramma 2026';
+  -- Il grassetto (**testo**) si chiude sempre sulla stessa riga.
+  assert (select bool_and((length(l) - length(replace(l, '**', ''))) / 2 % 2 = 0)
+          from jsonb_array_elements(v) e, regexp_split_to_table(e->>'body', '\n') l),
+    'grassetto chiuso';
+  assert (select e->>'body' from jsonb_array_elements(v) e where e->>'title' like 'Art. 5%')
+    like '%**BENVENUTO IN FAMIGLIA!**', 'in chiusura il benvenuto';
+  assert (select content from pages where slug = 'storia')
+    like '%nasce nel 2025 da un''idea di Fabio Ruggieri, Giuseppe Ruggieri e Christian Rizzi%',
+    'la storia nuova';
+  assert (select content from pages where slug = 'storia') like '%il rosso, il nero ed il bianco.',
+    'i colori sociali: rosso, nero e bianco';
+  assert (select count(*) from net.calls) = 0, 'senza la funzione notify nessuna chiamata';
+end $$;
+-- Rilanciata non pubblica di nuovo; se l'ultima versione è diversa (es. pubblicata dopo dal
+-- Direttivo) pubblica quella dopo con la notifica "rules", come publish_rules(), e rimette
+-- bozza e storia.
+begin;
+insert into app_config (key, value) values
+  ('notify_url', 'https://example.invalid/functions/v1/notify'), ('notify_secret', 's3greto');
+\i supabase/migrations/0033_regolamento_2026.sql
+do $$ begin
+  assert (select max(number) from rules_versions) = 2, 'rilanciata non crea un''altra versione';
+  assert (select count(*) from net.calls) = 0, 'e non manda la notifica';
+end $$;
+insert into rules_versions (number, snapshot) values (3, '[{"title": "Art. 1", "body": "Altro."}]');
+insert into rules_articles (sort_order, title, body) values (9, 'Bozza', 'Da togliere.');
+update pages set content = 'Un''altra storia.' where slug = 'storia';
+\i supabase/migrations/0033_regolamento_2026.sql
+do $$ begin
+  assert (select max(number) from rules_versions) = 4, 'versione dopo l''ultima';
+  assert (select snapshot from rules_versions where number = 4)
+         = (select snapshot from rules_versions where number = 2), 'di nuovo il regolamento 2026';
+  assert (select count(*) from rules_articles) = 7, 'la bozza è di nuovo il 2026';
+  assert (select content from pages where slug = 'storia') like '%il rosso, il nero ed il bianco.',
+    'la storia rimessa';
+  assert (select count(*) from net.calls where body->>'kind' = 'rules' and body->>'version' = '4') = 1
+         and (select count(*) from net.calls) = 1, 'una notifica del nuovo regolamento';
+  assert (select headers->>'x-milanac-secret' from net.calls) = 's3greto', 'come le altre notifiche';
+end $$;
+rollback;
+
 insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-00000000000d', 'd@example.com', '{"full_name": "Direttore"}'),
   ('00000000-0000-0000-0000-00000000000a', 'g@example.com', '{"name": "Giocatore"}'),
@@ -425,10 +494,10 @@ insert into auth.users (id, email) values
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 do $$ begin
-  assert (select count(*) from rules_versions) = 1, 'chi si registra legge il regolamento (versione 1)';
+  assert (select count(*) from rules_versions) = 2, 'chi si registra legge il regolamento (versione 2, il 2026)';
   assert (select count(*) from pages where slug = 'storia') = 1, 'e la storia del club';
 end $$;
-select pg_temp.expect_error($q$select accept_rules(1)$q$, 'Completa prima');
+select pg_temp.expect_error($q$select accept_rules(2)$q$, 'Completa prima');
 select pg_temp.expect_error(
   $q$select complete_registration('', 'Rossi', 1995, 'ROSSI', null, array['milanac'], false, null, null, 'ATT', 9, 'ps5', '{}')$q$,
   'Nome non valido');
@@ -450,10 +519,10 @@ select pg_temp.expect_error($q$select accept_rules(7)$q$, 'non aggiornata');
 select pg_temp.expect_error(
   $q$update profiles set requested_role = 'direttivo' where id = '00000000-0000-0000-0000-0000000000a1'$q$,
   'Solo il Direttivo');
-select accept_rules(1);
+select accept_rules(2);
 do $$ begin
   assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 'giocatore', 'entrato come giocatore';
-  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 1, 'versione accettata';
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 2, 'versione accettata';
   assert (select count(*) from events) >= 1, 'da membro legge i dati del club';
 end $$;
 select pg_temp.expect_error($q$select publish_rules()$q$, 'Solo il Direttivo');
@@ -471,7 +540,7 @@ select pg_temp.expect_error(
   $q$select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['milanac', 'futuro'], true, 'prova-test', '{}', 'CC', 10, 'ps5', '{}')$q$,
   'almeno un ruolo');
 select complete_registration('Fabio', 'Bianchi', 1990, 'BIANCHI', null, array['futuro', 'milanac', 'milanac'], true, 'prova-test', array['capitano', 'gestore'], 'CC', 10, 'ps5', '{}');
-select accept_rules(1);
+select accept_rules(2);
 do $$ begin
   assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 'direttivo', 'entrato nel Direttivo';
   assert (select teams from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['milanac', 'futuro'],
@@ -479,21 +548,22 @@ do $$ begin
   assert (select direttivo_roles from profiles where id = '00000000-0000-0000-0000-0000000000a2') = array['capitano', 'gestore'], 'etichette';
 end $$;
 -- Nuova versione del regolamento: notifica a tutti e nuova accettazione.
-insert into rules_articles (sort_order, title, body) values (1, 'Art. 1 – Presenze', 'Rispondi entro le 18:30.');
+insert into rules_articles (sort_order, title, body) values (7, 'Art. 6 – Presenze', 'Rispondi entro le 18:30.');
 do $$ begin
-  assert (select publish_rules()) = 2, 'versione 2';
+  assert (select publish_rules()) = 3, 'versione 3';
 end $$;
 reset role;
 do $$ begin
   assert (select count(*) from net.calls where body->>'kind' = 'rules') = 1, 'notifica del nuovo regolamento';
-  assert (select jsonb_array_length(snapshot) from rules_versions where number = 2) = 2, 'due articoli nella versione 2';
+  assert (select jsonb_array_length(snapshot) from rules_versions where number = 3) = 8, 'otto articoli nella versione 3';
+  assert (select snapshot->7->>'title' from rules_versions where number = 3) = 'Art. 6 – Presenze', 'il nuovo in fondo';
 end $$;
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
-select pg_temp.expect_error($q$select accept_rules(1)$q$, 'non aggiornata');
-select accept_rules(2);
+select pg_temp.expect_error($q$select accept_rules(2)$q$, 'non aggiornata');
+select accept_rules(3);
 do $$ begin
-  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 2, 'riaccettata la versione 2';
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a1') = 3, 'riaccettata la versione 3';
   assert (select count(*) from rules_articles) = 0, 'la bozza non si legge dai giocatori';
 end $$;
 -- Cambio della password del club.
@@ -923,10 +993,10 @@ reset role;
 select set_config('milanac.now', '', false);
 
 -- ---------------------------------------------------------------- regolamento d'ingresso (0021)
--- Chi pubblica una versione la ha già accettata (la 2 l'ha pubblicata a2).
+-- Chi pubblica una versione la ha già accettata (la 3 l'ha pubblicata a2).
 reset role;
 do $$ begin
-  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 2,
+  assert (select rules_accepted_version from profiles where id = '00000000-0000-0000-0000-0000000000a2') = 3,
     'chi pubblica ha già accettato la versione';
 end $$;
 -- Con una versione pubblicata non si entra senza accettarla.

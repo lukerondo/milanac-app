@@ -102,6 +102,16 @@ primo del Direttivo che entra trova l'editor del regolamento d'ingresso con la s
 Chi pubblica una versione risulta averla già accettata; tutti gli altri la leggono e la
 accettano al primo accesso successivo.
 
+Il testo degli articoli è semplice: righe e paragrafi (riga vuota) restano come scritti,
+`**testo**` è grassetto (sulla stessa riga; un `**` spaiato resta com'è, l'editor lo ricorda
+sotto il campo) e un articolo in cui ogni riga è `ETICHETTA: valore` diventa un elenco.
+L'articolo intitolato **Organigramma** si vede anche sotto la Storia (pagina `storia` di
+`pages`, senza versioni). Il **Regolamento ufficiale 2026** è arrivato con la migrazione
+`0033`: sette articoli (presentazione, organigramma, Art. 1-5) al posto della bozza, pubblicati
+come nuova versione da riaccettare (notifica `rules`, `published_by` vuoto) e i cenni storici
+del documento nella Storia; gli stessi testi stanno in
+`lib/features/regolamento/regolamento_2026.dart` per la demo (un test li confronta).
+
 ## 4. Sezioni dell'app
 
 1. **Intro** – video MP4 incluso nell'app (il walkout della squadra, 20 s: striscioni in curva
@@ -167,7 +177,8 @@ accettano al primo accesso successivo.
 8. **Albo d'oro** – stagioni a schede (es. 2025/26, 2026/27), targa con il numero di trofei ed
    elenco dei trofei caricati dal Direttivo (foto o sagoma disegnata); tocco su un trofeo →
    dettaglio (competizione, data, finale, foto).
-9. **Regolamento & Storia** – una pagina con due schede, testo formattato modificabile dal Direttivo.
+9. **Regolamento & Storia** – una pagina con due schede, testo formattato modificabile dal Direttivo
+   (grassetto con `**testo**`, organigramma a elenco anche sotto la Storia).
 10. **Presenze** – settimana a colpo d'occhio (e mese intero): oggi in oro, un puntino per ogni evento. Per il
     giorno scelto: la serata della squadra, la propria risposta (*Presente* · *In ritardo*
     con orario e nota obbligatoria · *Assente* con nota facoltativa), totali e gli elenchi

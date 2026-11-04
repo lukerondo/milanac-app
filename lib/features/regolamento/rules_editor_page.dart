@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../shared/async_view.dart';
 import '../../shared/ui.dart';
 import '../auth/gate_ui.dart';
+import 'rules_reader.dart';
 import 'rules_repository.dart';
 
 /// Editor del Direttivo: la bozza degli articoli, da pubblicare come nuova versione.
@@ -156,8 +157,8 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
                       child: const Icon(Icons.drag_handle_rounded),
                     ),
                     title: Text(a.title),
-                    subtitle: Text(
-                      a.body,
+                    subtitle: Text.rich(
+                      boldSpan(a.body),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -311,6 +312,8 @@ class _ArticleDialogState extends State<_ArticleDialog> {
             decoration: const InputDecoration(
               labelText: 'Testo',
               alignLabelWithHint: true,
+              helperText: 'Per il grassetto: **testo**',
+              helperMaxLines: 2,
             ),
           ),
         ],

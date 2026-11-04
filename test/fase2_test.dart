@@ -130,7 +130,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Titolo'),
-      'Art. 4 – Chat',
+      'Art. 6 – Chat',
     );
     await tester.enterText(
       find.widgetWithText(TextField, 'Testo'),
@@ -138,14 +138,25 @@ void main() {
     );
     await tester.tap(find.text('Salva'));
     await tester.pumpAndSettle();
-    expect(find.text('Art. 4 – Chat'), findsOneWidget);
+    // In fondo alla bozza, dopo i sette articoli del regolamento 2026.
+    await tester.scrollUntilVisible(
+      find.text('Art. 6 – Chat'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(ReorderableListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('Art. 6 – Chat'), findsOneWidget);
     await tester.tap(find.text('PUBBLICA'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Pubblica'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Versione 2 pubblicata'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('ART. 4 – CHAT'),
+      find.text('ART. 6 – CHAT'),
       200,
       scrollable: find
           .descendant(
@@ -154,13 +165,13 @@ void main() {
           )
           .first,
     );
-    expect(find.text('ART. 4 – CHAT'), findsOneWidget);
+    expect(find.text('ART. 6 – CHAT'), findsOneWidget);
 
     // Storia: il racconto e, sotto, l'organigramma (dal regolamento).
     await tester.tap(find.text('Storia'));
     await tester.pumpAndSettle();
     expect(find.text('LA NOSTRA STORIA'), findsOneWidget);
-    expect(find.textContaining('settembre 2025'), findsOneWidget);
+    expect(find.textContaining('nasce nel 2025'), findsOneWidget);
     expect(find.byTooltip('Modifica la storia'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('ORGANIGRAMMA'),
