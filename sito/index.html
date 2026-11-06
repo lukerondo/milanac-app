@@ -3,35 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MILANAC Pro Club</title>
-<meta name="description" content="MILANAC Pro Club: il club rossonero di EA SPORTS FC Pro Clubs su PS5. Solo tifosi del Milan. Allenamenti, campionato, tornei e amichevoli dal lunedì al venerdì. Candidati.">
+<title>MILANAC Pro Club · Pro club milanista su EA SPORTS FC 27 (PS5, PC, Xbox)</title>
+<meta name="description" content="MILANAC Pro Club: il club di tifosi del Milan che gioca a Pro Clubs su EA SPORTS FC 27, cross-play PS5, PC e Xbox. Prima squadra in FVPA Serie C. Allenamenti dal lunedì al venerdì. Candidati: ti rispondiamo entro 48 ore.">
 <meta property="og:title" content="MILANAC Pro Club · Milano siamo noi">
-<meta property="og:description" content="Il pro club rossonero di EA SPORTS FC. Solo tifosi del Milan. Candidati e scendi in campo con noi.">
+<meta property="og:description" content="Il pro club milanista di EA SPORTS FC 27. Cross-play PS5, PC e Xbox. Candidati e scendi in campo con noi.">
 <meta property="og:type" content="website">
+<meta property="og:image" content="img/poster.jpg">
 <link rel="icon" href="img/stemma.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+ {"@type":"SportsTeam","name":"MILANAC Pro Club","sport":"Esports football (EA SPORTS FC 27 Pro Clubs)","foundingDate":"2025","location":{"@type":"Place","name":"Milano, Italia"},"memberOf":{"@type":"SportsOrganization","name":"FVPA"},"description":"Pro club di tifosi del Milan su EA SPORTS FC 27, cross-play PS5, PC e Xbox."},
+ {"@type":"FAQPage","mainEntity":[
+  {"@type":"Question","name":"Devo essere forte per entrare?","acceptedAnswer":{"@type":"Answer","text":"Conta più la testa delle mani: presenza, rispetto e gioco di squadra. Il livello lo vediamo nel provino di una settimana."}},
+  {"@type":"Question","name":"Posso giocare da PC o da Xbox?","acceptedAnswer":{"@type":"Answer","text":"Sì: siamo cross-play. Giochiamo a EA SPORTS FC 27 Pro Clubs da PS5, PC e Xbox."}},
+  {"@type":"Question","name":"Quando si gioca?","acceptedAnswer":{"@type":"Answer","text":"Dal lunedì al venerdì, dalle 21:30 alle 23:30. Nel fine settimana solo con una partita in calendario."}},
+  {"@type":"Question","name":"Serve il microfono?","acceptedAnswer":{"@type":"Answer","text":"Sì. In partita parla solo lo staff tecnico; nel resto della serata la comunicazione passa dal party e dalla stanza vocale dell'app."}},
+  {"@type":"Question","name":"In quanto tempo rispondete?","acceptedAnswer":{"@type":"Answer","text":"Entro 48 ore dalla candidatura ti scrive il responsabile del reclutamento."}},
+  {"@type":"Question","name":"Devo essere tifoso del Milan?","acceptedAnswer":{"@type":"Answer","text":"Sì, è la regola numero uno del club: tesseriamo solo milanisti."}}
+ ]}
+]}
+</script>
 <style>
-/* Layout: un'unica pagina cinematografica. Apertura con il video del walkout a tutta altezza,
-   che "arretra" scorrendo (sezione bloccata e guidata dallo scroll); poi fascia in movimento,
-   numeri che contano, testi che entrano riga per riga, scorrimento orizzontale per le
-   competizioni, modulo con campi a filo e il nome del club gigante in chiusura.
-   Nero e avorio come l'app, oro nei dettagli, rosso una volta sola. Tutto resta leggibile
-   anche senza JavaScript: le animazioni si aggiungono sopra. */
+/* Layout: un'unica pagina che accompagna chi vuole candidarsi. Apertura con il video del walkout
+   che arretra scorrendo; la storia dei tre fondatori a capitoli (scena bloccata sul computer);
+   i cinque requisiti timbrati con un sigillo; le due squadre come carte 3D; il provino in sette
+   giorni; FVPA Serie C; l'app del club; FAQ. Il modulo vive in un pannello laterale che si apre
+   dallo stemma fisso in basso a destra. Nero e avorio come l'app, oro nei dettagli, rosso per il
+   Milan. Tutto resta leggibile anche senza JavaScript: le animazioni si aggiungono sopra. */
 :root {
   color-scheme: dark;
-  --bg: #0B0B0C;
-  --bg-2: #111111;
-  --surface: #151517;
-  --line: #2B2B2F;
-  --fg: #F5F1E6;
-  --fg-2: #C9C3B8;
-  --muted: #A8A29A;
-  --gold: #D6B354;
-  --gold-light: #E8C96A;
-  --gold-deep: #8F6E1C;
-  --gold-line: rgba(214, 179, 84, .3);
+  --bg: #0B0B0C; --bg-2: #111111; --surface: #151517; --surface-2: #1C1C1F; --line: #2B2B2F;
+  --fg: #F5F1E6; --fg-2: #C9C3B8; --muted: #A8A29A;
+  --gold: #D6B354; --gold-light: #E8C96A; --gold-deep: #8F6E1C; --gold-line: rgba(214, 179, 84, .3);
   --red: #C61C23;
   --display: "Oswald", "Arial Narrow", Impact, sans-serif;
   --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
@@ -48,11 +54,13 @@ img { max-width: 100%; }
 a { color: inherit; }
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 p { margin: 0; }
+button { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 .wrap { max-width: var(--wrap); margin-inline: auto; padding-left: var(--gl); padding-right: var(--gr); }
 .band { padding-block: clamp(72px, 10vw, 150px); position: relative; }
 .band + .band::before { content: ""; position: absolute; left: var(--gl); right: var(--gr); top: 0; height: 1px; background: var(--gold-line); }
-html.cursor-on, html.cursor-on a, html.cursor-on button { cursor: none; }
+html.cursor-on, html.cursor-on a, html.cursor-on button, html.cursor-on label { cursor: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---------- Caricamento ---------- */
 .loader { position: fixed; inset: 0; z-index: 70; background: var(--bg); display: grid; place-items: center; animation: loader-out .9s cubic-bezier(.7, 0, .3, 1) 2.4s forwards; }
@@ -77,23 +85,25 @@ html.cur-hover .cur-ring { width: 64px; height: 64px; background: rgba(214, 179,
 html.cur-hover .cur-dot { opacity: 0; }
 
 /* ---------- Testata ---------- */
-.top {
-  position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 50;
-  transition: transform .5s var(--ease), background-color .4s, border-color .4s;
-  border-bottom: 1px solid transparent;
-}
+.top { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 50; transition: transform .5s var(--ease), background-color .4s, border-color .4s; border-bottom: 1px solid transparent; }
 .top.solid { background: rgba(11, 11, 12, .78); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-color: rgba(255, 255, 255, .06); }
 .top.hide { transform: translateY(-110%); }
-.top .wrap { display: flex; align-items: center; gap: 20px; min-height: 76px; }
+.top .wrap { display: flex; align-items: center; gap: 16px; min-height: 76px; }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; margin-right: auto; }
 .brand img { width: 40px; height: 40px; }
 .brand b { font: 600 20px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; }
 .brand small { display: block; font: 600 9px/1.2 var(--body); letter-spacing: .32em; color: var(--gold); text-transform: uppercase; margin-top: 3px; }
-.nav { display: flex; gap: 30px; align-items: center; }
-.nav a:not(.btn) { position: relative; font: 500 12px/1 var(--body); letter-spacing: .18em; text-transform: uppercase; text-decoration: none; color: var(--fg-2); padding: 10px 0; }
+.nav { display: flex; gap: 26px; align-items: center; }
+.nav a:not(.btn) { position: relative; font: 500 12px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; text-decoration: none; color: var(--fg-2); padding: 10px 0; }
 .nav a:not(.btn)::after { content: ""; position: absolute; left: 0; right: 0; bottom: 4px; height: 1px; background: var(--gold); transform: scaleX(0); transform-origin: right; transition: transform .45s var(--ease); }
 .nav a:not(.btn):hover { color: var(--fg); }
 .nav a:not(.btn):hover::after { transform: scaleX(1); transform-origin: left; }
+.iconbtn { width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 1px solid var(--line); border-radius: 50%; cursor: pointer; color: var(--fg-2); transition: border-color .3s, color .3s; }
+.iconbtn:hover, .iconbtn[aria-pressed="true"] { border-color: var(--gold); color: var(--gold-light); }
+.iconbtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.iconbtn .on { display: none; }
+.iconbtn[aria-pressed="true"] .on { display: block; }
+.iconbtn[aria-pressed="true"] .off { display: none; }
 .menu-btn { display: none; width: 44px; height: 44px; background: none; border: 1px solid var(--line); border-radius: 2px; cursor: pointer; position: relative; }
 .menu-btn span, .menu-btn span::before, .menu-btn span::after { content: ""; position: absolute; left: 12px; right: 12px; height: 2px; background: var(--fg); transition: transform .3s var(--ease), opacity .3s; }
 .menu-btn span { top: 21px; }
@@ -102,7 +112,7 @@ html.cur-hover .cur-dot { opacity: 0; }
 .menu-btn[aria-expanded="true"] span { background: transparent; }
 .menu-btn[aria-expanded="true"] span::before { transform: translateY(7px) rotate(45deg); }
 .menu-btn[aria-expanded="true"] span::after { transform: translateY(-7px) rotate(-45deg); }
-@media (max-width: 899px) {
+@media (max-width: 1023px) {
   .menu-btn { display: block; }
   .nav { display: none; position: absolute; left: 0; right: 0; top: 100%; background: rgba(11, 11, 12, .96); border-bottom: 1px solid var(--gold-line); flex-direction: column; align-items: stretch; gap: 0; padding: 8px var(--gr) 18px var(--gl); }
   .nav.open { display: flex; }
@@ -111,17 +121,11 @@ html.cur-hover .cur-dot { opacity: 0; }
 }
 
 /* ---------- Pulsanti ---------- */
-.btn {
-  position: relative; isolation: isolate; overflow: hidden;
-  display: inline-flex; align-items: center; justify-content: center; gap: 12px;
-  padding: 18px 30px; border-radius: 2px; border: 1px solid var(--gold);
-  font: 600 12px/1 var(--body); letter-spacing: .2em; text-transform: uppercase;
-  text-decoration: none; cursor: pointer; transition: color .35s var(--ease), border-color .35s;
-}
+.btn { position: relative; isolation: isolate; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 18px 30px; border-radius: 2px; border: 1px solid var(--gold); font: 600 12px/1 var(--body); letter-spacing: .2em; text-transform: uppercase; text-decoration: none; cursor: pointer; background: transparent; transition: color .35s var(--ease), border-color .35s; }
 .btn::before { content: ""; position: absolute; inset: 0; background: var(--gold-light); z-index: -1; transform: translateX(-101%); transition: transform .5s var(--ease); }
 .btn:hover::before { transform: translateX(0); }
 .btn-gold { background: var(--gold); color: #111; }
-.btn-line { background: transparent; color: var(--fg); border-color: rgba(245, 241, 230, .35); }
+.btn-line { color: var(--fg); border-color: rgba(245, 241, 230, .35); }
 .btn-line:hover { color: #111; border-color: var(--gold-light); }
 .btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
 .nav .btn { padding: 13px 20px; }
@@ -134,19 +138,15 @@ html.cur-hover .cur-dot { opacity: 0; }
 .stage-wrap { position: relative; height: 100svh; min-height: 560px; display: grid; align-items: center; justify-items: center; }
 .stage { position: relative; height: 100svh; min-height: 560px; width: calc(100svh * 9 / 16); min-width: 315px; max-width: 100%; background: #000; overflow: hidden; box-shadow: 0 40px 120px rgba(0, 0, 0, .7); }
 .stage::after { content: ""; position: absolute; inset: 0; border: 1px solid var(--gold-line); pointer-events: none; }
+/* Sul computer il menu passa sopra il video: un velo scuro in alto lo tiene leggibile. */
+@media (min-width: 900px) { .stage::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(to bottom, rgba(0, 0, 0, .6), rgba(0, 0, 0, 0) 22%); } }
 .stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .tick { position: absolute; width: 14px; height: 14px; border-color: var(--gold); border-style: solid; border-width: 0; z-index: 2; }
 .tick.tl { top: 10px; left: 10px; border-top-width: 1px; border-left-width: 1px; }
 .tick.tr { top: 10px; right: 10px; border-top-width: 1px; border-right-width: 1px; }
 .tick.bl { bottom: 10px; left: 10px; border-bottom-width: 1px; border-left-width: 1px; }
 .tick.br { bottom: 10px; right: 10px; border-bottom-width: 1px; border-right-width: 1px; }
-.audio {
-  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 3; white-space: nowrap;
-  display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px;
-  background: rgba(11, 11, 12, .72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--gold-line); border-radius: 999px; color: var(--fg); cursor: pointer;
-  font: 600 11px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; transition: border-color .3s, color .3s;
-}
+.audio { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 3; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; background: rgba(11, 11, 12, .72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--gold-line); border-radius: 999px; color: var(--fg); cursor: pointer; font: 600 11px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; transition: border-color .3s, color .3s; }
 .audio:hover { border-color: var(--gold); color: var(--gold-light); }
 .audio svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .audio .on { display: none; }
@@ -167,8 +167,8 @@ html.cur-hover .cur-dot { opacity: 0; }
   .hero { min-height: 100svh; }
   .hero-in { display: block; padding: 0; max-width: none; }
   .ambient { display: none; }
-  .stage-wrap { position: absolute; inset: 0; display: block; }
-  .stage { height: 100%; width: 100%; aspect-ratio: auto; box-shadow: none; }
+  .stage-wrap { position: absolute; inset: 0; display: block; height: 100%; min-height: 0; }
+  .stage { height: 100%; width: 100%; min-width: 0; min-height: 0; box-shadow: none; }
   .stage::after, .tick { display: none; }
   .stage::before { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0, 0, 0, .4), rgba(0, 0, 0, 0) 24%, rgba(11, 11, 12, .55) 48%, rgba(11, 11, 12, .93) 70%, var(--bg) 100%); z-index: 1; }
   .hero h1, .hero .lead, .hero .eyebrow { text-shadow: 0 2px 24px rgba(0, 0, 0, .8); }
@@ -176,10 +176,11 @@ html.cur-hover .cur-dot { opacity: 0; }
   .hero-copy { position: absolute; left: var(--gl); right: var(--gr); bottom: 86px; max-width: none; }
   .hero h1 { font-size: clamp(56px, 16vw, 92px); }
   .hero .lead { font-size: 16px; }
+  .hero .eyebrow { font-size: 10px; letter-spacing: .18em; }
   .scroll-hint { bottom: 22px; }
 }
 
-/* ---------- Fascia in movimento ---------- */
+/* ---------- Fascia in movimento e numeri ---------- */
 .marquee { overflow: hidden; border-block: 1px solid var(--gold-line); padding-block: 22px; background: var(--bg-2); }
 .marquee-track { display: flex; width: max-content; gap: 48px; align-items: center; will-change: transform; animation: slide 30s linear infinite; }
 html.gsap .marquee-track { animation: none; }
@@ -187,8 +188,6 @@ html.gsap .marquee-track { animation: none; }
 .marquee span { white-space: nowrap; font: 600 clamp(28px, 4.6vw, 62px)/1 var(--display); text-transform: uppercase; letter-spacing: .02em; color: transparent; -webkit-text-stroke: 1px var(--gold); }
 .marquee span.fill { color: var(--fg); -webkit-text-stroke: 0; }
 .marquee em { font-style: normal; color: var(--gold); font-size: .6em; vertical-align: middle; margin-inline: 24px; }
-
-/* ---------- Numeri ---------- */
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 28px 32px; padding-block: clamp(48px, 7vw, 90px); }
 .facts b { display: block; font: 600 clamp(48px, 7vw, 104px)/.95 var(--display); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .facts b small { font-size: .42em; color: var(--gold); letter-spacing: .04em; margin-left: 4px; }
@@ -196,95 +195,186 @@ html.gsap .marquee-track { animation: none; }
 
 /* ---------- Sezioni ---------- */
 .h2 { margin-top: 18px; font: 600 clamp(38px, 5.8vw, 76px)/.98 var(--display); text-transform: uppercase; letter-spacing: -.01em; }
+.h3 { font: 600 clamp(26px, 2.6vw, 36px)/1.05 var(--display); text-transform: uppercase; letter-spacing: .01em; }
 .sec-head { max-width: 820px; }
 .sec-head .lead { margin-top: 20px; }
-.two { display: grid; gap: 44px; margin-top: clamp(36px, 5vw, 72px); }
-@media (min-width: 900px) { .two { grid-template-columns: 1.05fr .95fr; gap: 80px; } }
-.quote { font: 400 clamp(23px, 2.6vw, 34px)/1.35 var(--body); color: var(--fg); text-wrap: pretty; }
-.quote::before { content: "\201C"; display: block; font: 700 120px/.55 var(--display); color: var(--red); margin-bottom: 28px; }
-.quote em { font-style: normal; color: var(--gold-light); }
 .prose { color: var(--fg-2); font-size: 17px; max-width: 58ch; }
 .prose + .prose { margin-top: 16px; }
-.values { list-style: none; margin: 36px 0 0; padding: 0; }
-.values li { position: relative; padding: 20px 0; display: grid; grid-template-columns: 130px 1fr; gap: 16px; align-items: baseline; }
-.values li::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; }
-.values b { font: 600 19px/1.1 var(--display); text-transform: uppercase; letter-spacing: .05em; color: var(--gold-light); }
-.values span { color: var(--fg-2); font-size: 15px; }
-@media (max-width: 480px) { .values li { grid-template-columns: 1fr; gap: 6px; } }
-
-.what { display: grid; gap: 48px; margin-top: clamp(36px, 5vw, 72px); }
-@media (min-width: 900px) { .what { grid-template-columns: 1fr 380px; gap: 80px; align-items: start; } .phone-wrap { position: sticky; top: 110px; } }
-.list > div { position: relative; padding: 30px 0; display: grid; grid-template-columns: 64px 1fr; gap: 18px; }
-.list > div::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; }
-.list > div:last-child::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--line); }
-.list .n { font: 600 14px/1.3 var(--body); color: var(--gold); letter-spacing: .14em; padding-top: 7px; }
-.list h3 { font: 600 clamp(24px, 2.4vw, 32px)/1.05 var(--display); text-transform: uppercase; letter-spacing: .02em; transition: color .3s; }
-.list > div:hover h3 { color: var(--gold-light); }
-.list p { margin-top: 10px; color: var(--fg-2); font-size: 16px; max-width: 56ch; }
-.phone-wrap { display: grid; gap: 14px; perspective: 1200px; }
-.phone { max-width: 320px; margin-inline: auto; border: 1px solid var(--line); border-radius: 32px; padding: 9px; background: #000; box-shadow: 0 40px 90px rgba(0, 0, 0, .65); transform-style: preserve-3d; }
-.reveal-img { overflow: hidden; border-radius: 24px; }
-.reveal-img img { display: block; width: 100%; }
 .caption { font-size: 13px; color: var(--muted); letter-spacing: .02em; text-align: center; }
+.small { font-size: 13px; color: var(--muted); }
+.hair { position: relative; }
+.hair::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; transform: scaleX(var(--x, 1)); }
 
-/* ---------- Scorrimento orizzontale ---------- */
-.hs { position: relative; overflow: hidden; }
-.hs .sec-head { margin-bottom: 8px; }
-.hs-track { display: flex; gap: 24px; padding: 40px var(--gl) 40px; width: max-content; }
-.panel { position: relative; width: min(72vw, 640px); min-height: 440px; padding: 36px 32px 40px; border: 1px solid var(--line); background: linear-gradient(160deg, #15130d, var(--bg-2) 60%); display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
-.panel::before { content: attr(data-n); position: absolute; top: 10px; right: 20px; font: 700 clamp(140px, 18vw, 260px)/1 var(--display); color: transparent; -webkit-text-stroke: 1px rgba(214, 179, 84, .22); pointer-events: none; }
-.panel .eyebrow { margin-bottom: auto; }
-.panel h3 { font: 600 clamp(34px, 3.6vw, 52px)/1 var(--display); text-transform: uppercase; margin-top: 60px; }
-.panel p { margin-top: 14px; color: var(--fg-2); max-width: 44ch; font-size: 16px; }
-.panel .btn { align-self: flex-start; margin-top: 26px; }
-.panel.cta { background: linear-gradient(160deg, #2a2110, #15130d 60%); border-color: var(--gold-line); }
+/* ---------- La storia a capitoli ---------- */
+.story { position: relative; background: var(--bg); }
+.story-stage { position: relative; }
+.story-grid { display: grid; gap: 40px; }
+.chapter { display: grid; align-content: center; gap: 0; }
+.chapter .h2 { max-width: 12ch; }
+.chapter .prose { margin-top: 22px; }
+.fcards { display: flex; gap: 18px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.fcard { position: relative; width: 172px; aspect-ratio: 5 / 7; padding: 18px 14px 16px; border-radius: 10px; background: linear-gradient(165deg, #3a2f12, #15130d 55%, #0f0d09); border: 1px solid rgba(214, 179, 84, .5); box-shadow: 0 30px 70px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(0, 0, 0, .6); display: grid; grid-template-rows: auto 1fr auto; text-align: center; }
+.fcard::before { content: ""; position: absolute; inset: 6px; border: 1px solid rgba(214, 179, 84, .35); border-radius: 7px; pointer-events: none; }
+.fcard .ini { font: 700 clamp(44px, 4vw, 56px)/1 var(--display); color: var(--gold-light); letter-spacing: .02em; align-self: center; }
+.fcard .who { font: 600 15px/1.1 var(--display); text-transform: uppercase; letter-spacing: .06em; }
+.fcard .what { margin-top: 4px; font: 600 9px/1.3 var(--body); letter-spacing: .2em; text-transform: uppercase; color: var(--gold); }
+.fcard img { width: 26px; height: 26px; justify-self: center; }
+.pact { display: grid; gap: 10px; margin-top: 24px; }
+.pact p { font: 400 clamp(20px, 2vw, 26px)/1.3 var(--body); color: var(--fg); }
+.pact p em { font-style: normal; color: var(--gold-light); }
+.pact p::before { content: "— "; color: var(--gold); }
+.crest-wrap { position: relative; width: min(360px, 70vw); aspect-ratio: 1; margin-inline: auto; display: grid; place-items: center; }
+.crest-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.crest-wrap svg circle { fill: none; stroke: var(--gold); stroke-width: 1; stroke-dasharray: 1; stroke-dashoffset: 0; }
+.crest-wrap img { width: 66%; height: auto; filter: drop-shadow(0 20px 40px rgba(0, 0, 0, .7)); }
+.today { display: grid; gap: 6px; text-align: center; }
+.today b { display: block; font: 600 clamp(40px, 6vw, 84px)/.95 var(--display); text-transform: uppercase; letter-spacing: -.01em; }
+.today b.fut { color: transparent; -webkit-text-stroke: 1px var(--gold); }
+.today span { font: 600 11px/1.3 var(--body); letter-spacing: .24em; color: var(--gold); text-transform: uppercase; margin-top: 10px; }
+.story-progress { display: none; }
+@media (min-width: 900px) {
+  .story-stage { height: 100vh; overflow: hidden; }
+  .story-grid { height: 100%; grid-template-columns: 1fr 1fr; align-items: center; gap: 64px; }
+  .story-chapters { position: relative; height: 70vh; }
+  .chapter { position: absolute; inset: 0; opacity: 0; }
+  .chapter:first-child { opacity: 1; }
+  .story-visual { position: relative; height: 72vh; }
+  .story-visual > * { position: absolute; inset: 0; margin: auto; }
+  .fcards { height: 100%; }
+  .crest-wrap { opacity: 0; }
+  .today { opacity: 0; align-content: center; }
+  .story-progress { display: flex; position: absolute; left: var(--gl); bottom: 28px; gap: 18px; z-index: 2; }
+  .story-progress span { font: 600 10px/1 var(--body); letter-spacing: .24em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; transition: color .3s; }
+  .story-progress span::before { content: ""; width: 18px; height: 1px; background: currentColor; }
+  .story-progress span.on { color: var(--gold); }
+}
 @media (max-width: 899px) {
-  .hs-track { overflow-x: auto; width: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-right: var(--gr); }
-  .hs-track::-webkit-scrollbar { display: none; }
-  .panel { flex: none; width: 82vw; min-height: 400px; scroll-snap-align: start; }
+  .story { padding-block: clamp(72px, 10vw, 150px); }
+  .story-chapters, .story-visual { display: contents; }
+  .story-grid > .chapter, .story-grid > .fcards, .story-grid > .crest-wrap, .story-grid > .today { }
+  .chapter[data-i="1"] { order: 1; } .fcards { order: 2; } .chapter[data-i="2"] { order: 3; }
+  .chapter[data-i="3"] { order: 4; } .crest-wrap { order: 5; } .chapter[data-i="4"] { order: 6; } .today { order: 7; }
+  .fcard { width: 150px; }
+  .chapter + .fcards, .crest-wrap, .today { margin-top: 10px; }
+  .chapter[data-i="2"], .chapter[data-i="3"], .chapter[data-i="4"] { margin-top: 36px; }
 }
 
-/* ---------- Organigramma ---------- */
-.staff { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 48px; margin-top: clamp(32px, 4vw, 56px); }
-.staff > div { position: relative; padding: 24px 0; }
-.staff > div::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; }
+/* ---------- Il codice rossonero ---------- */
+.rules { margin-top: clamp(32px, 5vw, 64px); }
+.rule { position: relative; display: grid; grid-template-columns: 64px 1fr 150px; gap: 20px; align-items: center; padding: 30px 0; }
+.rule .rn { font: 600 14px/1.3 var(--body); color: var(--gold); letter-spacing: .14em; align-self: start; padding-top: 10px; }
+.rule h3 { font: 600 clamp(30px, 3.6vw, 52px)/.98 var(--display); text-transform: uppercase; letter-spacing: -.005em; }
+.rule p { margin-top: 10px; color: var(--fg-2); font-size: 16px; max-width: 58ch; }
+.seal { width: 120px; height: 120px; justify-self: end; transform: rotate(-12deg); }
+.seal svg { width: 100%; height: 100%; }
+.seal .ring { fill: none; stroke: var(--gold); stroke-width: 2; }
+.seal .ring2 { fill: none; stroke: var(--gold); stroke-width: 1; opacity: .6; }
+.seal text { font: 700 11px var(--body); letter-spacing: .26em; fill: var(--gold); text-transform: uppercase; }
+.seal .tick { position: static; width: auto; height: auto; border: 0; fill: none; stroke: var(--gold-light); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.rules-close { margin-top: clamp(32px, 4vw, 56px); display: grid; gap: 22px; justify-items: start; }
+.rules-close p { font: 500 clamp(22px, 2.4vw, 32px)/1.3 var(--body); max-width: 30ch; text-wrap: pretty; }
+@media (max-width: 640px) { .rule { grid-template-columns: 44px 1fr; } .seal { grid-column: 2; justify-self: start; width: 96px; height: 96px; margin-top: 6px; } }
+
+/* ---------- Le due squadre ---------- */
+.tcards { display: grid; gap: 28px; margin-top: clamp(32px, 5vw, 64px); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 820px; }
+.tcard { perspective: 1400px; }
+.tcard-inner { position: relative; aspect-ratio: 5 / 7; transform-style: preserve-3d; transition: transform .9s cubic-bezier(.2, .7, .2, 1); cursor: pointer; }
+.tcard.is-flipped .tcard-inner { transform: rotateY(180deg); }
+.tface { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 14px; border: 1px solid rgba(214, 179, 84, .55); background: linear-gradient(165deg, #3a2f12, #15130d 55%, #0f0d09); box-shadow: 0 40px 90px rgba(0, 0, 0, .65); overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; padding: 22px 22px 20px; }
+.tface::before { content: ""; position: absolute; inset: 8px; border: 1px solid rgba(214, 179, 84, .35); border-radius: 9px; pointer-events: none; }
+.tface.back { transform: rotateY(180deg); grid-template-rows: auto 1fr auto; }
+.tface .tn { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.tface .tn b { font: 600 clamp(22px, 2.2vw, 28px)/1 var(--display); text-transform: uppercase; letter-spacing: .04em; }
+.tface .tn b.fut { color: transparent; -webkit-text-stroke: 1px var(--gold-light); }
+.tface .tn span { font: 600 10px/1.3 var(--body); letter-spacing: .22em; text-transform: uppercase; color: var(--gold); white-space: nowrap; }
+.jersey { width: 78%; max-width: 300px; margin: 8px auto 0; align-self: center; filter: drop-shadow(0 24px 30px rgba(0, 0, 0, .6)); }
+.tface .tf { display: flex; justify-content: space-between; align-items: center; font: 600 10px/1.3 var(--body); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+.tface .tf i { font-style: normal; color: var(--gold); }
+.tface.back .prose { margin-top: 22px; }
+.tface.back ul { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 10px; }
+.tface.back li { padding-left: 18px; position: relative; color: var(--fg-2); font-size: 15px; }
+.tface.back li::before { content: ""; position: absolute; left: 0; top: 11px; width: 10px; height: 1px; background: var(--gold); }
+.tface.back .btn { justify-self: start; }
+.compare { margin-top: clamp(40px, 6vw, 80px); display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; max-width: 820px; }
+.compare .ch { padding-bottom: 14px; font: 600 clamp(20px, 2vw, 26px)/1 var(--display); text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--gold-line); }
+.compare .ch.fut { color: transparent; -webkit-text-stroke: 1px var(--gold-light); }
+.compare .row { display: contents; }
+.compare .cell { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.compare .cell small { display: block; font: 600 10px/1.3 var(--body); letter-spacing: .2em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px; }
+.compare .cell span { color: var(--fg-2); font-size: 15px; }
+.trial { margin-top: clamp(48px, 7vw, 96px); }
+.trial-steps { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 16px; margin-top: 36px; padding-top: 26px; }
+.trial-line { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); }
+.trial-line i { display: block; height: 100%; background: var(--gold); transform-origin: left; transform: scaleX(var(--x, 1)); }
+.day { position: relative; }
+.day::before { content: ""; position: absolute; top: -31px; left: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--bg); border: 1px solid var(--gold); }
+.day b { display: block; font: 600 clamp(18px, 1.6vw, 22px)/1 var(--display); text-transform: uppercase; letter-spacing: .04em; }
+.day span { display: block; margin-top: 8px; font-size: 14px; color: var(--fg-2); }
+@media (max-width: 899px) {
+  .trial-steps { grid-template-columns: 1fr; gap: 0; padding: 0 0 0 26px; margin-top: 28px; }
+  .trial-line { left: 4px; right: auto; top: 0; bottom: 0; width: 1px; height: auto; }
+  .trial-line i { width: 100%; height: 100%; transform-origin: top; transform: scaleY(var(--x, 1)); }
+  .day { padding: 14px 0; }
+  .day::before { top: 20px; left: -26px; }
+}
+
+/* ---------- FVPA ---------- */
+.fvpa { background: linear-gradient(180deg, var(--bg), #15110a 55%, var(--bg)); }
+.fvpa-grid { display: grid; gap: 36px; align-items: center; }
+.fvpa-mark { font: 700 clamp(84px, 16vw, 220px)/.85 var(--display); text-transform: uppercase; letter-spacing: -.02em; }
+.fvpa-mark span { display: block; color: transparent; -webkit-text-stroke: 1px var(--gold); }
+.fvpa-mark b { display: block; color: var(--fg); font-weight: 600; font-size: .55em; margin-top: .08em; }
+.fvpa-mark small { display: block; margin-top: 14px; font: 600 11px/1.3 var(--body); letter-spacing: .3em; color: var(--gold); text-transform: uppercase; }
+@media (min-width: 900px) { .fvpa-grid { grid-template-columns: auto 1fr; gap: 72px; } }
+
+/* ---------- L'app ---------- */
+.app-grid { display: grid; gap: 48px; margin-top: clamp(36px, 5vw, 72px); }
+@media (min-width: 900px) { .app-grid { grid-template-columns: 1fr 1.05fr; gap: 72px; align-items: center; } }
+.feat { list-style: none; margin: 0; padding: 0; display: grid; }
+.feat li { position: relative; display: grid; grid-template-columns: 44px 1fr; gap: 18px; padding: 20px 0; }
+.feat li::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; transform: scaleX(var(--x, 1)); }
+.feat svg { width: 28px; height: 28px; fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; margin-top: 2px; }
+.feat b { font: 600 19px/1.1 var(--display); text-transform: uppercase; letter-spacing: .04em; }
+.feat span { display: block; margin-top: 6px; color: var(--fg-2); font-size: 15px; }
+/* Collage: il telefono a destra e due riquadri dell'app a sinistra; sul telefono tutto in colonna. */
+.appshow { position: relative; min-height: 580px; display: grid; align-items: center; justify-items: end; perspective: 1400px; }
+.phone { position: relative; z-index: 1; width: min(280px, 70vw); border: 1px solid var(--line); border-radius: 32px; padding: 9px; background: #000; box-shadow: 0 40px 90px rgba(0, 0, 0, .65); transform-style: preserve-3d; }
+.reveal-img { overflow: hidden; border-radius: 24px; }
+.reveal-img img { display: block; width: 100%; height: auto; }
+.frag { position: absolute; width: min(250px, 42%); border-radius: 14px; overflow: hidden; border: 1px solid rgba(214, 179, 84, .35); box-shadow: 0 30px 60px rgba(0, 0, 0, .6); background: #000; }
+.frag img { display: block; width: 100%; height: auto; }
+.frag.a { left: 0; top: 4%; }
+.frag.b { left: 8%; bottom: 4%; }
+@media (max-width: 899px) {
+  .appshow { min-height: 0; gap: 16px; justify-items: stretch; padding-top: 8px; }
+  .phone { justify-self: center; }
+  .frag { position: static; width: 100%; max-width: 420px; justify-self: center; }
+}
+
+/* ---------- Organigramma, FAQ, chiusura ---------- */
+.staff { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0 48px; margin-top: clamp(32px, 4vw, 56px); }
+.staff > div { position: relative; padding: 22px 0; }
+.staff > div::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; transform: scaleX(var(--x, 1)); }
 .staff .role { font: 600 11px/1.3 var(--body); color: var(--gold); letter-spacing: .2em; text-transform: uppercase; }
-.staff .name { margin-top: 10px; font: 500 clamp(24px, 2.2vw, 30px)/1.1 var(--display); letter-spacing: .01em; transition: transform .4s var(--ease), color .3s; }
+.staff .name { margin-top: 8px; font: 500 clamp(22px, 2vw, 28px)/1.1 var(--display); letter-spacing: .01em; transition: transform .4s var(--ease), color .3s; }
 .staff > div:hover .name { transform: translateX(8px); color: var(--gold-light); }
 .staff .wide { grid-column: 1 / -1; }
-
-/* ---------- Candidature ---------- */
-.join { display: grid; gap: 48px; margin-top: clamp(36px, 5vw, 72px); }
-@media (min-width: 900px) { .join { grid-template-columns: .8fr 1.2fr; gap: 88px; align-items: start; } }
-.req { list-style: none; margin: 0; padding: 0; }
-.req li { position: relative; padding: 18px 0; display: flex; gap: 14px; color: var(--fg-2); font-size: 16px; }
-.req li::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; }
-.req li i { flex: none; width: 22px; height: 1px; background: var(--gold); margin-top: 13px; }
-.req li strong { color: var(--fg); font-weight: 600; }
-.form { display: grid; gap: 26px; }
-.row2 { display: grid; gap: 26px; grid-template-columns: 1fr 1fr; }
-@media (max-width: 560px) { .row2 { grid-template-columns: 1fr; } }
-.field { position: relative; display: grid; gap: 6px; min-width: 0; }
-.field label, .legend { font: 600 11px/1.3 var(--body); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
-.field input, .field select, .field textarea { width: 100%; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; color: var(--fg); padding: 12px 0; font: 400 18px/1.4 var(--body); }
-.field::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--gold); transform: scaleX(0); transform-origin: left; transition: transform .5s var(--ease); }
-.field:focus-within::after { transform: scaleX(1); }
-.field select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%); background-position: calc(100% - 14px) 55%, calc(100% - 9px) 55%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 30px; }
-.field select option { background: var(--surface); }
-.field textarea { min-height: 110px; resize: vertical; }
-.field input:focus, .field select:focus, .field textarea:focus { outline: none; }
-.check { display: flex; gap: 14px; align-items: flex-start; color: var(--fg-2); font-size: 15px; cursor: pointer; }
-.check input { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; margin: 2px 0 0; border: 1px solid var(--gold-line); border-radius: 2px; flex: none; display: grid; place-items: center; background: transparent; transition: background .25s, border-color .25s; }
-.check input::before { content: ""; width: 10px; height: 10px; background: #111; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); transform: scale(0); transition: transform .25s var(--ease); }
-.check input:checked { background: var(--gold); border-color: var(--gold); }
-.check input:checked::before { transform: scale(1); }
-.note { padding: 16px 18px; border: 1px solid var(--gold-line); border-left: 3px solid var(--gold); border-radius: 2px; color: var(--fg); font-size: 15px; }
-.thanks { border: 1px solid var(--gold-line); padding: 36px; }
-.thanks h3 { font: 600 34px/1.05 var(--display); text-transform: uppercase; }
-.thanks p { margin-top: 12px; color: var(--fg-2); }
-.small { font-size: 13px; color: var(--muted); }
-
-/* ---------- Chiusura ---------- */
+.staff .lead-role .name { color: var(--gold-light); }
+.faq { margin-top: clamp(28px, 4vw, 48px); max-width: 820px; }
+.faq details { border-top: 1px solid var(--line); }
+.faq details:last-child { border-bottom: 1px solid var(--line); }
+.faq summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 22px 0; font: 600 clamp(19px, 1.8vw, 24px)/1.15 var(--display); text-transform: uppercase; letter-spacing: .02em; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; flex: none; width: 34px; height: 34px; border: 1px solid var(--gold-line); border-radius: 50%; display: grid; place-items: center; color: var(--gold); font: 400 20px/1 var(--body); transition: transform .4s var(--ease), background .3s; }
+.faq details[open] summary::after { transform: rotate(45deg); background: rgba(214, 179, 84, .12); }
+.faq details p { padding: 0 0 24px; color: var(--fg-2); max-width: 60ch; }
+.final { text-align: center; }
+.final .h2 { margin-inline: auto; max-width: 14ch; font-size: clamp(44px, 8vw, 110px); }
+.final .lead { margin: 22px auto 0; }
+.final .cta { justify-content: center; }
+.promise { display: inline-flex; align-items: center; gap: 12px; margin-top: 26px; padding: 10px 16px; border: 1px solid var(--gold-line); border-radius: 999px; font: 600 11px/1.3 var(--body); letter-spacing: .2em; text-transform: uppercase; color: var(--gold); }
+.promise i { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
 .foot { position: relative; border-top: 1px solid var(--gold-line); padding-block: 56px 36px; overflow: hidden; }
 .giant { overflow: hidden; margin: 0 0 40px; font: 700 clamp(72px, 18.5vw, 300px)/.86 var(--display); letter-spacing: -.02em; text-transform: uppercase; color: transparent; -webkit-text-stroke: 1px rgba(214, 179, 84, .5); text-align: center; white-space: nowrap; }
 .foot-grid { display: grid; gap: 36px; }
@@ -300,11 +390,70 @@ html.gsap .marquee-track { animation: none; }
 .contact code { font: 500 15px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); padding: 7px 10px; border-radius: 3px; user-select: all; }
 .legal { margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; font-size: 12px; color: var(--muted); }
 .legal a { color: var(--muted); }
+@media (max-width: 899px) { .foot { padding-bottom: 104px; } }
+/* Informativa privacy. */
+.dlg { border: 1px solid var(--gold-line); background: var(--bg-2); color: var(--fg); padding: 0; width: min(560px, calc(100% - 32px)); border-radius: 4px; }
+.dlg::backdrop { background: rgba(0, 0, 0, .7); backdrop-filter: blur(4px); }
+.dlg-in { padding: 28px; display: grid; gap: 14px; }
+.dlg h3 { font: 600 26px/1.05 var(--display); text-transform: uppercase; }
+.dlg p { color: var(--fg-2); font-size: 15px; }
+.dlg .btn { justify-self: start; margin-top: 6px; }
+
+/* ---------- Stemma fisso e pannello del modulo ---------- */
+/* Niente transizioni CSS su trasformazione e opacità dello stemma: GSAP lo fa entrare all'apertura
+   e una transizione in corso gli farebbe leggere "zero" come valore finale. */
+.fab { position: fixed; right: calc(var(--gr) + 4px); bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); z-index: 55; width: 68px; height: 68px; border-radius: 50%; border: 1px solid var(--gold); background: radial-gradient(circle at 35% 30%, #2a2210, #0f0d09 70%); box-shadow: 0 20px 50px rgba(0, 0, 0, .6); display: grid; place-items: center; cursor: pointer; }
+.fab img { width: 48px; height: 48px; transition: transform .4s var(--ease); }
+.fab::before { content: ""; position: absolute; inset: -1px; border-radius: 50%; border: 1px solid var(--gold); animation: fabring 2.4s ease-out infinite; }
+.fab:hover img { transform: scale(1.1); }
+.fab .fab-label { position: absolute; right: calc(100% + 14px); top: 50%; transform: translateY(-50%); white-space: nowrap; padding: 10px 14px; background: rgba(11, 11, 12, .9); border: 1px solid var(--gold-line); border-radius: 999px; font: 600 11px/1 var(--body); letter-spacing: .2em; text-transform: uppercase; color: var(--fg); opacity: 0; transition: opacity .3s, transform .3s; pointer-events: none; }
+.fab:hover .fab-label { opacity: 1; }
+html.drawer-open .fab { opacity: 0; visibility: hidden; pointer-events: none; }
+@keyframes fabring { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.7); opacity: 0; } }
+.backdrop { position: fixed; inset: 0; z-index: 56; background: rgba(0, 0, 0, .6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); opacity: 0; visibility: hidden; transition: opacity .4s, visibility .4s; }
+html.drawer-open .backdrop { opacity: 1; visibility: visible; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 57; width: min(560px, 100%); background: var(--bg-2); border-left: 1px solid var(--gold-line); transform: translateX(104%); visibility: hidden; transition: transform .6s var(--ease), visibility .6s; display: grid; grid-template-rows: auto 1fr; overflow: hidden; padding-top: env(safe-area-inset-top, 0px); }
+html.drawer-open .drawer, .drawer:target { transform: none; visibility: visible; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px var(--gr) 18px 28px; border-bottom: 1px solid var(--line); }
+.drawer-head b { font: 600 20px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.drawer-head small { display: block; margin-top: 4px; font: 600 10px/1.3 var(--body); letter-spacing: .24em; text-transform: uppercase; color: var(--gold); }
+.close { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: none; cursor: pointer; display: grid; place-items: center; color: var(--fg); transition: border-color .3s, transform .4s var(--ease); text-decoration: none; }
+.close:hover { border-color: var(--gold); transform: rotate(90deg); }
+.close svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.drawer-body { overflow-y: auto; padding: 26px var(--gr) calc(env(safe-area-inset-bottom, 0px) + 40px) 28px; overscroll-behavior: contain; }
+.form { display: grid; gap: 24px; }
+.row2 { display: grid; gap: 24px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 520px) { .row2 { grid-template-columns: 1fr; } }
+.field { position: relative; display: grid; gap: 6px; min-width: 0; }
+.field label, .legend { font: 600 11px/1.3 var(--body); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+.field input, .field select, .field textarea { width: 100%; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; color: var(--fg); padding: 12px 0; font: 400 18px/1.4 var(--body); }
+.field::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--gold); transform: scaleX(0); transform-origin: left; transition: transform .5s var(--ease); }
+.field:focus-within::after { transform: scaleX(1); }
+.field select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%); background-position: calc(100% - 14px) 55%, calc(100% - 9px) 55%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 30px; }
+.field select option { background: var(--surface); }
+.field textarea { min-height: 100px; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip { position: relative; }
+.chip input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.chip span { display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; border: 1px solid var(--line); border-radius: 999px; font: 600 12px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--fg-2); transition: border-color .3s, color .3s, background .3s; }
+.chip input:checked + span { border-color: var(--gold); color: var(--gold-light); background: rgba(214, 179, 84, .12); }
+.chip input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 2px; }
+.check { display: flex; gap: 14px; align-items: flex-start; color: var(--fg-2); font-size: 15px; cursor: pointer; }
+.check input { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; margin: 2px 0 0; border: 1px solid var(--gold-line); border-radius: 2px; flex: none; display: grid; place-items: center; background: transparent; transition: background .25s, border-color .25s; }
+.check input::before { content: ""; width: 10px; height: 10px; background: #111; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); transform: scale(0); transition: transform .25s var(--ease); }
+.check input:checked { background: var(--gold); border-color: var(--gold); }
+.check input:checked::before { transform: scale(1); }
+.note { padding: 16px 18px; border: 1px solid var(--gold-line); border-left: 3px solid var(--gold); border-radius: 2px; color: var(--fg); font-size: 15px; }
+.thanks { display: grid; gap: 14px; padding: 8px 0; }
+.thanks h3 { font: 600 34px/1.05 var(--display); text-transform: uppercase; }
+.thanks p { color: var(--fg-2); }
+.thanks ol { margin: 6px 0 0; padding-left: 20px; color: var(--fg-2); display: grid; gap: 6px; }
 
 @media (prefers-reduced-motion: reduce) {
   .loader { animation-duration: .01s; animation-delay: 0s; }
-  .scroll-hint i, .marquee-track, .loader-bar i { animation: none; }
-  html { scroll-behavior: auto; }
+  .scroll-hint i, .marquee-track, .loader-bar i, .fab::before, .promise i { animation: none; }
+  .tcard-inner, .drawer, .backdrop { transition-duration: .01s; }
 }
 </style>
 </head>
@@ -316,6 +465,22 @@ html.gsap .marquee-track { animation: none; }
   <symbol id="i-twitch" viewBox="0 0 24 24"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></symbol>
   <symbol id="i-discord" viewBox="0 0 24 24"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></symbol>
+  <!-- Maglia rossonera a bande strette, vista frontale, con un accenno di giocatore. -->
+  <symbol id="jersey" viewBox="0 -56 200 266">
+    <defs>
+      <pattern id="stripes" width="14" height="14" patternUnits="userSpaceOnUse"><rect width="7" height="14" fill="#C61C23"/><rect x="7" width="7" height="14" fill="#141416"/></pattern>
+    </defs>
+    <circle cx="100" cy="-24" r="24" fill="#1a1a1d"/>
+    <rect x="90" y="-4" width="20" height="14" fill="#1a1a1d"/>
+    <path d="M60 22 L90 8 Q100 20 110 8 L140 22 L178 38 L167 78 L146 70 L146 204 L54 204 L54 70 L33 78 L22 38 Z" fill="url(#stripes)" stroke="#0B0B0C" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M54 70 L33 78 L22 38 L60 22 Z M146 70 L167 78 L178 38 L140 22 Z" fill="#141416" opacity=".55"/>
+    <path d="M34 78 L24 42 M166 78 L176 42" stroke="#D6B354" stroke-width="2"/>
+    <path d="M90 8 Q100 20 110 8 L104 12 Q100 24 96 12 Z" fill="#0B0B0C"/>
+    <path d="M86 6 L90 8 Q100 20 110 8 L114 6" fill="none" stroke="#D6B354" stroke-width="2"/>
+    <circle cx="130" cy="62" r="11" fill="#0B0B0C" stroke="#D6B354" stroke-width="1.5"/>
+    <text x="130" y="66" text-anchor="middle" font-family="Oswald, Arial Narrow, sans-serif" font-weight="700" font-size="11" fill="#E8C96A">M</text>
+    <path d="M54 190 L146 190 L146 204 L54 204 Z" fill="#0B0B0C" opacity=".5"/>
+  </symbol>
 </svg>
 
 <div class="loader" id="loader" aria-hidden="true">
@@ -328,6 +493,7 @@ html.gsap .marquee-track { animation: none; }
 <div class="progress" id="progress" aria-hidden="true"></div>
 <div class="cur cur-ring" id="cur-ring" aria-hidden="true"></div>
 <div class="cur cur-dot" id="cur-dot" aria-hidden="true"></div>
+<audio id="stadio" loop preload="none" src="audio/stadio.m4a"></audio>
 
 <header class="top" id="top">
   <div class="wrap">
@@ -335,13 +501,19 @@ html.gsap .marquee-track { animation: none; }
       <img src="img/stemma.png" alt="" width="40" height="40">
       <span><b>MILANAC</b><small>Pro Club</small></span>
     </a>
+    <button class="iconbtn" id="audio-top" type="button" aria-pressed="false" aria-label="Attiva i cori dello stadio">
+      <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6m0-6-5 6"/></svg>
+      <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+    </button>
     <button class="menu-btn" id="menu" aria-expanded="false" aria-controls="nav" aria-label="Apri il menu"><span></span></button>
     <nav class="nav" id="nav" aria-label="Sezioni del sito">
-      <a href="#club">Il club</a>
-      <a href="#cosa-facciamo">Cosa facciamo</a>
-      <a href="#tornei">In campo</a>
-      <a href="#staff">Staff</a>
-      <a class="btn btn-gold magnetic" href="#candidati">Candidati</a>
+      <a href="#storia">Storia</a>
+      <a href="#codice">Il codice</a>
+      <a href="#squadre">Squadre</a>
+      <a href="#fvpa">FVPA</a>
+      <a href="#app">L'app</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn btn-gold magnetic" href="#modulo" data-open-form>Candidati</a>
     </nav>
   </div>
 </header>
@@ -354,12 +526,12 @@ html.gsap .marquee-track { animation: none; }
     <div class="hero-dim" id="hero-dim"></div>
     <div class="hero-in">
       <div class="hero-copy" id="hero-copy">
-        <p class="eyebrow">Pro club rossonero · EA SPORTS FC · PS5</p>
+        <p class="eyebrow">EA SPORTS FC 27 · Pro Clubs · PS5 · PC · Xbox</p>
         <h1 id="h1">Milano<br>siamo noi<span class="dot">.</span></h1>
-        <p class="lead">Un club di tifosi del Milan che gioca a Pro Clubs come una squadra vera: allenamenti ogni sera, campionato, tornei e amichevoli. Due squadre, un solo stemma.</p>
+        <p class="lead">Un club di tifosi del Milan che gioca a Pro Clubs come una squadra vera: allenamenti ogni sera, campionato FVPA, tornei e amichevoli. Due squadre, un solo stemma, e un posto che potrebbe essere il tuo.</p>
         <div class="cta">
-          <a class="btn btn-gold magnetic" href="#candidati">Candidati <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
-          <a class="btn btn-line magnetic" href="#club">Scopri il club</a>
+          <a class="btn btn-gold magnetic" href="#modulo" data-open-form>Candidati <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+          <a class="btn btn-line magnetic" href="#storia">La nostra storia</a>
         </div>
       </div>
       <div class="stage-wrap">
@@ -381,90 +553,205 @@ html.gsap .marquee-track { animation: none; }
 
   <div class="marquee" aria-hidden="true">
     <div class="marquee-track" id="marquee">
-      <span class="fill">Milano siamo noi</span><em>✦</em><span>Rosso, nero e bianco</span><em>✦</em><span class="fill">Solo tifosi del Milan</span><em>✦</em><span>Dal 2025</span><em>✦</em>
-      <span class="fill">Milano siamo noi</span><em>✦</em><span>Rosso, nero e bianco</span><em>✦</em><span class="fill">Solo tifosi del Milan</span><em>✦</em><span>Dal 2025</span><em>✦</em>
+      <span class="fill">Milano siamo noi</span><em>✦</em><span>Rosso, nero e bianco</span><em>✦</em><span class="fill">Solo tifosi del Milan</span><em>✦</em><span>Cross-play PS5 · PC · Xbox</span><em>✦</em>
+      <span class="fill">Milano siamo noi</span><em>✦</em><span>Rosso, nero e bianco</span><em>✦</em><span class="fill">Solo tifosi del Milan</span><em>✦</em><span>Cross-play PS5 · PC · Xbox</span><em>✦</em>
     </div>
   </div>
 
   <section class="wrap">
     <div class="facts">
       <div><b><span class="count" data-to="2025" data-from="1899">2025</span></b><span class="lbl">Anno di fondazione</span></div>
+      <div><b><span class="count" data-to="3">3</span></b><span class="lbl">Fondatori, un'amicizia</span></div>
       <div><b><span class="count" data-to="2">2</span></b><span class="lbl">Squadre: MILANAC e MILANAC FUTURO</span></div>
-      <div><b><span class="count" data-to="5">5</span><small>sere</small></b><span class="lbl">A settimana, dal lunedì al venerdì</span></div>
-      <div><b><span class="count" data-to="120">120</span><small>min</small></b><span class="lbl">In campo ogni sera, 21:30 › 23:30</span></div>
+      <div><b><span class="count" data-to="5">5</span><small>sere</small></b><span class="lbl">A settimana, 21:30 › 23:30</span></div>
     </div>
   </section>
 
-  <section class="band" id="club">
+  <section class="story" id="storia" aria-label="La storia del club">
+    <div class="story-stage" id="story-stage">
+      <div class="wrap story-grid">
+        <div class="story-chapters">
+          <article class="chapter" data-i="1">
+            <p class="eyebrow">Capitolo 01 · 2025</p>
+            <h2 class="h2">Due fratelli e un amico</h2>
+            <p class="prose">Fabio e Giuseppe Ruggieri sono fratelli, milanisti da sempre. Christian Rizzi è l'amico con cui hanno condiviso serate, partite e la stessa idea: un pro club che giochi come una squadra vera e tenga insieme chi tifa Milan.</p>
+          </article>
+          <article class="chapter" data-i="2">
+            <p class="eyebrow">Capitolo 02 · Il patto</p>
+            <h2 class="h2">Prima della squadra, un giuramento</h2>
+            <div class="pact" id="pact">
+              <p>I nostri colori saranno il rosso, come il cuore che arde per la vittoria,</p>
+              <p>ed il nero come la notte che avvolgerà i sogni degli avversari.</p>
+              <p>Saremo una legione infernale che danza sui campi di calcio virtuali.</p>
+              <p>Il nostro nome sarà <em>MILANAC</em>.</p>
+            </div>
+          </article>
+          <article class="chapter" data-i="3">
+            <p class="eyebrow">Capitolo 03 · La nascita</p>
+            <h2 class="h2">Nasce il MILANAC</h2>
+            <p class="prose">Dall'accordo tra i tre fondatori nasce il club, con una regola che vale più di tutte: tesseriamo solo giocatori che tifano Milan. Il nome si ispira alla squadra che amiamo, i colori sociali sono il rosso, il nero e il bianco.</p>
+          </article>
+          <article class="chapter" data-i="4">
+            <p class="eyebrow">Capitolo 04 · Oggi</p>
+            <h2 class="h2">Due squadre, un solo stemma</h2>
+            <p class="prose">La prima squadra gioca il campionato FVPA in Serie C, il MILANAC FUTURO cresce tra tornei e coppe. Cinque sere a settimana in campo, uno staff che decide e un'app tutta nostra. Manca solo chi legge queste righe.</p>
+          </article>
+        </div>
+        <div class="story-visual">
+          <div class="fcards" id="fcards">
+            <div class="fcard" data-c="1"><div class="ini">FR</div><div><div class="who">Fabio Ruggieri</div><div class="what">Fondatore · Tecnico</div></div><img src="img/stemma.png" alt="" width="26" height="26"></div>
+            <div class="fcard" data-c="2"><div class="ini">GR</div><div><div class="who">Giuseppe Ruggieri</div><div class="what">Fondatore · Comunicazione</div></div><img src="img/stemma.png" alt="" width="26" height="26"></div>
+            <div class="fcard" data-c="3"><div class="ini">CR</div><div><div class="who">Christian Rizzi</div><div class="what">Fondatore</div></div><img src="img/stemma.png" alt="" width="26" height="26"></div>
+          </div>
+          <div class="crest-wrap" id="crest-wrap">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><circle id="crest-ring" cx="50" cy="50" r="48" pathLength="1"/></svg>
+            <img src="img/stemma.png" alt="Lo stemma del MILANAC Pro Club" width="512" height="512">
+          </div>
+          <div class="today" id="today"><b>MILANAC</b><b class="fut">MILANAC Futuro</b><span>Milano siamo noi</span></div>
+        </div>
+      </div>
+      <div class="story-progress" id="story-progress" aria-hidden="true"><span class="on">L'idea</span><span>Il patto</span><span>La nascita</span><span>Oggi</span></div>
+    </div>
+  </section>
+
+  <section class="band" id="codice">
     <div class="wrap">
       <div class="sec-head">
-        <p class="eyebrow">Il club</p>
-        <h2 class="h2 split">Rosso come il cuore, nero come la notte</h2>
+        <p class="eyebrow">Il codice rossonero</p>
+        <h2 class="h2 split">Cinque righe, nessuna eccezione</h2>
+        <p class="lead fade">Per entrare non serve essere i più forti. Serve riconoscersi in queste cinque righe, che valgono per tutti: fondatori compresi.</p>
       </div>
-      <div class="two">
-        <blockquote class="quote" id="quote">I nostri colori saranno il rosso, come il cuore che arde per la vittoria, ed il nero come la notte che avvolgerà i sogni degli avversari. Saremo una legione infernale che danza sui campi di calcio virtuali: il nostro nome sarà <em>MILANAC</em>.</blockquote>
-        <div>
-          <p class="prose fade">Il MILANAC nasce nel 2025 da un'idea di Fabio Ruggieri, Giuseppe Ruggieri e Christian Rizzi, con una regola che vale più di tutte: tesseriamo solo giocatori che tifano Milan. Il nome si ispira alla squadra che amiamo e i colori sociali sono il rosso, il nero e il bianco.</p>
-          <p class="prose fade">Siamo un gruppo solido di amici che vuole farsi riconoscere nelle competizioni nazionali e internazionali per il gioco, lo stile e il rispetto delle regole. Si cresce tutti insieme.</p>
-          <ul class="values lines">
-            <li><b>Rispetto</b><span>Verso i compagni, il Direttivo e gli avversari. Comportamenti tossici non esistono qui.</span></li>
-            <li><b>Puntualità</b><span>Convocati in party 30 minuti prima del fischio d'inizio. Il ritardo non è accettato.</span></li>
-            <li><b>Squadra</b><span>Ruolo e tattiche vengono prima dell'individualismo: l'ID sulla maglia conta meno dello stemma.</span></li>
-          </ul>
+      <div class="rules">
+        <article class="rule hair"><span class="rn">01</span><div><h3>Sei milanista.</h3><p>È la regola numero uno e non si discute: nel MILANAC entrano solo tifosi del Milan.</p></div><div class="seal" aria-hidden="true"><svg viewBox="0 0 120 120"><circle class="ring" cx="60" cy="60" r="56"/><circle class="ring2" cx="60" cy="60" r="44"/><path id="arc1" d="M60 60 m-50 0 a50 50 0 1 1 100 0 a50 50 0 1 1 -100 0" fill="none"/><text><textPath href="#arc1" startOffset="0">MILANAC · PRO CLUB · MILANAC · PRO CLUB ·</textPath></text><path class="tick" d="M44 62 l11 11 l21 -24"/></svg></div></article>
+        <article class="rule hair"><span class="rn">02</span><div><h3>Ci sei dal lunedì al venerdì, dalle 21:30 alle 23:30.</h3><p>Sono le serate del club: allenamenti, campionato, tornei e amichevoli. La presenza si segna nell'app entro le 18:30.</p></div><div class="seal" aria-hidden="true"><svg viewBox="0 0 120 120"><circle class="ring" cx="60" cy="60" r="56"/><circle class="ring2" cx="60" cy="60" r="44"/><path id="arc2" d="M60 60 m-50 0 a50 50 0 1 1 100 0 a50 50 0 1 1 -100 0" fill="none"/><text><textPath href="#arc2">MILANAC · PRO CLUB · MILANAC · PRO CLUB ·</textPath></text><path class="tick" d="M44 62 l11 11 l21 -24"/></svg></div></article>
+        <article class="rule hair"><span class="rn">03</span><div><h3>Rispetto.</h3><p>Verso i compagni, lo staff e gli avversari. Comportamenti tossici non esistono qui, in party come in chat.</p></div><div class="seal" aria-hidden="true"><svg viewBox="0 0 120 120"><circle class="ring" cx="60" cy="60" r="56"/><circle class="ring2" cx="60" cy="60" r="44"/><path id="arc3" d="M60 60 m-50 0 a50 50 0 1 1 100 0 a50 50 0 1 1 -100 0" fill="none"/><text><textPath href="#arc3">MILANAC · PRO CLUB · MILANAC · PRO CLUB ·</textPath></text><path class="tick" d="M44 62 l11 11 l21 -24"/></svg></div></article>
+        <article class="rule hair"><span class="rn">04</span><div><h3>Puntualità.</h3><p>Convocato? Sei in party 30 minuti prima del fischio d'inizio. Il ritardo non è accettato, se si ripete si esce dal club.</p></div><div class="seal" aria-hidden="true"><svg viewBox="0 0 120 120"><circle class="ring" cx="60" cy="60" r="56"/><circle class="ring2" cx="60" cy="60" r="44"/><path id="arc4" d="M60 60 m-50 0 a50 50 0 1 1 100 0 a50 50 0 1 1 -100 0" fill="none"/><text><textPath href="#arc4">MILANAC · PRO CLUB · MILANAC · PRO CLUB ·</textPath></text><path class="tick" d="M44 62 l11 11 l21 -24"/></svg></div></article>
+        <article class="rule hair"><span class="rn">05</span><div><h3>Disponibilità.</h3><p>Il ruolo e le tattiche vengono prima dell'individualismo. Giochi dove serve, con il microfono acceso e lo stemma davanti all'ID.</p></div><div class="seal" aria-hidden="true"><svg viewBox="0 0 120 120"><circle class="ring" cx="60" cy="60" r="56"/><circle class="ring2" cx="60" cy="60" r="44"/><path id="arc5" d="M60 60 m-50 0 a50 50 0 1 1 100 0 a50 50 0 1 1 -100 0" fill="none"/><text><textPath href="#arc5">MILANAC · PRO CLUB · MILANAC · PRO CLUB ·</textPath></text><path class="tick" d="M44 62 l11 11 l21 -24"/></svg></div></article>
+      </div>
+      <div class="rules-close fade">
+        <p>Se ti riconosci in queste cinque righe, il resto lo vediamo in campo.</p>
+        <a class="btn btn-gold magnetic" href="#modulo" data-open-form>Candidati <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="squadre">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">Le due squadre</p>
+        <h2 class="h2 split">Stessa maglia, due campi</h2>
+        <p class="lead fade">Rossonera a bande strette, come quella del Milan. Il MILANAC è la prima squadra, il MILANAC FUTURO la seconda: non meno importante, sempre attiva e in fase di completamento. Tocca una carta per girarla.</p>
+      </div>
+      <div class="tcards">
+        <div class="tcard" data-team="MILANAC" tabindex="0" role="button" aria-pressed="false" aria-label="Carta MILANAC, prima squadra: tocca per girarla">
+          <div class="tcard-inner">
+            <div class="tface front">
+              <div class="tn"><b>MILANAC</b><span>Prima squadra</span></div>
+              <svg class="jersey" viewBox="0 -56 200 266" aria-hidden="true"><use href="#jersey"/><text x="100" y="150" text-anchor="middle" font-family="Oswald, Arial Narrow, sans-serif" font-weight="700" font-size="78" fill="#F5F1E6" stroke="#0B0B0C" stroke-width="3" paint-order="stroke">10</text></svg>
+              <div class="tf"><span>FVPA · <i>Serie C</i></span><span>Gira la carta →</span></div>
+            </div>
+            <div class="tface back">
+              <div class="tn"><b>MILANAC</b><span>Prima squadra</span></div>
+              <div>
+                <p class="prose">È la squadra che gioca il campionato FVPA in Serie C: giornate settimanali, formazione pubblicata prima di ogni partita, battitori e presenze decisi in anticipo.</p>
+                <ul><li>Campionato ufficiale FVPA, Serie C</li><li>Rosa con titolari, panchina e capitano</li><li>Analisi tattica il giorno dopo la partita</li></ul>
+              </div>
+              <a class="btn btn-line" href="#modulo" data-open-form data-team="MILANAC">Candidati qui</a>
+            </div>
+          </div>
+        </div>
+        <div class="tcard" data-team="MILANAC FUTURO" tabindex="0" role="button" aria-pressed="false" aria-label="Carta MILANAC FUTURO, seconda squadra: tocca per girarla">
+          <div class="tcard-inner">
+            <div class="tface front">
+              <div class="tn"><b class="fut">Futuro</b><span>Seconda squadra</span></div>
+              <svg class="jersey" viewBox="0 -56 200 266" aria-hidden="true"><use href="#jersey"/><text x="100" y="150" text-anchor="middle" font-family="Oswald, Arial Narrow, sans-serif" font-weight="700" font-size="78" fill="#F5F1E6" stroke="#0B0B0C" stroke-width="3" paint-order="stroke">7</text></svg>
+              <div class="tf"><span>Tornei e <i>coppe</i></span><span>Gira la carta →</span></div>
+            </div>
+            <div class="tface back">
+              <div class="tn"><b class="fut">Futuro</b><span>Seconda squadra</span></div>
+              <div>
+                <p class="prose">Gioca tornei e coppe organizzati su canali alternativi ed è sempre attiva. È in fase di completamento: chi entra oggi trova spazio e un gruppo in crescita.</p>
+                <ul><li>Tornei e coppe tra pro club</li><li>Stesse serate, stesso staff, stessa app</li><li>Da qui si cresce verso la prima squadra</li></ul>
+              </div>
+              <a class="btn btn-line" href="#modulo" data-open-form data-team="MILANAC FUTURO">Candidati qui</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="compare fade">
+        <div class="ch">MILANAC</div><div class="ch fut">MILANAC Futuro</div>
+        <div class="row"><div class="cell"><small>Competizione</small><span>Campionato FVPA, Serie C</span></div><div class="cell"><small>Competizione</small><span>Tornei e coppe su canali alternativi</span></div></div>
+        <div class="row"><div class="cell"><small>Ruolo nel club</small><span>Prima squadra</span></div><div class="cell"><small>Ruolo nel club</small><span>Seconda squadra, sempre attiva</span></div></div>
+        <div class="row"><div class="cell"><small>Rosa</small><span>Si entra dopo il provino, quando si libera un posto</span></div><div class="cell"><small>Rosa</small><span>In fase di completamento: posti aperti</span></div></div>
+        <div class="row"><div class="cell"><small>Serate</small><span>Lunedì–venerdì, 21:30–23:30</span></div><div class="cell"><small>Serate</small><span>Lunedì–venerdì, 21:30–23:30</span></div></div>
+      </div>
+      <div class="trial" id="provino">
+        <p class="eyebrow">Il provino</p>
+        <h3 class="h3 split" style="margin-top:14px">Una settimana per conoscerci</h3>
+        <p class="prose fade" style="margin-top:14px">Far crescere tutte e due le squadre è l'obiettivo del club, e si cresce con le persone giuste. Per questo prima del tesseramento c'è un provino di circa una settimana, in campo con noi.</p>
+        <div class="trial-steps" id="trial">
+          <div class="trial-line" aria-hidden="true"><i id="trial-fill"></i></div>
+          <div class="day"><b>Giorno 1</b><span>Ti rispondiamo entro 48 ore e ti aggiungiamo al party e all'app.</span></div>
+          <div class="day"><b>Giorno 2</b><span>Primo allenamento: moduli, ruoli e come comunichiamo in campo.</span></div>
+          <div class="day"><b>Giorno 3</b><span>Amichevole con la squadra, nel ruolo che chiedi.</span></div>
+          <div class="day"><b>Giorno 4</b><span>Allenamento su palle inattive e fase difensiva.</span></div>
+          <div class="day"><b>Giorno 5</b><span>Seconda amichevole, anche fuori ruolo: si vede chi gioca per la squadra.</span></div>
+          <div class="day"><b>Giorno 6</b><span>Confronto con lo staff tecnico: cosa è andato, cosa manca.</span></div>
+          <div class="day"><b>Giorno 7</b><span>Decisione dello staff, tesseramento e maglia. Benvenuto in famiglia.</span></div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="band" id="cosa-facciamo">
+  <section class="band fvpa" id="fvpa">
+    <div class="wrap fvpa-grid">
+      <div class="fvpa-mark fade"><span>FVPA</span><b>Serie C</b><small>Campionato ufficiale</small></div>
+      <div class="sec-head">
+        <p class="eyebrow">Dove giochiamo</p>
+        <h2 class="h2 split">In campo dove conta</h2>
+        <p class="lead fade">La prima squadra partecipa al campionato FVPA, il circuito italiano dei pro club, nella Serie C: giornate settimanali, classifica, risultati e la possibilità di salire. Il MILANAC FUTURO gioca tornei e coppe su canali alternativi, con lo stesso impegno.</p>
+        <div class="cta fade">
+          <a class="btn btn-gold magnetic" href="https://www.fvpa.net/" data-fvpa target="_blank" rel="noopener">Sito ufficiale FVPA <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="app">
     <div class="wrap">
       <div class="sec-head">
-        <p class="eyebrow">Cosa facciamo</p>
-        <h2 class="h2 split">Ogni sera, come una squadra vera</h2>
-        <p class="lead fade">Dal lunedì al venerdì, dalle 21:30 alle 23:30, siamo in campo. Il resto del tempo lo passiamo a prepararci.</p>
+        <p class="eyebrow">L'app del club</p>
+        <h2 class="h2 split">Niente gruppi improvvisati: un'app tutta nostra</h2>
+        <p class="lead fade">Il MILANAC si gestisce con un'app dedicata, riservata ai tesserati. Ci entri il primo giorno del provino, e ci resti.</p>
       </div>
-      <div class="what">
-        <div class="list lines">
-          <div><span class="n">01</span><div><h3>Allenamenti</h3><p>Sessioni per affinare l'affiatamento e provare nuove tattiche. Chi si allena, gioca: le convocazioni partono da qui.</p></div></div>
-          <div><span class="n">02</span><div><h3>Campionato e tornei</h3><p>Competizioni tra pro club con due squadre, MILANAC e MILANAC FUTURO. La formazione viene pubblicata prima di ogni partita.</p></div></div>
-          <div><span class="n">03</span><div><h3>Amichevoli</h3><p>Partite di preparazione contro altri club, per testare moduli, nuovi ingressi e palle inattive.</p></div></div>
-          <div><span class="n">04</span><div><h3>Analisi tattica</h3><p>Il giorno dopo la partita rivediamo le azioni con lo staff tecnico sulla lavagna della nostra app: pallone, schemi e replay con la voce del mister.</p></div></div>
-        </div>
-        <div class="phone-wrap">
+      <div class="app-grid">
+        <ul class="feat lines">
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4m8-4v4m-7 7 2 2 4-4"/></svg><div><b>Presenze e serate</b><span>Rispondi entro le 18:30 e sai sempre chi c'è stasera. Promemoria automatici prima delle partite.</span></div></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4 5 6l1 4h2v10h8V10h2l1-4-3-2-2 2h-4z"/></svg><div><b>Formazione pubblicata</b><span>Modulo, titolari, panchina e chi batte rigori, punizioni e angoli: lo staff la pubblica e ti arriva la notifica.</span></div></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M12 8v4m-2-2h4"/></svg><div><b>Chat sicura e stanza vocale</b><span>Una chat riservata ai membri, con canali per squadra e una stanza vocale come Discord: dentro l'app, senza inviti esterni.</span></div></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M12 4v16M3 12h18"/><circle cx="12" cy="12" r="2.5"/></svg><div><b>Lavagna tattica con il pallone</b><span>Schemi, palle inattive, replay con la voce del mister. Dopo la partita si rivede tutto insieme.</span></div></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v16l14-8z"/></svg><div><b>Il tuo walkout</b><span>Ogni tesserato ha il suo ingresso in campo personalizzato nell'app, con il suo volto e la sua carta.</span></div></li>
+        </ul>
+        <div class="appshow">
+          <div class="frag a" id="frag-a"><img src="img/app-prossima.jpg" alt="Riquadro dell'app: prossima partita, MILANAC contro Atletico Virtuale, terza giornata" width="640" height="315" loading="lazy"></div>
           <div class="phone" id="phone"><div class="reveal-img"><img src="img/app-lavagna.jpg" alt="La lavagna tattica dell'app MILANAC: un calcio d'angolo con le zone numerate e il cross sul primo palo" width="720" height="1173" loading="lazy"></div></div>
-          <p class="caption">La lavagna tattica dell'app MILANAC, riservata ai membri.</p>
+          <div class="frag b" id="frag-b"><img src="img/app-risultato.jpg" alt="Riquadro dell'app: ultimo risultato, MILANAC 3 a 1 Dinamo Pixel" width="640" height="264" loading="lazy"></div>
         </div>
       </div>
-    </div>
-  </section>
-
-  <section class="band hs" id="tornei">
-    <div class="wrap hs-head">
-      <div class="sec-head">
-        <p class="eyebrow">In campo</p>
-        <h2 class="h2 split">Campionato, coppe e amichevoli</h2>
-        <p class="lead fade">Giochiamo nei circuiti di Pro Clubs tra club italiani, con un calendario che pubblichiamo stagione per stagione.</p>
-      </div>
-    </div>
-    <div class="hs-track" id="hs-track">
-      <article class="panel" data-n="01"><p class="eyebrow">Campionato</p><h3>Ogni settimana, in serata</h3><p>MILANAC e MILANAC FUTURO in campionati distinti. Ogni partita ha formazione, battitori e presenze decise in anticipo.</p></article>
-      <article class="panel" data-n="02"><p class="eyebrow">Coppe e tornei</p><h3>Eliminazione diretta</h3><p>Serate dedicate, dove le palle inattive provate in allenamento fanno la differenza.</p></article>
-      <article class="panel" data-n="03"><p class="eyebrow">Amichevoli</p><h3>Prove vere contro altri club</h3><p>Per testare moduli, nuovi ingressi e schemi prima che contino.</p></article>
-      <article class="panel cta" data-n="04"><p class="eyebrow">Vuoi sfidarci?</p><h3>Scrivici per un'amichevole</h3><p>Sui social o dal modulo delle candidature: rispondiamo noi dello staff.</p><a class="btn btn-gold magnetic" href="#candidati">Contattaci</a></article>
     </div>
   </section>
 
   <section class="band" id="staff">
     <div class="wrap">
       <div class="sec-head">
-        <p class="eyebrow">Chi guida il club</p>
+        <p class="eyebrow">Chi ti risponde</p>
         <h2 class="h2 split">Organigramma</h2>
       </div>
       <div class="staff lines">
-        <div class="wide"><div class="role">Fondatori</div><div class="name">Giuseppe Ruggieri, Fabio Ruggieri, Christian Rizzi</div></div>
+        <div class="wide lead-role"><div class="role">Resp. reclutamento · ti scrive lui entro 48 ore</div><div class="name">Fabiano Freduzzi</div></div>
+        <div><div class="role">Fondatori</div><div class="name">Giuseppe, Fabio e Christian</div></div>
         <div><div class="role">Resp. comunicazioni e marketing</div><div class="name">Giuseppe Ruggieri</div></div>
         <div><div class="role">Resp. tecnico / tattico</div><div class="name">Fabio Ruggieri</div></div>
-        <div><div class="role">Resp. reclutamento</div><div class="name">Fabiano Freduzzi</div></div>
         <div><div class="role">Resp. tornei e amichevoli</div><div class="name">Vincenzo Lauricella</div></div>
         <div><div class="role">Resp. presenze</div><div class="name">Giovanni Giordano</div></div>
         <div><div class="role">Resp. IT</div><div class="name">Francesco De Vietro</div></div>
@@ -472,66 +759,32 @@ html.gsap .marquee-track { animation: none; }
     </div>
   </section>
 
-  <section class="band" id="candidati">
+  <section class="band" id="faq">
     <div class="wrap">
       <div class="sec-head">
-        <p class="eyebrow">Unisciti a noi</p>
-        <h2 class="h2 split">Cerchiamo player milanisti</h2>
-        <p class="lead fade">Se tifi Milan, giochi su PS5 e la sera dalle 21:30 sei in campo, il posto c'è. Compila il modulo: ti risponde il responsabile del reclutamento.</p>
+        <p class="eyebrow">Domande frequenti</p>
+        <h2 class="h2 split">Prima di candidarti</h2>
       </div>
-      <div class="join">
-        <div>
-          <p class="legend">Cosa chiediamo</p>
-          <ul class="req lines">
-            <li><i></i><span><strong>Tifoso del Milan.</strong> È la regola numero uno del club.</span></li>
-            <li><i></i><span><strong>PS5</strong> con EA SPORTS FC e la modalità Pro Clubs.</span></li>
-            <li><i></i><span><strong>Disponibile dal lunedì al venerdì</strong>, dalle 21:30 alle 23:30.</span></li>
-            <li><i></i><span><strong>Microfono</strong> e voglia di giocare di squadra, nel ruolo che serve.</span></li>
-            <li><i></i><span><strong>Rispetto del regolamento</strong>: puntualità, comunicazione, nessun individualismo.</span></li>
-          </ul>
-        </div>
-        <div class="fade">
-          <form class="form" id="candidatura" method="POST" action="#candidati" data-endpoint="" novalidate>
-            <input type="hidden" name="_subject" value="Nuova candidatura dal sito MILANAC">
-            <input type="hidden" name="_template" value="table">
-            <input type="hidden" name="_next" value="">
-            <input type="text" name="_honey" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
-            <div class="row2">
-              <div class="field"><label for="c-nome">Nome e cognome</label><input id="c-nome" name="Nome" type="text" required autocomplete="name"></div>
-              <div class="field"><label for="c-anno">Anno di nascita</label><input id="c-anno" name="Anno di nascita" type="number" inputmode="numeric" min="1960" max="2012" required></div>
-            </div>
-            <div class="row2">
-              <div class="field"><label for="c-psn">ID PlayStation (PSN)</label><input id="c-psn" name="PSN" type="text" required autocomplete="off"></div>
-              <div class="field"><label for="c-ruolo">Ruolo preferito</label>
-                <select id="c-ruolo" name="Ruolo" required>
-                  <option value="">Scegli</option>
-                  <option>Portiere</option>
-                  <option>Difensore centrale</option>
-                  <option>Terzino</option>
-                  <option>Centrocampista</option>
-                  <option>Esterno</option>
-                  <option>Attaccante</option>
-                  <option>Dove serve</option>
-                </select>
-              </div>
-            </div>
-            <div class="row2">
-              <div class="field"><label for="c-email">Email</label><input id="c-email" name="Email" type="email" required autocomplete="email"></div>
-              <div class="field"><label for="c-discord">Discord (facoltativo)</label><input id="c-discord" name="Discord" type="text" autocomplete="off"></div>
-            </div>
-            <div class="field"><label for="c-esperienza">Dove hai giocato finora e perché vuoi entrare nel MILANAC</label><textarea id="c-esperienza" name="Presentazione" required></textarea></div>
-            <label class="check"><input id="c-milan" name="Tifoso del Milan" type="checkbox" value="Sì" required><span>Sono tifoso del Milan.</span></label>
-            <label class="check"><input id="c-sere" name="Disponibile lun-ven" type="checkbox" value="Sì" required><span>Sono disponibile dal lunedì al venerdì, dalle 21:30 alle 23:30.</span></label>
-            <label class="check"><input id="c-privacy" name="Consenso privacy" type="checkbox" value="Sì" required><span>Acconsento al trattamento dei miei dati per essere ricontattato dal club. I dati non vengono condivisi con nessuno.</span></label>
-            <div><button class="btn btn-gold magnetic" type="submit">Invia la candidatura <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
-            <p class="note" id="nota" hidden></p>
-          </form>
-          <div class="thanks" id="grazie-box" hidden>
-            <h3>Candidatura inviata</h3>
-            <p>Grazie. Il responsabile del reclutamento ti scrive all'email che hai lasciato. Intanto preparati: dal lunedì al venerdì, alle 21:30, si gioca.</p>
-          </div>
-        </div>
+      <div class="faq fade">
+        <details><summary>Devo essere forte per entrare?</summary><p>Conta più la testa delle mani: presenza, rispetto e gioco di squadra. Il livello lo vediamo nel provino di una settimana, e si cresce allenandosi con noi.</p></details>
+        <details><summary>Posso giocare da PC o da Xbox?</summary><p>Sì: siamo cross-play. Giochiamo a EA SPORTS FC 27 Pro Clubs da PS5, PC e Xbox, nello stesso club.</p></details>
+        <details><summary>Quando si gioca?</summary><p>Dal lunedì al venerdì, dalle 21:30 alle 23:30. Nel fine settimana solo se c'è una partita in calendario.</p></details>
+        <details><summary>Serve il microfono?</summary><p>Sì. In partita parla solo lo staff tecnico, che coordina; nel resto della serata la comunicazione passa dal party e dalla stanza vocale dell'app.</p></details>
+        <details><summary>In quanto tempo rispondete?</summary><p>Entro 48 ore dalla candidatura ti scrive il responsabile del reclutamento all'email che lasci nel modulo.</p></details>
+        <details><summary>Devo essere tifoso del Milan?</summary><p>Sì, è la regola numero uno del club: tesseriamo solo milanisti. Il nome e i colori vengono da lì.</p></details>
       </div>
+    </div>
+  </section>
+
+  <section class="band final" id="candidati">
+    <div class="wrap">
+      <p class="eyebrow" style="justify-content:center">Unisciti a noi</p>
+      <h2 class="h2 split">Pronto a scendere in campo?</h2>
+      <p class="lead fade">Compila il modulo: ti aggiungiamo al party e inizia il provino. Cross-play PS5, PC e Xbox.</p>
+      <div class="cta fade">
+        <a class="btn btn-gold magnetic" href="#modulo" data-open-form>Apri il modulo <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+      </div>
+      <div class="promise fade"><i></i>Ti rispondiamo entro 48 ore</div>
     </div>
   </section>
 </main>
@@ -545,7 +798,7 @@ html.gsap .marquee-track { animation: none; }
           <img src="img/stemma.png" alt="" width="56" height="56">
           <span><b>MILANAC</b><small>Pro Club · Milano siamo noi</small></span>
         </a>
-        <p class="small" style="margin-top:18px;max-width:46ch">Club amatoriale di tifosi del Milan che gioca a EA SPORTS FC Pro Clubs su PS5. Fondato a Milano nel 2025.</p>
+        <p class="small" style="margin-top:18px;max-width:46ch">Club amatoriale di tifosi del Milan che gioca a EA SPORTS FC 27 Pro Clubs, cross-play su PS5, PC e Xbox. Fondato a Milano nel 2025.</p>
       </div>
       <div>
         <h4>Seguici</h4>
@@ -568,13 +821,92 @@ html.gsap .marquee-track { animation: none; }
       </div>
     </div>
     <div class="legal">
-      <span>© 2026 MILANAC Pro Club. Non siamo affiliati ad AC Milan, a Electronic Arts né a Sony. EA SPORTS FC e PlayStation sono marchi dei rispettivi proprietari.</span>
+      <span>© 2026 MILANAC Pro Club. Non siamo affiliati ad AC Milan, a Electronic Arts, a FVPA, a Sony, a Microsoft né ad altri. EA SPORTS FC, PlayStation e Xbox sono marchi dei rispettivi proprietari.</span>
       <a href="#" data-privacy>Privacy</a>
     </div>
   </div>
 </footer>
 </div>
 </div>
+
+<div class="backdrop" id="backdrop"></div>
+<aside class="drawer" id="modulo" aria-label="Modulo di candidatura">
+  <div class="drawer-head">
+    <div><b>Candidatura</b><small>Ti rispondiamo entro 48 ore</small></div>
+    <a class="close" id="close" href="#candidati" aria-label="Chiudi il modulo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></a>
+  </div>
+  <div class="drawer-body">
+    <form class="form" id="candidatura" method="POST" action="#modulo" data-endpoint="" novalidate>
+      <input type="hidden" name="_subject" value="Nuova candidatura dal sito MILANAC">
+      <input type="hidden" name="_template" value="table">
+      <input type="hidden" name="_next" value="">
+      <input type="text" name="_honey" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+      <div class="row2">
+        <div class="field"><label for="c-nome">Nome e cognome</label><input id="c-nome" name="Nome" type="text" required autocomplete="name"></div>
+        <div class="field"><label for="c-anno">Anno di nascita</label><input id="c-anno" name="Anno di nascita" type="number" inputmode="numeric" min="1960" max="2012" required></div>
+      </div>
+      <div class="field">
+        <span class="legend" id="piatt-legend">Piattaforma (anche più di una)</span>
+        <div class="chips" role="group" aria-labelledby="piatt-legend">
+          <label class="chip"><input type="checkbox" name="Piattaforma" value="PS5"><span>PS5</span></label>
+          <label class="chip"><input type="checkbox" name="Piattaforma" value="PC"><span>PC</span></label>
+          <label class="chip"><input type="checkbox" name="Piattaforma" value="Xbox"><span>Xbox</span></label>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="c-ea">EA ID (nome nel cross-play)</label><input id="c-ea" name="EA ID" type="text" required autocomplete="off"></div>
+        <div class="field"><label for="c-psn">PSN o gamertag (facoltativo)</label><input id="c-psn" name="PSN o gamertag" type="text" autocomplete="off"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="c-ruolo">Ruolo principale</label>
+          <select id="c-ruolo" name="Ruolo principale" required>
+            <option value="">Scegli</option><option>Portiere</option><option>Difensore centrale</option><option>Terzino</option><option>Mediano</option><option>Centrocampista</option><option>Esterno</option><option>Trequartista</option><option>Attaccante</option>
+          </select>
+        </div>
+        <div class="field"><label for="c-ruolo2">Ruolo secondario</label>
+          <select id="c-ruolo2" name="Ruolo secondario">
+            <option value="">Nessuno</option><option>Portiere</option><option>Difensore centrale</option><option>Terzino</option><option>Mediano</option><option>Centrocampista</option><option>Esterno</option><option>Trequartista</option><option>Attaccante</option><option>Dove serve</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label for="c-squadra">Squadra preferita</label>
+        <select id="c-squadra" name="Squadra preferita">
+          <option>Indifferente: dove serve</option><option>MILANAC</option><option>MILANAC FUTURO</option>
+        </select>
+      </div>
+      <div class="field"><label for="c-esperienza">Club precedenti ed esperienza</label><textarea id="c-esperienza" name="Esperienza" required placeholder="Dove hai giocato, da quanto, con quale modulo ti trovi meglio."></textarea></div>
+      <div class="row2">
+        <div class="field"><label for="c-email">Email</label><input id="c-email" name="Email" type="email" required autocomplete="email"></div>
+        <div class="field"><label for="c-discord">Discord (facoltativo)</label><input id="c-discord" name="Discord" type="text" autocomplete="off"></div>
+      </div>
+      <div class="field"><label for="c-clip">Link a una tua clip (facoltativo)</label><input id="c-clip" name="Clip" type="url" placeholder="https://" autocomplete="off"></div>
+      <label class="check"><input id="c-milan" name="Tifoso del Milan" type="checkbox" value="Sì" required><span>Sono tifoso del Milan.</span></label>
+      <label class="check"><input id="c-sere" name="Disponibile lun-ven" type="checkbox" value="Sì" required><span>Sono disponibile dal lunedì al venerdì, dalle 21:30 alle 23:30.</span></label>
+      <label class="check"><input id="c-privacy" name="Consenso privacy" type="checkbox" value="Sì" required><span>Acconsento al trattamento dei miei dati per essere ricontattato dal club. I dati non vengono condivisi con nessuno.</span></label>
+      <div><button class="btn btn-gold magnetic" type="submit">Invia la candidatura <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
+      <p class="note" id="nota" hidden></p>
+    </form>
+    <div class="thanks" id="grazie-box" hidden>
+      <h3>Candidatura inviata</h3>
+      <p>Grazie. Ecco cosa succede adesso:</p>
+      <ol>
+        <li>Entro 48 ore ti scrive Fabiano, il responsabile del reclutamento, all'email che hai lasciato.</li>
+        <li>Ti aggiungiamo al party e all'app del club.</li>
+        <li>Parte il provino: una settimana in campo con noi, dalle 21:30.</li>
+      </ol>
+    </div>
+  </div>
+</aside>
+<dialog class="dlg" id="privacy" aria-labelledby="privacy-title">
+  <div class="dlg-in">
+    <h3 id="privacy-title">Privacy</h3>
+    <p>I dati che scrivi nel modulo (nome, anno di nascita, piattaforma, EA ID, PSN o gamertag, ruoli, esperienza, email, Discord, link a una clip) arrivano per email al Direttivo del MILANAC Pro Club e servono solo a valutare la candidatura e a ricontattarti.</p>
+    <p>Non li condividiamo con nessuno e non li usiamo per altro. Se la candidatura non va avanti li cancelliamo; se vuoi che li cancelliamo prima, scrivi all'email del club.</p>
+    <p>Il sito non usa cookie di profilazione. I caratteri arrivano da Google Fonts e le animazioni da cdnjs (Cloudflare): per servire i file possono registrare l'indirizzo IP. L'invio del modulo passa da FormSubmit, che consegna la candidatura all'email del club.</p>
+    <button class="btn btn-line" type="button" data-close-privacy>Chiudi</button>
+  </div>
+</dialog>
+<button class="fab" id="fab" type="button" data-open-form aria-label="Candidati: apri il modulo"><img src="img/stemma.png" alt="" width="48" height="48"><span class="fab-label">Candidati</span></button>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js"></script>
@@ -594,7 +926,7 @@ html.gsap .marquee-track { animation: none; }
   var loader = $('#loader');
   function hideLoader(fast) {
     if (!loader) return;
-    if (hasGsap && !reduce && !fast) return; // ci pensa la sequenza qui sotto
+    if (hasGsap && !reduce && !fast) return;
     loader.style.transition = 'opacity .5s'; loader.style.opacity = '0';
     setTimeout(function () { loader.style.display = 'none'; }, 520);
   }
@@ -608,36 +940,92 @@ html.gsap .marquee-track { animation: none; }
     menu.setAttribute('aria-label', open ? 'Chiudi il menu' : 'Apri il menu');
   });
 
-  var video = $('#walkout'), audio = $('#audio'), label = $('#audio-label'), ambient = $('#ambient');
-  if (desktop && !reduce) { ambient.src = 'video/intro.mp4'; var ap = ambient.play && ambient.play(); if (ap && ap.catch) ap.catch(function () {}); }
-  audio.addEventListener('click', function () {
-    var turnOn = video.muted;
-    video.muted = !turnOn;
-    if (turnOn) video.currentTime = 0;
-    var p = video.play(); if (p && p.catch) p.catch(function () {});
-    audio.setAttribute('aria-pressed', String(turnOn));
-    label.textContent = turnOn ? 'Audio acceso' : "Attiva l'audio";
+  /* Audio: i cori partono dal video e proseguono nel resto del sito a volume basso. */
+  var video = $('#walkout'), ambient = $('#ambient'), stadio = $('#stadio');
+  var audioBtns = [$('#audio'), $('#audio-top')], label = $('#audio-label');
+  var audioOn = false, heroVisible = true;
+  function play(v) { var p = v && v.play && v.play(); if (p && p.catch) p.catch(function () {}); }
+  function applyAudio() {
+    video.muted = !(audioOn && heroVisible);
+    if (audioOn && !heroVisible) { stadio.volume = .35; play(stadio); } else stadio.pause();
+    audioBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(audioOn)); });
+    label.textContent = audioOn ? 'Audio acceso' : "Attiva l'audio";
+    $('#audio-top').setAttribute('aria-label', audioOn ? 'Spegni i cori dello stadio' : 'Attiva i cori dello stadio');
+  }
+  audioBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      audioOn = !audioOn;
+      if (audioOn && heroVisible) { video.currentTime = 0; play(video); }
+      applyAudio();
+    });
   });
+  if (desktop && !reduce) { ambient.src = 'video/intro.mp4'; play(ambient); }
   if ('IntersectionObserver' in window) {
     new IntersectionObserver(function (es) {
       es.forEach(function (en) {
-        var vids = [video, ambient];
-        vids.forEach(function (v) { if (en.isIntersecting) { var p = v.play && v.play(); if (p && p.catch) p.catch(function () {}); } else if (v.pause) v.pause(); });
+        heroVisible = en.isIntersecting;
+        [video, ambient].forEach(function (v) { if (en.isIntersecting) play(v); else if (v.pause) v.pause(); });
+        applyAudio();
       });
     }, { threshold: .1 }).observe($('#hero'));
   }
 
-  var form = $('#candidatura'), nota = $('#nota'), grazie = $('#grazie-box');
+  /* Pannello del modulo: si apre dallo stemma e dai pulsanti "Candidati", si chiude con la X. */
+  var drawer = $('#modulo'), closeBtn = $('#close'), backdrop = $('#backdrop'), form = $('#candidatura'), lastFocus = null;
+  function openDrawer(team) {
+    lastFocus = document.activeElement;
+    if (team) { var sel = $('#c-squadra'); Array.prototype.forEach.call(sel.options, function (o) { if (o.text === team) sel.value = o.text; }); }
+    root.classList.add('drawer-open');
+    drawer.setAttribute('aria-hidden', 'false');
+    if (window.ScrollSmoother && ScrollSmoother.get()) ScrollSmoother.get().paused(true);
+    setTimeout(function () { var first = $('#c-nome'); if (first && !form.hidden) first.focus({ preventScroll: true }); }, 450);
+  }
+  function closeDrawer() {
+    root.classList.remove('drawer-open');
+    drawer.setAttribute('aria-hidden', 'true');
+    if (window.ScrollSmoother && ScrollSmoother.get()) ScrollSmoother.get().paused(false);
+    if (location.hash === '#modulo' || location.hash === '#grazie') history.replaceState(null, '', location.pathname + location.search);
+    if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
+  }
+  $$('[data-open-form]').forEach(function (el) {
+    el.addEventListener('click', function (e) { e.preventDefault(); nav.classList.remove('open'); menu.setAttribute('aria-expanded', 'false'); openDrawer(el.getAttribute('data-team')); });
+  });
+  closeBtn.addEventListener('click', function (e) { e.preventDefault(); closeDrawer(); });
+  backdrop.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && root.classList.contains('drawer-open')) closeDrawer(); });
+  drawer.setAttribute('aria-hidden', 'true');
+  if (location.hash === '#modulo') openDrawer();
+
+  /* Link ancora vuoti (social e FVPA, in attesa degli indirizzi) e informativa privacy. */
+  $$('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
+  var privacy = $('#privacy');
+  $$('[data-privacy]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); if (privacy.showModal) privacy.showModal(); else privacy.setAttribute('open', ''); }); });
+  $$('[data-close-privacy]').forEach(function (b) { b.addEventListener('click', function () { if (privacy.close) privacy.close(); else privacy.removeAttribute('open'); }); });
+
+  /* Candidature: senza l'indirizzo del club (data-endpoint) il modulo è solo un'anteprima. */
+  var nota = $('#nota'), grazie = $('#grazie-box');
   var endpoint = form.getAttribute('data-endpoint') || '';
-  function showThanks() { form.hidden = true; grazie.hidden = false; }
+  function showThanks() { form.hidden = true; grazie.hidden = false; openDrawer(); }
   if (location.hash === '#grazie') showThanks();
   window.addEventListener('hashchange', function () { if (location.hash === '#grazie') showThanks(); });
   form.addEventListener('submit', function (e) {
-    if (!form.checkValidity()) { e.preventDefault(); form.reportValidity(); return; }
+    var piatt = $$('input[name=Piattaforma]:checked', form).length;
+    if (!form.checkValidity() || !piatt) {
+      e.preventDefault();
+      if (!piatt) { nota.hidden = false; nota.textContent = 'Scegli almeno una piattaforma tra PS5, PC e Xbox.'; }
+      form.reportValidity(); return;
+    }
     if (form.querySelector('[name=_honey]').value) { e.preventDefault(); return; }
     if (!endpoint) { e.preventDefault(); nota.hidden = false; nota.textContent = "Anteprima del sito: il modulo si attiva quando avremo l'email del club. Per ora scrivici sui social."; return; }
     form.action = endpoint;
     form.querySelector('[name=_next]').value = location.origin + location.pathname + '#grazie';
+  });
+
+  /* Carte delle squadre: tocco o invio per girarle. */
+  $$('.tcard').forEach(function (card) {
+    function flip() { var on = card.classList.toggle('is-flipped'); card.setAttribute('aria-pressed', String(on)); }
+    card.addEventListener('click', function (e) { if (e.target.closest('a')) return; flip(); });
+    card.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
   });
 
   if (!hasGsap) return;
@@ -650,26 +1038,24 @@ html.gsap .marquee-track { animation: none; }
   if (!reduce && fine && window.ScrollSmoother) {
     try { smoother = ScrollSmoother.create({ wrapper: '#smooth-wrapper', content: '#smooth-content', smooth: 1.1, effects: false, smoothTouch: false, normalizeScroll: false }); } catch (e) { smoother = null; }
   }
-  // Ancore: con lo scorrimento morbido le gestisce lui, altrimenti il browser.
-  $$('a[href^="#"]').forEach(function (a) {
+  $$('a[href^="#"]:not([data-open-form])').forEach(function (a) {
     a.addEventListener('click', function (e) {
-      var id = a.getAttribute('href'); if (id.length < 2) return;
+      var id = a.getAttribute('href'); if (id.length < 2 || id === '#modulo') return;
       var el = document.getElementById(id.slice(1)); if (!el) return;
       e.preventDefault();
       nav.classList.remove('open'); menu.setAttribute('aria-expanded', 'false');
+      if (root.classList.contains('drawer-open')) closeDrawer();
       if (smoother) smoother.scrollTo(el, true, 'top 72px'); else el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
     });
   });
 
-  // Barra di avanzamento e testata che sparisce scendendo e torna risalendo.
   gsap.fromTo('#progress', { scaleX: 0 }, { scaleX: 1, ease: 'none', scrollTrigger: { start: 0, end: 'max', scrub: .3 } });
   ScrollTrigger.create({ start: 0, end: 'max', onUpdate: function (self) {
     var y = self.scroll();
     top.classList.toggle('solid', y > 40);
-    top.classList.toggle('hide', self.direction === 1 && y > 320);
+    top.classList.toggle('hide', self.direction === 1 && y > 320 && !root.classList.contains('drawer-open'));
   } });
 
-  // Cursore oro e pulsanti "magnetici" (solo con il mouse).
   if (fine && !reduce) {
     root.classList.add('cursor-on');
     var dot = $('#cur-dot'), ring = $('#cur-ring');
@@ -677,8 +1063,8 @@ html.gsap .marquee-track { animation: none; }
     var dx = gsap.quickTo(dot, 'x', { duration: .12, ease: 'power3' }), dy = gsap.quickTo(dot, 'y', { duration: .12, ease: 'power3' });
     var rx = gsap.quickTo(ring, 'x', { duration: .45, ease: 'power3' }), ry = gsap.quickTo(ring, 'y', { duration: .45, ease: 'power3' });
     window.addEventListener('mousemove', function (e) { dx(e.clientX); dy(e.clientY); rx(e.clientX); ry(e.clientY); });
-    document.addEventListener('mouseover', function (e) { if (e.target.closest('a, button, label, input, select, textarea')) root.classList.add('cur-hover'); });
-    document.addEventListener('mouseout', function (e) { if (e.target.closest('a, button, label, input, select, textarea')) root.classList.remove('cur-hover'); });
+    document.addEventListener('mouseover', function (e) { if (e.target.closest('a, button, label, input, select, textarea, summary, .tcard')) root.classList.add('cur-hover'); });
+    document.addEventListener('mouseout', function (e) { if (e.target.closest('a, button, label, input, select, textarea, summary, .tcard')) root.classList.remove('cur-hover'); });
     document.addEventListener('mouseleave', function () { gsap.to([dot, ring], { opacity: 0, duration: .3 }); });
     document.addEventListener('mouseenter', function () { gsap.to(dot, { opacity: 1, duration: .3 }); gsap.to(ring, { opacity: .7, duration: .3 }); });
     $$('.magnetic').forEach(function (el) {
@@ -686,16 +1072,15 @@ html.gsap .marquee-track { animation: none; }
       el.addEventListener('mousemove', function (e) { var r = el.getBoundingClientRect(); mx((e.clientX - r.left - r.width / 2) * .3); my((e.clientY - r.top - r.height / 2) * .35); });
       el.addEventListener('mouseleave', function () { mx(0); my(0); });
     });
-    // La schermata dell'app si inclina un po' seguendo il mouse.
-    var phone = $('#phone');
-    if (phone) {
-      var prx = gsap.quickTo(phone, 'rotationX', { duration: .6, ease: 'power3' }), pry = gsap.quickTo(phone, 'rotationY', { duration: .6, ease: 'power3' });
-      phone.parentElement.addEventListener('mousemove', function (e) { var r = phone.getBoundingClientRect(); pry(((e.clientX - r.left) / r.width - .5) * 14); prx(-((e.clientY - r.top) / r.height - .5) * 10); });
-      phone.parentElement.addEventListener('mouseleave', function () { prx(0); pry(0); });
-    }
+    // Carte delle squadre e schermata dell'app si inclinano seguendo il mouse.
+    $$('.tcard, .phone').forEach(function (el) {
+      var prx = gsap.quickTo(el, 'rotationX', { duration: .6, ease: 'power3' }), pry = gsap.quickTo(el, 'rotationY', { duration: .6, ease: 'power3' });
+      var zone = el.classList.contains('phone') ? el.parentElement : el;
+      zone.addEventListener('mousemove', function (e) { var r = el.getBoundingClientRect(); pry(((e.clientX - r.left) / r.width - .5) * 16); prx(-((e.clientY - r.top) / r.height - .5) * 12); });
+      zone.addEventListener('mouseleave', function () { prx(0); pry(0); });
+    });
   }
 
-  // Fascia in movimento: continua, e accelera quando si scorre.
   var marquee = $('#marquee');
   var loop = gsap.to(marquee, { xPercent: -50, ease: 'none', duration: 28, repeat: -1 });
   if (reduce) loop.pause();
@@ -706,41 +1091,33 @@ html.gsap .marquee-track { animation: none; }
 
   if (reduce) { hideLoader(true); return; }
 
-  // Testi che entrano riga per riga (SplitText) o, se non c'è, tutti insieme.
-  function linesIn(el, opts) {
-    opts = opts || {};
+  function linesIn(el) {
     var trigger = { trigger: el, start: 'top 86%', once: true };
     if (window.SplitText) {
       try {
-        var st = SplitText.create(el, { type: 'lines', mask: 'lines', autoSplit: true, onSplit: function (self) {
-          return gsap.from(self.lines, { yPercent: 110, duration: 1.1, stagger: .09, ease: 'power4.out', scrollTrigger: trigger, delay: opts.delay || 0 });
+        return SplitText.create(el, { type: 'lines', mask: 'lines', autoSplit: true, onSplit: function (self) {
+          return gsap.from(self.lines, { yPercent: 110, duration: 1.1, stagger: .09, ease: 'power4.out', scrollTrigger: trigger });
         } });
-        return st;
       } catch (e) {}
     }
     gsap.from(el, { y: 30, opacity: 0, duration: 1, ease: 'power3.out', scrollTrigger: trigger });
   }
   function safeStart() { try { start(); } catch (e) { hideLoader(true); } }
   document.fonts && document.fonts.ready ? document.fonts.ready.then(safeStart, safeStart) : safeStart();
-  // Rete lenta o errore inatteso: il sipario non resta mai chiuso più di 5 secondi.
   setTimeout(function () { if (loader && loader.style.display !== 'none') hideLoader(true); }, 5000);
 
   function start() {
-    // Sequenza di apertura: stemma e scritta, poi il sipario sale e il video si apre.
+    /* Sipario e apertura. */
     var intro = gsap.timeline();
     loader.style.animation = 'none';
     gsap.set('#loader-bar', { animation: 'none', scaleX: 0 });
     var words = $$('#loader-word span');
-    if (seen) {
-      intro.to(loader, { yPercent: -100, duration: .7, ease: 'power4.inOut' });
-    } else {
-      intro.from($('.loader-in img'), { scale: .8, opacity: 0, duration: .9, ease: 'power3.out' })
-        .from(words, { yPercent: 120, opacity: 0, duration: .8, stagger: .12, ease: 'power4.out' }, '-=.5')
-        .to('#loader-bar', { scaleX: 1, duration: 1, ease: 'power2.inOut' }, '-=.6')
-        .to(loader, { yPercent: -100, duration: .9, ease: 'power4.inOut' }, '+=.15');
-    }
+    if (seen) intro.to(loader, { yPercent: -100, duration: .7, ease: 'power4.inOut' });
+    else intro.from($('.loader-in img'), { scale: .8, opacity: 0, duration: .9, ease: 'power3.out' })
+      .from(words, { yPercent: 120, opacity: 0, duration: .8, stagger: .12, ease: 'power4.out' }, '-=.5')
+      .to('#loader-bar', { scaleX: 1, duration: 1, ease: 'power2.inOut' }, '-=.6')
+      .to(loader, { yPercent: -100, duration: .9, ease: 'power4.inOut' }, '+=.15');
     intro.set(loader, { display: 'none' });
-    // Apertura della home: il video si apre dal centro, il titolo sale lettera per lettera.
     var h1 = $('#h1'), h1Chars = null;
     if (window.SplitText) { try { h1Chars = new SplitText(h1, { type: 'chars,lines', mask: 'lines' }); } catch (e) { h1Chars = null; } }
     intro.fromTo('#stage', { clipPath: 'inset(0% 50% 0% 50%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.3, ease: 'expo.inOut' }, '-=.55')
@@ -748,40 +1125,66 @@ html.gsap .marquee-track { animation: none; }
     if (h1Chars) intro.from(h1Chars.chars, { yPercent: 110, duration: 1, stagger: .03, ease: 'power4.out' }, '-=.6');
     else intro.from(h1, { y: 40, opacity: 0, duration: 1, ease: 'power4.out' }, '-=.6');
     intro.from(['.hero .lead', '.hero .cta', '.scroll-hint', '#audio'], { y: 24, opacity: 0, duration: .9, stagger: .1, ease: 'power3.out' }, '-=.6')
-      .from('#top', { yPercent: -100, duration: .8, ease: 'power3.out' }, '-=.8');
+      /* La testata ha una transizione CSS su transform (per nascondersi scorrendo): si anima l'interno. */
+      .from('#top .wrap', { yPercent: -60, opacity: 0, duration: .8, ease: 'power3.out' }, '-=.8')
+      .from('#fab', { scale: 0, opacity: 0, duration: .7, ease: 'back.out(1.6)', clearProps: 'transform,opacity' }, '-=.5');
 
     var mm = gsap.matchMedia();
-    // Computer: l'apertura resta ferma mentre il video arretra e si sposta a destra.
     mm.add('(min-width: 900px)', function () {
+      /* Computer: l'apertura resta ferma mentre il video arretra. */
       var tl = gsap.timeline({ scrollTrigger: { trigger: '#hero', start: 'top top', end: '+=130%', pin: true, scrub: 1.2, anticipatePin: 1 } });
       tl.to('#stage', { scale: .64, xPercent: 20, yPercent: -4, ease: 'none' }, 0)
         .to('#ambient', { opacity: .25, ease: 'none' }, 0)
         .to('#hero-copy', { yPercent: -10, scale: .92, transformOrigin: 'left center', ease: 'none' }, 0)
         .to('.scroll-hint', { opacity: 0, ease: 'none', duration: .3 }, 0)
         .to('#hero-dim', { opacity: .92, ease: 'none', duration: .45 }, .55);
-      // Le competizioni scorrono in orizzontale: la fila di pannelli resta ferma a metà schermo.
-      var track = $('#hs-track');
-      var dist = function () { return track.scrollWidth - window.innerWidth; };
-      gsap.to(track, { x: function () { return -dist(); }, ease: 'none', scrollTrigger: {
-        trigger: track, pin: true, scrub: 1, invalidateOnRefresh: true, anticipatePin: 1,
-        start: function () { return 'top ' + Math.max(84, Math.round((window.innerHeight - track.offsetHeight) / 2)) + 'px'; },
-        end: function () { return '+=' + dist(); }
-      } });
+
+      /* La storia: una scena ferma, quattro capitoli guidati dallo scroll. */
+      var cards = $$('.fcard'), chapters = $$('.chapter'), dots = $$('#story-progress span');
+      var pactChars = null;
+      if (window.SplitText) { try { pactChars = new SplitText('#pact p', { type: 'words,chars' }).chars; } catch (e) { pactChars = null; } }
+      /* Le carte dei fondatori entrano appena la scena si avvicina, prima che si blocchi. */
+      gsap.timeline({ scrollTrigger: { trigger: '#story-stage', start: 'top 75%', once: true } })
+        .from(cards[0], { xPercent: -220, rotation: -14, opacity: 0, duration: 1, ease: 'power3.out' }, 0)
+        .from(cards[1], { yPercent: 160, opacity: 0, duration: 1, ease: 'power3.out' }, .15)
+        .from(cards[2], { xPercent: 220, rotation: 14, opacity: 0, duration: 1, ease: 'power3.out' }, .3);
+      var st = gsap.timeline({ scrollTrigger: { trigger: '#story-stage', start: 'top top', end: '+=420%', pin: true, scrub: 1, anticipatePin: 1,
+        onUpdate: function (self) { var i = Math.min(3, Math.floor(self.progress * 4)); dots.forEach(function (d, k) { d.classList.toggle('on', k === i); }); } } });
+      st.to(chapters[0], { opacity: 0, y: -40, duration: .06 }, .22)
+        .fromTo(chapters[1], { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: .06 }, .27);
+      if (pactChars) st.from(pactChars, { opacity: .08, duration: .2, stagger: { each: .0008, ease: 'none' }, ease: 'none' }, .3);
+      st.to(chapters[1], { opacity: 0, y: -40, duration: .06 }, .52)
+        .to(cards, { xPercent: 0, x: function (i) { return (i - 1) * 40; }, yPercent: 0, scale: .25, opacity: 0, rotation: 0, duration: .1, ease: 'power3.in', stagger: .01, overwrite: 'auto' }, .5)
+        .fromTo(chapters[2], { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: .06 }, .57)
+        .fromTo('#crest-wrap', { opacity: 0, scale: .6 }, { opacity: 1, scale: 1, duration: .12, ease: 'power3.out' }, .56)
+        .fromTo('#crest-ring', { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: .16, ease: 'none' }, .56)
+        .to(chapters[2], { opacity: 0, y: -40, duration: .06 }, .78)
+        .to('#crest-wrap', { opacity: 0, scale: .7, duration: .08 }, .8)
+        .fromTo(chapters[3], { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: .06 }, .83)
+        .fromTo('#today', { opacity: 0 }, { opacity: 1, duration: .05 }, .84)
+        .from('#today b', { yPercent: 60, opacity: 0, stagger: .04, duration: .08, ease: 'power3.out' }, .84)
+        .to({}, { duration: .06 });
+
+      /* Riquadri dell'app: scorrono a velocità diverse. */
+      gsap.to('#frag-a', { y: -40, ease: 'none', scrollTrigger: { trigger: '.appshow', start: 'top bottom', end: 'bottom top', scrub: true } });
+      gsap.to('#frag-b', { y: 50, ease: 'none', scrollTrigger: { trigger: '.appshow', start: 'top bottom', end: 'bottom top', scrub: true } });
       return function () {};
     });
-    // Telefono: il video scorre più lento del resto e il titolo si dissolve.
     mm.add('(max-width: 899px)', function () {
       gsap.to('#walkout', { yPercent: 14, ease: 'none', scrollTrigger: { trigger: '#hero', start: 'top top', end: 'bottom top', scrub: true } });
       gsap.to('#hero-copy', { opacity: 0, y: -30, ease: 'none', scrollTrigger: { trigger: '#hero', start: '40% top', end: 'bottom top', scrub: true } });
+      /* Telefono: i capitoli entrano uno dopo l'altro. */
+      $$('.chapter, .crest-wrap, .today').forEach(function (el) { gsap.from(el, { y: 36, opacity: 0, duration: 1, ease: 'power3.out', scrollTrigger: { trigger: el, start: 'top 88%', once: true } }); });
+      gsap.from('.fcard', { y: 60, opacity: 0, stagger: .12, duration: 1, ease: 'power3.out', scrollTrigger: { trigger: '#fcards', start: 'top 85%', once: true } });
+      gsap.fromTo('#crest-ring', { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 1.6, ease: 'power2.out', scrollTrigger: { trigger: '#crest-wrap', start: 'top 80%', once: true } });
     });
 
-    // Numeri che contano.
+    /* Numeri che contano. */
     $$('.count').forEach(function (el) {
       var to = +el.getAttribute('data-to'), from = +(el.getAttribute('data-from') || 0), o = { v: from };
       gsap.to(o, { v: to, duration: 1.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 88%', once: true }, onUpdate: function () { el.textContent = Math.round(o.v); } });
     });
-
-    // Titoli riga per riga, paragrafi in dissolvenza, filetti che si disegnano.
+    /* Titoli riga per riga, paragrafi in dissolvenza, filetti che si disegnano. */
     $$('.split').forEach(function (el) { linesIn(el); });
     $$('.fade').forEach(function (el) { gsap.from(el, { y: 28, opacity: 0, duration: 1, ease: 'power3.out', scrollTrigger: { trigger: el, start: 'top 88%', once: true } }); });
     $$('.lines').forEach(function (list) {
@@ -789,36 +1192,36 @@ html.gsap .marquee-track { animation: none; }
       gsap.from(rows, { opacity: 0, y: 18, duration: .9, stagger: .08, ease: 'power3.out', scrollTrigger: { trigger: list, start: 'top 85%', once: true } });
       gsap.fromTo(rows, { '--x': 0 }, { '--x': 1, duration: 1.2, stagger: .08, ease: 'power3.out', scrollTrigger: { trigger: list, start: 'top 85%', once: true } });
     });
-    // La citazione si "legge" scorrendo: le parole si accendono una alla volta.
-    var quote = $('#quote');
-    if (window.SplitText) {
-      try {
-        var qs = new SplitText(quote, { type: 'words' });
-        gsap.from(qs.words, { opacity: .14, stagger: .06, ease: 'none', scrollTrigger: { trigger: quote, start: 'top 78%', end: 'bottom 55%', scrub: true } });
-      } catch (e) {}
-    }
-    // Immagini: si svelano dal basso e si allontanano un po'.
+    /* Il codice: ogni regola entra e viene timbrata con il sigillo. */
+    $$('.rule').forEach(function (rule) {
+      var seal = $('.seal', rule);
+      var t = gsap.timeline({ scrollTrigger: { trigger: rule, start: 'top 72%', once: true } });
+      t.from(rule, { opacity: 0, y: 24, duration: .8, ease: 'power3.out' })
+        .fromTo(rule, { '--x': 0 }, { '--x': 1, duration: 1, ease: 'power3.out' }, 0)
+        .fromTo(seal, { scale: 2.4, opacity: 0, rotation: -40 }, { scale: 1, opacity: 1, rotation: -12, duration: .45, ease: 'power4.in' }, .35)
+        .to(rule, { x: 3, duration: .05, yoyo: true, repeat: 3 }, '-=.02')
+        .from($('.tick', rule), { scale: 0, opacity: 0, transformOrigin: '50% 50%', duration: .3, ease: 'back.out(2)' }, '-=.1');
+    });
+    /* Carte delle squadre e confronto. */
+    gsap.from('.tcard', { y: 60, opacity: 0, rotationY: -20, stagger: .15, duration: 1.1, ease: 'power3.out', scrollTrigger: { trigger: '.tcards', start: 'top 80%', once: true } });
+    /* Il provino: la linea si riempie scorrendo, i giorni entrano uno alla volta. */
+    gsap.fromTo('#trial-fill', { '--x': 0 }, { '--x': 1, ease: 'none', scrollTrigger: { trigger: '#trial', start: 'top 75%', end: 'bottom 60%', scrub: true } });
+    gsap.from('.day', { opacity: 0, y: 20, stagger: .1, duration: .8, ease: 'power3.out', scrollTrigger: { trigger: '#trial', start: 'top 80%', once: true } });
+    /* Immagini: si svelano dal basso. */
     $$('.reveal-img').forEach(function (box) {
       var img = box.querySelector('img');
       gsap.fromTo(box, { clipPath: 'inset(100% 0% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.4, ease: 'power4.out', scrollTrigger: { trigger: box, start: 'top 85%', once: true } });
       gsap.from(img, { scale: 1.25, duration: 1.6, ease: 'power3.out', scrollTrigger: { trigger: box, start: 'top 85%', once: true } });
     });
-    // Pannelli delle competizioni.
-    $$('.panel').forEach(function (p, i) { gsap.from(p, { y: 40, opacity: 0, duration: 1, delay: i * .06, ease: 'power3.out', scrollTrigger: { trigger: '#tornei', start: 'top 70%', once: true } }); });
-    // Il nome del club gigante in chiusura.
+    gsap.from('.frag', { opacity: 0, scale: .9, stagger: .15, duration: 1, ease: 'power3.out', scrollTrigger: { trigger: '.appshow', start: 'top 75%', once: true } });
+    /* Il nome del club gigante in chiusura. */
     var giant = $('#giant');
     if (window.SplitText) {
       try {
         var gs = new SplitText(giant, { type: 'chars' });
         gsap.from(gs.chars, { yPercent: 100, duration: 1.2, stagger: .05, ease: 'power4.out', scrollTrigger: { trigger: giant, start: 'top 95%', once: true } });
-      } catch (e) {
-        gsap.from(giant, { yPercent: 40, opacity: 0, duration: 1.2, ease: 'power4.out', scrollTrigger: { trigger: giant, start: 'top 95%', once: true } });
-      }
+      } catch (e) { gsap.from(giant, { yPercent: 40, opacity: 0, duration: 1.2, ease: 'power4.out', scrollTrigger: { trigger: giant, start: 'top 95%', once: true } }); }
     }
-    // Filetti delle righe: da sinistra a destra (via variabile CSS usata nei ::before).
-    var style = document.createElement('style');
-    style.textContent = '.values li::before,.list>div::before,.staff>div::before,.req li::before{transform:scaleX(var(--x,1))}';
-    document.head.appendChild(style);
     ScrollTrigger.refresh();
   }
 })();
