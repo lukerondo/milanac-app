@@ -13,9 +13,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
 <style>
-/* Layout: bande nere a tutta larghezza, contenuto in una colonna da 1180px; la home si apre con il
-   video verticale del walkout (a destra sul computer, a tutto schermo sul telefono), poi sezioni
-   separate da filetti d'oro. Nero e avorio come l'app, oro solo nei dettagli, rosso una volta sola. */
+/* Layout: un'unica pagina cinematografica. Apertura con il video del walkout a tutta altezza,
+   che "arretra" scorrendo (sezione bloccata e guidata dallo scroll); poi fascia in movimento,
+   numeri che contano, testi che entrano riga per riga, scorrimento orizzontale per le
+   competizioni, modulo con campi a filo e il nome del club gigante in chiusura.
+   Nero e avorio come l'app, oro nei dettagli, rosso una volta sola. Tutto resta leggibile
+   anche senza JavaScript: le animazioni si aggiungono sopra. */
 :root {
   color-scheme: dark;
   --bg: #0B0B0C;
@@ -28,56 +31,71 @@
   --gold: #D6B354;
   --gold-light: #E8C96A;
   --gold-deep: #8F6E1C;
-  --gold-line: rgba(214, 179, 84, .28);
+  --gold-line: rgba(214, 179, 84, .3);
   --red: #C61C23;
   --display: "Oswald", "Arial Narrow", Impact, sans-serif;
   --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
-  --wrap: 1180px;
+  --wrap: 1240px;
+  --gl: max(16px, env(safe-area-inset-left, 0px));
+  --gr: max(16px, env(safe-area-inset-right, 0px));
+  --ease: cubic-bezier(.2, .7, .2, 1);
 }
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font: 400 16px/1.6 var(--body);
-  overflow-x: hidden;
-}
-body::before {
-  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
-  z-index: 30; background: var(--bg);
-}
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--body); overflow-x: hidden; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--bg); }
 img { max-width: 100%; }
 a { color: inherit; }
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 p { margin: 0; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
-.wrap {
-  max-width: var(--wrap); margin-inline: auto;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-}
-.band { padding-block: clamp(56px, 9vw, 120px); }
-.band + .band { border-top: 1px solid var(--gold-line); }
+.wrap { max-width: var(--wrap); margin-inline: auto; padding-left: var(--gl); padding-right: var(--gr); }
+.band { padding-block: clamp(72px, 10vw, 150px); position: relative; }
+.band + .band::before { content: ""; position: absolute; left: var(--gl); right: var(--gr); top: 0; height: 1px; background: var(--gold-line); }
+html.cursor-on, html.cursor-on a, html.cursor-on button { cursor: none; }
+
+/* ---------- Caricamento ---------- */
+.loader { position: fixed; inset: 0; z-index: 70; background: var(--bg); display: grid; place-items: center; animation: loader-out .9s cubic-bezier(.7, 0, .3, 1) 2.4s forwards; }
+html.gsap .loader { animation: none; }
+.loader-in { display: grid; justify-items: center; gap: 22px; text-align: center; }
+.loader-in img { width: 96px; height: 96px; }
+.loader-word { font: 600 clamp(22px, 3.4vw, 34px)/1 var(--display); letter-spacing: .28em; text-transform: uppercase; padding-left: .28em; }
+.loader-word span { display: inline-block; }
+.loader-bar { width: 160px; height: 1px; background: var(--line); overflow: hidden; }
+.loader-bar i { display: block; height: 100%; width: 100%; background: var(--gold); transform-origin: left; transform: scaleX(0); animation: bar 2.2s var(--ease) forwards; }
+html.gsap .loader-bar i { animation: none; }
+@keyframes bar { to { transform: scaleX(1); } }
+@keyframes loader-out { to { transform: translateY(-100%); visibility: hidden; } }
+.progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 2px; width: 100%; background: var(--gold); transform-origin: left; transform: scaleX(0); z-index: 65; pointer-events: none; }
+
+/* ---------- Cursore (solo con il mouse) ---------- */
+.cur { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 80; display: none; }
+html.cursor-on .cur { display: block; }
+.cur-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
+.cur-ring { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--gold); opacity: .7; transition: width .3s var(--ease), height .3s var(--ease), background-color .3s; }
+html.cur-hover .cur-ring { width: 64px; height: 64px; background: rgba(214, 179, 84, .12); }
+html.cur-hover .cur-dot { opacity: 0; }
 
 /* ---------- Testata ---------- */
 .top {
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
-  background: rgba(11, 11, 12, .84); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 50;
+  transition: transform .5s var(--ease), background-color .4s, border-color .4s;
+  border-bottom: 1px solid transparent;
 }
-.top .wrap { display: flex; align-items: center; gap: 20px; min-height: 68px; }
+.top.solid { background: rgba(11, 11, 12, .78); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-color: rgba(255, 255, 255, .06); }
+.top.hide { transform: translateY(-110%); }
+.top .wrap { display: flex; align-items: center; gap: 20px; min-height: 76px; }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; margin-right: auto; }
-.brand img { width: 38px; height: 38px; }
-.brand b { font: 600 20px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; }
-.brand small { display: block; font: 600 9px/1.2 var(--body); letter-spacing: .3em; color: var(--gold); text-transform: uppercase; margin-top: 3px; }
-.nav { display: flex; gap: 28px; align-items: center; }
-.nav a { font: 500 13px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; text-decoration: none; color: var(--fg-2); padding: 10px 0; }
-.nav a:hover { color: var(--gold-light); }
+.brand img { width: 40px; height: 40px; }
+.brand b { font: 600 20px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.brand small { display: block; font: 600 9px/1.2 var(--body); letter-spacing: .32em; color: var(--gold); text-transform: uppercase; margin-top: 3px; }
+.nav { display: flex; gap: 30px; align-items: center; }
+.nav a:not(.btn) { position: relative; font: 500 12px/1 var(--body); letter-spacing: .18em; text-transform: uppercase; text-decoration: none; color: var(--fg-2); padding: 10px 0; }
+.nav a:not(.btn)::after { content: ""; position: absolute; left: 0; right: 0; bottom: 4px; height: 1px; background: var(--gold); transform: scaleX(0); transform-origin: right; transition: transform .45s var(--ease); }
+.nav a:not(.btn):hover { color: var(--fg); }
+.nav a:not(.btn):hover::after { transform: scaleX(1); transform-origin: left; }
 .menu-btn { display: none; width: 44px; height: 44px; background: none; border: 1px solid var(--line); border-radius: 2px; cursor: pointer; position: relative; }
-.menu-btn span, .menu-btn span::before, .menu-btn span::after {
-  content: ""; position: absolute; left: 12px; right: 12px; height: 2px; background: var(--fg); transition: transform .25s, opacity .25s;
-}
+.menu-btn span, .menu-btn span::before, .menu-btn span::after { content: ""; position: absolute; left: 12px; right: 12px; height: 2px; background: var(--fg); transition: transform .3s var(--ease), opacity .3s; }
 .menu-btn span { top: 21px; }
 .menu-btn span::before { top: -7px; left: 0; right: 0; }
 .menu-btn span::after { top: 7px; left: 0; right: 0; }
@@ -86,190 +104,208 @@ p { margin: 0; }
 .menu-btn[aria-expanded="true"] span::after { transform: translateY(-7px) rotate(-45deg); }
 @media (max-width: 899px) {
   .menu-btn { display: block; }
-  .nav {
-    display: none; position: absolute; left: 0; right: 0; top: 100%;
-    background: var(--bg-2); border-bottom: 1px solid var(--gold-line);
-    flex-direction: column; align-items: stretch; gap: 0;
-    padding: 8px max(16px, env(safe-area-inset-left, 0px)) 16px max(16px, env(safe-area-inset-right, 0px));
-  }
+  .nav { display: none; position: absolute; left: 0; right: 0; top: 100%; background: rgba(11, 11, 12, .96); border-bottom: 1px solid var(--gold-line); flex-direction: column; align-items: stretch; gap: 0; padding: 8px var(--gr) 18px var(--gl); }
   .nav.open { display: flex; }
-  .nav a { padding: 14px 0; border-top: 1px solid var(--line); }
-  .nav .btn { margin-top: 12px; }
+  .nav a:not(.btn) { padding: 15px 0; border-top: 1px solid var(--line); }
+  .nav .btn { margin-top: 14px; }
 }
 
 /* ---------- Pulsanti ---------- */
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 16px 28px; border-radius: 2px; border: 1px solid var(--gold);
-  font: 600 13px/1 var(--body); letter-spacing: .16em; text-transform: uppercase;
-  text-decoration: none; cursor: pointer; transition: background .2s, color .2s, border-color .2s, transform .2s;
+  position: relative; isolation: isolate; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 18px 30px; border-radius: 2px; border: 1px solid var(--gold);
+  font: 600 12px/1 var(--body); letter-spacing: .2em; text-transform: uppercase;
+  text-decoration: none; cursor: pointer; transition: color .35s var(--ease), border-color .35s;
 }
+.btn::before { content: ""; position: absolute; inset: 0; background: var(--gold-light); z-index: -1; transform: translateX(-101%); transition: transform .5s var(--ease); }
+.btn:hover::before { transform: translateX(0); }
 .btn-gold { background: var(--gold); color: #111; }
-.btn-gold:hover { background: var(--gold-light); }
 .btn-line { background: transparent; color: var(--fg); border-color: rgba(245, 241, 230, .35); }
-.btn-line:hover { border-color: var(--gold); color: var(--gold-light); }
-.btn:active { transform: translateY(1px); }
-.nav .btn { padding: 12px 20px; }
+.btn-line:hover { color: #111; border-color: var(--gold-light); }
+.btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
+.nav .btn { padding: 13px 20px; }
 
-/* ---------- Apertura con il video ---------- */
-.hero { position: relative; overflow: hidden; }
-.hero::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(60% 70% at 72% 50%, rgba(143, 110, 28, .22), transparent 70%);
-}
-.hero .wrap { position: relative; padding-block: clamp(28px, 5vw, 72px) clamp(40px, 6vw, 88px); }
-.hero-grid { display: grid; gap: 36px; align-items: center; }
-.eyebrow {
-  display: flex; align-items: center; gap: 12px; color: var(--gold);
-  font: 600 11px/1.3 var(--body); letter-spacing: .22em; text-transform: uppercase;
-}
-.eyebrow::before { content: ""; flex: none; width: 28px; height: 1px; background: var(--gold); }
-.hero h1 {
-  margin-top: 22px;
-  font: 600 clamp(54px, 9.4vw, 124px)/.92 var(--display); text-transform: uppercase; letter-spacing: -.012em;
-}
-.hero h1 .dot { color: var(--gold); }
-.hero .lead { margin-top: 26px; }
-.lead { font-size: clamp(17px, 1.45vw, 20px); line-height: 1.6; color: var(--fg-2); max-width: 56ch; }
-.cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; }
-.stage-wrap { display: grid; gap: 14px; justify-items: center; }
-.stage {
-  position: relative; height: min(78vh, 740px); aspect-ratio: 9 / 16; width: auto; max-width: 100%;
-  border: 1px solid var(--gold-line); border-radius: 4px; overflow: hidden; background: #000;
-  box-shadow: 0 40px 90px rgba(0, 0, 0, .65);
-}
-.stage video { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* ---------- Apertura ---------- */
+.hero { position: relative; height: 100svh; min-height: 560px; overflow: hidden; background: #000; }
+.ambient { position: absolute; inset: -12%; width: 124%; height: 124%; object-fit: cover; filter: blur(46px) brightness(.42) saturate(1.3); opacity: .9; }
+.hero-dim { position: absolute; inset: 0; background: var(--bg); opacity: 0; pointer-events: none; z-index: 3; }
+.hero-in { position: relative; z-index: 2; height: 100%; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; padding-left: var(--gl); padding-right: var(--gr); max-width: var(--wrap); margin-inline: auto; }
+.stage-wrap { position: relative; height: 100svh; min-height: 560px; display: grid; align-items: center; justify-items: center; }
+.stage { position: relative; height: 100svh; min-height: 560px; width: calc(100svh * 9 / 16); min-width: 315px; max-width: 100%; background: #000; overflow: hidden; box-shadow: 0 40px 120px rgba(0, 0, 0, .7); }
+.stage::after { content: ""; position: absolute; inset: 0; border: 1px solid var(--gold-line); pointer-events: none; }
+.stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.tick { position: absolute; width: 14px; height: 14px; border-color: var(--gold); border-style: solid; border-width: 0; z-index: 2; }
+.tick.tl { top: 10px; left: 10px; border-top-width: 1px; border-left-width: 1px; }
+.tick.tr { top: 10px; right: 10px; border-top-width: 1px; border-right-width: 1px; }
+.tick.bl { bottom: 10px; left: 10px; border-bottom-width: 1px; border-left-width: 1px; }
+.tick.br { bottom: 10px; right: 10px; border-bottom-width: 1px; border-right-width: 1px; }
 .audio {
-  position: absolute; top: 12px; right: 12px; z-index: 2;
-  display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px;
+  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 3; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px;
   background: rgba(11, 11, 12, .72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--gold-line); border-radius: 999px; color: var(--fg); cursor: pointer;
-  font: 600 11px/1 var(--body); letter-spacing: .14em; text-transform: uppercase;
+  font: 600 11px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; transition: border-color .3s, color .3s;
 }
 .audio:hover { border-color: var(--gold); color: var(--gold-light); }
 .audio svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .audio .on { display: none; }
 .audio[aria-pressed="true"] .on { display: block; }
 .audio[aria-pressed="true"] .off { display: none; }
-.caption { font-size: 13px; color: var(--muted); letter-spacing: .02em; text-align: center; }
-@media (min-width: 900px) {
-  .hero-grid { grid-template-columns: 1.15fr .85fr; gap: 56px; }
-  .stage-wrap { justify-self: end; }
-}
+.hero-copy { position: relative; z-index: 2; max-width: 720px; }
+.eyebrow { display: flex; align-items: center; gap: 12px; color: var(--gold); font: 600 11px/1.3 var(--body); letter-spacing: .24em; text-transform: uppercase; }
+.eyebrow::before { content: ""; flex: none; width: 30px; height: 1px; background: var(--gold); }
+.hero h1 { margin-top: 24px; font: 600 clamp(58px, 7.4vw, 118px)/.9 var(--display); text-transform: uppercase; letter-spacing: -.014em; }
+.hero h1 .dot { color: var(--gold); }
+.hero .lead { margin-top: 28px; }
+.lead { font-size: clamp(17px, 1.4vw, 20px); line-height: 1.6; color: var(--fg-2); max-width: 54ch; }
+.cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
+.scroll-hint { position: absolute; left: var(--gl); bottom: 26px; z-index: 3; display: flex; align-items: center; gap: 14px; color: var(--muted); font: 600 10px/1 var(--body); letter-spacing: .3em; text-transform: uppercase; }
+.scroll-hint i { display: block; width: 1px; height: 44px; background: var(--gold); transform-origin: top; animation: hint 1.8s var(--ease) infinite; }
+@keyframes hint { 0% { transform: scaleY(0); transform-origin: top; } 45% { transform: scaleY(1); transform-origin: top; } 55% { transform: scaleY(1); transform-origin: bottom; } 100% { transform: scaleY(0); transform-origin: bottom; } }
 @media (max-width: 899px) {
-  .hero .wrap { padding-inline: 0; padding-block: 0 48px; }
-  .hero-grid { gap: 0; }
-  .stage-wrap { order: -1; width: 100%; }
-  .stage { width: 100%; height: auto; max-height: 82vh; border-radius: 0; border-inline: 0; }
-  .caption { display: none; }
-  .hero-copy {
-    margin-top: -120px; position: relative; z-index: 1;
-    padding: 110px max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
-    background: linear-gradient(to bottom, rgba(11, 11, 12, 0), var(--bg) 110px);
-  }
+  .hero { min-height: 100svh; }
+  .hero-in { display: block; padding: 0; max-width: none; }
+  .ambient { display: none; }
+  .stage-wrap { position: absolute; inset: 0; display: block; }
+  .stage { height: 100%; width: 100%; aspect-ratio: auto; box-shadow: none; }
+  .stage::after, .tick { display: none; }
+  .stage::before { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0, 0, 0, .4), rgba(0, 0, 0, 0) 24%, rgba(11, 11, 12, .55) 48%, rgba(11, 11, 12, .93) 70%, var(--bg) 100%); z-index: 1; }
+  .hero h1, .hero .lead, .hero .eyebrow { text-shadow: 0 2px 24px rgba(0, 0, 0, .8); }
+  .audio { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 88px); left: auto; right: var(--gr); transform: none; }
+  .hero-copy { position: absolute; left: var(--gl); right: var(--gr); bottom: 86px; max-width: none; }
+  .hero h1 { font-size: clamp(56px, 16vw, 92px); }
+  .hero .lead { font-size: 16px; }
+  .scroll-hint { bottom: 22px; }
 }
 
-/* Entrata della home: titolo e pulsanti salgono una volta sola. */
-@media (prefers-reduced-motion: no-preference) {
-  .hero-copy > * { animation: rise .9s cubic-bezier(.2, .7, .2, 1) both; }
-  .hero-copy > :nth-child(2) { animation-delay: .08s; }
-  .hero-copy > :nth-child(3) { animation-delay: .16s; }
-  .hero-copy > :nth-child(4) { animation-delay: .24s; }
-  html.js .reveal { opacity: .4; transform: translateY(18px); transition: opacity .7s ease, transform .7s cubic-bezier(.2, .7, .2, 1); }
-  html.js .reveal.in { opacity: 1; transform: none; }
-}
-@keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+/* ---------- Fascia in movimento ---------- */
+.marquee { overflow: hidden; border-block: 1px solid var(--gold-line); padding-block: 22px; background: var(--bg-2); }
+.marquee-track { display: flex; width: max-content; gap: 48px; align-items: center; will-change: transform; animation: slide 30s linear infinite; }
+html.gsap .marquee-track { animation: none; }
+@keyframes slide { to { transform: translateX(-50%); } }
+.marquee span { white-space: nowrap; font: 600 clamp(28px, 4.6vw, 62px)/1 var(--display); text-transform: uppercase; letter-spacing: .02em; color: transparent; -webkit-text-stroke: 1px var(--gold); }
+.marquee span.fill { color: var(--fg); -webkit-text-stroke: 0; }
+.marquee em { font-style: normal; color: var(--gold); font-size: .6em; vertical-align: middle; margin-inline: 24px; }
 
-/* ---------- Numeri del club ---------- */
-.facts {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 24px 32px;
-  border-top: 1px solid var(--gold-line); padding-block: 30px;
-}
-.facts b { display: block; font: 600 clamp(30px, 3.6vw, 42px)/1 var(--display); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
-.facts span { display: block; margin-top: 8px; font-size: 13px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+/* ---------- Numeri ---------- */
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 28px 32px; padding-block: clamp(48px, 7vw, 90px); }
+.facts b { display: block; font: 600 clamp(48px, 7vw, 104px)/.95 var(--display); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.facts b small { font-size: .42em; color: var(--gold); letter-spacing: .04em; margin-left: 4px; }
+.facts .lbl { display: block; margin-top: 10px; font-size: 12px; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; }
 
 /* ---------- Sezioni ---------- */
-.h2 { margin-top: 16px; font: 600 clamp(34px, 5vw, 58px)/1 var(--display); text-transform: uppercase; letter-spacing: -.006em; }
-.sec-head { max-width: 760px; }
-.sec-head .lead { margin-top: 18px; }
-.two { display: grid; gap: 40px; margin-top: clamp(32px, 5vw, 64px); }
-@media (min-width: 900px) { .two { grid-template-columns: 1fr 1fr; gap: 72px; } }
-.quote { font: 400 clamp(22px, 2.5vw, 31px)/1.35 var(--body); color: var(--fg); text-wrap: pretty; }
-.quote::before { content: "\201C"; display: block; font: 700 110px/.55 var(--display); color: var(--red); margin-bottom: 26px; }
+.h2 { margin-top: 18px; font: 600 clamp(38px, 5.8vw, 76px)/.98 var(--display); text-transform: uppercase; letter-spacing: -.01em; }
+.sec-head { max-width: 820px; }
+.sec-head .lead { margin-top: 20px; }
+.two { display: grid; gap: 44px; margin-top: clamp(36px, 5vw, 72px); }
+@media (min-width: 900px) { .two { grid-template-columns: 1.05fr .95fr; gap: 80px; } }
+.quote { font: 400 clamp(23px, 2.6vw, 34px)/1.35 var(--body); color: var(--fg); text-wrap: pretty; }
+.quote::before { content: "\201C"; display: block; font: 700 120px/.55 var(--display); color: var(--red); margin-bottom: 28px; }
 .quote em { font-style: normal; color: var(--gold-light); }
-.prose { color: var(--fg-2); font-size: 17px; max-width: 60ch; }
+.prose { color: var(--fg-2); font-size: 17px; max-width: 58ch; }
 .prose + .prose { margin-top: 16px; }
-.values { list-style: none; margin: 32px 0 0; padding: 0; display: grid; gap: 0; }
-.values li { padding: 18px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: baseline; }
-.values b { font: 600 18px/1.1 var(--display); text-transform: uppercase; letter-spacing: .04em; color: var(--gold-light); }
+.values { list-style: none; margin: 36px 0 0; padding: 0; }
+.values li { position: relative; padding: 20px 0; display: grid; grid-template-columns: 130px 1fr; gap: 16px; align-items: baseline; }
+.values li::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; }
+.values b { font: 600 19px/1.1 var(--display); text-transform: uppercase; letter-spacing: .05em; color: var(--gold-light); }
 .values span { color: var(--fg-2); font-size: 15px; }
 @media (max-width: 480px) { .values li { grid-template-columns: 1fr; gap: 6px; } }
 
-.list { margin-top: clamp(24px, 4vw, 48px); }
-.list > div { padding: 26px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 54px 1fr; gap: 18px; }
-.list > div:last-child { border-bottom: 1px solid var(--line); }
-.list .n { font: 600 14px/1.3 var(--body); color: var(--gold); letter-spacing: .14em; padding-top: 6px; }
-.list h3 { font: 600 22px/1.1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
-.list p { margin-top: 8px; color: var(--fg-2); font-size: 16px; max-width: 58ch; }
-.what { display: grid; gap: 44px; }
-@media (min-width: 900px) { .what { grid-template-columns: 1fr 340px; gap: 64px; align-items: start; } .what .list { margin-top: 0; } }
-.phone { max-width: 300px; margin-inline: auto; border: 1px solid var(--line); border-radius: 30px; padding: 8px; background: #000; box-shadow: 0 30px 70px rgba(0, 0, 0, .6); }
-.phone img { display: block; width: 100%; border-radius: 22px; }
-.phone-wrap { display: grid; gap: 14px; }
+.what { display: grid; gap: 48px; margin-top: clamp(36px, 5vw, 72px); }
+@media (min-width: 900px) { .what { grid-template-columns: 1fr 380px; gap: 80px; align-items: start; } .phone-wrap { position: sticky; top: 110px; } }
+.list > div { position: relative; padding: 30px 0; display: grid; grid-template-columns: 64px 1fr; gap: 18px; }
+.list > div::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; }
+.list > div:last-child::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--line); }
+.list .n { font: 600 14px/1.3 var(--body); color: var(--gold); letter-spacing: .14em; padding-top: 7px; }
+.list h3 { font: 600 clamp(24px, 2.4vw, 32px)/1.05 var(--display); text-transform: uppercase; letter-spacing: .02em; transition: color .3s; }
+.list > div:hover h3 { color: var(--gold-light); }
+.list p { margin-top: 10px; color: var(--fg-2); font-size: 16px; max-width: 56ch; }
+.phone-wrap { display: grid; gap: 14px; perspective: 1200px; }
+.phone { max-width: 320px; margin-inline: auto; border: 1px solid var(--line); border-radius: 32px; padding: 9px; background: #000; box-shadow: 0 40px 90px rgba(0, 0, 0, .65); transform-style: preserve-3d; }
+.reveal-img { overflow: hidden; border-radius: 24px; }
+.reveal-img img { display: block; width: 100%; }
+.caption { font-size: 13px; color: var(--muted); letter-spacing: .02em; text-align: center; }
 
-.tri { display: grid; gap: 28px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-top: clamp(32px, 5vw, 56px); }
-.tri > div { border-top: 1px solid var(--gold-line); padding-top: 22px; }
-.tri h3 { font: 600 24px/1.1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
-.tri p { margin-top: 10px; color: var(--fg-2); font-size: 16px; }
+/* ---------- Scorrimento orizzontale ---------- */
+.hs { position: relative; overflow: hidden; }
+.hs .sec-head { margin-bottom: 8px; }
+.hs-track { display: flex; gap: 24px; padding: 40px var(--gl) 40px; width: max-content; }
+.panel { position: relative; width: min(72vw, 640px); min-height: 440px; padding: 36px 32px 40px; border: 1px solid var(--line); background: linear-gradient(160deg, #15130d, var(--bg-2) 60%); display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+.panel::before { content: attr(data-n); position: absolute; top: 10px; right: 20px; font: 700 clamp(140px, 18vw, 260px)/1 var(--display); color: transparent; -webkit-text-stroke: 1px rgba(214, 179, 84, .22); pointer-events: none; }
+.panel .eyebrow { margin-bottom: auto; }
+.panel h3 { font: 600 clamp(34px, 3.6vw, 52px)/1 var(--display); text-transform: uppercase; margin-top: 60px; }
+.panel p { margin-top: 14px; color: var(--fg-2); max-width: 44ch; font-size: 16px; }
+.panel .btn { align-self: flex-start; margin-top: 26px; }
+.panel.cta { background: linear-gradient(160deg, #2a2110, #15130d 60%); border-color: var(--gold-line); }
+@media (max-width: 899px) {
+  .hs-track { overflow-x: auto; width: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-right: var(--gr); }
+  .hs-track::-webkit-scrollbar { display: none; }
+  .panel { flex: none; width: 82vw; min-height: 400px; scroll-snap-align: start; }
+}
 
-.staff { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0 40px; margin-top: clamp(28px, 4vw, 48px); }
-.staff > div { padding: 20px 0; border-top: 1px solid var(--line); }
-.staff .role { font: 600 11px/1.3 var(--body); color: var(--gold); letter-spacing: .18em; text-transform: uppercase; }
-.staff .name { margin-top: 8px; font: 500 24px/1.15 var(--display); letter-spacing: .01em; }
+/* ---------- Organigramma ---------- */
+.staff { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 48px; margin-top: clamp(32px, 4vw, 56px); }
+.staff > div { position: relative; padding: 24px 0; }
+.staff > div::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; }
+.staff .role { font: 600 11px/1.3 var(--body); color: var(--gold); letter-spacing: .2em; text-transform: uppercase; }
+.staff .name { margin-top: 10px; font: 500 clamp(24px, 2.2vw, 30px)/1.1 var(--display); letter-spacing: .01em; transition: transform .4s var(--ease), color .3s; }
+.staff > div:hover .name { transform: translateX(8px); color: var(--gold-light); }
 .staff .wide { grid-column: 1 / -1; }
 
 /* ---------- Candidature ---------- */
-.join { display: grid; gap: 44px; margin-top: clamp(32px, 5vw, 56px); }
-@media (min-width: 900px) { .join { grid-template-columns: .85fr 1.15fr; gap: 72px; align-items: start; } }
-.req { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
-.req li { padding: 16px 0; border-top: 1px solid var(--line); display: flex; gap: 14px; color: var(--fg-2); font-size: 16px; }
-.req li::before { content: ""; flex: none; width: 22px; height: 1px; background: var(--gold); margin-top: 13px; }
+.join { display: grid; gap: 48px; margin-top: clamp(36px, 5vw, 72px); }
+@media (min-width: 900px) { .join { grid-template-columns: .8fr 1.2fr; gap: 88px; align-items: start; } }
+.req { list-style: none; margin: 0; padding: 0; }
+.req li { position: relative; padding: 18px 0; display: flex; gap: 14px; color: var(--fg-2); font-size: 16px; }
+.req li::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; }
+.req li i { flex: none; width: 22px; height: 1px; background: var(--gold); margin-top: 13px; }
 .req li strong { color: var(--fg); font-weight: 600; }
-.form { display: grid; gap: 18px; }
-.row2 { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+.form { display: grid; gap: 26px; }
+.row2 { display: grid; gap: 26px; grid-template-columns: 1fr 1fr; }
 @media (max-width: 560px) { .row2 { grid-template-columns: 1fr; } }
-.field { display: grid; gap: 8px; min-width: 0; }
-.field label, .legend { font: 600 11px/1.3 var(--body); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
-.field input, .field select, .field textarea {
-  width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 3px;
-  color: var(--fg); padding: 14px; font: 400 16px/1.4 var(--body);
-}
-.field select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 40px; }
-.field textarea { min-height: 120px; resize: vertical; }
-.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--gold); outline: none; }
-.check { display: flex; gap: 12px; align-items: flex-start; color: var(--fg-2); font-size: 15px; }
-.check input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--gold); flex: none; }
+.field { position: relative; display: grid; gap: 6px; min-width: 0; }
+.field label, .legend { font: 600 11px/1.3 var(--body); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+.field input, .field select, .field textarea { width: 100%; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; color: var(--fg); padding: 12px 0; font: 400 18px/1.4 var(--body); }
+.field::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--gold); transform: scaleX(0); transform-origin: left; transition: transform .5s var(--ease); }
+.field:focus-within::after { transform: scaleX(1); }
+.field select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%); background-position: calc(100% - 14px) 55%, calc(100% - 9px) 55%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 30px; }
+.field select option { background: var(--surface); }
+.field textarea { min-height: 110px; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; }
+.check { display: flex; gap: 14px; align-items: flex-start; color: var(--fg-2); font-size: 15px; cursor: pointer; }
+.check input { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; margin: 2px 0 0; border: 1px solid var(--gold-line); border-radius: 2px; flex: none; display: grid; place-items: center; background: transparent; transition: background .25s, border-color .25s; }
+.check input::before { content: ""; width: 10px; height: 10px; background: #111; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); transform: scale(0); transition: transform .25s var(--ease); }
+.check input:checked { background: var(--gold); border-color: var(--gold); }
+.check input:checked::before { transform: scale(1); }
 .note { padding: 16px 18px; border: 1px solid var(--gold-line); border-left: 3px solid var(--gold); border-radius: 2px; color: var(--fg); font-size: 15px; }
-.thanks { border: 1px solid var(--gold-line); padding: 32px; border-radius: 4px; }
-.thanks h3 { font: 600 30px/1.05 var(--display); text-transform: uppercase; }
+.thanks { border: 1px solid var(--gold-line); padding: 36px; }
+.thanks h3 { font: 600 34px/1.05 var(--display); text-transform: uppercase; }
 .thanks p { margin-top: 12px; color: var(--fg-2); }
 .small { font-size: 13px; color: var(--muted); }
 
-/* ---------- Piè di pagina ---------- */
-.foot { border-top: 1px solid var(--gold-line); padding-block: 48px 40px; }
+/* ---------- Chiusura ---------- */
+.foot { position: relative; border-top: 1px solid var(--gold-line); padding-block: 56px 36px; overflow: hidden; }
+.giant { overflow: hidden; margin: 0 0 40px; font: 700 clamp(72px, 18.5vw, 300px)/.86 var(--display); letter-spacing: -.02em; text-transform: uppercase; color: transparent; -webkit-text-stroke: 1px rgba(214, 179, 84, .5); text-align: center; white-space: nowrap; }
 .foot-grid { display: grid; gap: 36px; }
 @media (min-width: 800px) { .foot-grid { grid-template-columns: 1.3fr 1fr 1fr; gap: 48px; } }
 .foot .brand { margin: 0; }
 .foot .brand img { width: 56px; height: 56px; }
-.foot h4 { margin: 0 0 14px; font: 600 11px/1.3 var(--body); color: var(--gold); letter-spacing: .2em; text-transform: uppercase; }
-.social { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.social a { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; color: var(--fg-2); font-size: 15px; padding: 4px 0; }
-.social a:hover { color: var(--gold-light); }
+.foot h4 { margin: 0 0 14px; font: 600 11px/1.3 var(--body); color: var(--gold); letter-spacing: .22em; text-transform: uppercase; }
+.social { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.social a { display: inline-flex; align-items: center; gap: 14px; text-decoration: none; color: var(--fg-2); font-size: 15px; padding: 6px 0; transition: color .3s, transform .4s var(--ease); }
+.social a:hover { color: var(--gold-light); transform: translateX(6px); }
 .social svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 .contact { color: var(--fg-2); font-size: 15px; display: grid; gap: 10px; }
-.contact code { font: 500 15px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); padding: 6px 10px; border-radius: 3px; user-select: all; }
-.legal { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.contact code { font: 500 15px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); padding: 7px 10px; border-radius: 3px; user-select: all; }
+.legal { margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; font-size: 12px; color: var(--muted); }
 .legal a { color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .loader { animation-duration: .01s; animation-delay: 0s; }
+  .scroll-hint i, .marquee-track, .loader-bar i { animation: none; }
+  html { scroll-behavior: auto; }
+}
 </style>
 </head>
 <body>
@@ -282,10 +318,21 @@ p { margin: 0; }
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></symbol>
 </svg>
 
-<header class="top">
+<div class="loader" id="loader" aria-hidden="true">
+  <div class="loader-in">
+    <img src="img/stemma.png" alt="" width="96" height="96">
+    <div class="loader-word" id="loader-word"><span>Milano</span> <span>siamo</span> <span>noi</span></div>
+    <div class="loader-bar"><i id="loader-bar"></i></div>
+  </div>
+</div>
+<div class="progress" id="progress" aria-hidden="true"></div>
+<div class="cur cur-ring" id="cur-ring" aria-hidden="true"></div>
+<div class="cur cur-dot" id="cur-dot" aria-hidden="true"></div>
+
+<header class="top" id="top">
   <div class="wrap">
     <a class="brand" href="#inizio" aria-label="MILANAC Pro Club, torna in cima">
-      <img src="img/stemma.png" alt="" width="38" height="38">
+      <img src="img/stemma.png" alt="" width="40" height="40">
       <span><b>MILANAC</b><small>Pro Club</small></span>
     </a>
     <button class="menu-btn" id="menu" aria-expanded="false" aria-controls="nav" aria-label="Apri il menu"><span></span></button>
@@ -294,62 +341,72 @@ p { margin: 0; }
       <a href="#cosa-facciamo">Cosa facciamo</a>
       <a href="#tornei">In campo</a>
       <a href="#staff">Staff</a>
-      <a class="btn btn-gold" href="#candidati">Candidati</a>
+      <a class="btn btn-gold magnetic" href="#candidati">Candidati</a>
     </nav>
   </div>
 </header>
 
+<div id="smooth-wrapper">
+<div id="smooth-content">
 <main id="inizio">
-  <section class="hero">
-    <div class="wrap">
-      <div class="hero-grid">
-        <div class="hero-copy">
-          <p class="eyebrow">Pro club rossonero · EA SPORTS FC · PS5</p>
-          <h1>Milano<br>siamo noi<span class="dot">.</span></h1>
-          <p class="lead">Siamo un club di tifosi del Milan che gioca a Pro Clubs come una squadra vera: allenamenti ogni sera, campionato, tornei e amichevoli. Due squadre, un solo stemma.</p>
-          <div class="cta">
-            <a class="btn btn-gold" href="#candidati">Candidati</a>
-            <a class="btn btn-line" href="#club">Scopri il club</a>
-          </div>
+  <section class="hero" id="hero">
+    <video class="ambient" id="ambient" muted loop playsinline aria-hidden="true"></video>
+    <div class="hero-dim" id="hero-dim"></div>
+    <div class="hero-in">
+      <div class="hero-copy" id="hero-copy">
+        <p class="eyebrow">Pro club rossonero · EA SPORTS FC · PS5</p>
+        <h1 id="h1">Milano<br>siamo noi<span class="dot">.</span></h1>
+        <p class="lead">Un club di tifosi del Milan che gioca a Pro Clubs come una squadra vera: allenamenti ogni sera, campionato, tornei e amichevoli. Due squadre, un solo stemma.</p>
+        <div class="cta">
+          <a class="btn btn-gold magnetic" href="#candidati">Candidati <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+          <a class="btn btn-line magnetic" href="#club">Scopri il club</a>
         </div>
-        <div class="stage-wrap">
-          <div class="stage">
-            <video id="walkout" autoplay muted loop playsinline preload="metadata" poster="img/poster.jpg" aria-label="Il walkout del MILANAC a San Siro">
-              <source src="video/intro.mp4" type="video/mp4">
-            </video>
-            <button class="audio" id="audio" type="button" aria-pressed="false">
-              <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6m0-6-5 6"/></svg>
-              <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
-              <span id="audio-label">Attiva l'audio</span>
-            </button>
-          </div>
-          <p class="caption">Il nostro ingresso a San Siro. Attiva l'audio per i cori e lo speaker.</p>
+      </div>
+      <div class="stage-wrap">
+        <div class="stage" id="stage">
+          <i class="tick tl"></i><i class="tick tr"></i><i class="tick bl"></i><i class="tick br"></i>
+          <video id="walkout" autoplay muted loop playsinline preload="metadata" poster="img/poster.jpg" aria-label="Il walkout del MILANAC a San Siro">
+            <source src="video/intro.mp4" type="video/mp4">
+          </video>
+          <button class="audio" id="audio" type="button" aria-pressed="false">
+            <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6m0-6-5 6"/></svg>
+            <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+            <span id="audio-label">Attiva l'audio</span>
+          </button>
         </div>
       </div>
     </div>
+    <div class="scroll-hint" aria-hidden="true"><i></i><span>Scorri</span></div>
   </section>
 
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track" id="marquee">
+      <span class="fill">Milano siamo noi</span><em>✦</em><span>Rosso, nero e bianco</span><em>✦</em><span class="fill">Solo tifosi del Milan</span><em>✦</em><span>Dal 2025</span><em>✦</em>
+      <span class="fill">Milano siamo noi</span><em>✦</em><span>Rosso, nero e bianco</span><em>✦</em><span class="fill">Solo tifosi del Milan</span><em>✦</em><span>Dal 2025</span><em>✦</em>
+    </div>
+  </div>
+
   <section class="wrap">
-    <div class="facts reveal">
-      <div><b>2025</b><span>Anno di fondazione</span></div>
-      <div><b>2</b><span>Squadre: MILANAC e MILANAC FUTURO</span></div>
-      <div><b>Lun–Ven</b><span>In campo dalle 21:30 alle 23:30</span></div>
-      <div><b>PS5</b><span>La nostra piattaforma</span></div>
+    <div class="facts">
+      <div><b><span class="count" data-to="2025" data-from="1899">2025</span></b><span class="lbl">Anno di fondazione</span></div>
+      <div><b><span class="count" data-to="2">2</span></b><span class="lbl">Squadre: MILANAC e MILANAC FUTURO</span></div>
+      <div><b><span class="count" data-to="5">5</span><small>sere</small></b><span class="lbl">A settimana, dal lunedì al venerdì</span></div>
+      <div><b><span class="count" data-to="120">120</span><small>min</small></b><span class="lbl">In campo ogni sera, 21:30 › 23:30</span></div>
     </div>
   </section>
 
   <section class="band" id="club">
     <div class="wrap">
-      <div class="sec-head reveal">
+      <div class="sec-head">
         <p class="eyebrow">Il club</p>
-        <h2 class="h2">Rosso come il cuore, nero come la notte</h2>
+        <h2 class="h2 split">Rosso come il cuore, nero come la notte</h2>
       </div>
       <div class="two">
-        <blockquote class="quote reveal">I nostri colori saranno il rosso, come il cuore che arde per la vittoria, ed il nero come la notte che avvolgerà i sogni degli avversari. Saremo una legione infernale che danza sui campi di calcio virtuali: il nostro nome sarà <em>MILANAC</em>.</blockquote>
-        <div class="reveal">
-          <p class="prose">Il MILANAC nasce nel 2025 da un'idea di Fabio Ruggieri, Giuseppe Ruggieri e Christian Rizzi, con una regola che vale più di tutte: tesseriamo solo giocatori che tifano Milan. Il nome si ispira alla squadra che amiamo e i colori sociali sono il rosso, il nero e il bianco.</p>
-          <p class="prose">Siamo un gruppo solido di amici che vuole farsi riconoscere nelle competizioni nazionali e internazionali per il gioco, lo stile e il rispetto delle regole. Si cresce tutti insieme.</p>
-          <ul class="values">
+        <blockquote class="quote" id="quote">I nostri colori saranno il rosso, come il cuore che arde per la vittoria, ed il nero come la notte che avvolgerà i sogni degli avversari. Saremo una legione infernale che danza sui campi di calcio virtuali: il nostro nome sarà <em>MILANAC</em>.</blockquote>
+        <div>
+          <p class="prose fade">Il MILANAC nasce nel 2025 da un'idea di Fabio Ruggieri, Giuseppe Ruggieri e Christian Rizzi, con una regola che vale più di tutte: tesseriamo solo giocatori che tifano Milan. Il nome si ispira alla squadra che amiamo e i colori sociali sono il rosso, il nero e il bianco.</p>
+          <p class="prose fade">Siamo un gruppo solido di amici che vuole farsi riconoscere nelle competizioni nazionali e internazionali per il gioco, lo stile e il rispetto delle regole. Si cresce tutti insieme.</p>
+          <ul class="values lines">
             <li><b>Rispetto</b><span>Verso i compagni, il Direttivo e gli avversari. Comportamenti tossici non esistono qui.</span></li>
             <li><b>Puntualità</b><span>Convocati in party 30 minuti prima del fischio d'inizio. Il ritardo non è accettato.</span></li>
             <li><b>Squadra</b><span>Ruolo e tattiche vengono prima dell'individualismo: l'ID sulla maglia conta meno dello stemma.</span></li>
@@ -361,48 +418,49 @@ p { margin: 0; }
 
   <section class="band" id="cosa-facciamo">
     <div class="wrap">
-      <div class="sec-head reveal">
+      <div class="sec-head">
         <p class="eyebrow">Cosa facciamo</p>
-        <h2 class="h2">Ogni sera, come una squadra vera</h2>
-        <p class="lead">Dal lunedì al venerdì, dalle 21:30 alle 23:30, siamo in campo. Il resto del tempo lo passiamo a prepararci.</p>
+        <h2 class="h2 split">Ogni sera, come una squadra vera</h2>
+        <p class="lead fade">Dal lunedì al venerdì, dalle 21:30 alle 23:30, siamo in campo. Il resto del tempo lo passiamo a prepararci.</p>
       </div>
       <div class="what">
-        <div class="list reveal">
+        <div class="list lines">
           <div><span class="n">01</span><div><h3>Allenamenti</h3><p>Sessioni per affinare l'affiatamento e provare nuove tattiche. Chi si allena, gioca: le convocazioni partono da qui.</p></div></div>
           <div><span class="n">02</span><div><h3>Campionato e tornei</h3><p>Competizioni tra pro club con due squadre, MILANAC e MILANAC FUTURO. La formazione viene pubblicata prima di ogni partita.</p></div></div>
           <div><span class="n">03</span><div><h3>Amichevoli</h3><p>Partite di preparazione contro altri club, per testare moduli, nuovi ingressi e palle inattive.</p></div></div>
           <div><span class="n">04</span><div><h3>Analisi tattica</h3><p>Il giorno dopo la partita rivediamo le azioni con lo staff tecnico sulla lavagna della nostra app: pallone, schemi e replay con la voce del mister.</p></div></div>
         </div>
-        <div class="phone-wrap reveal">
-          <div class="phone"><img src="img/app-lavagna.jpg" alt="La lavagna tattica dell'app MILANAC: un calcio d'angolo con le zone numerate e il cross sul primo palo" width="720" height="1173" loading="lazy"></div>
+        <div class="phone-wrap">
+          <div class="phone" id="phone"><div class="reveal-img"><img src="img/app-lavagna.jpg" alt="La lavagna tattica dell'app MILANAC: un calcio d'angolo con le zone numerate e il cross sul primo palo" width="720" height="1173" loading="lazy"></div></div>
           <p class="caption">La lavagna tattica dell'app MILANAC, riservata ai membri.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="band" id="tornei">
-    <div class="wrap">
-      <div class="sec-head reveal">
+  <section class="band hs" id="tornei">
+    <div class="wrap hs-head">
+      <div class="sec-head">
         <p class="eyebrow">In campo</p>
-        <h2 class="h2">Campionato, coppe e amichevoli</h2>
-        <p class="lead">Giochiamo nei circuiti di Pro Clubs tra club italiani, con un calendario che pubblichiamo stagione per stagione.</p>
+        <h2 class="h2 split">Campionato, coppe e amichevoli</h2>
+        <p class="lead fade">Giochiamo nei circuiti di Pro Clubs tra club italiani, con un calendario che pubblichiamo stagione per stagione.</p>
       </div>
-      <div class="tri reveal">
-        <div><h3>Campionato</h3><p>Giornate settimanali in serata, con MILANAC e MILANAC FUTURO in campionati distinti. Ogni partita ha formazione, battitori e presenze decise in anticipo.</p></div>
-        <div><h3>Coppe e tornei</h3><p>Eliminazione diretta e serate dedicate. Le palle inattive provate in allenamento qui fanno la differenza.</p></div>
-        <div><h3>Amichevoli</h3><p>Su richiesta di altri club: per sfidarci scrivici sui social o dal modulo qui sotto.</p></div>
-      </div>
+    </div>
+    <div class="hs-track" id="hs-track">
+      <article class="panel" data-n="01"><p class="eyebrow">Campionato</p><h3>Ogni settimana, in serata</h3><p>MILANAC e MILANAC FUTURO in campionati distinti. Ogni partita ha formazione, battitori e presenze decise in anticipo.</p></article>
+      <article class="panel" data-n="02"><p class="eyebrow">Coppe e tornei</p><h3>Eliminazione diretta</h3><p>Serate dedicate, dove le palle inattive provate in allenamento fanno la differenza.</p></article>
+      <article class="panel" data-n="03"><p class="eyebrow">Amichevoli</p><h3>Prove vere contro altri club</h3><p>Per testare moduli, nuovi ingressi e schemi prima che contino.</p></article>
+      <article class="panel cta" data-n="04"><p class="eyebrow">Vuoi sfidarci?</p><h3>Scrivici per un'amichevole</h3><p>Sui social o dal modulo delle candidature: rispondiamo noi dello staff.</p><a class="btn btn-gold magnetic" href="#candidati">Contattaci</a></article>
     </div>
   </section>
 
   <section class="band" id="staff">
     <div class="wrap">
-      <div class="sec-head reveal">
+      <div class="sec-head">
         <p class="eyebrow">Chi guida il club</p>
-        <h2 class="h2">Organigramma</h2>
+        <h2 class="h2 split">Organigramma</h2>
       </div>
-      <div class="staff reveal">
+      <div class="staff lines">
         <div class="wide"><div class="role">Fondatori</div><div class="name">Giuseppe Ruggieri, Fabio Ruggieri, Christian Rizzi</div></div>
         <div><div class="role">Resp. comunicazioni e marketing</div><div class="name">Giuseppe Ruggieri</div></div>
         <div><div class="role">Resp. tecnico / tattico</div><div class="name">Fabio Ruggieri</div></div>
@@ -416,23 +474,23 @@ p { margin: 0; }
 
   <section class="band" id="candidati">
     <div class="wrap">
-      <div class="sec-head reveal">
+      <div class="sec-head">
         <p class="eyebrow">Unisciti a noi</p>
-        <h2 class="h2">Cerchiamo player milanisti</h2>
-        <p class="lead">Se tifi Milan, giochi su PS5 e la sera dalle 21:30 sei in campo, il posto c'è. Compila il modulo: ti risponde il responsabile del reclutamento.</p>
+        <h2 class="h2 split">Cerchiamo player milanisti</h2>
+        <p class="lead fade">Se tifi Milan, giochi su PS5 e la sera dalle 21:30 sei in campo, il posto c'è. Compila il modulo: ti risponde il responsabile del reclutamento.</p>
       </div>
       <div class="join">
-        <div class="reveal">
+        <div>
           <p class="legend">Cosa chiediamo</p>
-          <ul class="req">
-            <li><span><strong>Tifoso del Milan.</strong> È la regola numero uno del club.</span></li>
-            <li><span><strong>PS5</strong> con EA SPORTS FC e la modalità Pro Clubs.</span></li>
-            <li><span><strong>Disponibile dal lunedì al venerdì</strong>, dalle 21:30 alle 23:30.</span></li>
-            <li><span><strong>Microfono</strong> e voglia di giocare di squadra, nel ruolo che serve.</span></li>
-            <li><span><strong>Rispetto del regolamento</strong>: puntualità, comunicazione, nessun individualismo.</span></li>
+          <ul class="req lines">
+            <li><i></i><span><strong>Tifoso del Milan.</strong> È la regola numero uno del club.</span></li>
+            <li><i></i><span><strong>PS5</strong> con EA SPORTS FC e la modalità Pro Clubs.</span></li>
+            <li><i></i><span><strong>Disponibile dal lunedì al venerdì</strong>, dalle 21:30 alle 23:30.</span></li>
+            <li><i></i><span><strong>Microfono</strong> e voglia di giocare di squadra, nel ruolo che serve.</span></li>
+            <li><i></i><span><strong>Rispetto del regolamento</strong>: puntualità, comunicazione, nessun individualismo.</span></li>
           </ul>
         </div>
-        <div class="reveal">
+        <div class="fade">
           <form class="form" id="candidatura" method="POST" action="#candidati" data-endpoint="" novalidate>
             <input type="hidden" name="_subject" value="Nuova candidatura dal sito MILANAC">
             <input type="hidden" name="_template" value="table">
@@ -465,9 +523,7 @@ p { margin: 0; }
             <label class="check"><input id="c-milan" name="Tifoso del Milan" type="checkbox" value="Sì" required><span>Sono tifoso del Milan.</span></label>
             <label class="check"><input id="c-sere" name="Disponibile lun-ven" type="checkbox" value="Sì" required><span>Sono disponibile dal lunedì al venerdì, dalle 21:30 alle 23:30.</span></label>
             <label class="check"><input id="c-privacy" name="Consenso privacy" type="checkbox" value="Sì" required><span>Acconsento al trattamento dei miei dati per essere ricontattato dal club. I dati non vengono condivisi con nessuno.</span></label>
-            <div>
-              <button class="btn btn-gold" type="submit">Invia la candidatura</button>
-            </div>
+            <div><button class="btn btn-gold magnetic" type="submit">Invia la candidatura <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
             <p class="note" id="nota" hidden></p>
           </form>
           <div class="thanks" id="grazie-box" hidden>
@@ -482,6 +538,7 @@ p { margin: 0; }
 
 <footer class="foot">
   <div class="wrap">
+    <p class="giant" id="giant" aria-hidden="true">Milanac</p>
     <div class="foot-grid">
       <div>
         <a class="brand" href="#inizio" aria-label="MILANAC Pro Club">
@@ -516,25 +573,43 @@ p { margin: 0; }
     </div>
   </div>
 </footer>
+</div>
+</div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollSmoother.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/SplitText.min.js"></script>
 <script>
 (function () {
-  var root = document.documentElement;
+  var root = document.documentElement, $ = function (s, c) { return (c || document).querySelector(s); }, $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var fine = window.matchMedia('(pointer: fine)').matches;
+  var desktop = window.matchMedia('(min-width: 900px)').matches;
+  var hasGsap = !!(window.gsap && window.ScrollTrigger);
   root.classList.add('js');
+  if (hasGsap) root.classList.add('gsap');
 
-  // Menu sul telefono.
-  var menu = document.getElementById('menu'), nav = document.getElementById('nav');
+  /* ---------- Base: funziona anche senza GSAP ---------- */
+  var loader = $('#loader');
+  function hideLoader(fast) {
+    if (!loader) return;
+    if (hasGsap && !reduce && !fast) return; // ci pensa la sequenza qui sotto
+    loader.style.transition = 'opacity .5s'; loader.style.opacity = '0';
+    setTimeout(function () { loader.style.display = 'none'; }, 520);
+  }
+  var seen = false; try { seen = sessionStorage.getItem('milanac-intro') === '1'; sessionStorage.setItem('milanac-intro', '1'); } catch (e) {}
+  if (!hasGsap || reduce) setTimeout(function () { hideLoader(true); }, hasGsap ? 300 : 1400);
+
+  var menu = $('#menu'), nav = $('#nav'), top = $('#top');
   menu.addEventListener('click', function () {
     var open = nav.classList.toggle('open');
     menu.setAttribute('aria-expanded', String(open));
     menu.setAttribute('aria-label', open ? 'Chiudi il menu' : 'Apri il menu');
   });
-  nav.addEventListener('click', function (e) {
-    if (e.target.closest('a')) { nav.classList.remove('open'); menu.setAttribute('aria-expanded', 'false'); }
-  });
 
-  // Video: parte muto (i browser non permettono altro); il pulsante lo fa ripartire con i cori.
-  var video = document.getElementById('walkout'), audio = document.getElementById('audio'), label = document.getElementById('audio-label');
+  var video = $('#walkout'), audio = $('#audio'), label = $('#audio-label'), ambient = $('#ambient');
+  if (desktop && !reduce) { ambient.src = 'video/intro.mp4'; var ap = ambient.play && ambient.play(); if (ap && ap.catch) ap.catch(function () {}); }
   audio.addEventListener('click', function () {
     var turnOn = video.muted;
     video.muted = !turnOn;
@@ -546,38 +621,206 @@ p { margin: 0; }
   if ('IntersectionObserver' in window) {
     new IntersectionObserver(function (es) {
       es.forEach(function (en) {
-        if (en.isIntersecting) { var p = video.play(); if (p && p.catch) p.catch(function () {}); }
-        else video.pause();
+        var vids = [video, ambient];
+        vids.forEach(function (v) { if (en.isIntersecting) { var p = v.play && v.play(); if (p && p.catch) p.catch(function () {}); } else if (v.pause) v.pause(); });
       });
-    }, { threshold: .15 }).observe(video);
-
-    // Le sezioni salgono dolcemente quando entrano nello schermo.
-    var io = new IntersectionObserver(function (es) {
-      es.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
-    }, { rootMargin: '0px 0px -8% 0px' });
-    document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
-  } else {
-    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
+    }, { threshold: .1 }).observe($('#hero'));
   }
 
-  // Candidature: senza l'indirizzo del club (data-endpoint) il modulo è solo un'anteprima.
-  var form = document.getElementById('candidatura'), nota = document.getElementById('nota'), grazie = document.getElementById('grazie-box');
+  var form = $('#candidatura'), nota = $('#nota'), grazie = $('#grazie-box');
   var endpoint = form.getAttribute('data-endpoint') || '';
-  function showThanks() { form.hidden = true; grazie.hidden = false; grazie.scrollIntoView({ block: 'center' }); }
+  function showThanks() { form.hidden = true; grazie.hidden = false; }
   if (location.hash === '#grazie') showThanks();
   window.addEventListener('hashchange', function () { if (location.hash === '#grazie') showThanks(); });
   form.addEventListener('submit', function (e) {
     if (!form.checkValidity()) { e.preventDefault(); form.reportValidity(); return; }
     if (form.querySelector('[name=_honey]').value) { e.preventDefault(); return; }
-    if (!endpoint) {
-      e.preventDefault();
-      nota.hidden = false;
-      nota.textContent = "Anteprima del sito: il modulo si attiva quando avremo l'email del club. Per ora scrivici sui social.";
-      return;
-    }
+    if (!endpoint) { e.preventDefault(); nota.hidden = false; nota.textContent = "Anteprima del sito: il modulo si attiva quando avremo l'email del club. Per ora scrivici sui social."; return; }
     form.action = endpoint;
     form.querySelector('[name=_next]').value = location.origin + location.pathname + '#grazie';
   });
+
+  if (!hasGsap) return;
+
+  /* ---------- Animazioni (GSAP) ---------- */
+  gsap.registerPlugin(ScrollTrigger);
+  if (window.ScrollSmoother) gsap.registerPlugin(ScrollSmoother);
+  if (window.SplitText) gsap.registerPlugin(SplitText);
+  var smoother = null;
+  if (!reduce && fine && window.ScrollSmoother) {
+    try { smoother = ScrollSmoother.create({ wrapper: '#smooth-wrapper', content: '#smooth-content', smooth: 1.1, effects: false, smoothTouch: false, normalizeScroll: false }); } catch (e) { smoother = null; }
+  }
+  // Ancore: con lo scorrimento morbido le gestisce lui, altrimenti il browser.
+  $$('a[href^="#"]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var id = a.getAttribute('href'); if (id.length < 2) return;
+      var el = document.getElementById(id.slice(1)); if (!el) return;
+      e.preventDefault();
+      nav.classList.remove('open'); menu.setAttribute('aria-expanded', 'false');
+      if (smoother) smoother.scrollTo(el, true, 'top 72px'); else el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    });
+  });
+
+  // Barra di avanzamento e testata che sparisce scendendo e torna risalendo.
+  gsap.fromTo('#progress', { scaleX: 0 }, { scaleX: 1, ease: 'none', scrollTrigger: { start: 0, end: 'max', scrub: .3 } });
+  ScrollTrigger.create({ start: 0, end: 'max', onUpdate: function (self) {
+    var y = self.scroll();
+    top.classList.toggle('solid', y > 40);
+    top.classList.toggle('hide', self.direction === 1 && y > 320);
+  } });
+
+  // Cursore oro e pulsanti "magnetici" (solo con il mouse).
+  if (fine && !reduce) {
+    root.classList.add('cursor-on');
+    var dot = $('#cur-dot'), ring = $('#cur-ring');
+    gsap.set([dot, ring], { xPercent: -50, yPercent: -50, x: -100, y: -100 });
+    var dx = gsap.quickTo(dot, 'x', { duration: .12, ease: 'power3' }), dy = gsap.quickTo(dot, 'y', { duration: .12, ease: 'power3' });
+    var rx = gsap.quickTo(ring, 'x', { duration: .45, ease: 'power3' }), ry = gsap.quickTo(ring, 'y', { duration: .45, ease: 'power3' });
+    window.addEventListener('mousemove', function (e) { dx(e.clientX); dy(e.clientY); rx(e.clientX); ry(e.clientY); });
+    document.addEventListener('mouseover', function (e) { if (e.target.closest('a, button, label, input, select, textarea')) root.classList.add('cur-hover'); });
+    document.addEventListener('mouseout', function (e) { if (e.target.closest('a, button, label, input, select, textarea')) root.classList.remove('cur-hover'); });
+    document.addEventListener('mouseleave', function () { gsap.to([dot, ring], { opacity: 0, duration: .3 }); });
+    document.addEventListener('mouseenter', function () { gsap.to(dot, { opacity: 1, duration: .3 }); gsap.to(ring, { opacity: .7, duration: .3 }); });
+    $$('.magnetic').forEach(function (el) {
+      var mx = gsap.quickTo(el, 'x', { duration: .5, ease: 'power3' }), my = gsap.quickTo(el, 'y', { duration: .5, ease: 'power3' });
+      el.addEventListener('mousemove', function (e) { var r = el.getBoundingClientRect(); mx((e.clientX - r.left - r.width / 2) * .3); my((e.clientY - r.top - r.height / 2) * .35); });
+      el.addEventListener('mouseleave', function () { mx(0); my(0); });
+    });
+    // La schermata dell'app si inclina un po' seguendo il mouse.
+    var phone = $('#phone');
+    if (phone) {
+      var prx = gsap.quickTo(phone, 'rotationX', { duration: .6, ease: 'power3' }), pry = gsap.quickTo(phone, 'rotationY', { duration: .6, ease: 'power3' });
+      phone.parentElement.addEventListener('mousemove', function (e) { var r = phone.getBoundingClientRect(); pry(((e.clientX - r.left) / r.width - .5) * 14); prx(-((e.clientY - r.top) / r.height - .5) * 10); });
+      phone.parentElement.addEventListener('mouseleave', function () { prx(0); pry(0); });
+    }
+  }
+
+  // Fascia in movimento: continua, e accelera quando si scorre.
+  var marquee = $('#marquee');
+  var loop = gsap.to(marquee, { xPercent: -50, ease: 'none', duration: 28, repeat: -1 });
+  if (reduce) loop.pause();
+  else ScrollTrigger.create({ onUpdate: function (self) {
+    var v = Math.min(Math.abs(self.getVelocity()) / 500, 4);
+    gsap.to(loop, { timeScale: 1 + v, duration: .3, overwrite: true, onComplete: function () { gsap.to(loop, { timeScale: 1, duration: 1.2 }); } });
+  } });
+
+  if (reduce) { hideLoader(true); return; }
+
+  // Testi che entrano riga per riga (SplitText) o, se non c'è, tutti insieme.
+  function linesIn(el, opts) {
+    opts = opts || {};
+    var trigger = { trigger: el, start: 'top 86%', once: true };
+    if (window.SplitText) {
+      try {
+        var st = SplitText.create(el, { type: 'lines', mask: 'lines', autoSplit: true, onSplit: function (self) {
+          return gsap.from(self.lines, { yPercent: 110, duration: 1.1, stagger: .09, ease: 'power4.out', scrollTrigger: trigger, delay: opts.delay || 0 });
+        } });
+        return st;
+      } catch (e) {}
+    }
+    gsap.from(el, { y: 30, opacity: 0, duration: 1, ease: 'power3.out', scrollTrigger: trigger });
+  }
+  function safeStart() { try { start(); } catch (e) { hideLoader(true); } }
+  document.fonts && document.fonts.ready ? document.fonts.ready.then(safeStart, safeStart) : safeStart();
+  // Rete lenta o errore inatteso: il sipario non resta mai chiuso più di 5 secondi.
+  setTimeout(function () { if (loader && loader.style.display !== 'none') hideLoader(true); }, 5000);
+
+  function start() {
+    // Sequenza di apertura: stemma e scritta, poi il sipario sale e il video si apre.
+    var intro = gsap.timeline();
+    loader.style.animation = 'none';
+    gsap.set('#loader-bar', { animation: 'none', scaleX: 0 });
+    var words = $$('#loader-word span');
+    if (seen) {
+      intro.to(loader, { yPercent: -100, duration: .7, ease: 'power4.inOut' });
+    } else {
+      intro.from($('.loader-in img'), { scale: .8, opacity: 0, duration: .9, ease: 'power3.out' })
+        .from(words, { yPercent: 120, opacity: 0, duration: .8, stagger: .12, ease: 'power4.out' }, '-=.5')
+        .to('#loader-bar', { scaleX: 1, duration: 1, ease: 'power2.inOut' }, '-=.6')
+        .to(loader, { yPercent: -100, duration: .9, ease: 'power4.inOut' }, '+=.15');
+    }
+    intro.set(loader, { display: 'none' });
+    // Apertura della home: il video si apre dal centro, il titolo sale lettera per lettera.
+    var h1 = $('#h1'), h1Chars = null;
+    if (window.SplitText) { try { h1Chars = new SplitText(h1, { type: 'chars,lines', mask: 'lines' }); } catch (e) { h1Chars = null; } }
+    intro.fromTo('#stage', { clipPath: 'inset(0% 50% 0% 50%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.3, ease: 'expo.inOut' }, '-=.55')
+      .from('.hero-copy .eyebrow', { opacity: 0, x: -20, duration: .8, ease: 'power3.out' }, '-=.7');
+    if (h1Chars) intro.from(h1Chars.chars, { yPercent: 110, duration: 1, stagger: .03, ease: 'power4.out' }, '-=.6');
+    else intro.from(h1, { y: 40, opacity: 0, duration: 1, ease: 'power4.out' }, '-=.6');
+    intro.from(['.hero .lead', '.hero .cta', '.scroll-hint', '#audio'], { y: 24, opacity: 0, duration: .9, stagger: .1, ease: 'power3.out' }, '-=.6')
+      .from('#top', { yPercent: -100, duration: .8, ease: 'power3.out' }, '-=.8');
+
+    var mm = gsap.matchMedia();
+    // Computer: l'apertura resta ferma mentre il video arretra e si sposta a destra.
+    mm.add('(min-width: 900px)', function () {
+      var tl = gsap.timeline({ scrollTrigger: { trigger: '#hero', start: 'top top', end: '+=130%', pin: true, scrub: 1.2, anticipatePin: 1 } });
+      tl.to('#stage', { scale: .64, xPercent: 20, yPercent: -4, ease: 'none' }, 0)
+        .to('#ambient', { opacity: .25, ease: 'none' }, 0)
+        .to('#hero-copy', { yPercent: -10, scale: .92, transformOrigin: 'left center', ease: 'none' }, 0)
+        .to('.scroll-hint', { opacity: 0, ease: 'none', duration: .3 }, 0)
+        .to('#hero-dim', { opacity: .92, ease: 'none', duration: .45 }, .55);
+      // Le competizioni scorrono in orizzontale: la fila di pannelli resta ferma a metà schermo.
+      var track = $('#hs-track');
+      var dist = function () { return track.scrollWidth - window.innerWidth; };
+      gsap.to(track, { x: function () { return -dist(); }, ease: 'none', scrollTrigger: {
+        trigger: track, pin: true, scrub: 1, invalidateOnRefresh: true, anticipatePin: 1,
+        start: function () { return 'top ' + Math.max(84, Math.round((window.innerHeight - track.offsetHeight) / 2)) + 'px'; },
+        end: function () { return '+=' + dist(); }
+      } });
+      return function () {};
+    });
+    // Telefono: il video scorre più lento del resto e il titolo si dissolve.
+    mm.add('(max-width: 899px)', function () {
+      gsap.to('#walkout', { yPercent: 14, ease: 'none', scrollTrigger: { trigger: '#hero', start: 'top top', end: 'bottom top', scrub: true } });
+      gsap.to('#hero-copy', { opacity: 0, y: -30, ease: 'none', scrollTrigger: { trigger: '#hero', start: '40% top', end: 'bottom top', scrub: true } });
+    });
+
+    // Numeri che contano.
+    $$('.count').forEach(function (el) {
+      var to = +el.getAttribute('data-to'), from = +(el.getAttribute('data-from') || 0), o = { v: from };
+      gsap.to(o, { v: to, duration: 1.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 88%', once: true }, onUpdate: function () { el.textContent = Math.round(o.v); } });
+    });
+
+    // Titoli riga per riga, paragrafi in dissolvenza, filetti che si disegnano.
+    $$('.split').forEach(function (el) { linesIn(el); });
+    $$('.fade').forEach(function (el) { gsap.from(el, { y: 28, opacity: 0, duration: 1, ease: 'power3.out', scrollTrigger: { trigger: el, start: 'top 88%', once: true } }); });
+    $$('.lines').forEach(function (list) {
+      var rows = $$(':scope > li, :scope > div', list);
+      gsap.from(rows, { opacity: 0, y: 18, duration: .9, stagger: .08, ease: 'power3.out', scrollTrigger: { trigger: list, start: 'top 85%', once: true } });
+      gsap.fromTo(rows, { '--x': 0 }, { '--x': 1, duration: 1.2, stagger: .08, ease: 'power3.out', scrollTrigger: { trigger: list, start: 'top 85%', once: true } });
+    });
+    // La citazione si "legge" scorrendo: le parole si accendono una alla volta.
+    var quote = $('#quote');
+    if (window.SplitText) {
+      try {
+        var qs = new SplitText(quote, { type: 'words' });
+        gsap.from(qs.words, { opacity: .14, stagger: .06, ease: 'none', scrollTrigger: { trigger: quote, start: 'top 78%', end: 'bottom 55%', scrub: true } });
+      } catch (e) {}
+    }
+    // Immagini: si svelano dal basso e si allontanano un po'.
+    $$('.reveal-img').forEach(function (box) {
+      var img = box.querySelector('img');
+      gsap.fromTo(box, { clipPath: 'inset(100% 0% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.4, ease: 'power4.out', scrollTrigger: { trigger: box, start: 'top 85%', once: true } });
+      gsap.from(img, { scale: 1.25, duration: 1.6, ease: 'power3.out', scrollTrigger: { trigger: box, start: 'top 85%', once: true } });
+    });
+    // Pannelli delle competizioni.
+    $$('.panel').forEach(function (p, i) { gsap.from(p, { y: 40, opacity: 0, duration: 1, delay: i * .06, ease: 'power3.out', scrollTrigger: { trigger: '#tornei', start: 'top 70%', once: true } }); });
+    // Il nome del club gigante in chiusura.
+    var giant = $('#giant');
+    if (window.SplitText) {
+      try {
+        var gs = new SplitText(giant, { type: 'chars' });
+        gsap.from(gs.chars, { yPercent: 100, duration: 1.2, stagger: .05, ease: 'power4.out', scrollTrigger: { trigger: giant, start: 'top 95%', once: true } });
+      } catch (e) {
+        gsap.from(giant, { yPercent: 40, opacity: 0, duration: 1.2, ease: 'power4.out', scrollTrigger: { trigger: giant, start: 'top 95%', once: true } });
+      }
+    }
+    // Filetti delle righe: da sinistra a destra (via variabile CSS usata nei ::before).
+    var style = document.createElement('style');
+    style.textContent = '.values li::before,.list>div::before,.staff>div::before,.req li::before{transform:scaleX(var(--x,1))}';
+    document.head.appendChild(style);
+    ScrollTrigger.refresh();
+  }
 })();
 </script>
 </body>
