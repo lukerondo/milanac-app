@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MILANAC Pro Club</title>
+<meta name="description" content="MILANAC Pro Club: il club rossonero di EA SPORTS FC Pro Clubs su PS5. Solo tifosi del Milan. Allenamenti, campionato, tornei e amichevoli dal lunedì al venerdì. Candidati.">
+<meta property="og:title" content="MILANAC Pro Club · Milano siamo noi">
+<meta property="og:description" content="Il pro club rossonero di EA SPORTS FC. Solo tifosi del Milan. Candidati e scendi in campo con noi.">
+<meta property="og:type" content="website">
+<link rel="icon" href="img/stemma.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: bande nere a tutta larghezza, contenuto in una colonna da 1180px; la home si apre con il
+   video verticale del walkout (a destra sul computer, a tutto schermo sul telefono), poi sezioni
+   separate da filetti d'oro. Nero e avorio come l'app, oro solo nei dettagli, rosso una volta sola. */
+:root {
+  color-scheme: dark;
+  --bg: #0B0B0C;
+  --bg-2: #111111;
+  --surface: #151517;
+  --line: #2B2B2F;
+  --fg: #F5F1E6;
+  --fg-2: #C9C3B8;
+  --muted: #A8A29A;
+  --gold: #D6B354;
+  --gold-light: #E8C96A;
+  --gold-deep: #8F6E1C;
+  --gold-line: rgba(214, 179, 84, .28);
+  --red: #C61C23;
+  --display: "Oswald", "Arial Narrow", Impact, sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --wrap: 1180px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 400 16px/1.6 var(--body);
+  overflow-x: hidden;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 30; background: var(--bg);
+}
+img { max-width: 100%; }
+a { color: inherit; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.wrap {
+  max-width: var(--wrap); margin-inline: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.band { padding-block: clamp(56px, 9vw, 120px); }
+.band + .band { border-top: 1px solid var(--gold-line); }
+
+/* ---------- Testata ---------- */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: rgba(11, 11, 12, .84); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+.top .wrap { display: flex; align-items: center; gap: 20px; min-height: 68px; }
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; margin-right: auto; }
+.brand img { width: 38px; height: 38px; }
+.brand b { font: 600 20px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.brand small { display: block; font: 600 9px/1.2 var(--body); letter-spacing: .3em; color: var(--gold); text-transform: uppercase; margin-top: 3px; }
+.nav { display: flex; gap: 28px; align-items: center; }
+.nav a { font: 500 13px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; text-decoration: none; color: var(--fg-2); padding: 10px 0; }
+.nav a:hover { color: var(--gold-light); }
+.menu-btn { display: none; width: 44px; height: 44px; background: none; border: 1px solid var(--line); border-radius: 2px; cursor: pointer; position: relative; }
+.menu-btn span, .menu-btn span::before, .menu-btn span::after {
+  content: ""; position: absolute; left: 12px; right: 12px; height: 2px; background: var(--fg); transition: transform .25s, opacity .25s;
+}
+.menu-btn span { top: 21px; }
+.menu-btn span::before { top: -7px; left: 0; right: 0; }
+.menu-btn span::after { top: 7px; left: 0; right: 0; }
+.menu-btn[aria-expanded="true"] span { background: transparent; }
+.menu-btn[aria-expanded="true"] span::before { transform: translateY(7px) rotate(45deg); }
+.menu-btn[aria-expanded="true"] span::after { transform: translateY(-7px) rotate(-45deg); }
+@media (max-width: 899px) {
+  .menu-btn { display: block; }
+  .nav {
+    display: none; position: absolute; left: 0; right: 0; top: 100%;
+    background: var(--bg-2); border-bottom: 1px solid var(--gold-line);
+    flex-direction: column; align-items: stretch; gap: 0;
+    padding: 8px max(16px, env(safe-area-inset-left, 0px)) 16px max(16px, env(safe-area-inset-right, 0px));
+  }
+  .nav.open { display: flex; }
+  .nav a { padding: 14px 0; border-top: 1px solid var(--line); }
+  .nav .btn { margin-top: 12px; }
+}
+
+/* ---------- Pulsanti ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 16px 28px; border-radius: 2px; border: 1px solid var(--gold);
+  font: 600 13px/1 var(--body); letter-spacing: .16em; text-transform: uppercase;
+  text-decoration: none; cursor: pointer; transition: background .2s, color .2s, border-color .2s, transform .2s;
+}
+.btn-gold { background: var(--gold); color: #111; }
+.btn-gold:hover { background: var(--gold-light); }
+.btn-line { background: transparent; color: var(--fg); border-color: rgba(245, 241, 230, .35); }
+.btn-line:hover { border-color: var(--gold); color: var(--gold-light); }
+.btn:active { transform: translateY(1px); }
+.nav .btn { padding: 12px 20px; }
+
+/* ---------- Apertura con il video ---------- */
+.hero { position: relative; overflow: hidden; }
+.hero::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 70% at 72% 50%, rgba(143, 110, 28, .22), transparent 70%);
+}
+.hero .wrap { position: relative; padding-block: clamp(28px, 5vw, 72px) clamp(40px, 6vw, 88px); }
+.hero-grid { display: grid; gap: 36px; align-items: center; }
+.eyebrow {
+  display: flex; align-items: center; gap: 12px; color: var(--gold);
+  font: 600 11px/1.3 var(--body); letter-spacing: .22em; text-transform: uppercase;
+}
+.eyebrow::before { content: ""; flex: none; width: 28px; height: 1px; background: var(--gold); }
+.hero h1 {
+  margin-top: 22px;
+  font: 600 clamp(54px, 9.4vw, 124px)/.92 var(--display); text-transform: uppercase; letter-spacing: -.012em;
+}
+.hero h1 .dot { color: var(--gold); }
+.hero .lead { margin-top: 26px; }
+.lead { font-size: clamp(17px, 1.45vw, 20px); line-height: 1.6; color: var(--fg-2); max-width: 56ch; }
+.cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; }
+.stage-wrap { display: grid; gap: 14px; justify-items: center; }
+.stage {
+  position: relative; height: min(78vh, 740px); aspect-ratio: 9 / 16; width: auto; max-width: 100%;
+  border: 1px solid var(--gold-line); border-radius: 4px; overflow: hidden; background: #000;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .65);
+}
+.stage video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.audio {
+  position: absolute; top: 12px; right: 12px; z-index: 2;
+  display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px;
+  background: rgba(11, 11, 12, .72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--gold-line); border-radius: 999px; color: var(--fg); cursor: pointer;
+  font: 600 11px/1 var(--body); letter-spacing: .14em; text-transform: uppercase;
+}
+.audio:hover { border-color: var(--gold); color: var(--gold-light); }
+.audio svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.audio .on { display: none; }
+.audio[aria-pressed="true"] .on { display: block; }
+.audio[aria-pressed="true"] .off { display: none; }
+.caption { font-size: 13px; color: var(--muted); letter-spacing: .02em; text-align: center; }
+@media (min-width: 900px) {
+  .hero-grid { grid-template-columns: 1.15fr .85fr; gap: 56px; }
+  .stage-wrap { justify-self: end; }
+}
+@media (max-width: 899px) {
+  .hero .wrap { padding-inline: 0; padding-block: 0 48px; }
+  .hero-grid { gap: 0; }
+  .stage-wrap { order: -1; width: 100%; }
+  .stage { width: 100%; height: auto; max-height: 82vh; border-radius: 0; border-inline: 0; }
+  .caption { display: none; }
+  .hero-copy {
+    margin-top: -120px; position: relative; z-index: 1;
+    padding: 110px max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
+    background: linear-gradient(to bottom, rgba(11, 11, 12, 0), var(--bg) 110px);
+  }
+}
+
+/* Entrata della home: titolo e pulsanti salgono una volta sola. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-copy > * { animation: rise .9s cubic-bezier(.2, .7, .2, 1) both; }
+  .hero-copy > :nth-child(2) { animation-delay: .08s; }
+  .hero-copy > :nth-child(3) { animation-delay: .16s; }
+  .hero-copy > :nth-child(4) { animation-delay: .24s; }
+  html.js .reveal { opacity: .4; transform: translateY(18px); transition: opacity .7s ease, transform .7s cubic-bezier(.2, .7, .2, 1); }
+  html.js .reveal.in { opacity: 1; transform: none; }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Numeri del club ---------- */
+.facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 24px 32px;
+  border-top: 1px solid var(--gold-line); padding-block: 30px;
+}
+.facts b { display: block; font: 600 clamp(30px, 3.6vw, 42px)/1 var(--display); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+.facts span { display: block; margin-top: 8px; font-size: 13px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+
+/* ---------- Sezioni ---------- */
+.h2 { margin-top: 16px; font: 600 clamp(34px, 5vw, 58px)/1 var(--display); text-transform: uppercase; letter-spacing: -.006em; }
+.sec-head { max-width: 760px; }
+.sec-head .lead { margin-top: 18px; }
+.two { display: grid; gap: 40px; margin-top: clamp(32px, 5vw, 64px); }
+@media (min-width: 900px) { .two { grid-template-columns: 1fr 1fr; gap: 72px; } }
+.quote { font: 400 clamp(22px, 2.5vw, 31px)/1.35 var(--body); color: var(--fg); text-wrap: pretty; }
+.quote::before { content: "\201C"; display: block; font: 700 110px/.55 var(--display); color: var(--red); margin-bottom: 26px; }
+.quote em { font-style: normal; color: var(--gold-light); }
+.prose { color: var(--fg-2); font-size: 17px; max-width: 60ch; }
+.prose + .prose { margin-top: 16px; }
+.values { list-style: none; margin: 32px 0 0; padding: 0; display: grid; gap: 0; }
+.values li { padding: 18px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: baseline; }
+.values b { font: 600 18px/1.1 var(--display); text-transform: uppercase; letter-spacing: .04em; color: var(--gold-light); }
+.values span { color: var(--fg-2); font-size: 15px; }
+@media (max-width: 480px) { .values li { grid-template-columns: 1fr; gap: 6px; } }
+
+.list { margin-top: clamp(24px, 4vw, 48px); }
+.list > div { padding: 26px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 54px 1fr; gap: 18px; }
+.list > div:last-child { border-bottom: 1px solid var(--line); }
+.list .n { font: 600 14px/1.3 var(--body); color: var(--gold); letter-spacing: .14em; padding-top: 6px; }
+.list h3 { font: 600 22px/1.1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
+.list p { margin-top: 8px; color: var(--fg-2); font-size: 16px; max-width: 58ch; }
+.what { display: grid; gap: 44px; }
+@media (min-width: 900px) { .what { grid-template-columns: 1fr 340px; gap: 64px; align-items: start; } .what .list { margin-top: 0; } }
+.phone { max-width: 300px; margin-inline: auto; border: 1px solid var(--line); border-radius: 30px; padding: 8px; background: #000; box-shadow: 0 30px 70px rgba(0, 0, 0, .6); }
+.phone img { display: block; width: 100%; border-radius: 22px; }
+.phone-wrap { display: grid; gap: 14px; }
+
+.tri { display: grid; gap: 28px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-top: clamp(32px, 5vw, 56px); }
+.tri > div { border-top: 1px solid var(--gold-line); padding-top: 22px; }
+.tri h3 { font: 600 24px/1.1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
+.tri p { margin-top: 10px; color: var(--fg-2); font-size: 16px; }
+
+.staff { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0 40px; margin-top: clamp(28px, 4vw, 48px); }
+.staff > div { padding: 20px 0; border-top: 1px solid var(--line); }
+.staff .role { font: 600 11px/1.3 var(--body); color: var(--gold); letter-spacing: .18em; text-transform: uppercase; }
+.staff .name { margin-top: 8px; font: 500 24px/1.15 var(--display); letter-spacing: .01em; }
+.staff .wide { grid-column: 1 / -1; }
+
+/* ---------- Candidature ---------- */
+.join { display: grid; gap: 44px; margin-top: clamp(32px, 5vw, 56px); }
+@media (min-width: 900px) { .join { grid-template-columns: .85fr 1.15fr; gap: 72px; align-items: start; } }
+.req { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.req li { padding: 16px 0; border-top: 1px solid var(--line); display: flex; gap: 14px; color: var(--fg-2); font-size: 16px; }
+.req li::before { content: ""; flex: none; width: 22px; height: 1px; background: var(--gold); margin-top: 13px; }
+.req li strong { color: var(--fg); font-weight: 600; }
+.form { display: grid; gap: 18px; }
+.row2 { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 560px) { .row2 { grid-template-columns: 1fr; } }
+.field { display: grid; gap: 8px; min-width: 0; }
+.field label, .legend { font: 600 11px/1.3 var(--body); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.field input, .field select, .field textarea {
+  width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 3px;
+  color: var(--fg); padding: 14px; font: 400 16px/1.4 var(--body);
+}
+.field select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 40px; }
+.field textarea { min-height: 120px; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--gold); outline: none; }
+.check { display: flex; gap: 12px; align-items: flex-start; color: var(--fg-2); font-size: 15px; }
+.check input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--gold); flex: none; }
+.note { padding: 16px 18px; border: 1px solid var(--gold-line); border-left: 3px solid var(--gold); border-radius: 2px; color: var(--fg); font-size: 15px; }
+.thanks { border: 1px solid var(--gold-line); padding: 32px; border-radius: 4px; }
+.thanks h3 { font: 600 30px/1.05 var(--display); text-transform: uppercase; }
+.thanks p { margin-top: 12px; color: var(--fg-2); }
+.small { font-size: 13px; color: var(--muted); }
+
+/* ---------- Piè di pagina ---------- */
+.foot { border-top: 1px solid var(--gold-line); padding-block: 48px 40px; }
+.foot-grid { display: grid; gap: 36px; }
+@media (min-width: 800px) { .foot-grid { grid-template-columns: 1.3fr 1fr 1fr; gap: 48px; } }
+.foot .brand { margin: 0; }
+.foot .brand img { width: 56px; height: 56px; }
+.foot h4 { margin: 0 0 14px; font: 600 11px/1.3 var(--body); color: var(--gold); letter-spacing: .2em; text-transform: uppercase; }
+.social { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.social a { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; color: var(--fg-2); font-size: 15px; padding: 4px 0; }
+.social a:hover { color: var(--gold-light); }
+.social svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
+.contact { color: var(--fg-2); font-size: 15px; display: grid; gap: 10px; }
+.contact code { font: 500 15px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); padding: 6px 10px; border-radius: 3px; user-select: all; }
+.legal { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.legal a { color: var(--muted); }
+</style>
+</head>
+<body>
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="i-instagram" viewBox="0 0 24 24"><path d="M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077"/></symbol>
+  <symbol id="i-tiktok" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></symbol>
+  <symbol id="i-youtube" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></symbol>
+  <symbol id="i-twitch" viewBox="0 0 24 24"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></symbol>
+  <symbol id="i-discord" viewBox="0 0 24 24"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#inizio" aria-label="MILANAC Pro Club, torna in cima">
+      <img src="img/stemma.png" alt="" width="38" height="38">
+      <span><b>MILANAC</b><small>Pro Club</small></span>
+    </a>
+    <button class="menu-btn" id="menu" aria-expanded="false" aria-controls="nav" aria-label="Apri il menu"><span></span></button>
+    <nav class="nav" id="nav" aria-label="Sezioni del sito">
+      <a href="#club">Il club</a>
+      <a href="#cosa-facciamo">Cosa facciamo</a>
+      <a href="#tornei">In campo</a>
+      <a href="#staff">Staff</a>
+      <a class="btn btn-gold" href="#candidati">Candidati</a>
+    </nav>
+  </div>
+</header>
+
+<main id="inizio">
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Pro club rossonero · EA SPORTS FC · PS5</p>
+          <h1>Milano<br>siamo noi<span class="dot">.</span></h1>
+          <p class="lead">Siamo un club di tifosi del Milan che gioca a Pro Clubs come una squadra vera: allenamenti ogni sera, campionato, tornei e amichevoli. Due squadre, un solo stemma.</p>
+          <div class="cta">
+            <a class="btn btn-gold" href="#candidati">Candidati</a>
+            <a class="btn btn-line" href="#club">Scopri il club</a>
+          </div>
+        </div>
+        <div class="stage-wrap">
+          <div class="stage">
+            <video id="walkout" autoplay muted loop playsinline preload="metadata" poster="img/poster.jpg" aria-label="Il walkout del MILANAC a San Siro">
+              <source src="video/intro.mp4" type="video/mp4">
+            </video>
+            <button class="audio" id="audio" type="button" aria-pressed="false">
+              <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6m0-6-5 6"/></svg>
+              <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+              <span id="audio-label">Attiva l'audio</span>
+            </button>
+          </div>
+          <p class="caption">Il nostro ingresso a San Siro. Attiva l'audio per i cori e lo speaker.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="facts reveal">
+      <div><b>2025</b><span>Anno di fondazione</span></div>
+      <div><b>2</b><span>Squadre: MILANAC e MILANAC FUTURO</span></div>
+      <div><b>Lun–Ven</b><span>In campo dalle 21:30 alle 23:30</span></div>
+      <div><b>PS5</b><span>La nostra piattaforma</span></div>
+    </div>
+  </section>
+
+  <section class="band" id="club">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <p class="eyebrow">Il club</p>
+        <h2 class="h2">Rosso come il cuore, nero come la notte</h2>
+      </div>
+      <div class="two">
+        <blockquote class="quote reveal">I nostri colori saranno il rosso, come il cuore che arde per la vittoria, ed il nero come la notte che avvolgerà i sogni degli avversari. Saremo una legione infernale che danza sui campi di calcio virtuali: il nostro nome sarà <em>MILANAC</em>.</blockquote>
+        <div class="reveal">
+          <p class="prose">Il MILANAC nasce nel 2025 da un'idea di Fabio Ruggieri, Giuseppe Ruggieri e Christian Rizzi, con una regola che vale più di tutte: tesseriamo solo giocatori che tifano Milan. Il nome si ispira alla squadra che amiamo e i colori sociali sono il rosso, il nero e il bianco.</p>
+          <p class="prose">Siamo un gruppo solido di amici che vuole farsi riconoscere nelle competizioni nazionali e internazionali per il gioco, lo stile e il rispetto delle regole. Si cresce tutti insieme.</p>
+          <ul class="values">
+            <li><b>Rispetto</b><span>Verso i compagni, il Direttivo e gli avversari. Comportamenti tossici non esistono qui.</span></li>
+            <li><b>Puntualità</b><span>Convocati in party 30 minuti prima del fischio d'inizio. Il ritardo non è accettato.</span></li>
+            <li><b>Squadra</b><span>Ruolo e tattiche vengono prima dell'individualismo: l'ID sulla maglia conta meno dello stemma.</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="cosa-facciamo">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <p class="eyebrow">Cosa facciamo</p>
+        <h2 class="h2">Ogni sera, come una squadra vera</h2>
+        <p class="lead">Dal lunedì al venerdì, dalle 21:30 alle 23:30, siamo in campo. Il resto del tempo lo passiamo a prepararci.</p>
+      </div>
+      <div class="what">
+        <div class="list reveal">
+          <div><span class="n">01</span><div><h3>Allenamenti</h3><p>Sessioni per affinare l'affiatamento e provare nuove tattiche. Chi si allena, gioca: le convocazioni partono da qui.</p></div></div>
+          <div><span class="n">02</span><div><h3>Campionato e tornei</h3><p>Competizioni tra pro club con due squadre, MILANAC e MILANAC FUTURO. La formazione viene pubblicata prima di ogni partita.</p></div></div>
+          <div><span class="n">03</span><div><h3>Amichevoli</h3><p>Partite di preparazione contro altri club, per testare moduli, nuovi ingressi e palle inattive.</p></div></div>
+          <div><span class="n">04</span><div><h3>Analisi tattica</h3><p>Il giorno dopo la partita rivediamo le azioni con lo staff tecnico sulla lavagna della nostra app: pallone, schemi e replay con la voce del mister.</p></div></div>
+        </div>
+        <div class="phone-wrap reveal">
+          <div class="phone"><img src="img/app-lavagna.jpg" alt="La lavagna tattica dell'app MILANAC: un calcio d'angolo con le zone numerate e il cross sul primo palo" width="720" height="1173" loading="lazy"></div>
+          <p class="caption">La lavagna tattica dell'app MILANAC, riservata ai membri.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="tornei">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <p class="eyebrow">In campo</p>
+        <h2 class="h2">Campionato, coppe e amichevoli</h2>
+        <p class="lead">Giochiamo nei circuiti di Pro Clubs tra club italiani, con un calendario che pubblichiamo stagione per stagione.</p>
+      </div>
+      <div class="tri reveal">
+        <div><h3>Campionato</h3><p>Giornate settimanali in serata, con MILANAC e MILANAC FUTURO in campionati distinti. Ogni partita ha formazione, battitori e presenze decise in anticipo.</p></div>
+        <div><h3>Coppe e tornei</h3><p>Eliminazione diretta e serate dedicate. Le palle inattive provate in allenamento qui fanno la differenza.</p></div>
+        <div><h3>Amichevoli</h3><p>Su richiesta di altri club: per sfidarci scrivici sui social o dal modulo qui sotto.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="staff">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <p class="eyebrow">Chi guida il club</p>
+        <h2 class="h2">Organigramma</h2>
+      </div>
+      <div class="staff reveal">
+        <div class="wide"><div class="role">Fondatori</div><div class="name">Giuseppe Ruggieri, Fabio Ruggieri, Christian Rizzi</div></div>
+        <div><div class="role">Resp. comunicazioni e marketing</div><div class="name">Giuseppe Ruggieri</div></div>
+        <div><div class="role">Resp. tecnico / tattico</div><div class="name">Fabio Ruggieri</div></div>
+        <div><div class="role">Resp. reclutamento</div><div class="name">Fabiano Freduzzi</div></div>
+        <div><div class="role">Resp. tornei e amichevoli</div><div class="name">Vincenzo Lauricella</div></div>
+        <div><div class="role">Resp. presenze</div><div class="name">Giovanni Giordano</div></div>
+        <div><div class="role">Resp. IT</div><div class="name">Francesco De Vietro</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="candidati">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <p class="eyebrow">Unisciti a noi</p>
+        <h2 class="h2">Cerchiamo player milanisti</h2>
+        <p class="lead">Se tifi Milan, giochi su PS5 e la sera dalle 21:30 sei in campo, il posto c'è. Compila il modulo: ti risponde il responsabile del reclutamento.</p>
+      </div>
+      <div class="join">
+        <div class="reveal">
+          <p class="legend">Cosa chiediamo</p>
+          <ul class="req">
+            <li><span><strong>Tifoso del Milan.</strong> È la regola numero uno del club.</span></li>
+            <li><span><strong>PS5</strong> con EA SPORTS FC e la modalità Pro Clubs.</span></li>
+            <li><span><strong>Disponibile dal lunedì al venerdì</strong>, dalle 21:30 alle 23:30.</span></li>
+            <li><span><strong>Microfono</strong> e voglia di giocare di squadra, nel ruolo che serve.</span></li>
+            <li><span><strong>Rispetto del regolamento</strong>: puntualità, comunicazione, nessun individualismo.</span></li>
+          </ul>
+        </div>
+        <div class="reveal">
+          <form class="form" id="candidatura" method="POST" action="#candidati" data-endpoint="" novalidate>
+            <input type="hidden" name="_subject" value="Nuova candidatura dal sito MILANAC">
+            <input type="hidden" name="_template" value="table">
+            <input type="hidden" name="_next" value="">
+            <input type="text" name="_honey" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+            <div class="row2">
+              <div class="field"><label for="c-nome">Nome e cognome</label><input id="c-nome" name="Nome" type="text" required autocomplete="name"></div>
+              <div class="field"><label for="c-anno">Anno di nascita</label><input id="c-anno" name="Anno di nascita" type="number" inputmode="numeric" min="1960" max="2012" required></div>
+            </div>
+            <div class="row2">
+              <div class="field"><label for="c-psn">ID PlayStation (PSN)</label><input id="c-psn" name="PSN" type="text" required autocomplete="off"></div>
+              <div class="field"><label for="c-ruolo">Ruolo preferito</label>
+                <select id="c-ruolo" name="Ruolo" required>
+                  <option value="">Scegli</option>
+                  <option>Portiere</option>
+                  <option>Difensore centrale</option>
+                  <option>Terzino</option>
+                  <option>Centrocampista</option>
+                  <option>Esterno</option>
+                  <option>Attaccante</option>
+                  <option>Dove serve</option>
+                </select>
+              </div>
+            </div>
+            <div class="row2">
+              <div class="field"><label for="c-email">Email</label><input id="c-email" name="Email" type="email" required autocomplete="email"></div>
+              <div class="field"><label for="c-discord">Discord (facoltativo)</label><input id="c-discord" name="Discord" type="text" autocomplete="off"></div>
+            </div>
+            <div class="field"><label for="c-esperienza">Dove hai giocato finora e perché vuoi entrare nel MILANAC</label><textarea id="c-esperienza" name="Presentazione" required></textarea></div>
+            <label class="check"><input id="c-milan" name="Tifoso del Milan" type="checkbox" value="Sì" required><span>Sono tifoso del Milan.</span></label>
+            <label class="check"><input id="c-sere" name="Disponibile lun-ven" type="checkbox" value="Sì" required><span>Sono disponibile dal lunedì al venerdì, dalle 21:30 alle 23:30.</span></label>
+            <label class="check"><input id="c-privacy" name="Consenso privacy" type="checkbox" value="Sì" required><span>Acconsento al trattamento dei miei dati per essere ricontattato dal club. I dati non vengono condivisi con nessuno.</span></label>
+            <div>
+              <button class="btn btn-gold" type="submit">Invia la candidatura</button>
+            </div>
+            <p class="note" id="nota" hidden></p>
+          </form>
+          <div class="thanks" id="grazie-box" hidden>
+            <h3>Candidatura inviata</h3>
+            <p>Grazie. Il responsabile del reclutamento ti scrive all'email che hai lasciato. Intanto preparati: dal lunedì al venerdì, alle 21:30, si gioca.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="#inizio" aria-label="MILANAC Pro Club">
+          <img src="img/stemma.png" alt="" width="56" height="56">
+          <span><b>MILANAC</b><small>Pro Club · Milano siamo noi</small></span>
+        </a>
+        <p class="small" style="margin-top:18px;max-width:46ch">Club amatoriale di tifosi del Milan che gioca a EA SPORTS FC Pro Clubs su PS5. Fondato a Milano nel 2025.</p>
+      </div>
+      <div>
+        <h4>Seguici</h4>
+        <ul class="social">
+          <li><a href="#" data-social="instagram" target="_blank" rel="noopener"><svg><use href="#i-instagram"/></svg>Instagram</a></li>
+          <li><a href="#" data-social="tiktok" target="_blank" rel="noopener"><svg><use href="#i-tiktok"/></svg>TikTok</a></li>
+          <li><a href="#" data-social="youtube" target="_blank" rel="noopener"><svg><use href="#i-youtube"/></svg>YouTube</a></li>
+          <li><a href="#" data-social="twitch" target="_blank" rel="noopener"><svg><use href="#i-twitch"/></svg>Twitch</a></li>
+          <li><a href="#" data-social="discord" target="_blank" rel="noopener"><svg><use href="#i-discord"/></svg>Discord</a></li>
+          <li><a href="#" data-social="x" target="_blank" rel="noopener"><svg><use href="#i-x"/></svg>X</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Contatti</h4>
+        <div class="contact">
+          <span>Email del club</span>
+          <code id="email-club">in arrivo</code>
+          <span class="small">L'app MILANAC è riservata ai membri del club.</span>
+        </div>
+      </div>
+    </div>
+    <div class="legal">
+      <span>© 2026 MILANAC Pro Club. Non siamo affiliati ad AC Milan, a Electronic Arts né a Sony. EA SPORTS FC e PlayStation sono marchi dei rispettivi proprietari.</span>
+      <a href="#" data-privacy>Privacy</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  root.classList.add('js');
+
+  // Menu sul telefono.
+  var menu = document.getElementById('menu'), nav = document.getElementById('nav');
+  menu.addEventListener('click', function () {
+    var open = nav.classList.toggle('open');
+    menu.setAttribute('aria-expanded', String(open));
+    menu.setAttribute('aria-label', open ? 'Chiudi il menu' : 'Apri il menu');
+  });
+  nav.addEventListener('click', function (e) {
+    if (e.target.closest('a')) { nav.classList.remove('open'); menu.setAttribute('aria-expanded', 'false'); }
+  });
+
+  // Video: parte muto (i browser non permettono altro); il pulsante lo fa ripartire con i cori.
+  var video = document.getElementById('walkout'), audio = document.getElementById('audio'), label = document.getElementById('audio-label');
+  audio.addEventListener('click', function () {
+    var turnOn = video.muted;
+    video.muted = !turnOn;
+    if (turnOn) video.currentTime = 0;
+    var p = video.play(); if (p && p.catch) p.catch(function () {});
+    audio.setAttribute('aria-pressed', String(turnOn));
+    label.textContent = turnOn ? 'Audio acceso' : "Attiva l'audio";
+  });
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (es) {
+      es.forEach(function (en) {
+        if (en.isIntersecting) { var p = video.play(); if (p && p.catch) p.catch(function () {}); }
+        else video.pause();
+      });
+    }, { threshold: .15 }).observe(video);
+
+    // Le sezioni salgono dolcemente quando entrano nello schermo.
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+  } else {
+    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
+  }
+
+  // Candidature: senza l'indirizzo del club (data-endpoint) il modulo è solo un'anteprima.
+  var form = document.getElementById('candidatura'), nota = document.getElementById('nota'), grazie = document.getElementById('grazie-box');
+  var endpoint = form.getAttribute('data-endpoint') || '';
+  function showThanks() { form.hidden = true; grazie.hidden = false; grazie.scrollIntoView({ block: 'center' }); }
+  if (location.hash === '#grazie') showThanks();
+  window.addEventListener('hashchange', function () { if (location.hash === '#grazie') showThanks(); });
+  form.addEventListener('submit', function (e) {
+    if (!form.checkValidity()) { e.preventDefault(); form.reportValidity(); return; }
+    if (form.querySelector('[name=_honey]').value) { e.preventDefault(); return; }
+    if (!endpoint) {
+      e.preventDefault();
+      nota.hidden = false;
+      nota.textContent = "Anteprima del sito: il modulo si attiva quando avremo l'email del club. Per ora scrivici sui social.";
+      return;
+    }
+    form.action = endpoint;
+    form.querySelector('[name=_next]').value = location.origin + location.pathname + '#grazie';
+  });
+})();
+</script>
+</body>
+</html>
