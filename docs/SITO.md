@@ -4,25 +4,27 @@ Il sito di MILANAC Pro Club è una sola pagina statica: `sito/index.html` con de
 script, più le cartelle `img/`, `video/` e `audio/`. Non c'è niente da compilare: si pubblica la
 cartella così com'è. Le animazioni (GSAP) e i caratteri (Google Fonts) arrivano da CDN gratuite.
 
-## Pubblicare su Vercel (gratis)
+## Pubblicazione su Vercel (gratis)
 
-Una volta sola:
-1. Vai su <https://vercel.com>, **Sign up** → *Continue with GitHub* (l'account GitHub che vede il
-   repository `lukerondo/milanac-app`).
-2. **Add New…** → **Project** → *Import* accanto a `milanac-app` (se non compare, *Adjust GitHub App
-   Permissions* e concedi l'accesso al repository).
-3. Nella schermata di configurazione:
-   - **Project Name**: `milanacproclub` (diventa l'indirizzo `milanacproclub.vercel.app`, se libero);
-   - **Root Directory**: *Edit* → scegli `sito`;
-   - **Framework Preset**: *Other*; lascia vuoti Build Command e Output Directory.
-4. **Deploy**. Dopo un minuto il sito è online all'indirizzo mostrato (`https://….vercel.app`).
+Il sito è il progetto **milanacproclub** sull'account Vercel del club (piano Hobby), all'indirizzo
+<https://milanacproclub.vercel.app>. A pubblicarlo è il workflow **Sito** di GitHub
+(`.github/workflows/sito.yml`): a ogni aggiornamento di `main` che tocca `sito/` carica la
+cartella su Vercel con la Vercel CLI. Si può lanciare anche a mano da *Actions → Sito → Run
+workflow*; alla fine il riepilogo del lavoro mostra l'indirizzo.
 
-Da lì in poi **ogni aggiornamento di `main` ripubblica il sito da solo** (Vercel segue il
-repository). Un dominio proprio, quando ci sarà, si aggiunge in *Settings → Domains*.
+Serve, una volta sola, il secret **`VERCEL_TOKEN`**:
+1. Su <https://vercel.com>, con l'account del progetto: avatar in alto a destra → *Account
+   Settings* → *Tokens* → *Create*. Nome `github-sito`, Scope il team che contiene il progetto
+   (quello di Francesco), Expiration *No Expiration* (o un anno: alla scadenza se ne crea un
+   altro). Copia il token: Vercel lo mostra una volta sola.
+2. Su GitHub: repository → *Settings* → *Secrets and variables* → *Actions* → *New repository
+   secret*: nome `VERCEL_TOKEN`, valore il token.
+3. *Actions → Sito → Run workflow*. Dopo un minuto il sito è online.
 
-Dopo la prima pubblicazione, scrivi l'indirizzo definitivo nei tag `og:image` (deve essere un
-indirizzo completo, es. `https://milanacproclub.vercel.app/img/poster.jpg`) così le anteprime su
-WhatsApp e sui social mostrano l'immagine.
+Gli identificativi del progetto nel workflow (`VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`) non sono
+segreti. Un dominio proprio, quando ci sarà, si aggiunge su Vercel in *Settings → Domains* del
+progetto; poi si aggiorna l'indirizzo nei tag `og:url`, `og:image` e `canonical` di
+`sito/index.html`.
 
 ## Il modulo di candidatura
 
