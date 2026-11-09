@@ -6,25 +6,21 @@ cartella così com'è. Le animazioni (GSAP) e i caratteri (Google Fonts) arrivan
 
 ## Pubblicazione su Vercel (gratis)
 
-Il sito è il progetto **milanacproclub** sull'account Vercel del club (piano Hobby), all'indirizzo
-<https://milanacproclub.vercel.app>. A pubblicarlo è il workflow **Sito** di GitHub
-(`.github/workflows/sito.yml`): a ogni aggiornamento di `main` che tocca `sito/` carica la
-cartella su Vercel con la Vercel CLI. Si può lanciare anche a mano da *Actions → Sito → Run
-workflow*; alla fine il riepilogo del lavoro mostra l'indirizzo.
+Il sito è il progetto **milanacproclub** su Vercel (account del club, piano Hobby), online su
+<https://milanacproclub.vercel.app>. Vercel prende i file direttamente dal repository GitHub
+(ramo `main`, cartella `sito`): non c'è niente da caricare a mano.
 
-Serve, una volta sola, il secret **`VERCEL_TOKEN`**:
-1. Su <https://vercel.com>, con l'account del progetto: avatar in alto a destra → *Account
-   Settings* → *Tokens* → *Create*. Nome `github-sito`, Scope il team che contiene il progetto
-   (quello di Francesco), Expiration *No Expiration* (o un anno: alla scadenza se ne crea un
-   altro). Copia il token: Vercel lo mostra una volta sola.
-2. Su GitHub: repository → *Settings* → *Secrets and variables* → *Actions* → *New repository
-   secret*: nome `VERCEL_TOKEN`, valore il token.
-3. *Actions → Sito → Run workflow*. Dopo un minuto il sito è online.
+- **Ripubblicare dopo una modifica**: dopo aver unito la modifica in `main`, chiedi a Claude di
+  ripubblicare il sito (lo fa con il connettore Vercel) oppure, su Vercel, apri il progetto →
+  *Deployments* → *Create Deployment* dal ramo `main`.
+- **Pubblicazione automatica** a ogni aggiornamento di `main` (consigliata, una volta sola): su
+  Vercel, progetto → *Settings* → *Git* → *Connect Git Repository* → `lukerondo/milanac-app`.
+  La Root Directory è già `sito`. Da quel momento ogni modifica unita in `main` va online da sola.
+- Il collegamento tra Vercel e il profilo GitHub (Settings → Authentication) deve restare attivo:
+  è quello che permette a Vercel di leggere il repository.
 
-Gli identificativi del progetto nel workflow (`VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`) non sono
-segreti. Un dominio proprio, quando ci sarà, si aggiunge su Vercel in *Settings → Domains* del
-progetto; poi si aggiorna l'indirizzo nei tag `og:url`, `og:image` e `canonical` di
-`sito/index.html`.
+Un dominio proprio, quando ci sarà, si aggiunge su Vercel in *Settings → Domains* del progetto;
+poi si aggiorna l'indirizzo nei tag `og:url`, `og:image` e `canonical` di `sito/index.html`.
 
 ## Il modulo di candidatura
 
