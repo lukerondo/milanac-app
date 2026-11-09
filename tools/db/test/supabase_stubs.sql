@@ -20,6 +20,8 @@ create table auth.users (
   id uuid primary key default gen_random_uuid(),
   email text,
   raw_user_meta_data jsonb not null default '{}'::jsonb,
+  -- Come in Supabase: {"provider": "email"} per gli account con email, "google"... per i social.
+  raw_app_meta_data jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 -- Come in Supabase: l'utente corrente arriva dal JWT (qui: impostazione di sessione).

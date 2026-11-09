@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/providers.dart';
+import '../../core/auth/signup_gate.dart';
 import '../../core/theme.dart';
 import '../../shared/gold_loader.dart';
 import '../../shared/ui.dart';
@@ -21,9 +22,14 @@ enum _EmailMode { signIn, signUp }
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _clubPassword = TextEditingController();
   LoginMethod? _busy;
   bool _emailBusy = false;
   bool _hidden = true;
+  bool _clubHidden = true;
+
+  /// Password del club rifiutata dal server: evidenziata sul campo.
+  String? _clubError;
   _EmailMode _mode = _EmailMode.signIn;
 
   /// Email a cui è stato inviato il link di conferma (mostra l'avviso di attesa).
@@ -33,6 +39,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _clubPassword.dispose();
     super.dispose();
   }
 
@@ -65,12 +72,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _toast('La password deve avere almeno 8 caratteri.');
       return;
     }
+    final signUp = _mode == _EmailMode.signUp;
+    // Per creare un account serve la password del club (se il Direttivo l'ha impostata).
+    final needsClubPassword =
+        signUp && ref.read(signupStatusProvider).value == SignupStatus.password;
+    if (needsClubPassword && _clubPassword.text.isEmpty) {
+      _toast('Scrivi la password del club: te la dà il Direttivo.');
+      return;
+    }
     setState(() => _emailBusy = true);
     final auth = ref.read(authRepositoryProvider);
     try {
-      if (_mode == _EmailMode.signIn) {
+      if (!signUp) {
         await auth.signInWithEmail(_email.text, _password.text);
       } else {
+        if (needsClubPassword) {
+          await ref
+              .read(signupGateRepositoryProvider)
+              .requestSignup(_email.text, _clubPassword.text);
+        }
         final result = await auth.signUpWithEmail(_email.text, _password.text);
         if (!mounted) return;
         switch (result) {
@@ -85,7 +105,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         }
       }
     } catch (e) {
-      if (mounted) _toast(friendlyAuthError(e));
+      if (!mounted) return;
+      if (isClubPasswordError(e)) {
+        setState(() => _clubError = friendlyAuthError(e));
+        // Le iscrizioni possono essere state chiuse nel frattempo: si rilegge lo stato.
+        ref.invalidate(signupStatusProvider);
+      }
+      _toast(friendlyAuthError(e));
     } finally {
       if (mounted) setState(() => _emailBusy = false);
     }
@@ -127,8 +153,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         kIsWeb ||
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS;
-    final busy = _busy != null || _emailBusy;
     final signUp = _mode == _EmailMode.signUp;
+    // Solo creando un account: serve la password del club, o le iscrizioni sono chiuse.
+    final gate = signUp ? ref.watch(signupStatusProvider) : null;
+    // Stato non arrivato (rete): si mostra il campo, tanto decide il server.
+    final clubPassword =
+        gate != null &&
+        (gate.value == SignupStatus.password ||
+            gate.hasError && !gate.hasValue);
+    final closed = gate?.value == SignupStatus.closed;
+    final busy =
+        _busy != null ||
+        _emailBusy ||
+        (gate?.isLoading ?? false) && !gate!.hasValue;
     void switchMode() =>
         setState(() => _mode = signUp ? _EmailMode.signIn : _EmailMode.signUp);
 
@@ -160,6 +197,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     onChange: () =>
                                         setState(() => _sentTo = null),
                                   )
+                                else if (closed)
+                                  const _SignupsClosedNotice()
                                 else ...[
                                   GateTitle(
                                     signUp ? 'Crea il tuo account' : 'Accedi',
@@ -191,9 +230,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                             ? AutofillHints.newPassword
                                             : AutofillHints.password,
                                       ],
-                                      textInputAction: TextInputAction.done,
-                                      onSubmitted: (_) =>
-                                          busy ? null : _submitEmail(),
+                                      textInputAction: clubPassword
+                                          ? TextInputAction.next
+                                          : TextInputAction.done,
+                                      onSubmitted: (_) => busy || clubPassword
+                                          ? null
+                                          : _submitEmail(),
                                       decoration: InputDecoration(
                                         suffixIcon: ShowPasswordButton(
                                           hidden: _hidden,
@@ -228,6 +270,39 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     )
                                   else
                                     const SizedBox(height: 12),
+                                  if (clubPassword) ...[
+                                    LabeledField(
+                                      label: 'Password del club',
+                                      help:
+                                          'Te la dà il Direttivo: serve una volta '
+                                          'sola, per creare l\'account.',
+                                      child: TextField(
+                                        controller: _clubPassword,
+                                        obscureText: _clubHidden,
+                                        autocorrect: false,
+                                        enableSuggestions: false,
+                                        textInputAction: TextInputAction.done,
+                                        onChanged: (_) {
+                                          if (_clubError != null) {
+                                            setState(() => _clubError = null);
+                                          }
+                                        },
+                                        onSubmitted: (_) =>
+                                            busy ? null : _submitEmail(),
+                                        decoration: InputDecoration(
+                                          errorText: _clubError,
+                                          errorMaxLines: 3,
+                                          suffixIcon: ShowPasswordButton(
+                                            hidden: _clubHidden,
+                                            onPressed: () => setState(
+                                              () => _clubHidden = !_clubHidden,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                  ],
                                   const SizedBox(height: 4),
                                   PrimaryButton(
                                     label: signUp
@@ -302,6 +377,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Al posto del modulo quando il Direttivo non ha impostato la password del club.
+class _SignupsClosedNotice extends StatelessWidget {
+  const _SignupsClosedNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const GateTitle('Iscrizioni chiuse', size: 26),
+        const SizedBox(height: 12),
+        Text(
+          'Per entrare nel club serve la password di iscrizione, che il Direttivo '
+          'non ha ancora impostato. Chiedi a chi ti ha invitato e riprova più tardi.',
+          style: TextStyle(color: p.textSecondary, fontSize: 16, height: 1.4),
+        ),
+      ],
     );
   }
 }

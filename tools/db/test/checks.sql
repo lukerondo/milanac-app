@@ -115,6 +115,22 @@ do $$ begin
 end $$;
 rollback;
 
+-- Password di iscrizione (0037): dopo le migrazioni le iscrizioni sono chiuse, finché il
+-- Direttivo non imposta la password. Le prove qui sotto creano gli account direttamente,
+-- quindi le riaprono dall'editor SQL (signup_mode = 'aperte'); la regola ha le sue prove in fondo.
+do $$ begin
+  assert signup_status() = 'chiuse', 'senza password di iscrizione: chiuse';
+  assert not exists (select 1 from app_config where key = 'signup_password_hash'),
+    'nessuna password scritta dalla migrazione';
+end $$;
+select pg_temp.expect_error(
+  $q$insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000370c0', 'chiuse@example.com')$q$,
+  'serve la password del club');
+insert into app_config (key, value) values ('signup_mode', 'aperte');
+do $$ begin
+  assert signup_status() = 'aperte', 'iscrizioni aperte per le prove';
+end $$;
+
 insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-00000000000d', 'd@example.com', '{"full_name": "Direttore"}'),
   ('00000000-0000-0000-0000-00000000000a', 'g@example.com', '{"name": "Giocatore"}'),
@@ -2564,4 +2580,198 @@ do $$ begin
           where not direttivo_roles <@ array['presidente', 'fondatore', 'capitano', 'vicecapitano',
                                              'comunicazione', 'tecnico', 'reclutamento', 'tornei',
                                              'presenze', 'it']) = 0, 'solo etichette nuove';
+end $$;
+
+-- ================================================================ password di iscrizione (0037)
+-- Utenti: 37a1 con email (via libera), 37a2 social, 37a3 registrato prima della regola.
+reset role;
+select pg_temp.as_user(null);
+delete from signup_password_attempts;
+delete from signup_approvals;
+-- Un account già registrato quando la regola non c'era (iscrizioni ancora aperte).
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000037a3', 'prima@example.com');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000037a3');
+select complete_registration('Pino', 'Prima', 1994, 'PRIMA', null, array['futuro'], false, null, null, 'DC', 4, 'ps5', null);
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert exists (select 1 from signup_passes where user_id = '00000000-0000-0000-0000-0000000037a3'),
+    'registrazione riuscita: la password risulta data anche con le iscrizioni aperte';
+end $$;
+
+-- Si torna alla regola: senza password impostata le iscrizioni sono chiuse per tutti.
+delete from app_config where key = 'signup_mode';
+do $$ begin
+  assert signup_status() = 'chiuse', 'chiuse';
+  assert request_signup('nuovo@example.com', 'qualsiasi') = 'chiuse', 'nessun via libera a iscrizioni chiuse';
+  assert (select count(*) from signup_approvals) = 0, 'nessun via libera scritto';
+  assert (select count(*) from signup_password_attempts) = 0, 'a iscrizioni chiuse non si contano tentativi';
+end $$;
+select pg_temp.expect_error(
+  $q$insert into auth.users (id, email, raw_app_meta_data) values ('00000000-0000-0000-0000-0000000037a1', 'nuovo@example.com', '{"provider": "email"}')$q$,
+  'serve la password del club');
+-- Gli account dei login social nascono (la password non può viaggiare con loro) ma restano fuori.
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('00000000-0000-0000-0000-0000000037a2', 'social@example.com', '{"provider": "google", "providers": ["google"]}');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000037a2');
+do $$ begin
+  assert my_signup_gate() = 'chiuse', 'registrazione: iscrizioni chiuse';
+  assert complete_registration('Sara', 'Social', 1998, 'SOCIAL', null, array['milanac'], false, null, null, 'CC', 8, 'ps5', null, 'qualsiasi')
+         = 'iscrizioni_chiuse', 'a iscrizioni chiuse la registrazione non si salva';
+  assert (select registration_completed_at from profiles where id = auth.uid()) is null, 'niente salvato';
+end $$;
+
+-- La imposta il Direttivo: solo lui, da 8 a 72 caratteri, nel database resta solo l'hash.
+select pg_temp.expect_error($q$select set_signup_password('club-prova-2026')$q$, 'Solo il Direttivo');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select pg_temp.expect_error($q$select set_signup_password('corta')$q$, 'da 8 a 72');
+select set_signup_password('club-prova-2026');
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert signup_status() = 'password', 'con la password: iscrizioni con password';
+  assert (select value like '$2a$12$%' and value <> 'club-prova-2026' from app_config
+          where key = 'signup_password_hash'), 'solo l''hash';
+end $$;
+
+-- Chi non è nel club (anon): password sbagliata, poi giusta. Dell'email resta solo l'impronta.
+set role anon;
+do $$ begin
+  assert signup_status() = 'password', 'lo stato si legge senza account';
+  assert request_signup('nuovo@example.com', 'sbagliata') = 'password_errata', 'password sbagliata';
+  assert request_signup('  Nuovo@Example.com ', 'club-prova-2026') = 'ok', 'password giusta: via libera';
+end $$;
+select pg_temp.expect_error($q$select request_signup('senza-chiocciola', 'club-prova-2026')$q$, 'email non valido');
+select pg_temp.expect_error($q$select set_signup_password('club-prova-2026')$q$, 'permission denied');
+select pg_temp.expect_error($q$select check_signup_password('club-prova-2026')$q$, 'permission denied');
+select pg_temp.expect_error($q$select signup_password_ok('club-prova-2026')$q$, 'permission denied');
+select pg_temp.expect_error($q$select my_signup_gate()$q$, 'permission denied');
+reset role;
+do $$ begin
+  assert (select count(*) from signup_password_attempts) = 1, 'un tentativo sbagliato contato';
+  assert (select count(*) from signup_approvals where email_hash ~ '^[0-9a-f]{64}$'
+          and expires_at between now() + interval '29 minutes' and now() + interval '31 minutes') = 1,
+    'via libera di 30 minuti, senza l''indirizzo in chiaro';
+end $$;
+-- Un'altra email non ha il via libera; quella giusta sì (maiuscole e spazi non contano).
+select pg_temp.expect_error(
+  $q$insert into auth.users (id, email, raw_app_meta_data) values ('00000000-0000-0000-0000-0000000037a4', 'altro@example.com', '{"provider": "email"}')$q$,
+  'serve la password del club');
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('00000000-0000-0000-0000-0000000037a1', 'nuovo@example.com', '{"provider": "email", "providers": ["email"]}');
+do $$ begin
+  assert (select count(*) from signup_approvals) = 0, 'via libera consumato';
+  assert exists (select 1 from signup_passes where user_id = '00000000-0000-0000-0000-0000000037a1'),
+    'resta scritto che la password è stata data';
+  assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000037a1') = 'pending',
+    'profilo creato in attesa, come sempre';
+end $$;
+-- Il via libera vale una volta e scade.
+select pg_temp.expect_error(
+  $q$insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000037a5', 'nuovo@example.com')$q$,
+  'serve la password del club');
+insert into signup_approvals (email_hash, expires_at)
+values (signup_email_hash('scaduto@example.com'), now() - interval '1 minute');
+select pg_temp.expect_error(
+  $q$insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000037a5', 'scaduto@example.com')$q$,
+  'serve la password del club');
+
+-- Registrazione: chi ha già dato la password non la riscrive (nemmeno con l'app di prima).
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000037a1');
+do $$ begin
+  assert my_signup_gate() = 'ok', 'password già data creando l''account';
+  assert complete_registration('Nino', 'Nuovo', 2001, 'NUOVO', null, array['milanac'], false, null, null, 'ATT', 11, 'ps5', null)
+         = 'ok', 'registrazione senza riscriverla';
+end $$;
+select accept_rules((select max(number) from rules_versions));
+do $$ begin
+  assert (select club_role from profiles where id = auth.uid()) = 'giocatore', 'entrato nel club';
+  assert my_signup_gate() = 'ok', 'chi è nel club non ripassa';
+end $$;
+
+-- Login social: la password si scrive in registrazione. Sbagliata non salva, giusta sì.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000037a2');
+do $$ begin
+  assert my_signup_gate() = 'password', 'serve la password del club';
+  assert complete_registration('Sara', 'Social', 1998, 'SOCIAL', null, array['milanac'], false, null, null, 'CC', 8, 'ps5', null, 'sbagliata')
+         = 'password_club_errata', 'password del club sbagliata';
+  assert (select registration_completed_at from profiles where id = auth.uid()) is null, 'niente salvato';
+end $$;
+select pg_temp.expect_error(
+  $q$select complete_registration('Sara', 'Social', 1998, 'SOCIAL', null, array['milanac'], false, null, null, 'CC', 8, 'ps5', null)$q$,
+  'aggiorna l''app');
+select pg_temp.expect_error($q$select accept_rules((select max(number) from rules_versions))$q$, 'Completa prima');
+do $$ begin
+  assert complete_registration('Sara', 'Social', 1998, 'SOCIAL', null, array['milanac'], false, null, null, 'CC', 8, 'ps5', null, 'club-prova-2026')
+         = 'ok', 'password del club giusta';
+  assert my_signup_gate() = 'ok', 'password data';
+end $$;
+-- Le tabelle della regola non si leggono dalle app.
+do $$ begin
+  assert (select count(*) from signup_passes) = 0 and (select count(*) from signup_approvals) = 0
+     and (select count(*) from signup_password_attempts) = 0, 'solo il server le legge';
+end $$;
+reset role;
+do $$ begin
+  assert (select count(*) from signup_password_attempts where origin = 'u:00000000-0000-0000-0000-0000000037a2') = 1,
+    'il tentativo sbagliato resta contato sull''account';
+  assert exists (select 1 from signup_passes where user_id = '00000000-0000-0000-0000-0000000037a2'), 'lasciapassare scritto';
+end $$;
+
+-- Seconda chiusura: chi ha la registrazione compilata ma non ha mai dato la password non
+-- esce dall'attesa da solo; il Direttivo e l'editor SQL sì.
+delete from signup_passes where user_id = '00000000-0000-0000-0000-0000000037a3';
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000037a3');
+select pg_temp.expect_error($q$select accept_rules((select max(number) from rules_versions))$q$, 'serve la password di iscrizione');
+do $$ begin
+  assert my_signup_gate() = 'password', 'deve scriverla in registrazione';
+  assert complete_registration('Pino', 'Prima', 1994, 'PRIMA', null, array['futuro'], false, null, null, 'DC', 4, 'ps5', null, 'club-prova-2026')
+         = 'ok', 'la scrive e passa';
+end $$;
+select accept_rules((select max(number) from rules_versions));
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert (select club_role from profiles where id = '00000000-0000-0000-0000-0000000037a3') = 'giocatore', 'entrato';
+end $$;
+
+-- Troppi tentativi: 5 errori in 15 minuti dalla stessa provenienza, poi si aspetta.
+delete from signup_password_attempts;
+set role anon;
+do $$ begin
+  for i in 1..5 loop
+    assert request_signup('prova@example.com', 'tentativo ' || i) = 'password_errata', 'tentativo sbagliato';
+  end loop;
+end $$;
+select pg_temp.expect_error($q$select request_signup('prova@example.com', 'club-prova-2026')$q$, 'Troppi tentativi');
+reset role;
+-- Password nuova: i tentativi di prima non contano più, la vecchia non vale.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select set_signup_password('nuova-club-2027');
+reset role;
+select pg_temp.as_user(null);
+set role anon;
+do $$ begin
+  assert request_signup('prova@example.com', 'club-prova-2026') = 'password_errata', 'la vecchia non vale più';
+  assert request_signup('prova@example.com', 'nuova-club-2027') = 'ok', 'la nuova sì';
+end $$;
+reset role;
+-- Il Direttivo chiude le iscrizioni togliendo la password.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+select set_signup_password('');
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert signup_status() = 'chiuse', 'iscrizioni chiuse dal Direttivo';
+  assert not has_function_privilege('authenticated', 'public.signup_mode()', 'execute')
+     and not has_function_privilege('authenticated', 'public.signup_origin()', 'execute')
+     and not has_function_privilege('authenticated', 'public.signup_email_hash(text)', 'execute')
+     and not has_function_privilege('anon', 'public.complete_registration(text, text, int, text, text, text[], boolean, text, text[], text, int, text, jsonb, text)', 'execute'),
+    'funzioni interne non chiamabili dalle app';
 end $$;
