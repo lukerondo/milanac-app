@@ -30,6 +30,8 @@ on:
     branches:
       - main
       - "claude/**"
+    # Il sito (sito/) e la documentazione non toccano l'app: niente ricompilazione.
+    paths-ignore: [sito/**, docs/**]
 
 # Una build alla volta per ramo: due pubblicazioni insieme si sovrapporrebbero.
 concurrency: iphone-${{ github.ref }}
