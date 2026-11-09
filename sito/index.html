@@ -332,6 +332,9 @@ html.gsap .marquee-track { animation: none; }
 /* ---------- L'app ---------- */
 .app-grid { display: grid; gap: 48px; margin-top: clamp(36px, 5vw, 72px); }
 @media (min-width: 900px) { .app-grid { grid-template-columns: 1fr 1.05fr; gap: 72px; align-items: center; } }
+.app-web { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px 32px; margin-top: clamp(32px, 5vw, 64px); padding-top: 26px; border-top: 1px solid var(--line); }
+.app-web p { margin: 0; max-width: 54ch; color: var(--fg-2); }
+.app-web b { color: var(--fg); font-weight: 600; }
 .feat { list-style: none; margin: 0; padding: 0; display: grid; }
 .feat li { position: relative; display: grid; grid-template-columns: 44px 1fr; gap: 18px; padding: 20px 0; }
 .feat li::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); transform-origin: left; transform: scaleX(var(--x, 1)); }
@@ -514,6 +517,7 @@ html.drawer-open .drawer, .drawer:target { transform: none; visibility: visible;
       <a href="#fvpa">FVPA</a>
       <a href="#app">L'app</a>
       <a href="#faq">FAQ</a>
+      <a href="/app/">Area membri</a>
       <a class="btn btn-gold magnetic" href="#modulo" data-open-form>Candidati</a>
     </nav>
   </div>
@@ -739,6 +743,10 @@ html.drawer-open .drawer, .drawer:target { transform: none; visibility: visible;
           <div class="frag b" id="frag-b"><img src="img/app-risultato.jpg" alt="Riquadro dell'app: ultimo risultato, MILANAC 3 a 1 Dinamo Pixel" width="640" height="264" loading="lazy"></div>
         </div>
       </div>
+      <div class="app-web fade">
+        <p><b>Sei già dei nostri?</b> L'app si usa anche dal browser, senza installare niente: comoda dal PC mentre giochi.</p>
+        <a class="btn btn-line magnetic" href="/app/">Apri la web app <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+      </div>
     </div>
   </section>
 
@@ -814,7 +822,7 @@ html.drawer-open .drawer, .drawer:target { transform: none; visibility: visible;
         <div class="contact">
           <span>Email del club</span>
           <a class="mail" id="email-club" href="mailto:milanacproclub@proton.me">milanacproclub@proton.me</a>
-          <span class="small">L'app MILANAC è riservata ai membri del club.</span>
+          <span class="small">L'app MILANAC è riservata ai membri del club: <a href="/app/">aprila dal browser</a>.</span>
         </div>
       </div>
     </div>

@@ -1,12 +1,13 @@
 {
-    "name": "milanac",
-    "short_name": "milanac",
+    "name": "MILANAC Pro Club",
+    "short_name": "MILANAC",
+    "lang": "it",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "App ufficiale MILANAC Pro Club",
-    "orientation": "portrait-primary",
+    "background_color": "#0B0B0C",
+    "theme_color": "#0B0B0C",
+    "description": "L'app del MILANAC Pro Club: presenze, partite, chat e carte dei membri.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

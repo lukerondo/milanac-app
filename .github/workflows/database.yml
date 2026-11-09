@@ -36,6 +36,7 @@ jobs:
           sudo systemctl start postgresql.service
           cd / && sudo -u postgres psql -qc "alter user postgres password 'postgres'"
       - run: tools/db/test/run.sh
+      - run: python3 tools/db/test/auth_urls_test.py
 
   migrate:
     needs: sql
@@ -53,6 +54,8 @@ jobs:
         run: |
           export SUPABASE_PROJECT_REF=$(python3 -c "import json,re;print(re.search(r'https://([a-z0-9]+)\.supabase\.co', json.load(open('env/prod.json'))['SUPABASE_URL']).group(1))")
           python3 tools/db/migrate_api.py
+          # Indirizzi della web app tra i Redirect URLs dell'accesso (solo aggiunte).
+          python3 tools/db/auth_urls.py
       - name: Controllo del secret
         if: env.HAS_TOKEN != 'true'
         env:

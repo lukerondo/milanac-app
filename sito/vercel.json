@@ -1,5 +1,9 @@
 {
   "cleanUrls": true,
+  "buildCommand": "bash ../tools/web/build_vercel.sh",
+  "redirects": [
+    { "source": "/app", "destination": "/app/", "permanent": false }
+  ],
   "headers": [
     {
       "source": "/(img|video|audio)/(.*)",

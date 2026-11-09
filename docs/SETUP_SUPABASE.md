@@ -33,6 +33,10 @@ In alternativa, a mano: SQL Editor → incolla ed esegui in ordine i file di `su
 ```
 com.milanacproclub.milanac://login-callback
 ```
+Per la web app (`docs/SITO.md`) servono anche `https://milanacproclub.vercel.app/app/` e
+`https://milanacproclub.vercel.app/app`: li aggiunge da solo il workflow **Database**
+(`tools/db/auth_urls.py`, con il secret `SUPABASE_ACCESS_TOKEN`). Senza quel secret vanno
+aggiunti a mano qui.
 
 ## 3. Google
 1. https://console.cloud.google.com → nuovo progetto "MILANAC"
@@ -83,7 +87,8 @@ per le prove (pochi messaggi all'ora). Serve un servizio SMTP gratuito, per esem
    deve essere tra i *Redirect URLs* (serve anche ai link di conferma e di recupero password).
 
 ## 8. Password del Direttivo
-Chi si registra scegliendo "Faccio parte del Direttivo" deve inserire la **password del club**.
+Chi si registra scegliendo "Faccio parte del Direttivo" deve inserire la **password del Direttivo**
+(è un'altra cosa rispetto alla password di iscrizione, qui sotto).
 Nel database c'è solo il suo hash (`app_config`, chiave `direttivo_password_hash`).
 
 > **Cambiala subito.** La password iniziale impostata dalla migrazione `0016` è scritta nella
@@ -101,6 +106,22 @@ Nel database c'è solo il suo hash (`app_config`, chiave `direttivo_password_has
 Dopo il cambio controlla in Sala Direttivo → Rosa e squadre che nel Direttivo non ci sia
 nessuno che non conosci. Non serve più nominare il primo Direttivo a mano: basta registrarsi
 con la password.
+
+## 8b. Password di iscrizione (chi può creare un account)
+Per creare un account, dall'app o dalla web app, serve la **password del club** che il Direttivo
+dà a voce a chi entra (migrazione `0037`). Nel database c'è solo cifrata (`app_config`, chiave
+`signup_password_hash`): non sta in nessun file del repository, che è pubblico.
+
+- **Finché non è impostata le iscrizioni sono chiuse**: nessuno può creare un account né
+  completare la registrazione. Chi è già nel club continua a entrare come prima.
+- **Impostarla o cambiarla** (solo Direttivo): Impostazioni → Account → *Password di
+  iscrizione*. Da lì si possono anche chiudere le iscrizioni. Almeno 8 caratteri.
+- Chi si registra con email la scrive nella schermata di accesso, creando l'account. Chi entra
+  con Google, Microsoft, Yahoo o Apple la scrive al primo passo della registrazione.
+- Dopo 5 errori dalla stessa origine si aspettano 15 minuti.
+- Se gira troppo, cambiala: chi ha già l'account non deve riscriverla.
+- Solo in emergenza, dall'SQL Editor: `insert into public.app_config (key, value) values
+  ('signup_mode', 'aperte')` toglie il controllo; cancellando quella riga torna.
 
 ## 9. Azzeramento dei dati
 La migrazione `0016` svuota presenze, formazioni, eventi, risultati, trofei, tattiche, chat e tornei,

@@ -5,7 +5,8 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 
 - Architettura e roadmap: [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md)
 - Prompt per video intro, albo d'oro e stemma: [`docs/PROMPT_GRAFICA.md`](docs/PROMPT_GRAFICA.md)
-- Sito del club (`sito/`), pubblicazione su Vercel e modulo di candidatura: [`docs/SITO.md`](docs/SITO.md)
+- Sito del club (`sito/`), web app nel browser (`/app/`), pubblicazione su Vercel e modulo di
+  candidatura: [`docs/SITO.md`](docs/SITO.md)
 - Schema database + permessi: [`supabase/migrations/`](supabase/migrations)
 
 ## Stato
