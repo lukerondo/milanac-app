@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
+    # Il sito (sito/) e la documentazione non toccano l'app: niente ricompilazione.
+    paths-ignore: [sito/**, docs/**]
   pull_request:
+    paths-ignore: [sito/**, docs/**]
   workflow_dispatch:
     inputs:
       build_apk:
