@@ -91,7 +91,7 @@ class FutCard extends ConsumerWidget {
               height: height,
               child: CustomPaint(
                 // L'alone segue la forma della carta (non un rettangolo).
-                painter: glow ? _GlowPainter(skin.rim) : null,
+                painter: glow ? CardGlowPainter(skin.rim) : null,
                 child: CardFrame(
                   skin: skin,
                   // Il giocatore (foto o omino) dentro la carta, dietro la targa.
@@ -258,9 +258,9 @@ class FutCard extends ConsumerWidget {
       v == null ? null : (v + bonus).clamp(FutStats.min, FutStats.max);
 }
 
-/// Alone della carta, sulla sua forma.
-class _GlowPainter extends CustomPainter {
-  const _GlowPainter(this.color);
+/// Alone della carta, sulla sua forma (davanti e retro).
+class CardGlowPainter extends CustomPainter {
+  const CardGlowPainter(this.color);
   final Color color;
 
   @override
@@ -272,7 +272,7 @@ class _GlowPainter extends CustomPainter {
   );
 
   @override
-  bool shouldRepaint(_GlowPainter old) => old.color != color;
+  bool shouldRepaint(CardGlowPainter old) => old.color != color;
 }
 
 /// Il giocatore sulla carta, dietro la targa: la sua foto ritagliata dallo sfondo

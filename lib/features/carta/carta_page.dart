@@ -32,8 +32,10 @@ import '../walkout/celebrations.dart';
 import '../walkout/walkout_page.dart';
 import 'archetypes.dart';
 import 'card_colors.dart';
+import 'card_back.dart';
 import 'card_stats.dart';
 import 'fut_card.dart';
+import 'fut_card_skin.dart';
 import 'fut_stats.dart';
 import 'live_card.dart';
 import 'mini_card.dart' show cardHeroTag;
@@ -103,6 +105,9 @@ class PlayerCardView extends ConsumerStatefulWidget {
 class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
   final _cardKey = GlobalKey();
   bool _sharing = false;
+
+  /// La carta è girata sul retro (i numeri nel club).
+  bool _back = false;
 
   Future<void> _share(Member m) async {
     setState(() => _sharing = true);
@@ -247,10 +252,23 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                                 tag: cardHeroTag(member.id),
                                 child: Material(
                                   type: MaterialType.transparency,
-                                  child: FutCard(
-                                    member: member,
-                                    special: special?.kind,
-                                    bonus: special?.bonus ?? 0,
+                                  // Un tocco la gira: dietro, i numeri nel club.
+                                  child: FlipCard(
+                                    onFlip: (back) =>
+                                        setState(() => _back = back),
+                                    front: FutCard(
+                                      member: member,
+                                      special: special?.kind,
+                                      bonus: special?.bonus ?? 0,
+                                    ),
+                                    back: FutCardNumbers(
+                                      skin: CardSkin.of(
+                                        special?.kind,
+                                        member.overall,
+                                      ),
+                                      name: member.displayName,
+                                      stats: stats,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -258,7 +276,7 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                           ),
                           // Sulla propria carta senza foto: l'invito a caricarla
                           // (fuori dall'immagine condivisa).
-                          if (isMine && member.avatarPath == null)
+                          if (isMine && member.avatarPath == null && !_back)
                             Positioned(
                               // A destra della colonna di overall e
                               // PlayStyle+, sopra il nome.
@@ -284,6 +302,17 @@ class _PlayerCardViewState extends ConsumerState<PlayerCardView> {
                   const SizedBox(height: 4),
                   _SpecialLine(card: special, now: now),
                 ],
+                const SizedBox(height: 4),
+                // La testata è sempre scura.
+                Text(
+                  _back
+                      ? 'Tocca la carta per tornare al davanti'
+                      : 'Tocca la carta per girarla',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppPalette.dark.textMuted,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 OutlinedButton(
                   // La testata è sempre scura: bordo e scritta d'oro anche nel chiaro.

@@ -4,8 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:milanac/core/auth/profile.dart';
 import 'package:milanac/core/teams.dart';
+import 'package:milanac/features/carta/card_back.dart';
 import 'package:milanac/features/carta/card_stats.dart';
+import 'package:milanac/features/carta/carta_page.dart';
 import 'package:milanac/features/carta/fut_card.dart';
+import 'package:milanac/features/carta/live_card.dart';
 import 'package:milanac/features/carta/mini_card.dart';
 import 'package:milanac/features/carte/special_cards_repository.dart';
 import 'package:milanac/features/intro/intro_state.dart';
@@ -403,6 +406,71 @@ void main() {
     expect(onCard('66'), findsOneWidget);
     expect(onCard('–'), findsNWidgets(4));
     expect(find.text('REGISTA'), findsOneWidget);
+  });
+
+  testWidgets('La carta si gira con un tocco: dietro, i sei numeri nel club', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container.read(introDoneProvider.notifier).complete();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MilanacApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await goToSection(tester, 'La mia carta');
+    expect(find.text('Tocca la carta per girarla'), findsOneWidget);
+    expect(find.byType(FutCardNumbers), findsNothing);
+
+    // In alto a sinistra: al centro, senza foto, c'è l'invito a caricarla.
+    await tester.tapAt(
+      tester.getTopLeft(find.byType(FutCard)) + const Offset(40, 50),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(FutCard), findsNothing);
+    // Sul retro l'invito a caricare la foto non copre i numeri.
+    expect(
+      find.descendant(
+        of: find.byType(LiveCard),
+        matching: find.text('Carica la tua foto'),
+      ),
+      findsNothing,
+    );
+    expect(find.text('I NUMERI NEL CLUB'), findsOneWidget);
+    Finder onBack(String text) => find.descendant(
+      of: find.byType(FutCardNumbers),
+      matching: find.text(text),
+    );
+    for (final label in [
+      'PRESENZE',
+      'PUNTUALITÀ',
+      'SERATE',
+      'GOL',
+      'MESI',
+      'VITTORIE',
+    ]) {
+      expect(onBack(label), findsOneWidget);
+    }
+    // Gli stessi numeri della sezione Statistiche, più sotto.
+    final stats = container.read(cardStatsProvider('demo'))!;
+    expect(onBack('${stats.nights}'), findsWidgets);
+    expect(onBack('${stats.presence}%'), findsWidgets);
+    expect(
+      tester.getSemantics(find.byType(FutCardNumbers)).label,
+      contains('Presenze ${stats.presence}%'),
+    );
+    expect(find.text('Tocca la carta per tornare al davanti'), findsOneWidget);
+
+    await tester.tap(find.byType(FutCardNumbers));
+    await tester.pumpAndSettle();
+    expect(find.byType(FutCard), findsOneWidget);
+    expect(find.byType(FutCardNumbers), findsNothing);
   });
 
   testWidgets('Carta e dati del membro: i campi lasciati vuoti si cancellano', (
