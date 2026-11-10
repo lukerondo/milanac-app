@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,12 +15,13 @@ import 'playstyle_ui.dart';
 
 export '../carte/special_cards_repository.dart' show CardSpecial;
 
-/// La carta del giocatore come un oggetto di FUT (FC 24–26): overall, ruolo e PlayStyle+
-/// in alto a sinistra, la foto caricata dal giocatore, il nome, le sei statistiche in
-/// riga e in fondo bandiera e stemma. Bronzo, argento e oro secondo l'overall,
-/// rossonera sopra 85, nero/oro e blu elettrico per le carte speciali (il bonus sale
-/// sull'overall e sulle statistiche, come le carte in-form). Disegnata a 210×300 e
-/// scalata alla larghezza disponibile; colori fissi (uguali nei due temi).
+/// La carta del giocatore come un oggetto da collezione: cornice di metallo spazzolato,
+/// overall, ruolo e PlayStyle+ in alto a sinistra, il giocatore al centro (la sua foto
+/// ritagliata dallo sfondo, o l'omino del club) tagliato dalla targa bassa con il nome,
+/// le sei statistiche in riga e in fondo bandiera e stemma. Bronzo, argento e oro
+/// secondo l'overall, rossonera sopra 85, nero/oro e blu elettrico per le carte speciali
+/// (il bonus sale sull'overall e sulle statistiche, come le carte in-form). Disegnata a
+/// 210×300 e scalata alla larghezza disponibile; colori fissi (uguali nei due temi).
 class FutCard extends ConsumerWidget {
   const FutCard({
     super.key,
@@ -89,32 +92,17 @@ class FutCard extends ConsumerWidget {
               child: CustomPaint(
                 // L'alone segue la forma della carta (non un rettangolo).
                 painter: glow ? _GlowPainter(skin.rim) : null,
-                child: CustomPaint(
-                  painter: CardSkinPainter(skin),
-                  foregroundPainter: _RimPainter(skin),
+                child: CardFrame(
+                  skin: skin,
+                  // Il giocatore (foto o omino) dentro la carta, dietro la targa.
+                  figure: CardPhoto(
+                    member: member,
+                    cacheWidth: (photoRect.width * dpr * 2).ceil(),
+                  ),
                   child: DefaultTextStyle(
                     style: TextStyle(fontFamily: sportFont, color: skin.text),
                     child: Stack(
                       children: [
-                        // La foto (o la sagoma) dentro la forma della carta.
-                        Positioned.fill(
-                          child: ClipPath(
-                            clipper: const FutCardClipper(),
-                            child: Stack(
-                              children: [
-                                Positioned.fromRect(
-                                  rect: photoRect,
-                                  child: CardPhoto(
-                                    member: member,
-                                    silhouette: skin.text,
-                                    cacheWidth: (photoRect.width * dpr * 2)
-                                        .ceil(),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
                         // Overall, bonus, ruolo e PlayStyle+ in colonna a sinistra.
                         Positioned(
                           left: 18,
@@ -287,85 +275,193 @@ class _GlowPainter extends CustomPainter {
   bool shouldRepaint(_GlowPainter old) => old.color != color;
 }
 
-/// Il bordo ripassato sopra la foto, che così non esce dalla carta.
-class _RimPainter extends CustomPainter {
-  const _RimPainter(this.skin);
-  final CardSkin skin;
-
-  @override
-  void paint(Canvas canvas, Size size) => canvas.drawPath(
-    futCardPath(size),
-    Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..color = skin.rim,
-  );
-
-  @override
-  bool shouldRepaint(_RimPainter old) => old.skin != skin;
-}
-
-/// Il ritratto della carta: solo la foto caricata dal giocatore, che sfuma a sinistra e
-/// in basso dentro la carta come i giocatori di FUT; senza foto la sagoma grigia.
+/// Il giocatore sulla carta, dietro la targa: la sua foto ritagliata dallo sfondo
+/// (quando il server l'ha preparata), altrimenti la foto intera che sfuma dentro la
+/// carta; senza foto l'omino del club. Occupa tutta la carta: le posizioni sono in
+/// frazioni, così vale per la carta grande e per la mini.
 class CardPhoto extends ConsumerWidget {
   const CardPhoto({
     super.key,
     required this.member,
-    required this.silhouette,
     this.cacheWidth,
+    this.shadow = true,
   });
   final Member member;
-
-  /// Colore della sagoma (le scritte della carta, molto trasparenti).
-  final Color silhouette;
   final int? cacheWidth;
+
+  /// Ombra morbida dietro la figura (sulla carta grande).
+  final bool shadow;
+
+  /// Dove stanno l'omino e la foto (frazioni della carta). La foto è 4:5, come
+  /// l'inquadratura scelta dal giocatore; la targa ne copre il fondo.
+  static const ominoBox = Rect.fromLTWH(.26, .088, .754, .528);
+  static const photoBox = Rect.fromLTWH(46 / 210, 0, 160 / 210, 200 / 300);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final shape = CustomPaint(
-      painter: SilhouettePainter(silhouette.withValues(alpha: .26), inset: .1),
-      size: Size.infinite,
+    final cutout = photoOf(
+      ref,
+      member.avatarCutoutPath,
+      cacheWidth: cacheWidth,
     );
-    final photo = memberPhoto(ref, member, cacheWidth: cacheWidth);
-    if (photo == null) return shape;
-    Shader fade(Rect r, Alignment begin, Alignment end, List<double> stops) =>
-        LinearGradient(
-          begin: begin,
-          end: end,
-          colors: const [
-            Color(0x00FFFFFF),
-            Color(0xFFFFFFFF),
-            Color(0xFFFFFFFF),
-            Color(0x00FFFFFF),
-          ],
-          stops: stops,
-        ).createShader(r);
-    return ShaderMask(
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (r) => fade(
-        r,
-        Alignment.topCenter,
-        Alignment.bottomCenter,
-        const [0, 0, .74, 1],
-      ),
-      child: ShaderMask(
-        blendMode: BlendMode.dstIn,
-        shaderCallback: (r) => fade(
-          r,
-          Alignment.centerLeft,
-          Alignment.centerRight,
-          const [0, .16, .93, 1],
-        ),
-        child: Image(
-          image: photo,
-          fit: BoxFit.cover,
-          alignment: const Alignment(0, -.3),
-          gaplessPlayback: true,
-          errorBuilder: (_, _, _) => shape,
-        ),
-      ),
+    final path = member.avatarPath;
+    final loading = path == null ? null : ref.watch(photoBytesProvider(path));
+    final photo = cutout == null
+        ? memberPhoto(ref, member, cacheWidth: cacheWidth)
+        : null;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final size = box.biggest;
+        Widget at(Rect f, Widget child) => Positioned(
+          left: f.left * size.width,
+          top: f.top * size.height,
+          width: f.width * size.width,
+          height: f.height * size.height,
+          child: child,
+        );
+        final omino = at(ominoBox, _shadowed(const PlayerOmino(), size));
+        final Widget figure;
+        if (cutout != null) {
+          figure = at(photoBox, _shadowed(_Cutout(image: cutout), size));
+        } else if (photo != null) {
+          figure = at(
+            photoBox,
+            _FadedPhoto(image: photo, fallback: const PlayerOmino()),
+          );
+        } else if (loading != null && loading.isLoading && !loading.hasValue) {
+          // La foto c'è ma sta arrivando: niente omino che lampeggia prima di lei.
+          figure = const SizedBox.shrink();
+        } else {
+          figure = omino;
+        }
+        return Stack(children: [figure]);
+      },
     );
   }
+
+  /// La figura con la sua ombra: la stessa immagine, nera e sfocata, appena più in basso.
+  Widget _shadowed(Widget figure, Size card) {
+    if (!shadow) return figure;
+    final blur = card.width * .017;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Transform.translate(
+          offset: Offset(0, card.width * .017),
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(
+              sigmaX: blur,
+              sigmaY: blur,
+              tileMode: TileMode.decal,
+            ),
+            child: ColorFiltered(
+              colorFilter: const ColorFilter.mode(
+                Color(0x73000000),
+                BlendMode.srcIn,
+              ),
+              child: figure,
+            ),
+          ),
+        ),
+        figure,
+      ],
+    );
+  }
+}
+
+Shader _fade(
+  Rect r,
+  Alignment begin,
+  Alignment end,
+  List<Color> colors,
+  List<double> stops,
+) => LinearGradient(
+  begin: begin,
+  end: end,
+  colors: colors,
+  stops: stops,
+).createShader(r);
+
+/// La foto senza sfondo: la figura si scioglie nella carta verso il basso (la targa la
+/// taglia poco dopo) e a sinistra, dove le spalle passerebbero sotto overall e ruolo.
+class _Cutout extends StatelessWidget {
+  const _Cutout({required this.image});
+  final ImageProvider image;
+
+  @override
+  Widget build(BuildContext context) => ShaderMask(
+    blendMode: BlendMode.dstIn,
+    shaderCallback: (r) => _fade(
+      r,
+      Alignment.topCenter,
+      Alignment.bottomCenter,
+      const [Color(0xFFFFFFFF), Color(0xFFFFFFFF), Color(0x33FFFFFF)],
+      const [0, .7, .93],
+    ),
+    child: ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (r) => _fade(
+        r,
+        Alignment.centerLeft,
+        Alignment.centerRight,
+        const [Color(0x00FFFFFF), Color(0xFFFFFFFF), Color(0xFFFFFFFF)],
+        const [0, .15, 1],
+      ),
+      child: Image(
+        image: image,
+        fit: BoxFit.cover,
+        alignment: const Alignment(0, -.3),
+        gaplessPlayback: true,
+        excludeFromSemantics: true,
+        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      ),
+    ),
+  );
+}
+
+/// La foto intera (il ritaglio non c'è ancora): sfuma a sinistra e in basso dentro la
+/// carta.
+class _FadedPhoto extends StatelessWidget {
+  const _FadedPhoto({required this.image, required this.fallback});
+  final ImageProvider image;
+  final Widget fallback;
+
+  static const _colors = [
+    Color(0x00FFFFFF),
+    Color(0xFFFFFFFF),
+    Color(0xFFFFFFFF),
+    Color(0x00FFFFFF),
+  ];
+
+  @override
+  Widget build(BuildContext context) => ShaderMask(
+    blendMode: BlendMode.dstIn,
+    shaderCallback: (r) => _fade(
+      r,
+      Alignment.topCenter,
+      Alignment.bottomCenter,
+      _colors,
+      const [0, 0, .74, 1],
+    ),
+    child: ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (r) => _fade(
+        r,
+        Alignment.centerLeft,
+        Alignment.centerRight,
+        _colors,
+        const [0, .16, .93, 1],
+      ),
+      child: Image(
+        image: image,
+        fit: BoxFit.cover,
+        alignment: const Alignment(0, -.3),
+        gaplessPlayback: true,
+        excludeFromSemantics: true,
+        errorBuilder: (_, _, _) => fallback,
+      ),
+    ),
+  );
 }
 
 /// Retro della carta (nel walkout, mentre gira): nero e oro con lo stemma.
@@ -375,9 +471,10 @@ class FutCardBack extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AspectRatio(
     aspectRatio: FutCard.width / FutCard.height,
-    child: CustomPaint(
-      painter: const CardSkinPainter(CardSkin.neroOro),
-      child: Center(
+    child: CardFrame(
+      skin: CardSkin.neroOro,
+      child: Align(
+        alignment: const Alignment(0, -.3),
         child: FractionallySizedBox(
           widthFactor: .45,
           child: Image.asset('assets/images/stemma_256.png'),

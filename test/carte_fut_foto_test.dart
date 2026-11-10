@@ -33,7 +33,19 @@ Uint8List _photo(int w, int h) {
   return img.encodePng(image);
 }
 
-Member _keeper({FutStats stats = FutStats.empty, String? avatarPath}) => Member(
+/// Una foto del membro (dalla memoria), non un'immagine della cornice o l'omino.
+bool _isMemberPhoto(Widget w) {
+  if (w is! Image) return false;
+  final image = w.image;
+  return image is MemoryImage ||
+      image is ResizeImage && image.imageProvider is MemoryImage;
+}
+
+Member _keeper({
+  FutStats stats = FutStats.empty,
+  String? avatarPath,
+  String? avatarCutoutPath,
+}) => Member(
   id: 'immu',
   displayName: 'Immu',
   role: ClubRole.giocatore,
@@ -43,6 +55,7 @@ Member _keeper({FutStats stats = FutStats.empty, String? avatarPath}) => Member(
   overall: 77,
   futStats: stats,
   avatarPath: avatarPath,
+  avatarCutoutPath: avatarCutoutPath,
 );
 
 void main() {
@@ -255,12 +268,8 @@ void main() {
       final label = tester.getSemantics(find.byType(FutCard));
       expect(label.label, contains('Tuffo 83'));
       expect(label.label, contains('senza foto'));
-      expect(
-        find.byWidgetPredicate(
-          (w) => w is CustomPaint && w.painter is SilhouettePainter,
-        ),
-        findsOneWidget,
-      );
+      // L'omino e la sua ombra.
+      expect(find.byType(PlayerOmino), findsWidgets);
     });
 
     testWidgets('con la foto caricata: la foto, mai un volto disegnato', (
@@ -269,18 +278,82 @@ void main() {
       localPhotos['immu/foto_1.jpg'] = _photo(72, 90);
       await pumpCard(tester, _keeper(avatarPath: 'immu/foto_1.jpg'));
       await tester.pump();
+      expect(find.byWidgetPredicate(_isMemberPhoto), findsOneWidget);
+      expect(find.byType(PlayerOmino), findsNothing);
+    });
+  });
+
+  group('La foto ritagliata', () {
+    testWidgets(
+      'pronta: sulla carta la figura senza sfondo, non la foto intera',
+      (tester) async {
+        final photo = _photo(72, 90), cutout = _photo(36, 45);
+        localPhotos['immu/foto_1.jpg'] = photo;
+        localPhotos['immu/ritaglio_1.webp'] = cutout;
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: Center(
+                child: SizedBox(
+                  width: 210,
+                  child: FutCard(
+                    member: _keeper(
+                      avatarPath: 'immu/foto_1.jpg',
+                      avatarCutoutPath: 'immu/ritaglio_1.webp',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        Uint8List bytesOf(Image w) {
+          final image = w.image;
+          return ((image is ResizeImage ? image.imageProvider : image)
+                  as MemoryImage)
+              .bytes;
+        }
+
+        // La figura e la sua ombra: tutte dal ritaglio.
+        final shown = tester.widgetList<Image>(
+          find.byWidgetPredicate(_isMemberPhoto),
+        );
+        expect(shown, isNotEmpty);
+        for (final image in shown) {
+          expect(bytesOf(image), cutout);
+        }
+        expect(find.byType(PlayerOmino), findsNothing);
+      },
+    );
+
+    test('arriva con il profilo e vale solo per quella foto', () {
+      final m = Member.fromMap({
+        'id': 'immu',
+        'display_name': 'Immu',
+        'club_role': 'giocatore',
+        'joined_at': '2025-09-01T00:00:00Z',
+        'avatar_path': 'immu/foto_1.jpg',
+        'avatar_cutout_path': 'immu/ritaglio_1.webp',
+      });
+      expect(m.avatarCutoutPath, 'immu/ritaglio_1.webp');
+      // Un'altra modifica alla carta non lo tocca.
+      expect(m.copyWith(overall: 80).avatarCutoutPath, 'immu/ritaglio_1.webp');
+      // Foto nuova o tolta: si aspetta il ritaglio nuovo.
       expect(
-        find.byWidgetPredicate(
-          (w) =>
-              w is Image && (w.image is MemoryImage || w.image is ResizeImage),
-        ),
-        findsOneWidget,
+        m.copyWith(avatarPath: 'immu/foto_2.jpg').avatarCutoutPath,
+        isNull,
       );
+      expect(m.copyWith(avatarPath: null).avatarCutoutPath, isNull);
+      // Database non ancora aggiornato: nessun ritaglio.
       expect(
-        find.byWidgetPredicate(
-          (w) => w is CustomPaint && w.painter is SilhouettePainter,
-        ),
-        findsNothing,
+        Member.fromMap({
+          'id': 'immu',
+          'display_name': 'Immu',
+          'club_role': 'giocatore',
+          'joined_at': '2025-09-01T00:00:00Z',
+        }).avatarCutoutPath,
+        isNull,
       );
     });
   });
@@ -380,19 +453,14 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(FutCard),
-        matching: find.byWidgetPredicate(
-          (w) =>
-              w is Image && (w.image is MemoryImage || w.image is ResizeImage),
-        ),
+        matching: find.byWidgetPredicate(_isMemberPhoto),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: find.byType(FutCard),
-        matching: find.byWidgetPredicate(
-          (w) => w is CustomPaint && w.painter is SilhouettePainter,
-        ),
+        matching: find.byType(PlayerOmino),
       ),
       findsNothing,
     );
@@ -405,7 +473,7 @@ void main() {
     expect(find.text('Cambia la foto'), findsOneWidget);
   });
 
-  testWidgets('La carta di un compagno senza foto: sagoma, nessun invito', (
+  testWidgets('La carta di un compagno senza foto: omino, nessun invito', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1080, 2340);
@@ -429,11 +497,9 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(FutCard),
-        matching: find.byWidgetPredicate(
-          (w) => w is CustomPaint && w.painter is SilhouettePainter,
-        ),
+        matching: find.byType(PlayerOmino),
       ),
-      findsOneWidget,
+      findsWidgets,
     );
   });
 
@@ -531,6 +597,40 @@ void main() {
       await PhotoDiskCache.clear();
       expect(dir.existsSync(), isFalse);
       dir.createSync();
+    });
+
+    test('foto e ritaglio convivono; un ritaglio scritto a metà si butta', () async {
+      // Un WebP minimo: "RIFF", lunghezza dichiarata, "WEBP" e il contenuto.
+      Uint8List webp(int payload) => Uint8List.fromList([
+        ...'RIFF'.codeUnits,
+        payload + 4,
+        0,
+        0,
+        0,
+        ...'WEBP'.codeUnits,
+        for (var i = 0; i < payload; i++) i,
+      ]);
+      List<String> names() =>
+          [for (final e in dir.listSync()) e.uri.pathSegments.last]..sort();
+      expect(PhotoDiskCache.wholeWebp(webp(40)), isTrue);
+      expect(PhotoDiskCache.wholeWebp(webp(40).sublist(0, 30)), isFalse);
+
+      await PhotoDiskCache.write('a/foto_1.jpg', jpeg());
+      await PhotoDiskCache.write('a/ritaglio_1.webp', webp(40));
+      expect(names(), ['a_foto_1.jpg', 'a_ritaglio_1.webp']);
+      expect(await PhotoDiskCache.read('a/ritaglio_1.webp'), webp(40));
+      // La foto nuova toglie solo la foto vecchia; poi arriva il suo ritaglio.
+      await PhotoDiskCache.write('a/foto_2.jpg', jpeg());
+      expect(names(), ['a_foto_2.jpg', 'a_ritaglio_1.webp']);
+      await PhotoDiskCache.write('a/ritaglio_2.webp', webp(50));
+      expect(names(), ['a_foto_2.jpg', 'a_ritaglio_2.webp']);
+      // A metà: non si salva e, se c'è già, si butta alla lettura.
+      await PhotoDiskCache.write('b/ritaglio_1.webp', webp(40).sublist(0, 30));
+      expect(names(), ['a_foto_2.jpg', 'a_ritaglio_2.webp']);
+      File('${dir.path}/b_ritaglio_1.webp')
+          .writeAsBytesSync(webp(40).sublist(0, 30));
+      expect(await PhotoDiskCache.read('b/ritaglio_1.webp'), isNull);
+      expect(File('${dir.path}/b_ritaglio_1.webp').existsSync(), isFalse);
     });
 
     test('una foto appena arrivata resta anche se la rosa non la ha ancora; '

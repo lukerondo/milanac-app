@@ -222,7 +222,6 @@ class _RingedPhoto extends StatelessWidget {
               member: m,
               radius: inner,
               background: CardColors.portrait,
-              foreground: CardColors.text,
             ),
     );
   }

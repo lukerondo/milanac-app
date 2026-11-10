@@ -678,7 +678,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   ]);
 }
 
-/// La foto appena caricata, o la sagoma grigia.
+/// La foto appena caricata, o l'omino del club.
 class _PhotoPreview extends ConsumerWidget {
   const _PhotoPreview({required this.path});
   final String? path;
@@ -686,10 +686,7 @@ class _PhotoPreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final photo = photoOf(ref, path);
-    const shape = PlayerSilhouette(
-      background: MilanacColors.surfaceHigh,
-      color: MilanacColors.ivoryMuted,
-    );
+    const shape = PlayerOmino(background: MilanacColors.surfaceHigh);
     return photo == null
         ? shape
         : Image(
@@ -936,9 +933,8 @@ class _CardNamePreview extends ConsumerWidget {
                   fit: BoxFit.cover,
                   alignment: photoAlignment,
                 ),
-                null => const PlayerSilhouette(
+                null => const PlayerOmino(
                   background: MilanacColors.surfaceHigh,
-                  color: MilanacColors.ivoryMuted,
                 ),
               },
             ),

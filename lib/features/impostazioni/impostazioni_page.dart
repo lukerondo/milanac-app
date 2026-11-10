@@ -526,7 +526,6 @@ class _PhotoThumb extends StatelessWidget {
       member: member,
       radius: 13.5,
       background: MilanacColors.surfaceHigh,
-      foreground: MilanacColors.ivoryMuted,
     ),
   );
 }

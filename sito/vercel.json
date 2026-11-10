@@ -3,7 +3,8 @@
   "buildCommand": "bash ../tools/web/build_vercel.sh",
   "outputDirectory": ".",
   "redirects": [
-    { "source": "/app", "destination": "/app/", "permanent": false }
+    { "source": "/app", "destination": "/app/", "permanent": false },
+    { "source": "/vercel.json", "destination": "/", "permanent": false }
   ],
   "headers": [
     {
