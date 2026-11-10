@@ -40,6 +40,9 @@ flutter config --no-analytics >/dev/null 2>&1 || true
 flutter --version
 flutter pub get --enforce-lockfile
 
+# La stanza vocale nel browser usa l'SDK Web di Agora: va accanto all'app.
+"$root/tools/web/agora_sdk.sh"
+
 out="$root/sito/app"
 rm -rf "$out"
 # --no-web-resources-cdn: il motore grafico si scarica dal nostro sito, non da Google.
@@ -48,4 +51,10 @@ flutter build web --release --no-pub --no-wasm-dry-run --no-web-resources-cdn \
 
 # Simboli di debug del motore grafico: al browser non servono.
 find "$out/canvaskit" -name '*.symbols' -delete
+# Senza l'SDK la stanza vocale nel browser non partirebbe: meglio non pubblicare.
+[ -s "$out/agora/AgoraRTC_N-production.js" ] && [ -s "$out/stanza_vocale.js" ] || {
+  echo "Nella web app manca la stanza vocale (SDK di Agora o stanza_vocale.js)."
+  exit 1
+}
+rm -f "$out/agora/.versione"
 echo "Web app pronta: $(du -sh "$out" | cut -f1) in sito/app"

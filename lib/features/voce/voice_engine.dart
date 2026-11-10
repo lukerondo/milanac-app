@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config.dart';
+import 'voice_engine_web_stub.dart'
+    if (dart.library.js_interop) 'voice_engine_web.dart';
 import 'voice_models.dart';
 
-/// Il motore audio della stanza: Agora sul telefono, finto nella demo e nei test.
+/// Il motore audio della stanza: Agora sul telefono e nel browser (con l'SDK Web, stessa
+/// stanza per tutti), finto nella demo e nei test.
 /// Serve per un solo ingresso: dopo [dispose] se ne crea uno nuovo.
 abstract class VoiceEngine {
   /// I numeri utente Agora di chi sta parlando in questo momento.
@@ -41,13 +44,46 @@ abstract class VoiceEngine {
 final voiceEngineFactoryProvider = Provider<VoiceEngine Function()>(
   (ref) => AppConfig.isDemo
       ? () => DemoVoiceEngine(speakingUid: agoraUidFor('p2'))
+      : kIsWeb
+      ? createWebVoiceEngine
       : AgoraVoiceEngine.new,
 );
 
-/// Vivavoce e auricolare ci sono solo sul telefono: sul Mac l'audio esce da dove
-/// dice il sistema e Agora non accetta questi comandi (all'ingresso un errore
+/// Vivavoce e auricolare ci sono solo sul telefono: sul Mac e nel browser l'audio esce
+/// da dove dice il sistema e Agora non accetta questi comandi (all'ingresso un errore
 /// farebbe fallire la stanza).
-bool get voiceHasSpeakerphone => defaultTargetPlatform != TargetPlatform.macOS;
+bool get voiceHasSpeakerphone =>
+    !kIsWeb && defaultTargetPlatform != TargetPlatform.macOS;
+
+/// Nel browser: perché non si è riusciti a entrare, dalla sigla dell'SDK Web di Agora
+/// (o di `web/stanza_vocale.js`).
+String voiceWebJoinMessage(String code) => switch (code) {
+  'PERMISSION_DENIED' || 'NotAllowedError' =>
+    'Serve il permesso del microfono: consentilo dal lucchetto accanto '
+        'all\'indirizzo della pagina e riprova.',
+  'DEVICE_NOT_FOUND' ||
+  'NotFoundError' => 'Nessun microfono trovato: collegane uno e riprova.',
+  'NOT_READABLE' || 'NotReadableError' =>
+    'Il microfono è occupato da un\'altra applicazione: chiudila e riprova.',
+  'NOT_SUPPORTED' || 'BROWSER_NON_ADATTO' || 'WEB_SECURITY_RESTRICT' =>
+    'Questo browser non va bene per la stanza vocale: usa Chrome, Edge, Safari '
+        'o Firefox aggiornati.',
+  'SDK_MANCANTE' =>
+    'La stanza vocale non si è caricata: controlla la connessione e riprova.',
+  'UID_CONFLICT' => 'Sei già nella stanza da un altro dispositivo.',
+  'USCITO' || 'OPERATION_ABORTED' => 'Sei uscito dalla stanza.',
+  _ => 'La stanza non risponde ($code). Riprova.',
+};
+
+/// Nel browser: perché la chiamata è caduta dopo l'ingresso (motivo dell'SDK Web).
+String voiceWebLostMessage(String reason) => switch (reason) {
+  'TOKEN_EXPIRE' => 'Il biglietto della stanza non è più valido: rientra.',
+  'UID_BANNED' ||
+  'IP_BANNED' ||
+  'CHANNEL_BANNED' => 'La stanza ti ha fatto uscire: rientra.',
+  'UID_CONFLICT' => 'Sei entrato nella stanza da un altro dispositivo.',
+  _ => 'Connessione con la stanza persa: controlla la rete e rientra.',
+};
 
 /// Rinnovo del biglietto della stanza: chiede quello nuovo con [refresh] e lo passa
 /// ad Agora con [apply]. Un errore di rete (o del server) non chiude la chiamata: si
