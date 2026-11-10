@@ -2842,3 +2842,101 @@ do $$ begin
 end $$;
 reset role;
 select pg_temp.as_user(null);
+
+-- ================================================================ notifiche nel browser (0039)
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert (select relrowsecurity from pg_class where oid = 'public.web_push_subscriptions'::regclass),
+    'web_push_subscriptions: RLS attiva';
+  assert not has_function_privilege('anon', 'public.register_web_push(text, text, text)', 'execute')
+     and not has_function_privilege('anon', 'public.web_push_public_key()', 'execute'),
+    'niente notifiche senza account';
+end $$;
+-- Finché il workflow non ha generato le chiavi non c'è niente a cui iscriversi.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert web_push_public_key() is null, 'chiave non ancora generata';
+end $$;
+reset role;
+select pg_temp.as_user(null);
+insert into app_config (key, value) values ('vapid_public_key', 'CHIAVE-PUBBLICA-DI-PROVA')
+  on conflict (key) do update set value = excluded.value;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert web_push_public_key() = 'CHIAVE-PUBBLICA-DI-PROVA', 'la chiave pubblica si legge';
+  -- Il resto della configurazione no.
+  assert (select count(*) from app_config) = 0, 'app_config resta chiusa';
+end $$;
+-- Si iscrive un browser; gli indirizzi che non sono di un servizio push si rifiutano.
+select register_web_push(
+  'https://fcm.googleapis.com/fcm/send/browser-1',
+  'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
+  'BTBZMqHH6r4Tts7J_aSIgg');
+select pg_temp.expect_error(
+  $q$select register_web_push('https://example.com/push', 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', 'BTBZMqHH6r4Tts7J_aSIgg')$q$,
+  'non valida');
+select pg_temp.expect_error(
+  $q$select register_web_push('https://fcm.googleapis.com.example.com/x', 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', 'BTBZMqHH6r4Tts7J_aSIgg')$q$,
+  'non valida');
+select pg_temp.expect_error(
+  $q$select register_web_push('http://fcm.googleapis.com/fcm/send/x', 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', 'BTBZMqHH6r4Tts7J_aSIgg')$q$,
+  'non valida');
+select pg_temp.expect_error(
+  $q$select register_web_push('https://fcm.googleapis.com/fcm/send/x', 'corta', 'BTBZMqHH6r4Tts7J_aSIgg')$q$,
+  'non valida');
+-- Non si scrive direttamente nella tabella (nemmeno a proprio nome).
+select pg_temp.expect_error(
+  $q$insert into web_push_subscriptions (endpoint, user_id, p256dh, auth) values
+     ('https://fcm.googleapis.com/fcm/send/diretto', auth.uid(),
+      'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', 'BTBZMqHH6r4Tts7J_aSIgg')$q$,
+  'row-level security');
+do $$ begin
+  assert (select count(*) from web_push_subscriptions) = 1, 'la propria iscrizione si vede';
+end $$;
+-- Un altro membro non vede le iscrizioni altrui; se entra dallo stesso browser, passa a lui.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000037a3');
+do $$ begin
+  assert (select count(*) from web_push_subscriptions) = 0, 'le iscrizioni altrui non si vedono';
+end $$;
+select register_web_push(
+  'https://fcm.googleapis.com/fcm/send/browser-1',
+  'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
+  'BTBZMqHH6r4Tts7J_aSIgg');
+do $$ begin
+  assert (select count(*) from web_push_subscriptions) = 1, 'il browser ora è dell''account entrato';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+do $$ begin
+  assert (select count(*) from web_push_subscriptions) = 0, 'a chi è uscito non arriva più niente';
+end $$;
+-- Al massimo 10 browser a testa: l'undicesimo fa uscire il più vecchio.
+do $$ begin
+  for i in 1..11 loop
+    perform register_web_push(
+      'https://updates.push.services.mozilla.com/wpush/v2/b' || i,
+      'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
+      'BTBZMqHH6r4Tts7J_aSIgg');
+  end loop;
+  assert (select count(*) from web_push_subscriptions) = 10, 'al massimo 10 browser';
+end $$;
+-- Si toglie la propria iscrizione (disattivando le notifiche o uscendo dall'account).
+delete from web_push_subscriptions where endpoint = 'https://updates.push.services.mozilla.com/wpush/v2/b11';
+do $$ begin
+  assert (select count(*) from web_push_subscriptions) = 9, 'iscrizione tolta';
+end $$;
+-- Chi non è ancora nel club non si iscrive.
+reset role;
+select pg_temp.as_user(null);
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('00000000-0000-0000-0000-0000000039a1', 'attesa39@example.com', '{"provider": "google"}');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000039a1');
+select pg_temp.expect_error(
+  $q$select register_web_push('https://fcm.googleapis.com/fcm/send/attesa', 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', 'BTBZMqHH6r4Tts7J_aSIgg')$q$,
+  'membri del club');
+reset role;
+select pg_temp.as_user(null);
+delete from app_config where key = 'vapid_public_key';
