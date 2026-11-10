@@ -452,6 +452,13 @@ html.drawer-open .drawer, .drawer:target { transform: none; visibility: visible;
 .check input:checked { background: var(--gold); border-color: var(--gold); }
 .check input:checked::before { transform: scale(1); }
 .note { padding: 16px 18px; border: 1px solid var(--gold-line); border-left: 3px solid var(--gold); border-radius: 2px; color: var(--fg); font-size: 15px; }
+.note.err { border-left-color: #E5484D; }
+.note a { color: var(--gold); }
+.note .note-actions { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 12px; }
+.note .note-actions button { padding: 0; border: 0; background: none; color: var(--gold); font: inherit; text-decoration: underline; cursor: pointer; }
+.form button[type=submit][aria-busy=true] { opacity: .65; cursor: progress; }
+/* Quello che è nascosto resta nascosto anche quando lo stile gli dà un display (es. .thanks). */
+[hidden] { display: none !important; }
 .thanks { display: grid; gap: 14px; padding: 8px 0; }
 .thanks h3 { font: 600 34px/1.05 var(--display); text-transform: uppercase; }
 .thanks p { color: var(--fg-2); }
@@ -892,8 +899,8 @@ html.drawer-open .drawer, .drawer:target { transform: none; visibility: visible;
       <label class="check"><input id="c-milan" name="Tifoso del Milan" type="checkbox" value="Sì" required><span>Sono tifoso del Milan.</span></label>
       <label class="check"><input id="c-sere" name="Disponibile lun-ven" type="checkbox" value="Sì" required><span>Sono disponibile dal lunedì al venerdì, dalle 21:30 alle 23:30.</span></label>
       <label class="check"><input id="c-privacy" name="Consenso privacy" type="checkbox" value="Sì" required><span>Acconsento al trattamento dei miei dati per essere ricontattato dal club. I dati non vengono condivisi con nessuno.</span></label>
-      <div><button class="btn btn-gold magnetic" type="submit">Invia la candidatura <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
-      <p class="note" id="nota" hidden></p>
+      <div><button class="btn btn-gold magnetic" type="submit"><span class="lbl">Invia la candidatura</span> <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
+      <div class="note" id="nota" role="status" aria-live="polite" hidden></div>
     </form>
     <div class="thanks" id="grazie-box" hidden>
       <h3>Candidatura inviata</h3>
@@ -1011,27 +1018,108 @@ html.drawer-open .drawer, .drawer:target { transform: none; visibility: visible;
   $$('[data-privacy]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); if (privacy.showModal) privacy.showModal(); else privacy.setAttribute('open', ''); }); });
   $$('[data-close-privacy]').forEach(function (b) { b.addEventListener('click', function () { if (privacy.close) privacy.close(); else privacy.removeAttribute('open'); }); });
 
-  /* Candidature: il modulo va a FormSubmit, che lo recapita all'email del club (data-endpoint) e poi
-     torna su questa pagina con ?grazie=1, dove compare il ringraziamento. Senza indirizzo è solo
-     un'anteprima. */
+  /* Candidature: il modulo va a FormSubmit, che lo recapita all'email del club (data-endpoint).
+     L'invio parte in background (endpoint /ajax/ di FormSubmit, risposta JSON), così il candidato
+     resta sulla pagina: se va bene compare il ringraziamento; se FormSubmit non risponde o dà errore
+     si riprova una volta da soli, poi compare un messaggio chiaro con "Riprova" e un'email già
+     scritta al club, e i campi restano compilati. Senza fetch (browser molto vecchi) resta l'invio
+     classico, che torna qui con ?grazie=1. Senza indirizzo è solo un'anteprima. */
   var nota = $('#nota'), grazie = $('#grazie-box');
   var endpoint = form.getAttribute('data-endpoint') || '';
-  function showThanks() { form.hidden = true; grazie.hidden = false; openDrawer(); }
+  var clubMail = (endpoint.match(/[^\/]+@[^\/]+$/) || [''])[0];
+  var invio = form.querySelector('button[type=submit]'), invioLbl = invio && invio.querySelector('.lbl');
+  var inCorso = false;
+  function showThanks() { form.hidden = true; grazie.hidden = false; nota.hidden = true; openDrawer(); }
   if (location.hash === '#grazie' || /[?&]grazie/.test(location.search)) showThanks();
   window.addEventListener('hashchange', function () { if (location.hash === '#grazie') showThanks(); });
+
+  function testoNota(t) { nota.className = 'note'; nota.hidden = false; nota.textContent = t; }
+  function occupato(si) {
+    inCorso = si;
+    if (!invio) return;
+    invio.disabled = si;
+    invio.setAttribute('aria-busy', si ? 'true' : 'false');
+    if (invioLbl) invioLbl.textContent = si ? 'Invio in corso…' : 'Invia la candidatura';
+  }
+  /* I campi compilati, nell'ordine del modulo e senza quelli tecnici di FormSubmit. */
+  function riepilogo() {
+    var righe = [];
+    new FormData(form).forEach(function (v, k) {
+      if (k.charAt(0) === '_' || k === 'Piattaforma' || !String(v).trim()) return;
+      righe.push(k + ': ' + v);
+    });
+    return righe.join('\n');
+  }
+  /* Errore: cosa è successo, "Riprova" e l'email al club già scritta (i campi restano compilati). */
+  function mostraErrore(titolo) {
+    nota.className = 'note err'; nota.hidden = false; nota.textContent = '';
+    var p = document.createElement('p'); p.style.margin = '0';
+    p.textContent = titolo + ' I dati che hai scritto sono ancora qui: puoi riprovare tra poco oppure mandarci la candidatura per email.';
+    var azioni = document.createElement('div'); azioni.className = 'note-actions';
+    var riprova = document.createElement('button'); riprova.type = 'button'; riprova.textContent = 'Riprova';
+    riprova.addEventListener('click', function () { if (form.requestSubmit) form.requestSubmit(); else invia(); });
+    azioni.appendChild(riprova);
+    if (clubMail) {
+      var mail = document.createElement('a');
+      var corpo = 'Ciao, vi mando la mia candidatura (il modulo del sito non funzionava).\n\n' + riepilogo();
+      mail.href = 'mailto:' + clubMail + '?subject=' + encodeURIComponent('Candidatura dal sito MILANAC') +
+        '&body=' + encodeURIComponent(corpo.slice(0, 1800));
+      mail.textContent = 'Invia per email a ' + clubMail;
+      azioni.appendChild(mail);
+    }
+    nota.appendChild(p); nota.appendChild(azioni);
+  }
+  /* Una richiesta a FormSubmit, al massimo 25 secondi. Risponde con { ok, attivazione, server }. */
+  function chiama(dati) {
+    var ajax = endpoint.replace('formsubmit.co/', 'formsubmit.co/ajax/');
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 25000);
+    return fetch(ajax, { method: 'POST', body: dati, headers: { Accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          var ok = r.ok && (j.success === true || j.success === 'true');
+          var attivazione = /activat/i.test(String(j.message || ''));
+          return { ok: ok, attivazione: attivazione, server: r.status >= 500 };
+        });
+      }, function () { return { ok: false, attivazione: false, server: true }; })
+      .then(function (esito) { clearTimeout(timer); return esito; });
+  }
+  function invia() {
+    if (inCorso) return;
+    occupato(true);
+    testoNota('Invio della candidatura in corso…');
+    var dati = new FormData(form);
+    dati.delete('Piattaforma');
+    chiama(dati).then(function (esito) {
+      /* Errore del server o della rete: un secondo tentativo dopo qualche secondo. */
+      if (!esito.ok && esito.server) {
+        return new Promise(function (ok) { setTimeout(ok, 2500); }).then(function () { return chiama(dati); });
+      }
+      return esito;
+    }).then(function (esito) {
+      occupato(false);
+      if (esito.ok) { showThanks(); return; }
+      if (esito.attivazione) mostraErrore('Il modulo del club non è ancora attivo, quindi la candidatura non è partita.');
+      else if (esito.server) mostraErrore('Il servizio che ci consegna le candidature non risponde in questo momento.');
+      else mostraErrore('La candidatura non è partita.');
+    });
+  }
+
   form.addEventListener('submit', function (e) {
     var scelte = $$('input[name=Piattaforma]:checked', form).map(function (i) { return i.value; });
     if (!form.checkValidity() || !scelte.length) {
       e.preventDefault();
-      if (!scelte.length) { nota.hidden = false; nota.textContent = 'Scegli almeno una piattaforma tra PS5, PC e Xbox.'; }
+      if (!scelte.length) testoNota('Scegli almeno una piattaforma tra PS5, PC e Xbox.');
       form.reportValidity(); return;
     }
     if (form.querySelector('[name=_honey]').value) { e.preventDefault(); return; }
-    if (!endpoint) { e.preventDefault(); nota.hidden = false; nota.textContent = "Anteprima del sito: il modulo si attiva quando avremo l'email del club. Per ora scrivici sui social."; return; }
-    form.action = endpoint;
-    form.querySelector('[name=_next]').value = location.origin + location.pathname + '?grazie=1';
+    if (!endpoint) { e.preventDefault(); testoNota("Anteprima del sito: il modulo si attiva quando avremo l'email del club. Per ora scrivici sui social."); return; }
     /* Le piattaforme scelte viaggiano in un campo solo ("PS5, PC"), più leggibile nell'email. */
     form.querySelector('[name=Piattaforme]').value = scelte.join(', ');
+    if (window.fetch && window.FormData && window.Promise) { e.preventDefault(); invia(); return; }
+    /* Invio classico: FormSubmit torna qui con ?grazie=1. */
+    form.action = endpoint;
+    form.querySelector('[name=_next]').value = location.origin + location.pathname + '?grazie=1';
     var caselle = $$('input[name=Piattaforma]', form);
     caselle.forEach(function (i) { i.disabled = true; });
     setTimeout(function () { caselle.forEach(function (i) { i.disabled = false; }); }, 1500);
