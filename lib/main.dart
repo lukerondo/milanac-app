@@ -15,6 +15,7 @@ import 'core/push/push_service.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 import 'features/musica/soundtrack.dart';
+import 'shared/wide_layout.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,6 +70,9 @@ class MilanacApp extends ConsumerWidget {
       themeMode: ref.watch(appearanceProvider).mode,
       routerConfig: router,
       scaffoldMessengerKey: messengerKey,
+      // Sugli schermi larghi gli avvisi in basso (anche quelli delle notifiche) sono
+      // una striscia al centro, su tutte le pagine.
+      builder: (_, child) => WideSnackBars(child: child!),
       locale: const Locale('it'),
       supportedLocales: const [Locale('it'), Locale('en')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,

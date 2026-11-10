@@ -51,6 +51,11 @@ nel club accede con la sua email e la sua password.
   browser sa registrare in AAC (Chrome ed Edge su Windows e Mac, Safari) il formato è quello
   dell'app; altrimenti (Firefox, Linux) è WAV, che si ascolta ovunque ma pesa di più. Con la
   tastiera del computer **Invio** manda il messaggio e **Maiusc+Invio** va a capo.
+- **Sul computer**: da 1000 punti di larghezza la web app si dispone come un'app da PC
+  (`lib/shared/wide_layout.dart`): menu laterale al posto della barra in basso, chat a due
+  colonne (elenco dei canali e conversazione fianco a fianco), rosa con cinque carte per riga
+  e pagine a schermo intero con i comandi al centro. Sotto quella larghezza (telefoni,
+  finestre strette) resta tutto com'è.
 - **Notifiche**: le stesse dei telefoni, anche con la pagina chiusa (Web Push, senza
   Firebase). La prima volta l'app lo propone; poi si accendono e spengono da Impostazioni →
   Notifiche → *Notifiche in questo browser*. Con l'app aperta e davanti l'avviso esce in
