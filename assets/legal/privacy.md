@@ -13,7 +13,7 @@ Il Direttivo del MILANAC Pro Club. Contatto: {{EMAIL}}
 - Presenze: le risposte per le serate (presente, in ritardo con la nota, assente) e il loro storico.
 - Chat: messaggi, foto e messaggi vocali, e i replay della lavagna tattica (voce e mosse). Foto e vocali si cancellano dopo 60 giorni (il messaggio resta, con "Allegato scaduto"), i replay dopo 3 giorni.
 - Stanza vocale: la voce passa in tempo reale dal servizio Agora e non viene registrata né conservata. Il server tiene solo chi è nella stanza, con il microfono acceso o spento, e per quanto tempo (per contare i minuti del mese).
-- Notifiche push: il codice del telefono per le notifiche (Firebase Cloud Messaging di Google), solo se le autorizzi. Uscendo dall'account il telefono smette di riceverle.
+- Notifiche push: il codice del telefono per le notifiche (Firebase Cloud Messaging di Google), solo se le autorizzi. Uscendo dall'account il telefono smette di riceverle. Nella web app, se le attivi: l'indirizzo e le chiavi che il tuo browser crea per riceverle; si tolgono spegnendole o uscendo dall'account.
 - Contenuti del club pubblicati dal Direttivo: formazioni, risultati, foto e clip delle partite, carte speciali, trofei, eventi del calendario e regolamento (con la versione che hai accettato).
 
 ## Perché li usiamo
@@ -24,7 +24,7 @@ Non usiamo i dati per profilazione, pubblicità o statistiche di terze parti.
 ## Chi può vederli
 - Solo i membri del club vedono i dati del club; nome, cognome e anno di nascita li vede solo il Direttivo.
 - I canali della chat di una squadra li vede chi ne fa parte, quello del Direttivo solo il Direttivo.
-- I dati sono conservati su Supabase (server nell'Unione Europea). Le notifiche passano da Google Firebase, la voce della stanza vocale da Agora.
+- I dati sono conservati su Supabase (server nell'Unione Europea). Le notifiche passano da Google Firebase e, nella web app, dal servizio di notifiche del tuo browser (Google, Mozilla, Microsoft o Apple), che riceve il messaggio cifrato; la voce della stanza vocale passa da Agora.
 - Per mostrarti sulla carta senza lo sfondo, la tua foto viene elaborata per qualche secondo su un server temporaneo di GitHub (anche fuori dall'Unione Europea), che non la conserva: il risultato torna su Supabase.
 - Le notizie mostrate nella Home sono link a siti esterni, che hanno una propria informativa.
 

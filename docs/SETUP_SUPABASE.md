@@ -203,6 +203,23 @@ cron.job;` deve mostrare anche `stanze-vocali` (chiude le stanze abbandonate) e
 `select * from voice_rooms where closed_at is null;` elenca le stanze aperte adesso.
 Sul telefono l'app chiede il permesso del microfono la prima volta che si entra.
 
+## 14. Notifiche nel browser (Web Push)
+La web app riceve le stesse notifiche dei telefoni senza Firebase: la funzione `notify` le
+cifra e le spedisce al servizio push del browser (Chrome, Edge, Firefox, Safari). Non c'è
+niente da configurare a mano.
+- **Chiavi**: la prima volta il workflow **Funzioni** genera la coppia (VAPID). La privata
+  finisce solo tra i segreti della funzione (`VAPID_PRIVATE_KEY`), la pubblica nel database
+  (`app_config`, chiave `vapid_public_key`), da dove la legge la web app. Alle esecuzioni
+  successive il log dice "chiavi già presenti, restano quelle".
+- **Iscrizioni**: una riga per browser nella tabella `web_push_subscriptions` (migrazione
+  `0039`). Ognuno vede e toglie solo le proprie; uscendo dall'account il browser smette di
+  riceverle. Per controllare: `select count(*) from web_push_subscriptions;`.
+- **Rigenerare le chiavi** (solo se la privata fosse andata persa): **Actions → Funzioni →
+  Run workflow** con *Rigenera le chiavi delle notifiche nel browser*. I browser già
+  iscritti si iscrivono di nuovo da soli alla prossima apertura dell'app.
+- Le notifiche dei telefoni restano su Firebase (`FIREBASE_SERVICE_ACCOUNT`): le due strade
+  sono indipendenti, una funziona anche senza l'altra.
+
 ## Sicurezza
 - La chiave **publishable** (`sb_publishable_…`) è nel repository: va bene, è pensata per stare nell'app.
 - La chiave **secret** (`sb_secret_…`) NON va mai messa nell'app né nel repository:

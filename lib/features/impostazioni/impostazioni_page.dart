@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +12,9 @@ import '../../core/auth/signup_gate.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/haptics.dart';
+import '../../core/push/browser_notifications.dart';
 import '../../core/push/device_tokens.dart';
+import '../../core/push/push_service.dart';
 import '../../core/theme.dart';
 import '../../shared/app_shell.dart';
 import '../../shared/gold_loader.dart';
@@ -44,9 +47,16 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
   NotifyPrefs? _pendingPrefs;
   bool _deleting = false;
 
+  /// L'interruttore delle notifiche nel browser è appena stato toccato.
+  bool _browserBusy = false;
+
   @override
   void initState() {
     super.initState();
+    // Il permesso può essere cambiato dalle impostazioni del browser mentre si era via.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(browserNotificationsProvider.notifier).refresh();
+    });
     final key = switch (widget.initialSection) {
       'notifiche' => _notifiche,
       'aspetto' => _aspetto,
@@ -227,11 +237,25 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
     }
   }
 
+  Future<void> _setBrowserPush(bool on) async {
+    // Senza attese prima: il browser mostra la richiesta del permesso solo dentro al clic.
+    final notifications = ref.read(browserNotificationsProvider.notifier);
+    final change = on
+        ? notifications.turnOn()
+        : notifications.turnOff().then<String?>((_) => null);
+    setState(() => _browserBusy = true);
+    final error = await change;
+    if (!mounted) return;
+    setState(() => _browserBusy = false);
+    if (error != null) showAppMessage(error);
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
     final me = ref.watch(profileProvider).value;
     final rosa = ref.watch(rosaProvider);
+    final browserPush = ref.watch(browserNotificationsProvider);
     final member = me == null
         ? null
         : rosa.value?.where((m) => m.id == me.id).firstOrNull;
@@ -296,6 +320,29 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
                 _GroupLabel('Notifiche', key: _notifiche),
                 _Group(
                   children: [
+                    // Solo nella web app: sui telefoni le notifiche sono quelle del sistema.
+                    if (kIsWeb || browserPush != BrowserPushStatus.unsupported)
+                      SwitchListTile(
+                        value: browserPush == BrowserPushStatus.on,
+                        onChanged:
+                            me == null ||
+                                _browserBusy ||
+                                !(browserPush == BrowserPushStatus.on ||
+                                    browserPush == BrowserPushStatus.off)
+                            ? null
+                            : _setBrowserPush,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                        ),
+                        title: const Text(
+                          'Notifiche in questo browser',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        subtitle: Text(
+                          browserPushHint(browserPush),
+                          style: TextStyle(fontSize: 14, color: p.textMuted),
+                        ),
+                      ),
                     for (final c in NotifyCategory.values)
                       SwitchListTile(
                         value: prefs.isOn(c),
@@ -422,6 +469,21 @@ String cardSummary(Member m) => [
 ].join(' · ');
 
 /// Etichetta di un gruppo (PROFILO, NOTIFICHE, ...).
+/// La riga sotto "Notifiche in questo browser": cosa succede adesso e cosa fare.
+String browserPushHint(BrowserPushStatus status) => switch (status) {
+  BrowserPushStatus.on => 'Attive: arrivano anche con la pagina chiusa.',
+  BrowserPushStatus.off =>
+    'Spente: accendile per ricevere qui gli avvisi del club.',
+  BrowserPushStatus.denied =>
+    'Bloccate dal browser: consentile dal lucchetto accanto all\'indirizzo '
+        'della pagina, poi torna qui.',
+  BrowserPushStatus.needsInstall =>
+    'Su iPhone e iPad: aggiungi l\'app alla schermata Home (Condividi, poi '
+        '"Aggiungi alla schermata Home") e aprila da lì.',
+  BrowserPushStatus.unavailable => 'Non ancora disponibili: riprova più tardi.',
+  BrowserPushStatus.unsupported => 'Questo browser non le prevede.',
+};
+
 class _GroupLabel extends StatelessWidget {
   const _GroupLabel(this.text, {super.key, this.first = false});
   final String text;

@@ -34,6 +34,27 @@ jobs:
       # La stanza vocale nel browser: il motore Dart contro uno script finto, in Chrome.
       - name: Test nel browser
         run: flutter test --platform chrome test/web
+      # Le notifiche nel browser: cifratura e firma del messaggio (vettori dell'RFC 8291).
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Test funzione notify
+        run: |
+          deno test --no-lock supabase/functions/notify/
+          deno check --no-lock supabase/functions/notify/index.ts
+      - name: Test chiavi delle notifiche
+        run: |
+          bash tools/web/vapid_keys.sh > "$RUNNER_TEMP/vapid.env"
+          grep -Eq '^VAPID_PUBLIC_KEY=[A-Za-z0-9_-]{87}$' "$RUNNER_TEMP/vapid.env"
+          grep -Eq '^VAPID_PRIVATE_KEY=[A-Za-z0-9+/=]{100,}$' "$RUNNER_TEMP/vapid.env"
+          rm "$RUNNER_TEMP/vapid.env"
+      # Il service worker e lo script delle notifiche nel Chrome vero: il messaggio push lo
+      # consegna il debugger, senza un servizio push.
+      - name: Test notifiche nel browser
+        run: |
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright-core@1.63.0
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" CHROME_CHANNEL=chrome \
+            node tools/web/test/notifiche_test.js
       - name: Test raccoglitore notizie
         run: python3 -m unittest discover -s tools/news_fetcher/tests
       - name: Test strumenti iPhone

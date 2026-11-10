@@ -123,15 +123,7 @@ class PushService {
       FirebaseMessaging.onMessage.listen((m) {
         final n = m.notification;
         if (n == null) return;
-        if (shouldShowInApp != null && !shouldShowInApp!(m.data)) return;
-        messengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text([n.title, n.body].whereType<String>().join('\n')),
-            action: m.data['route'] == null
-                ? null
-                : SnackBarAction(label: 'Apri', onPressed: () => _open(m)),
-          ),
-        );
+        showInApp(title: n.title, body: n.body, data: m.data);
       });
 
       // Token rimasto da cancellare (uscita senza rete): si riprova anche al ritorno
@@ -146,8 +138,34 @@ class PushService {
 
   AppLifecycleListener? _lifecycle;
 
-  void _open(RemoteMessage m) {
-    final route = m.data['route'];
+  /// Notifica arrivata con l'app aperta: avviso in basso, con "Apri" se porta a una
+  /// sezione (`data['route']`). Vale per i telefoni (FCM) e per il browser (Web Push).
+  void showInApp({
+    String? title,
+    String? body,
+    Map<String, dynamic> data = const {},
+  }) {
+    if (shouldShowInApp != null && !shouldShowInApp!(data)) return;
+    final route = data['route'];
+    messengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(
+          [
+            title,
+            body,
+          ].whereType<String>().where((t) => t.isNotEmpty).join('\n'),
+        ),
+        action: route == null
+            ? null
+            : SnackBarAction(label: 'Apri', onPressed: () => openRoute(route)),
+      ),
+    );
+  }
+
+  void _open(RemoteMessage m) => openRoute(m.data['route']);
+
+  /// Apre la sezione di una notifica toccata (subito, o appena l'app è pronta).
+  void openRoute(Object? route) {
     if (route is! String || !route.startsWith('/')) return;
     final open = _onOpenRoute;
     if (open == null) {

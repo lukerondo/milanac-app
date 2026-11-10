@@ -51,15 +51,26 @@ nel club accede con la sua email e la sua password.
   browser sa registrare in AAC (Chrome ed Edge su Windows e Mac, Safari) il formato è quello
   dell'app; altrimenti (Firefox, Linux) è WAV, che si ascolta ovunque ma pesa di più. Con la
   tastiera del computer **Invio** manda il messaggio e **Maiusc+Invio** va a capo.
-- **Cosa non c'è nel browser** (resta nell'app sul telefono): le notifiche e la musica scelta
-  dal proprio dispositivo.
+- **Notifiche**: le stesse dei telefoni, anche con la pagina chiusa (Web Push, senza
+  Firebase). La prima volta l'app lo propone; poi si accendono e spengono da Impostazioni →
+  Notifiche → *Notifiche in questo browser*. Con l'app aperta e davanti l'avviso esce in
+  basso nella pagina, altrimenti è una notifica del sistema e il clic porta alla sezione.
+  Il messaggio lo riceve `web/notifiche-sw.js`, un service worker con un ambito suo
+  (`/app/notifiche/`); `web/notifiche.js` chiede il permesso e iscrive il browser. Su
+  **iPhone e iPad** funzionano solo dall'app aggiunta alla schermata Home (Condividi →
+  *Aggiungi alla schermata Home*). Su computer arrivano finché il browser è in esecuzione.
+  Le chiavi le genera il workflow **Funzioni** (vedi `docs/SETUP_SUPABASE.md`, "Notifiche
+  nel browser").
+- **Cosa non c'è nel browser** (resta nell'app sul telefono): la musica scelta dal proprio
+  dispositivo.
 - **Aggiornarla**: dopo ogni modifica all'app unita in `main` va ripubblicato il sito, come
   sopra. La web app non si aggiorna da sola finché Vercel non è collegato al repository.
 
 Per provarla in locale: `tools/web/build_vercel.sh`, poi `python3 -m http.server -d sito 8000`
 e apri <http://localhost:8000/app/>. Attenzione: è collegata al database vero. Con
 `flutter run -d chrome` serve prima, una volta, `tools/web/agora_sdk.sh` (per la stanza vocale).
-I test che girano nel browser: `flutter test --platform chrome test/web`.
+I test che girano nel browser: `flutter test --platform chrome test/web`; il service worker
+delle notifiche si prova con `node tools/web/test/notifiche_test.js` (Playwright e Chrome).
 
 ## Il modulo di candidatura
 

@@ -7,6 +7,7 @@ import '../../features/voce/voice_call.dart';
 import '../audio_focus.dart';
 import '../auth/providers.dart';
 import '../config.dart';
+import 'browser_notifications.dart';
 import 'push_service.dart';
 
 /// Salva il token FCM del telefono (tabella device_tokens) per le notifiche personali.
@@ -51,14 +52,15 @@ class DeviceTokens {
 final deviceTokensProvider = Provider<DeviceTokens>((ref) => DeviceTokens(ref));
 
 /// Uscita dall'account: prima esce dalla stanza vocale e ferma l'audio, poi rimuove
-/// il token di questo telefono (finché l'utente è ancora autenticato, altrimenti i
-/// permessi lo impedirebbero), poi esce.
+/// il token di questo telefono o l'iscrizione di questo browser (finché l'utente è
+/// ancora autenticato, altrimenti i permessi lo impedirebbero), poi esce.
 Future<void> logout(WidgetRef ref) async {
   // Tutto da ref prima del primo await: la pagina che chiama può sparire intanto.
   final call = ref.read(voiceCallProvider.notifier);
   final player = ref.read(voicePlayerProvider.notifier);
   final focus = ref.read(audioFocusProvider.notifier);
   final removeToken = ref.read(deviceTokensProvider).remove;
+  final browser = ref.read(browserNotificationsProvider.notifier);
   final auth = ref.read(authRepositoryProvider);
   try {
     // Motore e microfono si fermano subito; l'uscita sul server (finché si è
@@ -72,5 +74,7 @@ Future<void> logout(WidgetRef ref) async {
     focus.release(use);
   }
   await PushService.instance.unsubscribe(onRemoveToken: removeToken);
+  // Nel browser: via l'iscrizione di questo browser, finché si è ancora autenticati.
+  await browser.release();
   await auth.signOut();
 }
