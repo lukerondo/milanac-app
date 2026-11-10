@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 /// Disegna la sagoma grigia di un giocatore (testa e spalle) dentro [rect], appoggiata
-/// sul fondo: è quello che mostrano le carte FUT quando manca la foto.
+/// sul fondo: per i disegni fatti a mano sulla tela (il PDF della formazione), dove
+/// l'immagine dell'omino ([PlayerOmino]) non c'è.
 void paintSilhouette(Canvas canvas, Rect rect, Color color) {
   final w = rect.width, h = rect.height;
   final cx = rect.center.dx;
@@ -53,20 +54,37 @@ void paintSilhouette(Canvas canvas, Rect rect, Color color) {
   );
 }
 
-/// La sagoma grigia su un fondo pieno (avatar tondi, mini carte senza foto).
-class PlayerSilhouette extends StatelessWidget {
-  const PlayerSilhouette({super.key, this.background, required this.color});
+/// L'omino del club: busto senza volto, grigio neutro, con la maglia rossonera. È la
+/// figura di chi non ha ancora caricato la foto, sulle carte e negli avatar (immagine
+/// in assets/carte/, generata da tools/carte).
+const ominoAsset = 'assets/carte/omino.webp';
+
+/// L'omino su un fondo pieno (avatar tondi, riquadri senza foto) o trasparente (carte).
+class PlayerOmino extends StatelessWidget {
+  const PlayerOmino({super.key, this.background});
   final Color? background;
-  final Color color;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: background ?? Colors.transparent,
-    child: CustomPaint(
-      painter: SilhouettePainter(color.withValues(alpha: .55)),
-      size: Size.infinite,
-    ),
-  );
+  Widget build(BuildContext context) {
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2;
+    return ColoredBox(
+      color: background ?? Colors.transparent,
+      child: LayoutBuilder(
+        builder: (context, box) => Image.asset(
+          ominoAsset,
+          fit: BoxFit.contain,
+          alignment: Alignment.bottomCenter,
+          // Negli avatar basta piccolo: si decodifica alla misura in cui si vede.
+          cacheWidth: box.maxWidth.isFinite
+              ? (box.maxWidth * dpr).ceil().clamp(48, 600)
+              : null,
+          gaplessPlayback: true,
+          excludeFromSemantics: true,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
+      ),
+    );
+  }
 }
 
 class SilhouettePainter extends CustomPainter {

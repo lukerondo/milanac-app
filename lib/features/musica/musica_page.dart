@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -58,6 +59,17 @@ class MusicaPage extends ConsumerWidget {
     );
 
     Future<void> pick() async {
+      // Nel browser non c'è una cartella dell'app dove tenere il file.
+      if (kIsWeb) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'La musica dal tuo dispositivo si sceglie dall\'app sul telefono.',
+            ),
+          ),
+        );
+        return;
+      }
       try {
         await ctrl.pickTrack();
       } catch (e) {

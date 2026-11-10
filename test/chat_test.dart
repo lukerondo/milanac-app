@@ -1775,9 +1775,11 @@ void main() {
     );
     await startChat(tester, repo: repo);
     await openChannel(tester, 'Generale');
-    final inBubble = find.byWidgetPredicate(
-      (w) => w is Image && w.image is ResizeImage,
-    );
+    // La foto del messaggio (dalla memoria), non l'omino degli avatar.
+    final inBubble = find.byWidgetPredicate((w) {
+      final image = w is Image ? w.image : null;
+      return image is ResizeImage && image.imageProvider is MemoryImage;
+    });
     expect(inBubble, findsOneWidget);
     // Alla larghezza in cui si vede (in pixel veri), non meno (sarebbe sfocata) e
     // poco di più.

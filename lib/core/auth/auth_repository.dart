@@ -25,6 +25,15 @@ EmailSignUpResult signUpResultOf(AuthResponse res) {
 const alreadyRegisteredText =
     'Esiste già un account con questa email: prova ad accedere o recupera la password.';
 
+/// Indirizzo della web app senza quello che segue "#" e senza parametri (es.
+/// `https://milanacproclub.vercel.app/app/`): va tra i Redirect URLs di Supabase.
+String webAppUrl(Uri base) => Uri(
+  scheme: base.scheme,
+  host: base.host,
+  port: base.hasPort ? base.port : null,
+  path: base.path.isEmpty ? '/' : base.path,
+).toString();
+
 abstract class AuthRepository {
   Future<void> signIn(LoginMethod method);
   Future<void> signInWithEmail(String email, String password);
@@ -43,7 +52,10 @@ class SupabaseAuthRepository implements AuthRepository {
 
   final SupabaseClient _client;
 
-  String? get _redirect => kIsWeb ? null : AppConfig.authRedirect;
+  /// Dove riportano i link delle email (conferma, password dimenticata) e i login
+  /// social: sul telefono all'app, nel browser alla pagina da cui la web app è aperta.
+  String? get _redirect =>
+      kIsWeb ? webAppUrl(Uri.base) : AppConfig.authRedirect;
 
   @override
   Future<void> signIn(LoginMethod method) async {
@@ -161,6 +173,11 @@ String friendlyAuthError(Object e) {
   if (m.contains('already registered') ||
       m.contains('already been registered')) {
     return alreadyRegisteredText;
+  }
+  // La creazione dell'account è stata fermata dal database: manca il via libera della
+  // password del club (scaduto dopo 30 minuti, o app non aggiornata).
+  if (m.contains('database error saving new user')) {
+    return 'Per creare un account serve la password del club: riscrivila e riprova.';
   }
   if (m.contains('password should be')) {
     return 'La password è troppo corta.';

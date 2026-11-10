@@ -36,8 +36,8 @@ String _teamsShort(Set<Team> teams) => [
 /// Etichetta del volo della carta dalla Rosa (mini carta) alla carta grande.
 Object cardHeroTag(String memberId) => 'carta-$memberId';
 
-/// Mini carta del giocatore (Rosa): la stessa carta FUT in piccolo, come nella rosa di
-/// FC. Overall con il bonus, ruolo, foto (o sagoma), nome e squadre o tipo di carta
+/// Mini carta del giocatore (Rosa): la stessa carta in piccolo, come nella rosa di FC.
+/// Overall con il bonus, ruolo, foto (o omino), nome e squadre o tipo di carta
 /// speciale. Disegnata a 140×200 e scalata alla cella; colori fissi.
 class MiniCard extends ConsumerWidget {
   const MiniCard({super.key, required this.member, this.onTap});
@@ -86,8 +86,15 @@ class MiniCard extends ConsumerWidget {
                   child: SizedBox(
                     width: width,
                     height: height,
-                    child: CustomPaint(
-                      painter: CardSkinPainter(skin, rimWidth: 1.6),
+                    child: CardFrame(
+                      skin: skin,
+                      rimWidth: 1.8,
+                      decodeWidth: (width * dpr).ceil(),
+                      figure: CardPhoto(
+                        member: member,
+                        cacheWidth: (100 * dpr * 1.5).ceil(),
+                        shadow: false,
+                      ),
                       child: DefaultTextStyle(
                         style: TextStyle(
                           fontFamily: sportFont,
@@ -95,26 +102,6 @@ class MiniCard extends ConsumerWidget {
                         ),
                         child: Stack(
                           children: [
-                            Positioned.fill(
-                              child: ClipPath(
-                                clipper: const FutCardClipper(),
-                                child: Stack(
-                                  children: [
-                                    Positioned(
-                                      left: 36,
-                                      top: 9,
-                                      width: 100,
-                                      height: 125,
-                                      child: CardPhoto(
-                                        member: member,
-                                        silhouette: skin.text,
-                                        cacheWidth: (100 * dpr * 1.5).ceil(),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                             // Overall (con il bonus) e ruolo in alto a sinistra.
                             Positioned(
                               left: 10,
@@ -224,7 +211,7 @@ class MiniCard extends ConsumerWidget {
 }
 
 /// Ritratto tondo per le carte piccole (formazione in campo): la foto caricata dal
-/// giocatore o la sagoma grigia.
+/// giocatore o l'omino del club.
 class CardPortrait extends ConsumerWidget {
   const CardPortrait({
     super.key,
@@ -238,14 +225,14 @@ class CardPortrait extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final (bg, fg) = switch (special) {
-      CardSpecial.neroOro => (CardColors.neroOroLine, CardColors.goldText),
-      CardSpecial.blu => (CardColors.blueDeep, CardColors.onBlue),
-      null => (CardColors.portrait, CardColors.text),
+    final bg = switch (special) {
+      CardSpecial.neroOro => CardColors.neroOroLine,
+      CardSpecial.blu => CardColors.blueDeep,
+      null => CardColors.portrait,
     };
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2;
     final photo = memberPhoto(ref, member, cacheWidth: (size * dpr).ceil());
-    final fallback = PlayerSilhouette(background: bg, color: fg);
+    final fallback = PlayerOmino(background: bg);
     return ClipOval(
       child: SizedBox.square(
         dimension: size,

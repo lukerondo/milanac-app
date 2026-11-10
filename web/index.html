@@ -1,46 +1,83 @@
 <!DOCTYPE html>
-<html>
+<html lang="it">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
+  <!-- Segnaposto: lo sostituisce `flutter build web --base-href /app/` (la web app sta
+       sotto il sito ufficiale, vedi docs/SITO.md). -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="App ufficiale MILANAC Pro Club">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="L'app del MILANAC Pro Club nel browser: presenze, partite, chat e carte dei membri.">
+  <!-- Area riservata ai membri: fuori dai motori di ricerca. -->
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0B0B0C">
+  <meta name="color-scheme" content="dark">
 
-  <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="milanac">
+  <meta name="apple-mobile-web-app-title" content="MILANAC">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>milanac</title>
+  <title>MILANAC Pro Club</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body { height: 100%; margin: 0; background: #0B0B0C; }
+    /* Schermata di avvio: resta finché l'app non ha disegnato la prima pagina. */
+    #avvio {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 18px; padding: 24px; box-sizing: border-box;
+      background: #0B0B0C; color: #E8C96A; text-align: center;
+      font: 600 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      letter-spacing: .14em;
+      transition: opacity .35s ease;
+    }
+    #avvio img { width: 128px; height: 128px; border-radius: 28px; }
+    #avvio .barra {
+      width: 148px; height: 3px; border-radius: 3px; overflow: hidden;
+      background: rgba(214, 179, 84, .18);
+    }
+    #avvio .barra i {
+      display: block; width: 40%; height: 100%; border-radius: 3px; background: #D6B354;
+      animation: avvio 1.15s ease-in-out infinite alternate;
+    }
+    #avvio p {
+      margin: 0; max-width: 320px; color: #B9B4A6;
+      font-weight: 400; letter-spacing: 0;
+    }
+    #avvio a { color: #E8C96A; }
+    @keyframes avvio { from { transform: translateX(-20%); } to { transform: translateX(170%); } }
+    @media (prefers-reduced-motion: reduce) {
+      #avvio .barra i { animation: none; width: 100%; opacity: .6; }
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <div id="avvio" role="status" aria-live="polite">
+    <img src="icons/Icon-192.png" alt="" width="128" height="128">
+    <div>MILANAC PRO CLUB</div>
+    <div class="barra"><i></i></div>
+    <p id="avvio-nota" hidden>
+      Ci sta mettendo più del solito: controlla la connessione e
+      <a href=".">ricarica la pagina</a>.
+    </p>
+    <noscript><p>Per usare l'app serve un browser con JavaScript attivo.</p></noscript>
+  </div>
+  <script>
+    (function () {
+      var avvio = document.getElementById('avvio');
+      var lento = setTimeout(function () {
+        document.getElementById('avvio-nota').hidden = false;
+      }, 20000);
+      window.addEventListener('flutter-first-frame', function () {
+        clearTimeout(lento);
+        avvio.style.opacity = '0';
+        setTimeout(function () { avvio.remove(); }, 400);
+      });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

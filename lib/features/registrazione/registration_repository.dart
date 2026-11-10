@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
+import '../../core/auth/signup_gate.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/teams.dart';
@@ -22,6 +23,7 @@ class RegistrationData {
     required this.fieldPosition,
     required this.shirtNumber,
     required this.platform,
+    this.clubPassword = '',
   });
 
   final String firstName;
@@ -36,6 +38,10 @@ class RegistrationData {
   final String fieldPosition;
   final int? shirtNumber;
   final GamePlatform? platform;
+
+  /// Password di iscrizione al club: la scrive qui chi non l'ha data creando l'account
+  /// (login social, account nati prima della regola). Vuota se non serve.
+  final String clubPassword;
 
   Map<String, dynamic> toParams() => {
     'p_first_name': firstName,
@@ -55,6 +61,7 @@ class RegistrationData {
     // Il volto disegnato non c'è più: la foto si carica a parte (passo 3). Il
     // parametro resta per la firma della funzione sul server.
     'p_face': null,
+    'p_club_password': clubPassword,
   };
 }
 
@@ -77,13 +84,28 @@ class _SupabaseRegistrationRepository implements RegistrationRepository {
 
   @override
   Future<void> complete(RegistrationData data) async {
-    final result = await _ref
-        .read(supabaseProvider)
-        .rpc('complete_registration', params: data.toParams());
-    // La password sbagliata non è un errore del database (così il tentativo resta
-    // contato per il limite di 5 ogni 15 minuti): arriva come risposta.
-    if (result == 'password_errata') {
-      throw const RegistrationError('Password del Direttivo non corretta');
+    final client = _ref.read(supabaseProvider);
+    final params = data.toParams();
+    Object? result;
+    try {
+      result = await client.rpc('complete_registration', params: params);
+    } catch (e) {
+      // Database non ancora aggiornato (senza la password del club): come prima.
+      if (!isMissingFunction(e)) rethrow;
+      result = await client.rpc(
+        'complete_registration',
+        params: {...params}..remove('p_club_password'),
+      );
+    }
+    // Le password sbagliate non sono errori del database (così i tentativi restano
+    // contati per il limite di 5 ogni 15 minuti): arrivano come risposta.
+    switch (result) {
+      case 'password_errata':
+        throw const RegistrationError('Password del Direttivo non corretta');
+      case 'password_club_errata':
+        throw const SignupGateError(wrongClubPasswordText);
+      case 'iscrizioni_chiuse':
+        throw const SignupGateError(signupsClosedText);
     }
   }
 
@@ -106,9 +128,15 @@ class DemoRegistrationRepository implements RegistrationRepository {
   RegistrationData? last;
   String? newPassword;
 
-  /// Come `complete_registration`: con la password del Direttivo sbagliata non si salva.
+  /// Password di iscrizione da chiedere (null = non serve, come nella demo).
+  String? clubPassword;
+
+  /// Come `complete_registration`: con una password sbagliata non si salva.
   @override
   Future<void> complete(RegistrationData data) async {
+    if (clubPassword != null && data.clubPassword != clubPassword) {
+      throw const SignupGateError(wrongClubPasswordText);
+    }
     if (data.direttivo &&
         data.direttivoPassword != (newPassword ?? direttivoPassword)) {
       throw const RegistrationError('Password del Direttivo non corretta');

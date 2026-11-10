@@ -1,0 +1,78 @@
+name: Ritagli
+
+# Toglie lo sfondo alle foto dei membri per le carte (tools/ritaglio_foto/ritaglia.py).
+# Ogni 15 minuti conta le foto ancora senza ritaglio: se non ce ne sono finisce in pochi
+# secondi senza installare nulla. Se ce ne sono installa le dipendenze e scarica il modello
+# (circa 1 GB, entrambi in cache) e le ritaglia: una ventina di secondi a foto, al massimo
+# 20 per esecuzione; le altre aspettano il giro dopo.
+# I log sono pubblici: si stampano solo numeri, mai nomi, id o percorsi delle foto.
+# Secret: SUPABASE_SECRET_KEY (sb_secret_...), lo stesso del workflow Notizie.
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Prova senza salvare (ritaglia ma non carica e non modifica nulla)"
+        type: boolean
+        default: false
+
+# Una esecuzione alla volta: la successiva aspetta che finisca quella in corso.
+concurrency: ritagli
+
+permissions:
+  contents: read
+
+jobs:
+  ritaglia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Solo libreria standard: una richiesta a Supabase e si sa se c'è lavoro.
+      - name: Foto da ritagliare
+        id: conta
+        run: |
+          if [ -z "$SUPABASE_SECRET_KEY" ]; then
+            echo "::error::Manca il secret SUPABASE_SECRET_KEY (Settings → Secrets and variables → Actions): senza la chiave segreta di Supabase le foto non si possono ritagliare"
+            exit 1
+          fi
+          export SUPABASE_URL=$(python -c "import json;print(json.load(open('env/prod.json'))['SUPABASE_URL'])")
+          echo "SUPABASE_URL=$SUPABASE_URL" >> "$GITHUB_ENV"
+          da_fare=$(python tools/ritaglio_foto/ritaglia.py --conta)
+          echo "Foto da ritagliare: $da_fare"
+          echo "da_fare=$da_fare" >> "$GITHUB_OUTPUT"
+          echo "modello=$(python tools/ritaglio_foto/ritaglia.py --modello)" >> "$GITHUB_OUTPUT"
+      - name: Cache delle dipendenze
+        if: steps.conta.outputs.da_fare != '0'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ritagli-pip-${{ runner.os }}-${{ hashFiles('tools/ritaglio_foto/requirements.txt') }}
+      # La chiave è il nome del modello scelto in ritaglia.py: cambiandolo si riscarica.
+      - name: Cache del modello
+        if: steps.conta.outputs.da_fare != '0'
+        uses: actions/cache@v4
+        with:
+          path: ~/.u2net
+          key: ritagli-modello-${{ steps.conta.outputs.modello }}
+      - name: Dipendenze
+        if: steps.conta.outputs.da_fare != '0'
+        run: pip install --disable-pip-version-check -r tools/ritaglio_foto/requirements.txt
+      - name: Test
+        if: steps.conta.outputs.da_fare != '0'
+        run: python -m unittest discover -s tools/ritaglio_foto/tests
+      - name: Ritaglio
+        if: steps.conta.outputs.da_fare != '0'
+        env:
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          TQDM_DISABLE: "1"   # niente barra di avanzamento nei log quando si scarica il modello
+        run: |
+          # rembg tiene i modelli qui: è la cartella messa in cache qui sopra.
+          export U2NET_HOME="$HOME/.u2net"
+          python tools/ritaglio_foto/ritaglia.py

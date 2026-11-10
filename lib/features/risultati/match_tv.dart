@@ -604,7 +604,6 @@ class _GoalMoment extends StatelessWidget {
               member: m,
               radius: 15,
               background: CardColors.portrait,
-              foreground: HeroText.primary,
             ),
             const SizedBox(width: 8),
           ],

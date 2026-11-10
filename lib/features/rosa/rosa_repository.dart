@@ -126,7 +126,9 @@ class _SupabaseRosaRepository implements RosaRepository {
           Member.fromMap(withPrivateRow(r, private[r['id']])),
       ];
       // Sul telefono restano solo le foto attuali dei membri.
-      PhotoDiskCache.syncWithRoster(members.map((m) => m.avatarPath));
+      PhotoDiskCache.syncWithRoster([
+        for (final m in members) ...[m.avatarPath, m.avatarCutoutPath],
+      ]);
       return members;
     });
   }
@@ -253,8 +255,11 @@ class _SupabaseRosaRepository implements RosaRepository {
     await client.from('profiles').update({'avatar_path': null}).eq('id', m.id);
     if (path == null) return;
     await PhotoDiskCache.delete(path);
+    // Via anche la figura senza sfondo di quella foto (nel profilo si azzera da sé).
+    final cutout = m.avatarCutoutPath;
+    if (cutout != null) await PhotoDiskCache.delete(cutout);
     try {
-      await client.storage.from(avatarsBucket).remove([path]);
+      await client.storage.from(avatarsBucket).remove([path, ?cutout]);
     } catch (_) {}
   }
 

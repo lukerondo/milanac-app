@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../carte/special_cards_repository.dart';
@@ -60,22 +58,24 @@ class FutCardClipper extends CustomClipper<Path> {
   bool shouldReclip(FutCardClipper oldClipper) => false;
 }
 
-enum CardOrnament { none, rays, facets, shards, stripes }
-
-/// Il "materiale" di una carta: sfumatura metallica, scritte, bordi e decorazioni. Colori
-/// fissi: è un oggetto di gioco, uguale nei due temi.
+/// Il "materiale" di una carta: la cornice disegnata (metallo spazzolato, archi in
+/// rilievo, targa bassa: immagini in assets/carte/, generate da tools/carte), i colori
+/// delle scritte e dei bordi. Colori fissi: è un oggetto di gioco, uguale nei due temi.
 @immutable
 class CardSkin {
   const CardSkin({
+    required this.asset,
     required this.gradient,
     required this.text,
     required this.label,
     required this.rim,
     required this.inner,
-    required this.ornamentColor,
-    required this.ornament,
   });
 
+  /// Nome delle immagini della cornice: `assets/carte/<asset>_fondo.webp` e `_targa.webp`.
+  final String asset;
+
+  /// La sfumatura del materiale: fondo di riserva finché la cornice non è pronta.
   final List<Color> gradient;
 
   /// Overall, ruolo, nome e valori; [label] per le sigle delle statistiche.
@@ -85,8 +85,9 @@ class CardSkin {
   /// Bordo esterno e filetto interno.
   final Color rim;
   final Color inner;
-  final Color ornamentColor;
-  final CardOrnament ornament;
+
+  String get background => 'assets/carte/${asset}_fondo.webp';
+  String get plate => 'assets/carte/${asset}_targa.webp';
 
   /// Bronzo, argento e oro sono le carte rare di FUT (soglie 65 e 75); sopra 85 la carta
   /// rossonera del club; senza overall una carta grigia.
@@ -102,115 +103,120 @@ class CardSkin {
     },
   };
 
+  static const all = [vuota, bronzo, argento, oro, rossonera, neroOro, blu];
+
   static const vuota = CardSkin(
-    gradient: [Color(0xFF6A6A72), Color(0xFF43434A), Color(0xFF2C2C31)],
+    asset: 'vuota',
+    gradient: [
+      Color(0xFF8A8A93),
+      Color(0xFF5F5F68),
+      Color(0xFF3E3E45),
+      Color(0xFF55555D),
+      Color(0xFF27272C),
+    ],
     text: Color(0xFFF5F1E6),
     label: Color(0xFFCFCAC0),
     rim: Color(0xFF7C7C84),
-    inner: Color(0xFF9A9AA2),
-    ornamentColor: Color(0xFFFFFFFF),
-    ornament: CardOrnament.none,
+    inner: Color(0xFFB4B4BC),
   );
   static const bronzo = CardSkin(
+    asset: 'bronzo',
     gradient: [
-      Color(0xFFF3CDA4),
-      Color(0xFFD49A62),
-      Color(0xFFA86A3B),
-      Color(0xFFC98A55),
-      Color(0xFF7E4B25),
+      Color(0xFFF6D3AE),
+      Color(0xFFD29660),
+      Color(0xFF9A5E33),
+      Color(0xFFC4854F),
+      Color(0xFF70421F),
     ],
-    text: Color(0xFF2E1B0C),
-    label: Color(0xFF4A2E17),
-    rim: Color(0xFF6E4020),
-    inner: Color(0xFFF6D6B2),
-    ornamentColor: Color(0xFFFFFFFF),
-    ornament: CardOrnament.rays,
+    text: Color(0xFF2B1808),
+    label: Color(0xFF4A2C14),
+    rim: Color(0xFF6B3E1D),
+    inner: Color(0xFFFBE2C6),
   );
   static const argento = CardSkin(
+    asset: 'argento',
     gradient: [
       Color(0xFFFFFFFF),
-      Color(0xFFDDE2E6),
-      Color(0xFFA9B2B9),
-      Color(0xFFD5DADF),
-      Color(0xFF8F99A1),
+      Color(0xFFD9DFE4),
+      Color(0xFF9FA9B1),
+      Color(0xFFCDD4D9),
+      Color(0xFF7C8790),
     ],
-    text: Color(0xFF1F2427),
-    label: Color(0xFF3A4247),
-    rim: Color(0xFF7D868D),
+    text: Color(0xFF1B2024),
+    label: Color(0xFF353D43),
+    rim: Color(0xFF6F7981),
     inner: Color(0xFFFFFFFF),
-    ornamentColor: Color(0xFFFFFFFF),
-    ornament: CardOrnament.rays,
   );
   static const oro = CardSkin(
+    asset: 'oro',
     gradient: [
-      Color(0xFFFCEFB4),
-      Color(0xFFE8C766),
-      Color(0xFFC9A13A),
-      Color(0xFFE3C26A),
-      Color(0xFFA8822E),
+      Color(0xFFFFF3BF),
+      Color(0xFFEBCB6C),
+      Color(0xFFC19A33),
+      Color(0xFFE2C063),
+      Color(0xFF9B7724),
     ],
-    text: Color(0xFF3A2C0B),
-    label: Color(0xFF5A4614),
-    rim: Color(0xFF8E6B1E),
-    inner: Color(0xFFFFF4C8),
-    ornamentColor: Color(0xFFFFFFFF),
-    ornament: CardOrnament.rays,
+    text: Color(0xFF33260A),
+    label: Color(0xFF544011),
+    rim: Color(0xFF876419),
+    inner: Color(0xFFFFF6CF),
   );
   static const rossonera = CardSkin(
+    asset: 'rossonera',
     gradient: [
-      Color(0xFFD6182F),
-      Color(0xFF8E0B1E),
-      Color(0xFF1A0508),
+      Color(0xFFE01E36),
+      Color(0xFFA00F22),
+      Color(0xFF4A0810),
+      Color(0xFF16090B),
       Color(0xFF0B0B0C),
     ],
     text: Color(0xFFF6D77F),
-    label: Color(0xFFE9C964),
+    label: Color(0xFFE3C469),
     rim: Color(0xFFD9B65A),
     inner: Color(0xFF8C6F2A),
-    ornamentColor: Color(0xFF000000),
-    ornament: CardOrnament.stripes,
   );
   static const neroOro = CardSkin(
-    gradient: [Color(0xFF26231C), Color(0xFF111112), Color(0xFF050505)],
+    asset: 'nero_oro',
+    gradient: [
+      Color(0xFF34302A),
+      Color(0xFF19181A),
+      Color(0xFF0A0A0B),
+      Color(0xFF151416),
+      Color(0xFF050505),
+    ],
     text: Color(0xFFEBCB73),
     label: Color(0xFFC9AE68),
     rim: Color(0xFFD9B65A),
     inner: Color(0xFF8C6F2A),
-    ornamentColor: Color(0xFFC9A646),
-    ornament: CardOrnament.facets,
   );
   static const blu = CardSkin(
+    asset: 'blu',
     gradient: [
-      Color(0xFF1F5BFF),
-      Color(0xFF0B2E8A),
-      Color(0xFF06123A),
-      Color(0xFF0A1A55),
+      Color(0xFF3B74FF),
+      Color(0xFF1747C8),
+      Color(0xFF0A2A80),
+      Color(0xFF0C2F92),
+      Color(0xFF050F33),
     ],
     text: Color(0xFFFFFFFF),
-    label: Color(0xFFD6E2FF),
+    label: Color(0xFFD3E0FF),
     rim: Color(0xFFE7C76B),
-    inner: Color(0xFF5CC8FF),
-    ornamentColor: Color(0xFF5CC8FF),
-    ornament: CardOrnament.shards,
+    inner: Color(0xFF6FCBFF),
   );
 }
 
-/// Fondo della carta: sfumatura metallica, decorazioni, riflesso fisso, bordo esterno e
-/// filetto interno, tutto sulla forma FUT.
+/// Fondo di riserva della carta: la sfumatura del materiale sulla forma FUT. Si vede
+/// finché l'immagine della cornice non è pronta (primo istante, test).
 class CardSkinPainter extends CustomPainter {
-  const CardSkinPainter(this.skin, {this.rimWidth = 2});
+  const CardSkinPainter(this.skin);
   final CardSkin skin;
-  final double rimWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final shape = futCardPath(size);
-    canvas.save();
-    canvas.clipPath(shape);
     final colors = skin.gradient;
-    canvas.drawRect(
-      rect,
+    canvas.drawPath(
+      futCardPath(size),
       Paint()
         ..shader = LinearGradient(
           begin: Alignment.topLeft,
@@ -221,112 +227,105 @@ class CardSkinPainter extends CustomPainter {
           ],
         ).createShader(rect),
     );
-    switch (skin.ornament) {
-      case CardOrnament.none:
-        break;
-      case CardOrnament.rays:
-        _rays(canvas, size);
-      case CardOrnament.facets:
-        _facets(canvas, size, .3);
-      case CardOrnament.shards:
-        _facets(canvas, size, .22);
-      case CardOrnament.stripes:
-        _stripes(canvas, size);
-    }
-    // Riflesso fisso in diagonale, come il lucido delle carte rare.
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = LinearGradient(
-          begin: const Alignment(-1, -.6),
-          end: const Alignment(1, .6),
-          colors: [
-            Colors.white.withValues(alpha: 0),
-            Colors.white.withValues(alpha: .22),
-            Colors.white.withValues(alpha: 0),
-          ],
-          stops: const [.32, .42, .52],
-        ).createShader(rect),
-    );
-    canvas.restore();
-    // Filetto interno e bordo.
-    final inset = size.width * .035;
-    canvas.drawPath(
-      futCardPathIn(rect.deflate(inset)),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = size.width * .006
-        ..color = skin.inner.withValues(alpha: .85),
-    );
-    canvas.drawPath(
-      shape,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = rimWidth
-        ..color = skin.rim,
-    );
-  }
-
-  /// Raggi di luce che partono da dietro il ritratto (carte rare).
-  void _rays(Canvas canvas, Size size) {
-    final c = Offset(size.width * .6, size.height * .3);
-    final r = size.longestSide * 1.2;
-    final paint = Paint()..color = skin.ornamentColor.withValues(alpha: .1);
-    const n = 20;
-    for (var i = 0; i < n; i += 2) {
-      final a0 = i * 2 * math.pi / n, a1 = (i + 1) * 2 * math.pi / n;
-      canvas.drawPath(
-        Path()
-          ..moveTo(c.dx, c.dy)
-          ..lineTo(c.dx + r * math.cos(a0), c.dy + r * math.sin(a0))
-          ..lineTo(c.dx + r * math.cos(a1), c.dy + r * math.sin(a1))
-          ..close(),
-        paint,
-      );
-    }
-  }
-
-  /// Sfaccettature geometriche (nero/oro, blu elettrico): triangoli e linee sottili.
-  void _facets(Canvas canvas, Size size, double alpha) {
-    final w = size.width, h = size.height;
-    final fill = Paint()
-      ..color = skin.ornamentColor.withValues(alpha: alpha * .35);
-    final line = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * .005
-      ..color = skin.ornamentColor.withValues(alpha: alpha);
-    const tris = [
-      [0.0, .18, .34, .02, .22, .36],
-      [.62, 0.0, 1.0, .08, .9, .34],
-      [0.0, .62, .2, .48, .12, .8],
-      [.78, .55, 1.0, .46, 1.0, .74],
-      [.3, .78, .56, .7, .48, .95],
-    ];
-    for (final t in tris) {
-      final p = Path()
-        ..moveTo(w * t[0], h * t[1])
-        ..lineTo(w * t[2], h * t[3])
-        ..lineTo(w * t[4], h * t[5])
-        ..close();
-      canvas.drawPath(p, fill);
-      canvas.drawPath(p, line);
-    }
-    for (final y in const [.66, .69]) {
-      canvas.drawLine(Offset(w * .08, h * y), Offset(w * .92, h * y), line);
-    }
-  }
-
-  /// Righe rossonere strette (carta rossonera del club).
-  void _stripes(Canvas canvas, Size size) {
-    final w = size.width;
-    final stripe = w / 15;
-    final paint = Paint()..color = const Color(0x55000000);
-    for (var x = stripe; x < w; x += stripe * 2) {
-      canvas.drawRect(Rect.fromLTWH(x, 0, stripe, size.height), paint);
-    }
   }
 
   @override
-  bool shouldRepaint(CardSkinPainter old) =>
+  bool shouldRepaint(CardSkinPainter old) => old.skin != skin;
+}
+
+/// I bordi della carta, sopra a tutto (la foto non esce mai): filetto interno con la
+/// sua ombra, bordo e un filo di luce. Misure pensate per la carta larga 210.
+class CardRimPainter extends CustomPainter {
+  const CardRimPainter(this.skin, {this.rimWidth = 2.4});
+  final CardSkin skin;
+  final double rimWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final u = size.width / 210;
+    void line(double inset, Color color, double width) => canvas.drawPath(
+      futCardPathIn(rect.deflate(inset * u)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width
+        ..color = color,
+    );
+    line(6.3, skin.inner.withValues(alpha: .9), .9 * u);
+    line(7.85, Colors.black.withValues(alpha: .22), .7 * u);
+    line(0, skin.rim, rimWidth);
+    line(1.1, Colors.white.withValues(alpha: .45), .63 * u);
+  }
+
+  @override
+  bool shouldRepaint(CardRimPainter old) =>
       old.skin != skin || old.rimWidth != rimWidth;
+}
+
+/// La carta come oggetto: la cornice del materiale, il giocatore dietro la targa bassa
+/// (che lo taglia, come nelle carte da collezione), le scritte e i bordi.
+class CardFrame extends StatelessWidget {
+  const CardFrame({
+    super.key,
+    required this.skin,
+    required this.child,
+    this.figure,
+    this.rimWidth = 2.4,
+    this.decodeWidth,
+  });
+  final CardSkin skin;
+
+  /// Il giocatore (foto o omino), già al suo posto: sta sopra il fondo e sotto la targa.
+  final Widget? figure;
+
+  /// Scritte, numeri e stemma.
+  final Widget child;
+  final double rimWidth;
+
+  /// Larghezza in pixel a cui decodificare la cornice (carte piccole).
+  final int? decodeWidth;
+
+  /// Dove comincia l'immagine della targa (frazione dell'altezza della carta); il suo
+  /// bordo curvo sta poco più sotto, a [plateEdge] al centro.
+  static const plateTop = 250 / 430;
+  static const plateEdge = 258 / 430;
+
+  Widget _layer(String asset) => Image.asset(
+    asset,
+    fit: BoxFit.fill,
+    cacheWidth: decodeWidth,
+    gaplessPlayback: true,
+    excludeFromSemantics: true,
+    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+  );
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: CardSkinPainter(skin),
+    foregroundPainter: CardRimPainter(skin, rimWidth: rimWidth),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        ClipPath(
+          clipper: const FutCardClipper(),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _layer(skin.background),
+              ?figure,
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: FractionallySizedBox(
+                  widthFactor: 1,
+                  heightFactor: 1 - plateTop,
+                  child: _layer(skin.plate),
+                ),
+              ),
+            ],
+          ),
+        ),
+        child,
+      ],
+    ),
+  );
 }

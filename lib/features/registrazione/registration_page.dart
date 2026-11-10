@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
+import '../../core/auth/signup_gate.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/haptics.dart';
@@ -40,7 +41,10 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   bool _saving = false;
   bool _prefilled = false;
 
-  // Passo 1.
+  // Passo 1. La password del club la scrive solo chi non l'ha data creando l'account.
+  final _clubPassword = TextEditingController();
+  bool _clubHidden = true;
+  String? _clubError;
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _cardName = TextEditingController();
@@ -68,6 +72,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   void dispose() {
     _pages.dispose();
     for (final c in [
+      _clubPassword,
       _firstName,
       _lastName,
       _cardName,
@@ -104,6 +109,13 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   String? _validateStep(int step) {
     switch (step) {
       case 0:
+        switch (ref.read(mySignupGateProvider).value) {
+          case SignupStatus.closed:
+            return signupsClosedText;
+          case SignupStatus.password when _clubPassword.text.isEmpty:
+            return 'Scrivi la password del club: te la dà il Direttivo.';
+          default:
+        }
         if (_firstName.text.trim().isEmpty) return 'Scrivi il tuo nome.';
         if (_lastName.text.trim().isEmpty) return 'Scrivi il tuo cognome.';
         final year = int.tryParse(_birthYear.text.trim());
@@ -179,6 +191,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     fieldPosition: _position!,
     shirtNumber: int.tryParse(_number.text.trim()),
     platform: _platform,
+    clubPassword: _clubPassword.text,
   );
 
   Future<void> _complete() async {
@@ -196,7 +209,15 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
       await ref.read(registrationRepositoryProvider).complete(_data);
     } catch (e) {
       if (!mounted) return;
-      if (isDirettivoPasswordError(e)) {
+      if (isClubPasswordError(e)) {
+        // Si torna al passo 1, sul campo della password del club.
+        setState(() {
+          _step = 0;
+          _clubError = friendlyRegistrationError(e);
+        });
+        _pages.jumpToPage(0);
+        ref.invalidate(mySignupGateProvider);
+      } else if (isDirettivoPasswordError(e)) {
         // Si torna al passo 2, sul campo della password.
         setState(() {
           _step = 1;
@@ -343,7 +364,36 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   );
 
   Widget _stepWho() {
+    final gate = ref.watch(mySignupGateProvider).value;
     return _frame(1, [
+      if (gate == SignupStatus.closed) ...[
+        const _GateNotice(signupsClosedText),
+        const SizedBox(height: 16),
+      ] else if (gate == SignupStatus.password || _clubError != null) ...[
+        LabeledField(
+          label: 'Password del club',
+          help: 'Te la dà il Direttivo: serve una volta sola, per entrare nel club.',
+          child: TextField(
+            controller: _clubPassword,
+            obscureText: _clubHidden,
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) {
+              if (_clubError != null) setState(() => _clubError = null);
+            },
+            decoration: InputDecoration(
+              errorText: _clubError,
+              errorMaxLines: 3,
+              suffixIcon: ShowPasswordButton(
+                hidden: _clubHidden,
+                onPressed: () => setState(() => _clubHidden = !_clubHidden),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+      ],
       const _Legend(
         'Chi sei?',
         text:
@@ -628,7 +678,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   ]);
 }
 
-/// La foto appena caricata, o la sagoma grigia.
+/// La foto appena caricata, o l'omino del club.
 class _PhotoPreview extends ConsumerWidget {
   const _PhotoPreview({required this.path});
   final String? path;
@@ -636,10 +686,7 @@ class _PhotoPreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final photo = photoOf(ref, path);
-    const shape = PlayerSilhouette(
-      background: MilanacColors.surfaceHigh,
-      color: MilanacColors.ivoryMuted,
-    );
+    const shape = PlayerOmino(background: MilanacColors.surfaceHigh);
     return photo == null
         ? shape
         : Image(
@@ -886,9 +933,8 @@ class _CardNamePreview extends ConsumerWidget {
                   fit: BoxFit.cover,
                   alignment: photoAlignment,
                 ),
-                null => const PlayerSilhouette(
+                null => const PlayerOmino(
                   background: MilanacColors.surfaceHigh,
-                  color: MilanacColors.ivoryMuted,
                 ),
               },
             ),
@@ -906,6 +952,38 @@ class _CardNamePreview extends ConsumerWidget {
                 letterSpacing: 2,
                 color: HeroText.accent,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Avviso in testa al primo passo (iscrizioni chiuse).
+class _GateNotice extends StatelessWidget {
+  const _GateNotice(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: p.surfaceHigher,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: p.importantBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lock_outline_rounded, size: 20, color: p.accentText),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: p.text, fontSize: 15, height: 1.35),
             ),
           ),
         ],

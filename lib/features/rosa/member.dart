@@ -28,6 +28,7 @@ class Member {
     this.playStyles = const [],
     this.platform,
     this.avatarPath,
+    this.avatarCutoutPath,
     this.birthDate,
     this.city,
     this.nationality,
@@ -74,6 +75,11 @@ class Member {
   /// Dati del profilo (Impostazioni): foto caricata dalla galleria (l'unica immagine del
   /// membro nell'app), nascita, città, nazionalità, piede.
   final String? avatarPath;
+
+  /// La stessa foto senza lo sfondo (la prepara il server dopo il caricamento, vedi
+  /// tools/ritaglio_foto): sulla carta prende il posto della foto intera. null finché
+  /// non è pronta.
+  final String? avatarCutoutPath;
   final DateTime? birthDate;
   final String? city;
 
@@ -175,6 +181,8 @@ class Member {
     avatarPath: identical(avatarPath, _same)
         ? this.avatarPath
         : avatarPath as String?,
+    // Il ritaglio vale per quella foto: cambiandola si aspetta quello nuovo.
+    avatarCutoutPath: identical(avatarPath, _same) ? avatarCutoutPath : null,
     birthDate: identical(birthDate, _same)
         ? this.birthDate
         : birthDate as DateTime?,
@@ -222,6 +230,8 @@ class Member {
     ],
     platform: GamePlatform.values.asNameMap()[m['platform']],
     avatarPath: m['avatar_path'] as String?,
+    // Prima della migrazione 0038 la colonna non c'è: nessun ritaglio.
+    avatarCutoutPath: m['avatar_cutout_path'] as String?,
     birthDate: m['birth_date'] == null
         ? null
         : DateTime.parse(m['birth_date'] as String),
@@ -267,6 +277,9 @@ class Member {
     playStyles: playStyles,
     platform: platform,
     avatarPath: avatarPath ?? this.avatarPath,
+    avatarCutoutPath: avatarPath == null || avatarPath == this.avatarPath
+        ? avatarCutoutPath
+        : null,
     birthDate: birthDate,
     city: city,
     nationality: nationality,

@@ -7,6 +7,7 @@ import '../../core/appearance.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/notify_prefs.dart';
 import '../../core/auth/providers.dart';
+import '../../core/auth/signup_gate.dart';
 import '../../core/config.dart';
 import '../../core/errors.dart';
 import '../../core/haptics.dart';
@@ -158,6 +159,30 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
           .read(registrationRepositoryProvider)
           .changeDirettivoPassword(result.$1, result.$2);
       if (mounted) _toast('Password del Direttivo aggiornata.');
+    } catch (e) {
+      if (mounted) _toast(friendlyRegistrationError(e));
+    }
+  }
+
+  /// Password di iscrizione al club: il Direttivo la imposta, la cambia o chiude le
+  /// iscrizioni togliendola.
+  Future<void> _changeSignupPassword() async {
+    final set = ref.read(signupStatusProvider).value == SignupStatus.password;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => _SignupPasswordDialog(alreadySet: set),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await ref.read(signupGateRepositoryProvider).setPassword(result);
+      ref.invalidate(signupStatusProvider);
+      if (mounted) {
+        _toast(
+          result.isEmpty
+              ? 'Iscrizioni chiuse: nessuno può creare un account.'
+              : 'Password di iscrizione salvata: dalla ai nuovi a voce.',
+        );
+      }
     } catch (e) {
       if (mounted) _toast(friendlyRegistrationError(e));
     }
@@ -330,11 +355,22 @@ class _ImpostazioniPageState extends ConsumerState<ImpostazioniPage> {
                 _Group(
                   children: [
                     _Row(title: 'Cambia password', onTap: _changePassword),
-                    if (me?.isDirettivo ?? false)
+                    if (me?.isDirettivo ?? false) ...[
                       _Row(
                         title: 'Password del Direttivo',
                         onTap: _changeDirettivoPassword,
                       ),
+                      _Row(
+                        title: 'Password di iscrizione',
+                        detail: switch (ref.watch(signupStatusProvider).value) {
+                          SignupStatus.password => 'Impostata',
+                          SignupStatus.closed => 'Iscrizioni chiuse',
+                          SignupStatus.open => 'Non richiesta',
+                          null => null,
+                        },
+                        onTap: _changeSignupPassword,
+                      ),
+                    ],
                     _Row(
                       title: 'Privacy',
                       onTap: () => Navigator.of(context).push(
@@ -490,7 +526,6 @@ class _PhotoThumb extends StatelessWidget {
       member: member,
       radius: 13.5,
       background: MilanacColors.surfaceHigh,
-      foreground: MilanacColors.ivoryMuted,
     ),
   );
 }
@@ -916,4 +951,110 @@ class _PasswordDialogState extends State<_PasswordDialog> {
       FilledButton(onPressed: _ok, child: const Text('Cambia')),
     ],
   );
+}
+
+/// Password di iscrizione al club (quella che i nuovi scrivono per creare l'account):
+/// restituisce la nuova password, oppure una stringa vuota per chiudere le iscrizioni.
+class _SignupPasswordDialog extends StatefulWidget {
+  const _SignupPasswordDialog({required this.alreadySet});
+
+  /// C'è già una password: si può anche togliere (iscrizioni chiuse).
+  final bool alreadySet;
+
+  @override
+  State<_SignupPasswordDialog> createState() => _SignupPasswordDialogState();
+}
+
+class _SignupPasswordDialogState extends State<_SignupPasswordDialog> {
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _hidden = true;
+
+  @override
+  void dispose() {
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  void _warn(String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+
+  void _ok() {
+    if (_next.text.length < 8) {
+      _warn('La password deve avere almeno 8 caratteri.');
+      return;
+    }
+    if (_next.text.length > 72) {
+      _warn('La password può avere al massimo 72 caratteri.');
+      return;
+    }
+    if (_next.text != _confirm.text) {
+      _warn('Le due password non coincidono.');
+      return;
+    }
+    Navigator.pop(context, _next.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return AlertDialog(
+      title: const Text('Password di iscrizione'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Chi vuole creare un account (dall\'app o dal sito) deve scriverla. '
+              'Dalla solo a chi entra nel club; se gira troppo, cambiala qui.',
+              style: TextStyle(fontSize: 14, color: p.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _next,
+              obscureText: _hidden,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(
+                labelText: 'Nuova password (almeno 8 caratteri)',
+                suffixIcon: IconButton(
+                  tooltip: _hidden ? 'Mostra' : 'Nascondi',
+                  icon: Icon(
+                    _hidden
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                  onPressed: () => setState(() => _hidden = !_hidden),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _confirm,
+              obscureText: _hidden,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: const InputDecoration(labelText: 'Ripetila'),
+            ),
+          ],
+        ),
+      ),
+      actionsOverflowButtonSpacing: 4,
+      actions: [
+        if (widget.alreadySet)
+          TextButton(
+            onPressed: () => Navigator.pop(context, ''),
+            style: TextButton.styleFrom(foregroundColor: p.danger),
+            child: const Text('Chiudi le iscrizioni'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annulla'),
+        ),
+        FilledButton(onPressed: _ok, child: const Text('Salva')),
+      ],
+    );
+  }
 }

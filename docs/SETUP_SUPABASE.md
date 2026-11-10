@@ -33,6 +33,10 @@ In alternativa, a mano: SQL Editor → incolla ed esegui in ordine i file di `su
 ```
 com.milanacproclub.milanac://login-callback
 ```
+Per la web app (`docs/SITO.md`) servono anche `https://milanacproclub.vercel.app/app/` e
+`https://milanacproclub.vercel.app/app`: li aggiunge da solo il workflow **Database**
+(`tools/db/auth_urls.py`, con il secret `SUPABASE_ACCESS_TOKEN`). Senza quel secret vanno
+aggiunti a mano qui.
 
 ## 3. Google
 1. https://console.cloud.google.com → nuovo progetto "MILANAC"
@@ -83,7 +87,8 @@ per le prove (pochi messaggi all'ora). Serve un servizio SMTP gratuito, per esem
    deve essere tra i *Redirect URLs* (serve anche ai link di conferma e di recupero password).
 
 ## 8. Password del Direttivo
-Chi si registra scegliendo "Faccio parte del Direttivo" deve inserire la **password del club**.
+Chi si registra scegliendo "Faccio parte del Direttivo" deve inserire la **password del Direttivo**
+(è un'altra cosa rispetto alla password di iscrizione, qui sotto).
 Nel database c'è solo il suo hash (`app_config`, chiave `direttivo_password_hash`).
 
 > **Cambiala subito.** La password iniziale impostata dalla migrazione `0016` è scritta nella
@@ -102,6 +107,22 @@ Dopo il cambio controlla in Sala Direttivo → Rosa e squadre che nel Direttivo 
 nessuno che non conosci. Non serve più nominare il primo Direttivo a mano: basta registrarsi
 con la password.
 
+## 8b. Password di iscrizione (chi può creare un account)
+Per creare un account, dall'app o dalla web app, serve la **password del club** che il Direttivo
+dà a voce a chi entra (migrazione `0037`). Nel database c'è solo cifrata (`app_config`, chiave
+`signup_password_hash`): non sta in nessun file del repository, che è pubblico.
+
+- **Finché non è impostata le iscrizioni sono chiuse**: nessuno può creare un account né
+  completare la registrazione. Chi è già nel club continua a entrare come prima.
+- **Impostarla o cambiarla** (solo Direttivo): Impostazioni → Account → *Password di
+  iscrizione*. Da lì si possono anche chiudere le iscrizioni. Almeno 8 caratteri.
+- Chi si registra con email la scrive nella schermata di accesso, creando l'account. Chi entra
+  con Google, Microsoft, Yahoo o Apple la scrive al primo passo della registrazione.
+- Dopo 5 errori dalla stessa origine si aspettano 15 minuti.
+- Se gira troppo, cambiala: chi ha già l'account non deve riscriverla.
+- Solo in emergenza, dall'SQL Editor: `insert into public.app_config (key, value) values
+  ('signup_mode', 'aperte')` toglie il controllo; cancellando quella riga torna.
+
 ## 9. Azzeramento dei dati
 La migrazione `0016` svuota presenze, formazioni, eventi, risultati, trofei, tattiche, chat e tornei,
 e riporta tutti i profili alla registrazione: ogni membro ripassa dai tre passi e dal regolamento.
@@ -119,6 +140,24 @@ I file nei bucket (foto, clip, trofei) non vengono cancellati: se servono spazio
 
 > Nota: le esecuzioni programmate partono solo dal branch principale (`main`):
 > il workflow si attiva da solo dopo il merge della pull request.
+
+## 10b. Foto ritagliate per le carte (GitHub Actions)
+Sulle carte il giocatore compare senza lo sfondo della sua foto. Il ritaglio lo fa il workflow
+**Ritagli** (`tools/ritaglio_foto/ritaglia.py`), con lo stesso secret `SUPABASE_SECRET_KEY`
+delle notizie: non c'è altro da configurare.
+
+- Parte da solo ogni 15 minuti. Se non ci sono foto nuove finisce in pochi secondi; se ce ne
+  sono le ritaglia (una ventina di secondi a foto, al massimo 20 per esecuzione) e salva il
+  risultato accanto alla foto, nel bucket `avatars` (`profiles.avatar_cutout_path`).
+- Nel frattempo, e per le foto che non si riescono a ritagliare bene (nessuna persona
+  riconosciuta, contorno incerto), la carta mostra la foto intera. Le foto scartate stanno in
+  `cutout_failures` con il motivo e non si riprovano; caricando un'altra foto si riparte.
+- Per rifare un ritaglio: `update profiles set avatar_cutout_path = null where id = '…';` e, se
+  era stata scartata, `delete from cutout_failures where avatar_path = '…';`.
+- Per provarlo senza salvare nulla: **Actions → Ritagli → Run workflow** con *Prova senza
+  salvare*. Nel log compaiono solo numeri, mai nomi o percorsi (i log sono pubblici).
+- La foto viene scaricata sul server temporaneo di GitHub solo per il tempo del ritaglio
+  (è scritto nell'informativa dell'app). Per spegnerlo: **Actions → Ritagli → Disable workflow**.
 
 ## 11. Lavori automatici delle presenze (pg_cron)
 La migrazione `0017` attiva l'estensione **pg_cron** e programma `attendance_tick()` ogni minuto:

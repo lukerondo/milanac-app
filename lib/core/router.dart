@@ -89,6 +89,9 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/intro',
     refreshListenable: refresh,
+    // Indirizzo che non esiste (scritto a mano nel browser, link vecchio): alla Home,
+    // che poi rimanda dove serve (intro, accesso, ...).
+    onException: (_, _, router) => router.go('/'),
     redirect: (context, state) {
       final moved = _movedPaths[state.uri.path];
       if (moved != null) return moved;

@@ -27,8 +27,9 @@ void rememberPhoto(String path, Uint8List bytes) {
 
 /// Copia sul telefono delle foto dei membri, nella cartella della cache (fuori dai
 /// backup, il sistema può svuotarla): il percorso nel bucket cambia a ogni foto nuova
-/// (`<id>/foto_<ms>.jpg`), quindi una foto salvata vale finché è quella del membro e
-/// non si riscarica a ogni avvio (e si vede anche senza rete).
+/// (`<id>/foto_<ms>.jpg`, e `<id>/ritaglio_<ms>.webp` per la figura senza sfondo),
+/// quindi una foto salvata vale finché è quella del membro e non si riscarica a ogni
+/// avvio (e si vede anche senza rete).
 class PhotoDiskCache {
   @visibleForTesting
   static Future<Directory> Function() directory = () async =>
@@ -36,13 +37,30 @@ class PhotoDiskCache {
 
   static String _name(String path) => path.replaceAll('/', '_');
 
-  /// Un JPEG intero (inizio e fine): un file scritto a metà si butta.
-  static bool _whole(Uint8List b) =>
+  /// Un'immagine intera: un file scritto a metà si butta. JPEG (inizio e fine) per le
+  /// foto, WebP (intestazione con la lunghezza dichiarata) per i ritagli.
+  static bool _whole(Uint8List b) => _wholeJpeg(b) || wholeWebp(b);
+
+  static bool _wholeJpeg(Uint8List b) =>
       b.length > 4 &&
       b[0] == 0xFF &&
       b[1] == 0xD8 &&
       b[b.length - 2] == 0xFF &&
       b[b.length - 1] == 0xD9;
+
+  /// "RIFF" + lunghezza (tutto il file meno 8 byte) + "WEBP".
+  @visibleForTesting
+  static bool wholeWebp(Uint8List b) =>
+      b.length > 12 &&
+      b[0] == 0x52 &&
+      b[1] == 0x49 &&
+      b[2] == 0x46 &&
+      b[3] == 0x46 &&
+      b[8] == 0x57 &&
+      b[9] == 0x45 &&
+      b[10] == 0x42 &&
+      b[11] == 0x50 &&
+      (b[4] | b[5] << 8 | b[6] << 16 | b[7] << 24) + 8 == b.length;
 
   static Future<Uint8List?> read(String path) async {
     try {
@@ -58,14 +76,16 @@ class PhotoDiskCache {
   }
 
   /// Salva la foto (prima in un file temporaneo, poi rinominato: mai a metà) e toglie
-  /// quelle vecchie dello stesso membro.
+  /// quelle vecchie dello stesso membro e dello stesso tipo (foto o ritaglio).
   static Future<void> write(String path, Uint8List bytes) async {
     if (!_whole(bytes)) return;
     try {
       final dir = await directory();
       await dir.create(recursive: true);
       final name = _name(path);
-      final owner = '${name.split('_').first}_';
+      // "<id>_foto_" o "<id>_ritaglio_": la foto nuova non butta il ritaglio, né
+      // il contrario.
+      final owner = name.substring(0, name.lastIndexOf('_') + 1);
       await for (final e in dir.list()) {
         final other = e.uri.pathSegments.last;
         if (other.startsWith(owner) &&
@@ -193,20 +213,18 @@ ImageProvider? photoOf(WidgetRef ref, String? avatarPath, {int? cacheWidth}) {
 ImageProvider? memberPhoto(WidgetRef ref, Member m, {int? cacheWidth}) =>
     photoOf(ref, m.avatarPath, cacheWidth: cacheWidth);
 
-/// Avatar tondo con la foto del membro; senza foto la sagoma grigia (come sulle carte).
-/// [background] e [foreground] per i fondi sempre scuri.
+/// Avatar tondo con la foto del membro; senza foto l'omino del club (come sulle carte).
+/// [background] per i fondi sempre scuri.
 class MemberAvatar extends ConsumerWidget {
   const MemberAvatar({
     super.key,
     required this.member,
     this.radius = 22,
     this.background,
-    this.foreground,
   });
   final Member member;
   final double radius;
   final Color? background;
-  final Color? foreground;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -221,19 +239,14 @@ class MemberAvatar extends ConsumerWidget {
       child: SizedBox.square(
         dimension: radius * 2,
         child: photo == null
-            ? PlayerSilhouette(
-                background: background ?? p.surfaceHigher,
-                color: foreground ?? p.textSecondary,
-              )
+            ? PlayerOmino(background: background ?? p.surfaceHigher)
             : Image(
                 image: photo,
                 fit: BoxFit.cover,
                 alignment: photoAlignment,
                 gaplessPlayback: true,
-                errorBuilder: (_, _, _) => PlayerSilhouette(
-                  background: background ?? p.surfaceHigher,
-                  color: foreground ?? p.textSecondary,
-                ),
+                errorBuilder: (_, _, _) =>
+                    PlayerOmino(background: background ?? p.surfaceHigher),
               ),
       ),
     );

@@ -398,7 +398,6 @@ class _CardWinner extends StatelessWidget {
                   member: m,
                   radius: 20,
                   background: CardColors.portrait,
-                  foreground: HeroText.primary,
                 ),
         ),
         const SizedBox(height: 4),
