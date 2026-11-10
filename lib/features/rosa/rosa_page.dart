@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/profile.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/async_view.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
@@ -52,6 +53,9 @@ class RosaViewButton extends ConsumerWidget {
 
 class RosaPage extends ConsumerStatefulWidget {
   const RosaPage({super.key});
+
+  /// Larghezza massima della griglia di carte sugli schermi larghi.
+  static const cardsWidth = 1080.0;
 
   @override
   ConsumerState<RosaPage> createState() => _RosaPageState();
@@ -116,104 +120,111 @@ class _RosaPageState extends ConsumerState<RosaPage> {
           ..sort((a, b) => (b.overall ?? 0).compareTo(a.overall ?? 0));
         int count(Team? t) => members.where((m) => m.inTeam(t)).length;
 
-        return Column(
-          children: [
-            // Ricerca e filtri restano in alto mentre la rosa scorre.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _search,
-                    textInputAction: TextInputAction.search,
-                    style: const TextStyle(fontSize: 16),
-                    decoration: InputDecoration(
-                      hintText: 'Nome, cognome o gamertag',
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Cancella',
-                              icon: const Icon(Icons.close_rounded),
-                              onPressed: _search.clear,
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilterPill(
-                        label: 'Tutte · ${count(null)}',
-                        selected: _team == null,
-                        onTap: () => setState(() => _team = null),
+        // Sugli schermi larghi le carte usano tutta la larghezza che la sezione
+        // concede; l'elenco resta una colonna leggibile.
+        return ContentWidth(
+          maxWidth: view == RosaView.carte ? RosaPage.cardsWidth : null,
+          child: Column(
+            children: [
+              // Ricerca e filtri restano in alto mentre la rosa scorre.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _search,
+                      textInputAction: TextInputAction.search,
+                      style: const TextStyle(fontSize: 16),
+                      decoration: InputDecoration(
+                        hintText: 'Nome, cognome o gamertag',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        suffixIcon: _query.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Cancella',
+                                icon: const Icon(Icons.close_rounded),
+                                onPressed: _search.clear,
+                              ),
                       ),
-                      for (final t in Team.values)
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
                         FilterPill(
-                          label: '${teamPillLabel(t)} · ${count(t)}',
-                          selected: _team == t,
-                          onTap: () => setState(() => _team = t),
+                          label: 'Tutte · ${count(null)}',
+                          selected: _team == null,
+                          onTap: () => setState(() => _team = null),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      FilterPill(
-                        label: 'Tutti',
-                        square: true,
-                        selected: _reparto == null,
-                        onTap: () => setState(() => _reparto = null),
-                      ),
-                      for (final r in reparti)
-                        Tooltip(
-                          message: repartoLabels[r],
-                          child: FilterPill(
-                            label: r,
-                            square: true,
-                            selected: _reparto == r,
-                            onTap: () => setState(() => _reparto = r),
+                        for (final t in Team.values)
+                          FilterPill(
+                            label: '${teamPillLabel(t)} · ${count(t)}',
+                            selected: _team == t,
+                            onTap: () => setState(() => _team = t),
                           ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        FilterPill(
+                          label: 'Tutti',
+                          square: true,
+                          selected: _reparto == null,
+                          onTap: () => setState(() => _reparto = null),
                         ),
-                    ],
-                  ),
-                ],
+                        for (final r in reparti)
+                          Tooltip(
+                            message: repartoLabels[r],
+                            child: FilterPill(
+                              label: r,
+                              square: true,
+                              selected: _reparto == r,
+                              onTap: () => setState(() => _reparto = r),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                children: [
-                  if (shown.isEmpty)
-                    AppCard(
-                      child: Text(
-                        'Nessun membro corrisponde ai filtri.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 15, color: p.textMuted),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                  children: [
+                    if (shown.isEmpty)
+                      AppCard(
+                        child: Text(
+                          'Nessun membro corrisponde ai filtri.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 15, color: p.textMuted),
+                        ),
+                      )
+                    else if (view == RosaView.carte) ...[
+                      MiniCardGrid(
+                        members: byOverall,
+                        onTap: (m) => openPlayerCard(context, m.id),
                       ),
-                    )
-                  else if (view == RosaView.carte) ...[
-                    MiniCardGrid(
-                      members: byOverall,
-                      onTap: (m) => openPlayerCard(context, m.id),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Tocca una carta per aprire il profilo del giocatore.',
-                      style: TextStyle(fontSize: 14, color: p.textMuted),
-                    ),
-                  ] else
-                    ..._list(shown),
-                ],
+                      const SizedBox(height: 12),
+                      Text(
+                        'Tocca una carta per aprire il profilo del giocatore.',
+                        style: TextStyle(fontSize: 14, color: p.textMuted),
+                      ),
+                    ] else
+                      ..._list(shown),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

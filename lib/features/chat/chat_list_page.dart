@@ -18,7 +18,14 @@ export 'chat_search_page.dart'
 /// l'ultimo messaggio, l'ora e i non letti. La ricerca nei messaggi è l'azione
 /// [ChatSearchButton] della barra in alto.
 class ChatListPage extends ConsumerWidget {
-  const ChatListPage({super.key});
+  const ChatListPage({super.key, this.selectedSlug, this.onOpen});
+
+  /// Il canale aperto accanto all'elenco (schermi larghi): la sua riga è evidenziata.
+  final String? selectedSlug;
+
+  /// Cosa fare quando si sceglie un canale; di solito si apre la conversazione a
+  /// schermo intero.
+  final ValueChanged<Channel>? onOpen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,6 +67,10 @@ class ChatListPage extends ConsumerWidget {
                       overview: overview[c.id] ?? const ChannelOverview(),
                       muted: muted.contains(c.id),
                       roomOpen: rooms.contains(c.id),
+                      selected: c.slug == selectedSlug,
+                      onTap: () => onOpen != null
+                          ? onOpen!(c)
+                          : context.push('/chat/${c.slug}'),
                     ),
                   ],
                 ],
@@ -79,11 +90,17 @@ class _ChannelRow extends StatelessWidget {
     required this.overview,
     required this.muted,
     required this.roomOpen,
+    required this.selected,
+    required this.onTap,
   });
   final Channel channel;
   final ChannelOverview overview;
   final bool muted;
   final bool roomOpen;
+
+  /// È il canale aperto accanto all'elenco.
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -91,8 +108,8 @@ class _ChannelRow extends StatelessWidget {
     final o = overview;
     final unread = o.unread > 0;
     final last = o.lastAt;
-    return InkWell(
-      onTap: () => context.push('/chat/${channel.slug}'),
+    final row = InkWell(
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
@@ -176,6 +193,7 @@ class _ChannelRow extends StatelessWidget {
         ),
       ),
     );
+    return selected ? Ink(color: p.accentTint, child: row) : row;
   }
 }
 

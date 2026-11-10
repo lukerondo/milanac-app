@@ -9,11 +9,13 @@ import 'core/auth/providers.dart';
 import 'core/config.dart';
 import 'core/errors.dart';
 import 'core/haptics.dart';
+import 'core/push/browser_notifications.dart';
 import 'core/push/device_tokens.dart';
 import 'core/push/push_service.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 import 'features/musica/soundtrack.dart';
+import 'shared/wide_layout.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,15 +40,22 @@ class MilanacApp extends ConsumerWidget {
     PushService.instance.onOpenRoute = router.go;
 
     // Notifiche del club solo per i membri approvati.
-    ref.listen(profileProvider, (_, next) {
+    ref.listen(profileProvider, (previous, next) {
       final profile = next.value;
       final tokens = ref.read(deviceTokensProvider);
+      final browser = ref.read(browserNotificationsProvider.notifier);
       if (profile?.isApproved ?? false) {
         PushService.instance.subscribe(onToken: tokens.save);
+        // Nel browser: una volta per ingresso, non a ogni aggiornamento del profilo.
+        if (!(previous?.value?.isApproved ?? false)) browser.sync();
       } else if (next.hasValue && profile == null) {
         PushService.instance.unsubscribe(onRemoveToken: tokens.remove);
+        browser.release();
       }
     });
+    // Le notifiche del browser ascoltano da subito: un clic su una notifica apre la
+    // sua sezione anche se l'app si sta ancora avviando.
+    ref.listen(browserNotificationsProvider, (_, _) {});
 
     // Musica di sottofondo: resta attiva per tutta la vita dell'app.
     ref.listen(soundtrackProvider, (_, _) {});
@@ -61,6 +70,9 @@ class MilanacApp extends ConsumerWidget {
       themeMode: ref.watch(appearanceProvider).mode,
       routerConfig: router,
       scaffoldMessengerKey: messengerKey,
+      // Sugli schermi larghi gli avvisi in basso (anche quelli delle notifiche) sono
+      // una striscia al centro, su tutte le pagine.
+      builder: (_, child) => WideSnackBars(child: child!),
       locale: const Locale('it'),
       supportedLocales: const [Locale('it'), Locale('en')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,

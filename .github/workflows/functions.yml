@@ -6,9 +6,17 @@ name: Funzioni
 # AGORA_APP_ID e AGORA_APP_CERTIFICATE sono facoltativi: senza, la stanza vocale resta spenta.
 # Si possono mettere come secret di GitHub oppure incollare nel modulo "Run workflow":
 # in entrambi i casi finiscono solo tra i segreti delle funzioni su Supabase.
+# Le chiavi delle notifiche nel browser (VAPID) le genera questo workflow la prima volta:
+# la privata va solo tra i segreti della funzione notify, la pubblica nel database
+# (app_config, vapid_public_key), da dove la legge la web app.
 on:
   workflow_dispatch:
     inputs:
+      rigenera_chiavi_notifiche:
+        description: "Rigenera le chiavi delle notifiche nel browser (i browser si iscrivono di nuovo da soli alla prossima apertura)"
+        required: false
+        type: boolean
+        default: false
       agora_app_id:
         description: "App ID di Agora (facoltativo: se vuoto si usa il secret AGORA_APP_ID)"
         required: false
@@ -19,7 +27,7 @@ on:
         type: string
   push:
     branches: [main, claude/cloud-credits-private-repo-gqfxlp]
-    paths: [supabase/functions/**, .github/workflows/functions.yml]
+    paths: [supabase/functions/**, tools/web/vapid_keys.sh, .github/workflows/functions.yml]
 
 concurrency: functions
 
@@ -69,6 +77,28 @@ jobs:
           else
             echo "Stanza vocale: segreti Agora non indicati; restano quelli già su Supabase, se mai impostati."
           fi
+          # Notifiche nel browser: le chiavi si generano una volta sola. Se la pubblica è già
+          # nel database la coppia resta quella (la privata è tra i segreti della funzione e
+          # non si può rileggere): rigenerarla staccherebbe i browser già iscritti.
+          # Due passi separati: se la domanda al database non riesce il workflow si ferma qui,
+          # invece di credere che la chiave manchi e generarne un'altra.
+          RISPOSTA=$(curl -fsS -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
+            -H "User-Agent: milanac-deploy/1.0" \
+            -d "{\"query\": \"select value from public.app_config where key = 'vapid_public_key'\"}")
+          ESISTENTE=$(printf '%s' "$RISPOSTA" | jq -r 'if type == "array" then (.[0].value // empty) else error("risposta inattesa") end')
+          RIGENERA=$(jq -r '.inputs.rigenera_chiavi_notifiche // false' "$GITHUB_EVENT_PATH")
+          if [ -z "$ESISTENTE" ] || [ "$RIGENERA" = "true" ]; then
+            CHIAVI=$(bash tools/web/vapid_keys.sh)
+            VAPID_PRIVATE_KEY=$(printf '%s\n' "$CHIAVI" | sed -n 's/^VAPID_PRIVATE_KEY=//p')
+            VAPID_PUBLIC_KEY=$(printf '%s\n' "$CHIAVI" | sed -n 's/^VAPID_PUBLIC_KEY=//p')
+            echo "::add-mask::$VAPID_PRIVATE_KEY"
+            ARGS+=(VAPID_PRIVATE_KEY="$VAPID_PRIVATE_KEY" VAPID_PUBLIC_KEY="$VAPID_PUBLIC_KEY")
+            echo "VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY" >> "$GITHUB_ENV"
+            echo "Notifiche nel browser: chiavi nuove generate."
+          else
+            echo "Notifiche nel browser: chiavi già presenti, restano quelle."
+          fi
           supabase secrets set --project-ref "$REF" "${ARGS[@]}"
       - name: Pubblica le funzioni
         run: |
@@ -78,12 +108,21 @@ jobs:
         run: |
           python3 - <<'PY'
           import json, os, urllib.request
+          import re
           ref, secret = os.environ["REF"], os.environ["WEBHOOK_SECRET"]
           url = f"https://{ref}.supabase.co/functions/v1/notify"
+          values = [("notify_url", url), ("notify_secret", secret)]
+          # Chiave pubblica delle notifiche nel browser, solo se appena generata (la privata è
+          # già tra i segreti della funzione: scritta qui dopo, le due restano sempre in coppia).
+          vapid = os.environ.get("VAPID_PUBLIC_KEY", "")
+          if vapid:
+              if not re.fullmatch(r"[A-Za-z0-9_-]{87}", vapid):
+                  raise SystemExit("Chiave pubblica delle notifiche non valida")
+              values.append(("vapid_public_key", vapid))
+          rows = ", ".join(f"('{k}', '{v}')" for k, v in values)
           sql = ("create table if not exists public.app_config (key text primary key, value text not null); "
                  "alter table public.app_config enable row level security; "
-                 "insert into public.app_config(key, value) values "
-                 f"('notify_url', '{url}'), ('notify_secret', '{secret}') "
+                 f"insert into public.app_config(key, value) values {rows} "
                  "on conflict (key) do update set value = excluded.value;")
           req = urllib.request.Request(
               f"https://api.supabase.com/v1/projects/{ref}/database/query",
@@ -92,4 +131,6 @@ jobs:
                        "Content-Type": "application/json", "User-Agent": "milanac-deploy/1.0"})
           urllib.request.urlopen(req, timeout=60).read()
           print("Database collegato alla funzione notify.")
+          if vapid:
+              print("Chiave pubblica delle notifiche nel browser scritta nel database.")
           PY

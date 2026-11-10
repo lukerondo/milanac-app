@@ -7,11 +7,13 @@ import '../../core/auth/profile.dart';
 import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/async_view.dart';
 import '../../shared/gold_loader.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/shared_links.dart';
 import '../../shared/ui.dart';
+import '../../shared/wide_layout.dart';
 import '../carta/card_colors.dart';
 import '../carta/card_stats.dart';
 import '../carte/assign_cards_sheet.dart';
@@ -127,6 +129,21 @@ class _MatchScaffold extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final details = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (match.timeline.isEmpty)
+            _ScorersCard(match: match)
+          else
+            MatchTimelineCard(match: match),
+          _SpecialCardsCard(match: match, isDirettivo: isDirettivo),
+          _MediaSection(match: match, isDirettivo: isDirettivo),
+          if (isDirettivo) _DirettivoActions(match: match),
+        ],
+      ),
+    );
     return Scaffold(
       appBar: _bar(
         context,
@@ -158,21 +175,19 @@ class _MatchScaffold extends ConsumerWidget {
         children: [
           TvScoreHeader(match: match),
           const GoldFadeLine(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (match.timeline.isEmpty)
-                  _ScorersCard(match: match)
-                else
-                  MatchTimelineCard(match: match),
-                _SpecialCardsCard(match: match, isDirettivo: isDirettivo),
-                _MediaSection(match: match, isDirettivo: isDirettivo),
-                if (isDirettivo) _DirettivoActions(match: match),
-              ],
-            ),
-          ),
+          // Sugli schermi larghi cronaca, carte e video restano una colonna
+          // leggibile al centro, sotto il tabellone a tutta larghezza.
+          if (isWideLayout(context))
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: ContentWidth.maxWidth,
+                ),
+                child: details,
+              ),
+            )
+          else
+            details,
         ],
       ),
     );

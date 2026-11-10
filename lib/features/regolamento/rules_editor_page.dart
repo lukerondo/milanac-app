@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show WideContentWidth;
 import '../../shared/async_view.dart';
 import '../../shared/ui.dart';
 import '../auth/gate_ui.dart';
@@ -235,11 +236,13 @@ class _RulesEditorPageState extends ConsumerState<RulesEditorPage> {
           icon: const Icon(Icons.add_rounded),
           label: const Text('Nuovo articolo'),
         ),
-        body: AsyncView<List<RulesArticle>>(
-          value: draft,
-          action: 'Impossibile caricare la bozza',
-          onRetry: () => ref.invalidate(rulesDraftProvider),
-          data: _body,
+        body: WideContentWidth(
+          child: AsyncView<List<RulesArticle>>(
+            value: draft,
+            action: 'Impossibile caricare la bozza',
+            onRetry: () => ref.invalidate(rulesDraftProvider),
+            data: _body,
+          ),
         ),
       ),
     );

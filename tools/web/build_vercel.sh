@@ -57,4 +57,9 @@ find "$out/canvaskit" -name '*.symbols' -delete
   exit 1
 }
 rm -f "$out/agora/.versione"
+# Lo stesso per le notifiche nel browser: lo script della pagina e il service worker.
+[ -s "$out/notifiche.js" ] && [ -s "$out/notifiche-sw.js" ] && [ -s "$out/icons/notifica.png" ] || {
+  echo "Nella web app mancano le notifiche (notifiche.js, notifiche-sw.js o la loro icona)."
+  exit 1
+}
 echo "Web app pronta: $(du -sh "$out" | cut -f1) in sito/app"

@@ -23,7 +23,10 @@ import '../../shared/async_view.dart';
 import '../../shared/gold_loader.dart';
 import '../../shared/link_text.dart';
 import '../../shared/member_photo.dart';
+import '../../shared/sections.dart';
+import '../../shared/side_menu.dart';
 import '../../shared/ui.dart';
+import '../../shared/wide_layout.dart';
 import '../carte/special_cards_repository.dart';
 import '../formazione/formazione_page.dart' show formationPath;
 import '../lavagna/board_model.dart';
@@ -33,6 +36,7 @@ import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import '../voce/voice_room_sheet.dart';
 import 'channel_messages.dart';
+import 'chat_desktop.dart';
 import 'chat_repository.dart';
 import 'chat_widgets.dart';
 import 'poll.dart';
@@ -40,8 +44,10 @@ import 'poll_widgets.dart';
 import 'voice_player.dart';
 import 'voice_recorder.dart';
 
-/// Conversazione di un canale, in stile Telegram (aperta anche dalle notifiche: `/chat/<slug>`).
-class ChannelPage extends ConsumerWidget {
+/// Conversazione di un canale, in stile Telegram (aperta anche dalle notifiche:
+/// `/chat/<slug>`). Sui telefoni è a schermo intero; sugli schermi larghi sta accanto
+/// all'elenco dei canali, con il menu laterale sempre visibile.
+class ChannelPage extends ConsumerStatefulWidget {
   const ChannelPage({super.key, required this.slug, this.openVoice = false});
   final String slug;
 
@@ -52,32 +58,43 @@ class ChannelPage extends ConsumerWidget {
       context.canPop() ? context.pop() : context.go('/chat');
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChannelPage> createState() => _ChannelPageState();
+}
+
+class _ChannelPageState extends ConsumerState<ChannelPage> {
+  /// La conversazione resta la stessa (testo scritto, vocale in registrazione) quando
+  /// la finestra si allarga o si stringe e la pagina cambia disposizione.
+  final _conversationKey = GlobalKey(debugLabel: 'conversazione');
+
+  @override
+  Widget build(BuildContext context) {
+    final slug = widget.slug;
+    final wide = isWideLayout(context);
     final channels = ref.watch(channelsProvider);
     final channel = channels.value?.where((c) => c.slug == slug).firstOrNull;
-    // Aperta da una notifica come unica pagina: indietro porta all'elenco dei canali
-    // invece di chiudere l'app.
-    return PopScope(
-      canPop: !(ModalRoute.of(context)?.isFirst ?? false),
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) context.go('/chat');
-      },
+    final conversation = KeyedSubtree(
+      key: _conversationKey,
       child: channel != null
           // Una conversazione per canale: aprendo un altro canale (anche con
           // router.go, che riusa la pagina) si riparte da zero.
           ? _ChannelView(
               key: ValueKey(channel.id),
               channel: channel,
-              openVoice: openVoice,
+              openVoice: widget.openVoice,
+              embedded: wide,
             )
           : Scaffold(
               appBar: AppBar(
                 automaticallyImplyLeading: false,
-                leading: IconButton(
-                  tooltip: 'Indietro',
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  onPressed: () => _exit(context),
-                ),
+                toolbarHeight: wide ? ChatDesktop.barHeight : null,
+                titleSpacing: wide ? 20 : null,
+                leading: wide
+                    ? null
+                    : IconButton(
+                        tooltip: 'Indietro',
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        onPressed: () => ChannelPage._exit(context),
+                      ),
                 title: const Text('CHAT'),
                 bottom: const _BarBorder(),
                 flexibleSpace: const Align(
@@ -89,9 +106,44 @@ class ChannelPage extends ConsumerWidget {
                 value: channels,
                 onRetry: () => ref.invalidate(channelsProvider),
                 action: 'Canali non caricati',
-                data: (_) => _ChannelUnavailable(onExit: () => _exit(context)),
+                data: (_) => _ChannelUnavailable(
+                  onExit: () => ChannelPage._exit(context),
+                ),
               ),
             ),
+    );
+    // Aperta da una notifica come unica pagina: indietro porta all'elenco dei canali
+    // invece di chiudere l'app.
+    return PopScope(
+      canPop: !(ModalRoute.of(context)?.isFirst ?? false),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go('/chat');
+      },
+      child: wide
+          ? WideSnackBars(
+              child: Scaffold(
+                body: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SideMenu(
+                      current: MainTab.chat,
+                      onSelect: (t) => context.go(t.path),
+                    ),
+                    Expanded(
+                      child: MediaQuery.removePadding(
+                        context: context,
+                        removeLeft: true,
+                        child: ChatDesktop(
+                          selectedSlug: slug,
+                          conversation: conversation,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : conversation,
     );
   }
 }
@@ -115,9 +167,13 @@ class _ChannelView extends ConsumerStatefulWidget {
     super.key,
     required this.channel,
     required this.openVoice,
+    required this.embedded,
   });
   final Channel channel;
   final bool openVoice;
+
+  /// Accanto all'elenco dei canali (schermi larghi): niente freccia "Indietro".
+  final bool embedded;
 
   @override
   ConsumerState<_ChannelView> createState() => _ChannelViewState();
@@ -576,17 +632,38 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     final p = context.pal;
     // La barra in alto è sempre scura: colori fissi della tavola 13.
     const bar = AppPalette.dark;
+    final messages = Stack(
+      children: [
+        _messages(canWrite: canWrite),
+        if (_showJump)
+          Positioned(
+            right: 12,
+            bottom: 12,
+            child: FloatingActionButton.small(
+              tooltip: 'Torna in fondo',
+              backgroundColor: p.surfaceHigh,
+              foregroundColor: p.text,
+              elevation: 1,
+              shape: CircleBorder(side: BorderSide(color: p.border)),
+              onPressed: _jumpToBottom,
+              child: const Icon(Icons.keyboard_arrow_down_rounded),
+            ),
+          ),
+      ],
+    );
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        toolbarHeight: 60,
-        titleSpacing: 0,
+        toolbarHeight: ChatDesktop.barHeight,
+        titleSpacing: widget.embedded ? 20 : 0,
         leadingWidth: 52,
-        leading: IconButton(
-          tooltip: 'Indietro',
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => ChannelPage._exit(context),
-        ),
+        leading: widget.embedded
+            ? null
+            : IconButton(
+                tooltip: 'Indietro',
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => ChannelPage._exit(context),
+              ),
         title: Row(
           children: [
             ChannelTile(
@@ -652,35 +729,33 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
           child: GoldRule(),
         ),
       ),
-      body: ContentWidth(
-        child: Column(
-          children: [
-            VoiceRoomBanner(channel: channel),
-            Expanded(
-              child: Stack(
+      body: widget.embedded
+          // Accanto all'elenco: i messaggi stanno in una colonna al centro, le fasce
+          // in basso (scrittura, "solo il Direttivo") sono larghe quanto il riquadro.
+          ? Column(
+              children: [
+                _Centered(child: VoiceRoomBanner(channel: channel)),
+                Expanded(
+                  child: ContentWidth(
+                    maxWidth: ChatDesktop.conversationWidth,
+                    child: messages,
+                  ),
+                ),
+                if (canWrite)
+                  _composer()
+                else
+                  const _ReadOnlyNote(centered: true),
+              ],
+            )
+          : ContentWidth(
+              child: Column(
                 children: [
-                  _messages(canWrite: canWrite),
-                  if (_showJump)
-                    Positioned(
-                      right: 12,
-                      bottom: 12,
-                      child: FloatingActionButton.small(
-                        tooltip: 'Torna in fondo',
-                        backgroundColor: p.surfaceHigh,
-                        foregroundColor: p.text,
-                        elevation: 1,
-                        shape: CircleBorder(side: BorderSide(color: p.border)),
-                        onPressed: _jumpToBottom,
-                        child: const Icon(Icons.keyboard_arrow_down_rounded),
-                      ),
-                    ),
+                  VoiceRoomBanner(channel: channel),
+                  Expanded(child: messages),
+                  if (canWrite) _composer() else const _ReadOnlyNote(),
                 ],
               ),
             ),
-            if (canWrite) _composer() else const _ReadOnlyNote(),
-          ],
-        ),
-      ),
     );
   }
 
@@ -828,6 +903,152 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     );
     // Barra di scrittura della tavola 13: foto, "Scrivi un messaggio", microfono
     // (tieni premuto) o invio.
+    final bar = Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_replyTo != null)
+            _ReplyStrip(
+              message: _replyTo!,
+              title: _replyTo!.authorId == ref.watch(currentUserIdProvider)
+                  ? 'Rispondi al tuo messaggio'
+                  : 'Rispondi a ${members[_replyTo!.authorId] ?? 'Ex membro'}',
+              onClose: () => setState(() => _replyTo = null),
+            ),
+          if (_image != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Stack(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 4, 8, 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      // Anteprima alta 90: decodificata a quell'altezza.
+                      child: Image.memory(
+                        _image!,
+                        height: 90,
+                        cacheHeight:
+                            (90 * MediaQuery.devicePixelRatioOf(context))
+                                .round(),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: IconButton.filled(
+                      tooltip: 'Togli la foto',
+                      style: IconButton.styleFrom(
+                        backgroundColor: p.surfaceHigher,
+                        foregroundColor: p.text,
+                        minimumSize: const Size(32, 32),
+                        fixedSize: const Size(32, 32),
+                        padding: EdgeInsets.zero,
+                      ),
+                      onPressed: () => setState(() => _image = null),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!_recording) ...[
+                IconButton(
+                  tooltip: 'Aggiungi una foto',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _pickImage,
+                  icon: Icon(
+                    Icons.image_rounded,
+                    size: 22,
+                    color: p.textSecondary,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Crea un sondaggio',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _createPoll,
+                  icon: Icon(
+                    Icons.poll_rounded,
+                    size: 22,
+                    color: p.textSecondary,
+                  ),
+                ),
+              ],
+              Expanded(
+                child: _recording
+                    ? _RecordingIndicator(
+                        seconds: _recSeconds,
+                        cancelling: _recCancel,
+                      )
+                    : Semantics(
+                        label: 'Messaggio',
+                        child: Focus(
+                          // Con la tastiera del computer Invio manda il
+                          // messaggio e Maiusc+Invio va a capo.
+                          onKeyEvent: _enterSends,
+                          child: TextField(
+                            controller: _text,
+                            minLines: 1,
+                            maxLines: 5,
+                            maxLength: 2000,
+                            textCapitalization: TextCapitalization.sentences,
+                            style: TextStyle(fontSize: 16, color: p.text),
+                            decoration: InputDecoration(
+                              hintText: 'Scrivi un messaggio',
+                              counterText: '',
+                              isDense: true,
+                              filled: true,
+                              fillColor: p.surfaceHigh,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 11,
+                              ),
+                              border: pill(p.borderStrong),
+                              enabledBorder: pill(p.borderStrong),
+                              focusedBorder: pill(p.chipBorder),
+                            ),
+                            onSubmitted: (_) => _send(),
+                          ),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 6),
+              if (canSend && !_recording)
+                _RoundAction(
+                  tooltip: 'Invia',
+                  icon: Icons.send_rounded,
+                  onPressed: () => _send(),
+                )
+              else
+                _MicButton(
+                  recording: _recording,
+                  onTap: _micTapped,
+                  onStart: _startRecording,
+                  onMove: (dx) {
+                    final cancel = dx < -80;
+                    if (cancel != _recCancel) {
+                      setState(() => _recCancel = cancel);
+                    }
+                  },
+                  onEnd: () {
+                    _pressing = false;
+                    _finishRecording(send: true);
+                  },
+                  onCancel: () {
+                    _pressing = false;
+                    _finishRecording(send: false);
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
     return DecoratedBox(
       decoration: BoxDecoration(
         color: p.surface,
@@ -835,153 +1056,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
       ),
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_replyTo != null)
-                _ReplyStrip(
-                  message: _replyTo!,
-                  title: _replyTo!.authorId == ref.watch(currentUserIdProvider)
-                      ? 'Rispondi al tuo messaggio'
-                      : 'Rispondi a ${members[_replyTo!.authorId] ?? 'Ex membro'}',
-                  onClose: () => setState(() => _replyTo = null),
-                ),
-              if (_image != null)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Stack(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 4, 8, 8),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          // Anteprima alta 90: decodificata a quell'altezza.
-                          child: Image.memory(
-                            _image!,
-                            height: 90,
-                            cacheHeight:
-                                (90 * MediaQuery.devicePixelRatioOf(context))
-                                    .round(),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: IconButton.filled(
-                          tooltip: 'Togli la foto',
-                          style: IconButton.styleFrom(
-                            backgroundColor: p.surfaceHigher,
-                            foregroundColor: p.text,
-                            minimumSize: const Size(32, 32),
-                            fixedSize: const Size(32, 32),
-                            padding: EdgeInsets.zero,
-                          ),
-                          onPressed: () => setState(() => _image = null),
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (!_recording) ...[
-                    IconButton(
-                      tooltip: 'Aggiungi una foto',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _pickImage,
-                      icon: Icon(
-                        Icons.image_rounded,
-                        size: 22,
-                        color: p.textSecondary,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Crea un sondaggio',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _createPoll,
-                      icon: Icon(
-                        Icons.poll_rounded,
-                        size: 22,
-                        color: p.textSecondary,
-                      ),
-                    ),
-                  ],
-                  Expanded(
-                    child: _recording
-                        ? _RecordingIndicator(
-                            seconds: _recSeconds,
-                            cancelling: _recCancel,
-                          )
-                        : Semantics(
-                            label: 'Messaggio',
-                            child: Focus(
-                              // Con la tastiera del computer Invio manda il
-                              // messaggio e Maiusc+Invio va a capo.
-                              onKeyEvent: _enterSends,
-                              child: TextField(
-                                controller: _text,
-                                minLines: 1,
-                                maxLines: 5,
-                                maxLength: 2000,
-                                textCapitalization:
-                                    TextCapitalization.sentences,
-                                style: TextStyle(fontSize: 16, color: p.text),
-                                decoration: InputDecoration(
-                                  hintText: 'Scrivi un messaggio',
-                                  counterText: '',
-                                  isDense: true,
-                                  filled: true,
-                                  fillColor: p.surfaceHigh,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 11,
-                                  ),
-                                  border: pill(p.borderStrong),
-                                  enabledBorder: pill(p.borderStrong),
-                                  focusedBorder: pill(p.chipBorder),
-                                ),
-                                onSubmitted: (_) => _send(),
-                              ),
-                            ),
-                          ),
-                  ),
-                  const SizedBox(width: 6),
-                  if (canSend && !_recording)
-                    _RoundAction(
-                      tooltip: 'Invia',
-                      icon: Icons.send_rounded,
-                      onPressed: () => _send(),
-                    )
-                  else
-                    _MicButton(
-                      recording: _recording,
-                      onTap: _micTapped,
-                      onStart: _startRecording,
-                      onMove: (dx) {
-                        final cancel = dx < -80;
-                        if (cancel != _recCancel) {
-                          setState(() => _recCancel = cancel);
-                        }
-                      },
-                      onEnd: () {
-                        _pressing = false;
-                        _finishRecording(send: true);
-                      },
-                      onCancel: () {
-                        _pressing = false;
-                        _finishRecording(send: false);
-                      },
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
+        child: widget.embedded ? _Centered(child: bar) : bar,
       ),
     );
   }
@@ -1261,11 +1336,29 @@ class _ReplyStrip extends StatelessWidget {
 
 /// Canale in sola lettura (Comunicazioni): vi scrive solo il Direttivo.
 class _ReadOnlyNote extends StatelessWidget {
-  const _ReadOnlyNote();
+  const _ReadOnlyNote({this.centered = false});
+
+  /// Fascia larga quanto il riquadro, con il testo al centro (schermi larghi).
+  final bool centered;
 
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
+    final note = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: Row(
+        children: [
+          Icon(Icons.campaign_rounded, color: p.accentText, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Qui scrive solo il Direttivo: avvisi ufficiali, formazioni ed eventi.',
+              style: TextStyle(color: p.textSecondary, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
     return DecoratedBox(
       decoration: BoxDecoration(
         color: p.surface,
@@ -1273,24 +1366,27 @@ class _ReadOnlyNote extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-          child: Row(
-            children: [
-              Icon(Icons.campaign_rounded, color: p.accentText, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Qui scrive solo il Direttivo: avvisi ufficiali, formazioni ed eventi.',
-                  style: TextStyle(color: p.textSecondary, fontSize: 14),
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: centered ? _Centered(child: note) : note,
       ),
     );
   }
+}
+
+/// Tiene il contenuto di una fascia nella colonna dei messaggi, al centro del
+/// riquadro della conversazione (schermi larghi).
+class _Centered extends StatelessWidget {
+  const _Centered({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(
+        maxWidth: ChatDesktop.conversationWidth,
+      ),
+      child: child,
+    ),
+  );
 }
 
 /// Separatore per giorno: pillola al centro ("Oggi", "Ieri", "Lunedì 12 ottobre").

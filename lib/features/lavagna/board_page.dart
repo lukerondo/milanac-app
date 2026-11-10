@@ -15,9 +15,11 @@ import '../../core/errors.dart';
 import '../../core/haptics.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/async_view.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
+import '../../shared/wide_layout.dart';
 import '../chat/chat_repository.dart' show maxReplaySeconds;
 import '../chat/voice_player.dart' show formatSeconds;
 import '../chat/voice_file_io.dart'
@@ -1230,6 +1232,7 @@ class _BoardPageState extends ConsumerState<BoardPage>
         ? _crossHint
         : _tool.hint;
     final p = context.pal;
+    final wide = isWideLayout(context);
     return PopScope(
       canPop: !_recording && !_micBusy,
       onPopInvokedWithResult: (didPop, _) {
@@ -1289,83 +1292,86 @@ class _BoardPageState extends ConsumerState<BoardPage>
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: Column(
-              children: [
-                Flexible(
-                  child: AspectRatio(
-                    aspectRatio: boardAspect,
-                    child: PitchFrame(
-                      child: LayoutBuilder(
-                        builder: (context, c) {
-                          _size = c.biggest;
-                          final board = BoardCanvas(
-                            key: const ValueKey('lavagna'),
-                            board: _editor,
-                            pendingArrow: _pending,
-                            flight: _flight,
-                            shift: _shift,
-                            target: _target,
-                            selectedId: _selectedId,
-                            showSavedZones: !readOnly,
-                          );
-                          if (ballOnly) {
+            child: _centered(
+              wide: wide,
+              child: Column(
+                children: [
+                  Flexible(
+                    child: AspectRatio(
+                      aspectRatio: boardAspect,
+                      child: PitchFrame(
+                        child: LayoutBuilder(
+                          builder: (context, c) {
+                            _size = c.biggest;
+                            final board = BoardCanvas(
+                              key: const ValueKey('lavagna'),
+                              board: _editor,
+                              pendingArrow: _pending,
+                              flight: _flight,
+                              shift: _shift,
+                              target: _target,
+                              selectedId: _selectedId,
+                              showSavedZones: !readOnly,
+                            );
+                            if (ballOnly) {
+                              return GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                dragStartBehavior: DragStartBehavior.down,
+                                onPanStart: _onBallOnlyPanStart,
+                                onPanUpdate: _onPanUpdate,
+                                onPanEnd: _onPanEnd,
+                                child: board,
+                              );
+                            }
+                            if (readOnly) return board;
                             return GestureDetector(
                               behavior: HitTestBehavior.opaque,
+                              // Il trascinamento parte da dove si è appoggiato il
+                              // dito: serve per prendere il pallone, che è piccolo.
                               dragStartBehavior: DragStartBehavior.down,
-                              onPanStart: _onBallOnlyPanStart,
+                              onTapUp: _onTapUp,
+                              onDoubleTap: _tool == BoardTool.freccia
+                                  ? _onDoubleTap
+                                  : null,
+                              // Solo dove serve: con la pressione lunga nell'arena un
+                              // dito fermo mezzo secondo non trascinerebbe più.
+                              onLongPressStart: _tool == BoardTool.giocatore
+                                  ? _onLongPressStart
+                                  : null,
+                              onPanStart: _onPanStart,
                               onPanUpdate: _onPanUpdate,
                               onPanEnd: _onPanEnd,
                               child: board,
                             );
-                          }
-                          if (readOnly) return board;
-                          return GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            // Il trascinamento parte da dove si è appoggiato il
-                            // dito: serve per prendere il pallone, che è piccolo.
-                            dragStartBehavior: DragStartBehavior.down,
-                            onTapUp: _onTapUp,
-                            onDoubleTap: _tool == BoardTool.freccia
-                                ? _onDoubleTap
-                                : null,
-                            // Solo dove serve: con la pressione lunga nell'arena un
-                            // dito fermo mezzo secondo non trascinerebbe più.
-                            onLongPressStart: _tool == BoardTool.giocatore
-                                ? _onLongPressStart
-                                : null,
-                            onPanStart: _onPanStart,
-                            onPanUpdate: _onPanUpdate,
-                            onPanEnd: _onPanEnd,
-                            child: board,
-                          );
-                        },
+                          },
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  hint,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.3,
-                    color: p.textMuted,
+                  const SizedBox(height: 10),
+                  Text(
+                    hint,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.3,
+                      color: p.textMuted,
+                    ),
                   ),
-                ),
-                if (positionsBar) ...[
-                  const SizedBox(height: 8),
-                  _ZoneBar(
-                    zone: shown.ballZone,
-                    saved: shown.zoneSaved,
-                    onSave: (zone) {
-                      Haptics.light();
-                      _editor.apply(SaveZone(zone));
-                    },
-                    onDelete: (zone) => _editor.apply(ClearZone(zone)),
-                  ),
+                  if (positionsBar) ...[
+                    const SizedBox(height: 8),
+                    _ZoneBar(
+                      zone: shown.ballZone,
+                      saved: shown.zoneSaved,
+                      onSave: (zone) {
+                        Haptics.light();
+                        _editor.apply(SaveZone(zone));
+                      },
+                      onDelete: (zone) => _editor.apply(ClearZone(zone)),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -1374,6 +1380,7 @@ class _BoardPageState extends ConsumerState<BoardPage>
         bottomNavigationBar: readOnly
             ? null
             : _ToolBar(
+                wide: wide,
                 tool: _tool,
                 dashed: _dashed,
                 canUndo: shown.canUndo,
@@ -1392,6 +1399,20 @@ class _BoardPageState extends ConsumerState<BoardPage>
     );
   }
 }
+
+/// Sugli schermi larghi il campo (con il suggerimento e le zone) e gli strumenti
+/// stanno in una colonna al centro, non attaccati a sinistra o larghi quanto lo
+/// schermo.
+Widget _centered({required bool wide, required Widget child}) => wide
+    ? Align(
+        alignment: Alignment.topCenter,
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: ContentWidth.maxWidth),
+          child: child,
+        ),
+      )
+    : child;
 
 /// I pulsanti della barra in alto: alti 40, angoli da 10, testo 14 in grassetto.
 ButtonStyle _headerButtonStyle(ButtonStyle base) => base.copyWith(
@@ -1757,6 +1778,7 @@ class _InfoPill extends StatelessWidget {
 /// dall'icona (l'etichetta resta corta: sei pulsanti stanno anche a 320 dp).
 class _ToolBar extends StatelessWidget {
   const _ToolBar({
+    required this.wide,
     required this.tool,
     required this.dashed,
     required this.canUndo,
@@ -1764,6 +1786,9 @@ class _ToolBar extends StatelessWidget {
     required this.onUndo,
     required this.onClear,
   });
+
+  /// Schermo largo: i pulsanti stanno al centro, non larghi quanto lo schermo.
+  final bool wide;
   final BoardTool tool;
   final bool dashed;
   final bool canUndo;
@@ -1812,15 +1837,21 @@ class _ToolBar extends StatelessWidget {
               minimum: const EdgeInsets.only(bottom: 10),
               // Sei pulsanti: a 320 dp ognuno è largo 48, quanto basta per
               // "Gettoni" in grassetto.
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                child: Row(
-                  children: [
-                    for (final (i, b) in buttons.indexed) ...[
-                      if (i > 0) const SizedBox(width: 4),
-                      Expanded(child: b),
+              child: _centered(
+                wide: wide,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      for (final (i, b) in buttons.indexed) ...[
+                        if (i > 0) const SizedBox(width: 4),
+                        Expanded(child: b),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),

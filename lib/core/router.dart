@@ -8,7 +8,7 @@ import '../features/auth/new_password_page.dart';
 import '../features/auth/pending_page.dart';
 import '../features/carte/carte_speciali_page.dart';
 import '../features/chat/channel_page.dart';
-import '../features/chat/chat_list_page.dart';
+import '../features/chat/chat_desktop.dart';
 import '../features/club/club_page.dart';
 import '../features/direttivo/direttivo_page.dart';
 import '../features/formazione/formazione_page.dart';
@@ -33,6 +33,7 @@ import '../features/tattiche/tattiche_page.dart';
 import '../shared/app_shell.dart';
 import '../shared/offline_page.dart';
 import '../shared/sections.dart';
+import '../shared/wide_layout.dart';
 import 'auth/profile.dart';
 import 'auth/providers.dart';
 import 'config.dart';
@@ -162,13 +163,37 @@ final routerProvider = Provider<GoRouter>((ref) {
           initialSection: state.uri.queryParameters['sezione'],
         ),
       ),
-      // Conversazione a schermo intero (anche dalle notifiche).
+      // Conversazione (anche dalle notifiche): a schermo intero sui telefoni; sugli
+      // schermi larghi sta accanto all'elenco dei canali e compare senza l'animazione
+      // di una pagina nuova.
       GoRoute(
         path: '/chat/:slug',
-        builder: (_, state) => ChannelPage(
-          slug: state.pathParameters['slug']!,
-          openVoice: state.uri.queryParameters['stanza'] == '1',
-        ),
+        pageBuilder: (context, state) {
+          final page = ChannelPage(
+            slug: state.pathParameters['slug']!,
+            openVoice: state.uri.queryParameters['stanza'] == '1',
+          );
+          final name = state.name ?? state.path;
+          final arguments = <String, String>{
+            ...state.pathParameters,
+            ...state.uri.queryParameters,
+          };
+          return isWideLayoutNow(context)
+              ? NoTransitionPage<void>(
+                  key: state.pageKey,
+                  name: name,
+                  arguments: arguments,
+                  restorationId: state.pageKey.value,
+                  child: page,
+                )
+              : MaterialPage<void>(
+                  key: state.pageKey,
+                  name: name,
+                  arguments: arguments,
+                  restorationId: state.pageKey.value,
+                  child: page,
+                );
+        },
       ),
       // Lavagna tattica: nuova o uno schema salvato.
       GoRoute(path: '/lavagna', builder: (_, _) => const BoardPage()),
@@ -219,10 +244,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           StatefulShellBranch(
             routes: [
-              _section(
-                '/chat',
-                (_) => const ChatListPage(),
-                actions: const [ChatSearchButton()],
+              // L'elenco dei canali (su schermo largo, con la conversazione accanto).
+              GoRoute(
+                path: '/chat',
+                pageBuilder: (_, state) =>
+                    _fadePage(state, const ChatSection()),
               ),
             ],
           ),
@@ -233,6 +259,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 '/rosa',
                 (_) => const RosaPage(),
                 actions: const [RosaViewButton()],
+                maxWidth: RosaPage.cardsWidth,
               ),
               _section('/carte-speciali', (_) => const CarteSpecialiPage()),
               _section('/tattiche', (_) => const TattichePage()),
@@ -263,16 +290,29 @@ GoRoute _section(
   String path,
   Widget Function(GoRouterState state) page, {
   List<Widget> actions = const [],
+  double maxWidth = ContentWidth.maxWidth,
 }) => GoRoute(
   path: path,
-  pageBuilder: (_, state) => CustomTransitionPage(
-    key: state.pageKey,
-    transitionDuration: const Duration(milliseconds: 220),
-    transitionsBuilder: (_, animation, _, child) =>
-        FadeTransition(opacity: animation, child: child),
-    child: SectionFrame(path: path, actions: actions, child: page(state)),
+  pageBuilder: (_, state) => _fadePage(
+    state,
+    SectionFrame(
+      path: path,
+      actions: actions,
+      maxWidth: maxWidth,
+      child: page(state),
+    ),
   ),
 );
+
+/// Pagina di una scheda, che compare in dissolvenza.
+Page<void> _fadePage(GoRouterState state, Widget child) =>
+    CustomTransitionPage<void>(
+      key: state.pageKey,
+      transitionDuration: const Duration(milliseconds: 220),
+      transitionsBuilder: (_, animation, _, child) =>
+          FadeTransition(opacity: animation, child: child),
+      child: child,
+    );
 
 /// Risposta di [gateRedirect]: "torna alla Home (o alla sezione in sospeso)".
 const goHome = '@home';

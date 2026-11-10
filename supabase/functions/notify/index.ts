@@ -1,4 +1,5 @@
-// Funzione "notify": invia notifiche push personali tramite Firebase Cloud Messaging.
+// Funzione "notify": invia notifiche push personali, ai telefoni tramite Firebase Cloud
+// Messaging e ai browser della web app con Web Push (webpush.ts, chiavi VAPID del club).
 // Viene chiamata dal database (trigger, pg_cron + pg_net) con l'intestazione x-milanac-secret.
 //
 // Eventi gestiti:
@@ -29,10 +30,13 @@
 //                                             (allegati della chat scaduti o eliminati)
 //
 // Variabili (impostate dal workflow "Funzioni"):
-//   WEBHOOK_SECRET, FIREBASE_SERVICE_ACCOUNT (JSON; se manca le notifiche sono disattivate)
+//   WEBHOOK_SECRET, FIREBASE_SERVICE_ACCOUNT (JSON; se manca i telefoni non ricevono notifiche)
+//   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (generate dal workflow la prima volta; se mancano i
+//   browser non ricevono notifiche)
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (fornite automaticamente da Supabase)
 
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { allowedEndpoint, importVapidPrivateKey, sendWebPush, Vapid, webPayload } from "./webpush.ts";
 
 type Push = {
   userId: string;
@@ -73,12 +77,20 @@ Deno.serve(async (req) => {
   const category = CATEGORY[kind];
   if (category && pushes.length > 0) pushes = await withoutMuted(db, pushes, category);
 
+  // I browser e i telefoni sono due strade indipendenti: se una non è configurata, o
+  // fallisce, l'altra spedisce lo stesso.
+  let web = 0;
+  try {
+    web = await sendWebAll(db, pushes);
+  } catch (e) {
+    console.error("Notifiche ai browser non inviate:", e instanceof Error ? e.message : e);
+  }
   const account = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
   if (!account) {
-    return Response.json({ skipped: "firebase non configurato", pushes: pushes.length });
+    return Response.json({ skipped: "firebase non configurato", pushes: pushes.length, web });
   }
   const sent = await sendAll(db, JSON.parse(account), pushes);
-  return Response.json({ pushes: pushes.length, sent });
+  return Response.json({ pushes: pushes.length, sent, web });
 });
 
 /// Notifiche che si possono spegnere in Impostazioni → Notifiche (le altre arrivano sempre).
@@ -504,6 +516,45 @@ async function cleanupStorage(db: SupabaseClient): Promise<number> {
     removed += paths.length;
   }
   return removed;
+}
+
+// ------------------------------------------------------------------ browser (Web Push)
+
+/// Spedisce le notifiche ai browser iscritti dei destinatari (tabella web_push_subscriptions).
+/// Le iscrizioni che il servizio push dice sparite (404, 410) si cancellano.
+async function sendWebAll(db: SupabaseClient, pushes: Push[]): Promise<number> {
+  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
+  const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
+  if (!publicKey || !privateKey || pushes.length === 0) return 0;
+  const { data: subs, error } = await db
+    .from("web_push_subscriptions").select("endpoint, p256dh, auth, user_id")
+    .in("user_id", [...new Set(pushes.map((p) => p.userId))]);
+  // Tabella non ancora creata (migrazione da applicare): niente browser, senza errori.
+  if (error || !subs || subs.length === 0) return 0;
+  const vapid: Vapid = {
+    publicKey,
+    privateKey: await importVapidPrivateKey(privateKey),
+    subject: "https://milanacproclub.vercel.app",
+  };
+  let sent = 0;
+  for (const p of pushes) {
+    const payload = webPayload(p);
+    for (const s of subs.filter((s) => s.user_id === p.userId)) {
+      if (!allowedEndpoint(s.endpoint)) continue;
+      try {
+        const res = await sendWebPush(s, payload, vapid);
+        if (res.ok) sent++;
+        else if (res.status === 404 || res.status === 410) {
+          // Notifiche tolte dal browser, o browser non più usato.
+          await db.from("web_push_subscriptions").delete().eq("endpoint", s.endpoint);
+        }
+        await res.body?.cancel();
+      } catch (_) {
+        // Servizio push non raggiungibile: questa notifica si perde, le altre no.
+      }
+    }
+  }
+  return sent;
 }
 
 // ------------------------------------------------------------------ FCM

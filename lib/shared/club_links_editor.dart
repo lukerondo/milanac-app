@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/errors.dart';
 import '../core/theme.dart';
+import 'app_shell.dart' show WideContentWidth;
 import 'async_view.dart';
 import 'club_links.dart';
 import 'ui.dart';
@@ -111,57 +112,62 @@ class _ClubLinksEditorPageState extends ConsumerState<ClubLinksEditorPage> {
                   setState(() => rows.add(_Row(LinkKind.instagram, ''))),
               child: const Icon(Icons.add_rounded),
             ),
-      body: rows == null
-          ? AsyncView(
-              value: loaded,
-              onRetry: () => ref.invalidate(_editingLinksProvider),
-              data: (_) => const SizedBox.shrink(),
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              children: [
-                for (final r in rows)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          DropdownButton<LinkKind>(
-                            value: r.kind,
-                            underline: const SizedBox.shrink(),
-                            items: [
-                              for (final k in LinkKind.values)
-                                DropdownMenuItem(value: k, child: Icon(k.icon)),
-                            ],
-                            onChanged: (k) =>
-                                setState(() => r.kind = k ?? r.kind),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: r.url,
-                              keyboardType: TextInputType.url,
-                              decoration: InputDecoration(
-                                labelText: r.kind.label,
-                                hintText: 'https://…',
+      body: WideContentWidth(
+        child: rows == null
+            ? AsyncView(
+                value: loaded,
+                onRetry: () => ref.invalidate(_editingLinksProvider),
+                data: (_) => const SizedBox.shrink(),
+              )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                children: [
+                  for (final r in rows)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            DropdownButton<LinkKind>(
+                              value: r.kind,
+                              underline: const SizedBox.shrink(),
+                              items: [
+                                for (final k in LinkKind.values)
+                                  DropdownMenuItem(
+                                    value: k,
+                                    child: Icon(k.icon),
+                                  ),
+                              ],
+                              onChanged: (k) =>
+                                  setState(() => r.kind = k ?? r.kind),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: r.url,
+                                keyboardType: TextInputType.url,
+                                decoration: InputDecoration(
+                                  labelText: r.kind.label,
+                                  hintText: 'https://…',
+                                ),
                               ),
                             ),
-                          ),
-                          IconButton(
-                            tooltip: 'Togli il contatto',
-                            icon: const Icon(Icons.delete_outline_rounded),
-                            onPressed: () => setState(() {
-                              rows.remove(r);
-                              r.url.dispose();
-                            }),
-                          ),
-                        ],
+                            IconButton(
+                              tooltip: 'Togli il contatto',
+                              icon: const Icon(Icons.delete_outline_rounded),
+                              onPressed: () => setState(() {
+                                rows.remove(r);
+                                r.url.dispose();
+                              }),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 }
