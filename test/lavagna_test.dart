@@ -40,7 +40,10 @@ class _FakeMic implements VoiceRecorder {
   Future<bool> hasPermission({bool request = false}) async => true;
 
   @override
-  Future<bool> start({bool requestPermission = true}) async {
+  Future<bool> start({
+    bool requestPermission = true,
+    int maxSeconds = 120,
+  }) async {
     starts++;
     _on = await (opening?.future ?? Future.value(true));
     return _on;

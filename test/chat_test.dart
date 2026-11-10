@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -32,6 +33,7 @@ import 'package:milanac/main.dart';
 import 'package:milanac/shared/async_view.dart';
 import 'package:milanac/shared/gold_loader.dart';
 import 'package:milanac/shared/link_text.dart';
+import 'package:record/record.dart' show AudioEncoder;
 
 import 'helpers.dart';
 import 'home_test.dart' show todayAt;
@@ -62,7 +64,10 @@ class FakeVoiceRecorder implements VoiceRecorder {
   }
 
   @override
-  Future<bool> start({bool requestPermission = true}) async {
+  Future<bool> start({
+    bool requestPermission = true,
+    int maxSeconds = 120,
+  }) async {
     starts++;
     if (requestPermission) askedPermission = true;
     if (!permission) return false;
@@ -752,6 +757,109 @@ void main() {
       expect(repo.streams, 2);
       expect(find.text('Connessione persa: riprovo…'), findsNothing);
       expect(offset(), before);
+    },
+  );
+
+  testWidgets('Sul computer Invio manda il messaggio, Maiusc+Invio va a capo; '
+      'sul telefono Invio resta "a capo"', (tester) async {
+    await startChat(tester);
+    await openChannel(tester, 'Generale');
+    final field = find.byType(TextField);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      await tester.enterText(field, 'Dal computer');
+      await tester.pump();
+      // Maiusc+Invio non manda niente.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).controller!.text, isNotEmpty);
+      expect(find.byTooltip('Invia'), findsOneWidget);
+      // Invio: il messaggio parte e il campo si svuota.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+      expect(find.text('Dal computer'), findsOneWidget);
+      // Campo vuoto: Invio non manda messaggi vuoti.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Dal computer'), findsOneWidget);
+
+      // Sul telefono (anche con una tastiera collegata) Invio non manda.
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await tester.enterText(field, 'Dal telefono');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).controller!.text, isNotEmpty);
+      expect(find.byTooltip('Invia'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  test(
+    'formato di un vocale dai primi byte: telefono (AAC) e browser (WAV)',
+    () {
+      Uint8List bytes(List<int> head) =>
+          Uint8List.fromList([...head, 0, 0, 0, 0]);
+      // MP4 con AAC, come registra l'app: "....ftypM4A ".
+      expect(audioFormatOf(bytes([0, 0, 0, 28, ...'ftypM4A '.codeUnits])), (
+        'm4a',
+        'audio/mp4',
+      ));
+      expect(
+        audioFormatOf(
+          bytes([...'RIFF'.codeUnits, 36, 0, 0, 0, ...'WAVEfmt '.codeUnits]),
+        ),
+        ('wav', 'audio/wav'),
+      );
+      expect(audioFormatOf(bytes([0x1A, 0x45, 0xDF, 0xA3])), (
+        'webm',
+        'audio/webm',
+      ));
+      expect(audioFormatOf(bytes('OggS'.codeUnits)), ('ogg', 'audio/ogg'));
+      // Un RIFF che non è WAVE, o pochi byte: resta il formato dell'app.
+      expect(
+        audioFormatOf(
+          bytes([...'RIFF'.codeUnits, 1, 0, 0, 0, ...'AVI '.codeUnits]),
+        ),
+        ('m4a', 'audio/mp4'),
+      );
+      expect(audioFormatOf(Uint8List(2)), ('m4a', 'audio/mp4'));
+    },
+  );
+
+  test(
+    'registrazione nel browser: AAC dove si può, altrimenti WAV entro i 5 MB '
+    'della chat',
+    () async {
+      final aac = await webRecordConfig((e) async => true, maxVoiceSeconds);
+      expect(aac.encoder, AudioEncoder.aacLc);
+      expect(aac, same(phoneRecordConfig));
+
+      Future<bool> onlyWav(AudioEncoder e) async => e == AudioEncoder.wav;
+      final voice = await webRecordConfig(onlyWav, maxVoiceSeconds);
+      expect(voice.encoder, AudioEncoder.wav);
+      expect(voice.numChannels, 1);
+      expect(voice.sampleRate, 16000);
+      final replay = await webRecordConfig(onlyWav, maxReplaySeconds);
+      expect(replay.sampleRate, 8000);
+      // Mono a 16 bit: alla durata massima il file resta sotto il limite del bucket.
+      for (final (config, seconds) in [
+        (voice, maxVoiceSeconds),
+        (replay, maxReplaySeconds),
+      ]) {
+        expect(config.sampleRate * 2 * seconds + 44, lessThan(5 * 1024 * 1024));
+      }
+      // Il browser non sa rispondere: si registra comunque, in WAV.
+      final unknown = await webRecordConfig(
+        (e) => throw StateError('non supportato'),
+        maxVoiceSeconds,
+      );
+      expect(unknown.encoder, AudioEncoder.wav);
     },
   );
 

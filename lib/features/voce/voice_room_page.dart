@@ -248,100 +248,111 @@ class _VoiceRoomView extends ConsumerWidget {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (inThis)
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: _RoundAction(
-                                  icon: call.muted
-                                      ? Icons.mic_off_rounded
-                                      : Icons.mic_rounded,
-                                  label: 'Microfono',
-                                  semanticLabel: call.muted
-                                      ? 'Riattiva il microfono'
-                                      : 'Spegni il microfono',
-                                  active: call.muted,
-                                  onTap: notifier.toggleMute,
+                    // Sugli schermi larghi (browser, Mac) i comandi restano vicini.
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (inThis)
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: _RoundAction(
+                                      icon: call.muted
+                                          ? Icons.mic_off_rounded
+                                          : Icons.mic_rounded,
+                                      label: 'Microfono',
+                                      semanticLabel: call.muted
+                                          ? 'Riattiva il microfono'
+                                          : 'Spegni il microfono',
+                                      active: call.muted,
+                                      onTap: notifier.toggleMute,
+                                    ),
+                                  ),
+                                  // Sul Mac niente vivavoce: l'audio va dove
+                                  // dice il sistema.
+                                  if (voiceHasSpeakerphone) ...[
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _RoundAction(
+                                        icon: call.speakerphone
+                                            ? Icons.volume_up_rounded
+                                            : Icons.hearing_rounded,
+                                        label: 'Vivavoce',
+                                        semanticLabel: call.speakerphone
+                                            ? 'Vivavoce acceso: passa all\'auricolare'
+                                            : 'Accendi il vivavoce',
+                                        active: call.speakerphone,
+                                        onTap: notifier.toggleSpeakerphone,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _RoundAction(
+                                      icon: Icons.call_end_rounded,
+                                      label: 'Esci',
+                                      semanticLabel: 'Esci dalla stanza',
+                                      danger: true,
+                                      onTap: () {
+                                        // La pagina si chiude subito: motore e
+                                        // microfono si fermano adesso, l'uscita sul
+                                        // server continua da sola (senza rete la
+                                        // chiude il server dopo qualche minuto).
+                                        unawaited(
+                                          notifier.leave().catchError(
+                                            (Object _) {},
+                                          ),
+                                        );
+                                        Navigator.of(context).maybePop();
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(52),
+                                ),
+                                onPressed: () => notifier.enter(channel),
+                                icon: const Icon(Icons.headphones_rounded),
+                                label: Text(
+                                  room == null
+                                      ? 'Apri la stanza'
+                                      : 'Entra nella stanza',
                                 ),
                               ),
-                              // Sul Mac niente vivavoce: l'audio va dove
-                              // dice il sistema.
-                              if (voiceHasSpeakerphone) ...[
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _RoundAction(
-                                    icon: call.speakerphone
-                                        ? Icons.volume_up_rounded
-                                        : Icons.hearing_rounded,
-                                    label: 'Vivavoce',
-                                    semanticLabel: call.speakerphone
-                                        ? 'Vivavoce acceso: passa all\'auricolare'
-                                        : 'Accendi il vivavoce',
-                                    active: call.speakerphone,
-                                    onTap: notifier.toggleSpeakerphone,
+                            if (call.isActive &&
+                                !inThis &&
+                                call.channel != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: Text(
+                                  'Sei già nella stanza di #${call.channel!.name}: '
+                                  'entrando qui ne esci.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: p.textMuted,
                                   ),
                                 ),
-                              ],
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _RoundAction(
-                                  icon: Icons.call_end_rounded,
-                                  label: 'Esci',
-                                  semanticLabel: 'Esci dalla stanza',
-                                  danger: true,
-                                  onTap: () {
-                                    // La pagina si chiude subito: motore e
-                                    // microfono si fermano adesso, l'uscita sul
-                                    // server continua da sola (senza rete la
-                                    // chiude il server dopo qualche minuto).
-                                    unawaited(
-                                      notifier.leave().catchError(
-                                        (Object _) {},
-                                      ),
-                                    );
-                                    Navigator.of(context).maybePop();
-                                  },
-                                ),
                               ),
-                            ],
-                          )
-                        else
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(52),
-                            ),
-                            onPressed: () => notifier.enter(channel),
-                            icon: const Icon(Icons.headphones_rounded),
-                            label: Text(
-                              room == null
-                                  ? 'Apri la stanza'
-                                  : 'Entra nella stanza',
-                            ),
-                          ),
-                        if (call.isActive && !inThis && call.channel != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: Text(
-                              'Sei già nella stanza di #${call.channel!.name}: '
-                              'entrando qui ne esci.',
+                            const SizedBox(height: 18),
+                            Text(
+                              'I minuti contano sui 10.000 gratuiti del mese',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 14,
-                                color: p.textMuted,
+                                fontSize: 13,
+                                color: p.textDisabled,
                               ),
                             ),
-                          ),
-                        const SizedBox(height: 18),
-                        Text(
-                          'I minuti contano sui 10.000 gratuiti del mese',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 13, color: p.textDisabled),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ],
