@@ -48,7 +48,8 @@ function sito() {
   return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(server)));
 }
 
-async function aspetta(cosa, leggi, ms = 5000) {
+// Sul runner di CI il service worker può metterci qualche secondo a ripartire.
+async function aspetta(cosa, leggi, ms = 20000) {
   const fine = Date.now() + ms;
   for (;;) {
     const v = await leggi();
@@ -145,6 +146,10 @@ async function aspetta(cosa, leggi, ms = 5000) {
     //    aperta ma dietro" passa dallo stesso ramo.
     await page.goto(origine + '/altrove');
     await push({ title: 'Generale', body: 'Primo', route: '/chat/generale', data: { channel: 'generale' } });
+    // Il primo messaggio sveglia il service worker: si aspetta la sua notifica prima di
+    // mandare gli altri, così l'ordine è certo.
+    await aspetta('prima notifica di sistema', async () =>
+      (await notifiche()).some((x) => x.body === 'Primo'));
     await push({ title: 'Generale', body: 'Secondo', route: '/chat/generale', data: { channel: 'generale' } });
     // Un indirizzo esterno come sezione non passa: si apre l'app. Un testo che non è
     // JSON diventa una notifica con il nome del club.
