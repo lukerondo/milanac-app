@@ -25,6 +25,7 @@ Non usiamo i dati per profilazione, pubblicità o statistiche di terze parti.
 - Solo i membri del club vedono i dati del club; nome, cognome e anno di nascita li vede solo il Direttivo.
 - I canali della chat di una squadra li vede chi ne fa parte, quello del Direttivo solo il Direttivo.
 - I dati sono conservati su Supabase (server nell'Unione Europea). Le notifiche passano da Google Firebase, la voce della stanza vocale da Agora.
+- Per mostrarti sulla carta senza lo sfondo, la tua foto viene elaborata per qualche secondo su un server temporaneo di GitHub (anche fuori dall'Unione Europea), che non la conserva: il risultato torna su Supabase.
 - Le notizie mostrate nella Home sono link a siti esterni, che hanno una propria informativa.
 
 ## Per quanto tempo

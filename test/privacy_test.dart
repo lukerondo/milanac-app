@@ -90,6 +90,9 @@ void main() {
       'Agora',
       'non viene registrata',
       'Firebase',
+      // Il ritaglio della foto per la carta passa da un server di GitHub.
+      'senza lo sfondo',
+      'GitHub',
     ]) {
       expect(text, contains(words), reason: words);
     }

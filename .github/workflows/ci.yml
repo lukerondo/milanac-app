@@ -35,6 +35,13 @@ jobs:
         run: python3 -m unittest discover -s tools/news_fetcher/tests
       - name: Test strumenti iPhone
         run: python3 -m unittest discover -s tools/ios
+      # Senza il modello: bastano numpy e Pillow, nelle versioni usate dal workflow Ritagli.
+      - name: Test ritaglio delle foto
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ritaglio"
+          "$RUNNER_TEMP/ritaglio/bin/pip" install --quiet --disable-pip-version-check \
+            $(grep -E '^(numpy|pillow)==' tools/ritaglio_foto/requirements.txt)
+          "$RUNNER_TEMP/ritaglio/bin/python" -m unittest discover -s tools/ritaglio_foto/tests
 
   # Prova le migrazioni su un PostgreSQL vuoto (con le parti di Supabase simulate) e
   # verifica le regole di sicurezza: un errore qui blocca l'applicazione al database vero.

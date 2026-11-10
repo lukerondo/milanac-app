@@ -141,6 +141,24 @@ I file nei bucket (foto, clip, trofei) non vengono cancellati: se servono spazio
 > Nota: le esecuzioni programmate partono solo dal branch principale (`main`):
 > il workflow si attiva da solo dopo il merge della pull request.
 
+## 10b. Foto ritagliate per le carte (GitHub Actions)
+Sulle carte il giocatore compare senza lo sfondo della sua foto. Il ritaglio lo fa il workflow
+**Ritagli** (`tools/ritaglio_foto/ritaglia.py`), con lo stesso secret `SUPABASE_SECRET_KEY`
+delle notizie: non c'è altro da configurare.
+
+- Parte da solo ogni 15 minuti. Se non ci sono foto nuove finisce in pochi secondi; se ce ne
+  sono le ritaglia (una ventina di secondi a foto, al massimo 20 per esecuzione) e salva il
+  risultato accanto alla foto, nel bucket `avatars` (`profiles.avatar_cutout_path`).
+- Nel frattempo, e per le foto che non si riescono a ritagliare bene (nessuna persona
+  riconosciuta, contorno incerto), la carta mostra la foto intera. Le foto scartate stanno in
+  `cutout_failures` con il motivo e non si riprovano; caricando un'altra foto si riparte.
+- Per rifare un ritaglio: `update profiles set avatar_cutout_path = null where id = '…';` e, se
+  era stata scartata, `delete from cutout_failures where avatar_path = '…';`.
+- Per provarlo senza salvare nulla: **Actions → Ritagli → Run workflow** con *Prova senza
+  salvare*. Nel log compaiono solo numeri, mai nomi o percorsi (i log sono pubblici).
+- La foto viene scaricata sul server temporaneo di GitHub solo per il tempo del ritaglio
+  (è scritto nell'informativa dell'app). Per spegnerlo: **Actions → Ritagli → Disable workflow**.
+
 ## 11. Lavori automatici delle presenze (pg_cron)
 La migrazione `0017` attiva l'estensione **pg_cron** e programma `attendance_tick()` ogni minuto:
 alle 18:00 (ora italiana) il promemoria a chi non ha risposto, alle 18:30 le assenze automatiche.
