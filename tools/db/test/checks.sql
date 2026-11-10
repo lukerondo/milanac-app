@@ -2775,3 +2775,70 @@ do $$ begin
      and not has_function_privilege('anon', 'public.complete_registration(text, text, int, text, text, text[], boolean, text, text[], text, int, text, jsonb, text)', 'execute'),
     'funzioni interne non chiamabili dalle app';
 end $$;
+
+-- ================================================================ foto ritagliate (0038)
+-- 37a3 è un giocatore registrato: carica una foto, il server gli prepara il ritaglio.
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert (select relrowsecurity from pg_class where oid = 'public.cutout_failures'::regclass),
+    'cutout_failures: RLS attiva';
+  assert not exists (select 1 from pg_policies where tablename = 'cutout_failures'),
+    'cutout_failures: nessuna policy, solo il server';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000037a3');
+update profiles set avatar_path = auth.uid()::text || '/foto_1.jpg' where id = auth.uid();
+-- Un membro non può scrivere il ritaglio da sé (né leggere gli errori del server).
+update profiles set avatar_cutout_path = auth.uid()::text || '/finto.webp' where id = auth.uid();
+do $$ begin
+  assert (select avatar_cutout_path from profiles where id = auth.uid()) is null,
+    'il ritaglio non si imposta dall''app';
+  assert (select count(*) from cutout_failures) = 0, 'gli errori non si leggono dall''app';
+end $$;
+select pg_temp.expect_error(
+  $q$insert into cutout_failures (avatar_path) values ('x/foto_1.jpg')$q$, 'row-level security');
+-- Il server (nessun utente collegato): prima un errore, poi il ritaglio riuscito.
+reset role;
+select pg_temp.as_user(null);
+insert into cutout_failures (avatar_path, reason)
+  values ('00000000-0000-0000-0000-0000000037a3/foto_1.jpg', 'prova');
+select pg_temp.expect_error(
+  $q$update profiles set avatar_cutout_path = 'altro/ritaglio_1.webp'
+     where id = '00000000-0000-0000-0000-0000000037a3'$q$, 'profiles_avatar_cutout_path_check');
+update profiles set avatar_cutout_path = id::text || '/ritaglio_1.webp'
+  where id = '00000000-0000-0000-0000-0000000037a3' and avatar_path = id::text || '/foto_1.jpg';
+do $$ begin
+  assert (select avatar_cutout_path from profiles where id = '00000000-0000-0000-0000-0000000037a3')
+         = '00000000-0000-0000-0000-0000000037a3/ritaglio_1.webp', 'il server scrive il ritaglio';
+end $$;
+-- Un'altra modifica al profilo non lo tocca; la foto nuova lo azzera e dimentica l'errore.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000037a3');
+update profiles set city = 'Milano' where id = auth.uid();
+do $$ begin
+  assert (select avatar_cutout_path from profiles where id = auth.uid()) is not null,
+    'il ritaglio resta con le altre modifiche';
+end $$;
+update profiles set avatar_path = auth.uid()::text || '/foto_2.jpg' where id = auth.uid();
+do $$ begin
+  assert (select avatar_cutout_path from profiles where id = auth.uid()) is null,
+    'foto nuova: ritaglio azzerato';
+end $$;
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert (select count(*) from cutout_failures) = 0, 'foto nuova: errore della vecchia dimenticato';
+end $$;
+-- Tolta la foto, via anche il ritaglio.
+update profiles set avatar_cutout_path = id::text || '/ritaglio_2.webp'
+  where id = '00000000-0000-0000-0000-0000000037a3';
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000037a3');
+update profiles set avatar_path = null where id = auth.uid();
+do $$ begin
+  assert (select avatar_cutout_path from profiles where id = auth.uid()) is null,
+    'foto tolta: ritaglio azzerato';
+end $$;
+reset role;
+select pg_temp.as_user(null);
