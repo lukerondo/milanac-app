@@ -140,6 +140,30 @@ regolamento da accettare). Crea un account di prova con email e password, comple
 *Giocatore* e accetta il regolamento, poi scrivi email e password nelle **Note per la revisione** di App Store
 Connect (idem nella sezione *Accesso all'app* della Play Console). Finita la revisione, toglilo dalla Rosa.
 
+### iPhone con TestFlight (consigliato: niente UDID)
+
+I ragazzi installano l'app **TestFlight** dall'App Store e poi MILANAC con un invito via email o
+con il **link pubblico**, fino a 10.000 persone. Gli aggiornamenti arrivano da soli. Ogni build
+dura 90 giorni. Il workflow **TestFlight** usa la stessa chiave API del workflow iPhone
+(`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`): nessun secret in più.
+
+1. **Una volta sola**: appstoreconnect.apple.com → **App → + → Nuova app**, piattaforma iOS,
+   bundle ID `com.milanacproclub.milanac`, nome MILANAC. La chiave API non può crearla.
+2. **Una volta sola, per i tester esterni**: App Store Connect → l'app → **TestFlight →
+   Informazioni sul test**: email per i commenti, descrizione, contatto per Apple e un **account
+   di prova** (email e password di un account già iscritto al club: Apple deve poter entrare,
+   e la registrazione chiede la password di iscrizione).
+3. **GitHub → Actions → TestFlight → Run workflow**. Il workflow sceglie un numero di build
+   nuovo, compila, carica, aspetta che Apple elabori la build (10-30 minuti), la mette nel gruppo
+   esterno **Club** (lo crea con il link pubblico attivo) e la manda alla revisione beta. La prima
+   revisione di solito richiede meno di un giorno, le successive spesso sono immediate.
+4. **Il link**: TestFlight → gruppo **Club** → *Link pubblico* → copia e mandalo ai ragazzi. Si
+   apre dall'iPhone, installa TestFlight se manca e poi MILANAC. Il workflow non lo stampa nei log
+   (sono pubblici). In alternativa si aggiungono le email nel gruppo.
+
+Senza le informazioni del passo 2 il workflow carica comunque la build e avvisa: i **tester
+interni** (gli utenti del team su App Store Connect, fino a 100, senza revisione) la vedono subito.
+
 ### iPhone senza App Store (ad hoc, con gli UDID)
 
 Per far provare l'app ai membri senza App Store né TestFlight: i loro iPhone (UDID) si registrano
