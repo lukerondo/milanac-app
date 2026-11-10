@@ -12,6 +12,9 @@ trap 'psql -q -d postgres -c "drop database if exists $DB with (force)" >/dev/nu
 
 run() { psql -v ON_ERROR_STOP=1 -q -X -d "$DB" "$@"; }
 
+# Supabase rifiuta DELETE e UPDATE senza WHERE dalle chiamate dell'app (safeupdate).
+python3 tools/db/test/safeupdate_check.py supabase/migrations/*.sql
+
 run -f tools/db/test/supabase_stubs.sql
 for f in supabase/migrations/*.sql; do
   echo "→ $(basename "$f")"
