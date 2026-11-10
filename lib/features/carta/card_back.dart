@@ -51,7 +51,7 @@ class FutCardNumbers extends StatelessWidget {
                 c.$1,
                 maxLines: 1,
                 style: const TextStyle(
-                  fontSize: 27,
+                  fontSize: 25,
                   fontWeight: FontWeight.w700,
                   height: 1.05,
                 ),

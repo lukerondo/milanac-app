@@ -90,7 +90,7 @@ begin
     headers := null;
   end;
   ip := btrim(split_part(coalesce(headers->>'cf-connecting-ip', headers->>'x-forwarded-for', ''), ',', 1));
-  return 'i:' || encode(digest(coalesce(nullif(ip, ''), 'sconosciuto'), 'sha256'), 'hex');
+  return 'i:' || encode(sha256(convert_to(coalesce(nullif(ip, ''), 'sconosciuto'), 'UTF8')), 'hex');
 end $$;
 revoke all on function public.signup_origin() from public, anon, authenticated;
 
@@ -140,7 +140,7 @@ on conflict do nothing;
 
 create or replace function public.signup_email_hash(p_email text) returns text
 language sql immutable set search_path = public, extensions as $$
-  select encode(digest(lower(btrim(coalesce(p_email, ''))), 'sha256'), 'hex')
+  select encode(sha256(convert_to(lower(btrim(coalesce(p_email, ''))), 'UTF8')), 'hex')
 $$;
 revoke all on function public.signup_email_hash(text) from public, anon, authenticated;
 

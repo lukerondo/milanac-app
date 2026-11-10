@@ -43,6 +43,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | **Nuova app · 9** | Carte FUT fedeli con la foto vera: carta come gli oggetti di FUT (scudo con le tacche, finiture bronzo/argento/oro con i raggi, rossonera 85+, nero/oro e blu elettrico per le speciali), la foto caricata dal giocatore dalla galleria e inquadrata da lui (sposta e allarga) sfumata dentro la carta, sagoma grigia senza foto, sei statistiche FUT in riga scritte dal giocatore o dal Direttivo (VEL TIR PAS DRI DIF FIS, per i portieri TUF PRE RIN RIF VEL PIA; il bonus delle speciali sale anche su quelle; migrazione 0032), mini carte della Rosa nello stesso stile. Via il volto disegnato ovunque: registrazione, Impostazioni, chat, rosa e PDF usano la foto; copia delle foto sul telefono (niente download a ogni avvio). | ✅ |
 | – | Palle inattive nella formazione: il Direttivo sceglie tra i titolari chi batte rigori, punizioni e angoli (da sinistra e da destra), chi esce dal campo perde i suoi ruoli; i battitori compaiono nella formazione pubblicata, nell'annuncio in Comunicazioni, nel PDF e nella notifica di chi batte (migrazione 0035). | ✅ |
 | – | Lavagna: **palle inattive e fuori possesso**. Schemi pronti dal foglio del modulo (angoli da sinistra e da destra, punizione, rigore, rimessa laterale, rinvio dal fondo, calcio d'inizio, angolo contro) con il pallone sul punto giusto, i giocatori ai loro posti e i battitori della formazione pubblicata, salvati in "Piazzati"; **zone di battuta** numerate (1 primo palo, 2 dischetto, 3 secondo palo, 4 limite, 5 corto) dove con *Pallone* si crossa (linea a puntini); in *Vista* la **linea del fuorigioco** con le bandierine, le **linee di reparto** con i metri tra difesa e centrocampo e le **posizioni per zona** (9 zone: con la palla in una zona salvata i giocatori vanno lì da soli; chi non è del Direttivo sposta solo il pallone e vede dove deve stare). | ✅ |
+| **Nuova app · 10** | **Carte da collezione, web app e iscrizioni protette**. Carte nuove: cornici di metallo spazzolato per ogni livello (il colore segue sempre l'overall), targa bassa con nome e statistiche che taglia il giocatore, omino del club (busto grigio con la maglia rossonera) al posto della sagoma; la foto del giocatore viene **ritagliata dallo sfondo** dal workflow *Ritagli* (migrazione 0038) e sfuma nella carta; un tocco **gira la carta** e mostra i sei numeri veri nel club. Cornici e omino stanno in `assets/carte/` e si rigenerano con `tools/carte/genera.sh`. **Web app**: la stessa app nel browser, sotto il sito ufficiale all'indirizzo `/app/` (`docs/SITO.md`). **Password di iscrizione**: per creare un account serve la password che dà il Direttivo, impostata da Impostazioni → Account (migrazione 0037; finché manca le iscrizioni sono chiuse). | ✅ |
 | **Regolamento** | App allineata al regolamento ufficiale: serate dal lunedì al venerdì, 21:30-23:30 (sabato e domenica niente allenamento, promemoria delle 18:00 né assenze automatiche delle 18:30, a meno che il Direttivo non metta una partita in calendario; in Home e in Presenze "Riposo" con la prossima serata), in party 30 minuti prima della partita (promemoria a 30 e a 10 minuti, Match Day aggiornato), ruoli del Direttivo dell'organigramma (Presidente, Fondatore, Capitano, Vice-capitano e i responsabili di Comunicazioni e Marketing, Tecnico/Tattico, Reclutamento, Tornei e Amichevoli, Presenze, IT: stessi poteri per tutti); migrazione 0034. | ✅ |
 
 ## Provare l'app subito (modalità demo)
@@ -104,6 +105,13 @@ social (1080×1920) non sta nel repository. Se il video manca, l'intro resta su 
 7. **Stanza vocale** (facoltativa): serve un account Agora gratuito; App ID e App Certificate vanno
    nei secret `AGORA_APP_ID` e `AGORA_APP_CERTIFICATE` di GitHub (vedi `docs/SETUP_SUPABASE.md`, § 13).
    Senza, l'app funziona lo stesso e la stanza dice che la voce non è ancora attiva.
+
+## Foto ritagliate
+
+Il workflow **Ritagli** (`.github/workflows/ritagli.yml`) ogni 15 minuti cerca le foto dei membri
+ancora senza ritaglio, toglie lo sfondo (`tools/ritaglio_foto/ritaglia.py`, modello open source
+`birefnet-portrait`) e salva la figura trasparente accanto alla foto. Usa lo stesso secret
+`SUPABASE_SECRET_KEY` delle notizie. Dettagli in `docs/SETUP_SUPABASE.md` (10b).
 
 ## Notizie automatiche
 
