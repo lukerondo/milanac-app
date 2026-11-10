@@ -18,7 +18,9 @@ Il sito è il progetto **milanacproclub** su Vercel (account del club, piano Hob
   *Deployments* → *Create Deployment* dal ramo `main`.
 - **Pubblicazione automatica** a ogni aggiornamento di `main` (consigliata, una volta sola): su
   Vercel, progetto → *Settings* → *Git* → *Connect Git Repository* → `lukerondo/milanac-app`.
-  La Root Directory è già `sito`. Da quel momento ogni modifica unita in `main` va online da sola.
+  La Root Directory è già `sito` (con *Include files outside the root directory* attivo: la
+  web app si compila dal resto del repository). Da quel momento ogni modifica unita in `main`
+  va online da sola.
 - Il collegamento tra Vercel e il profilo GitHub (Settings → Authentication) deve restare attivo:
   è quello che permette a Vercel di leggere il repository.
 
