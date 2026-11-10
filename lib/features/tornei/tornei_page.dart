@@ -8,6 +8,7 @@ import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show WideContentWidth;
 import '../../shared/async_view.dart';
 import '../../shared/gold_loader.dart';
 import '../../shared/shared_links.dart';
@@ -418,149 +419,152 @@ class _TournamentPageState extends ConsumerState<TournamentPage> {
           const SizedBox(width: 4),
         ],
       ),
-      body: t == null
-          // Lo spinner finché l'elenco non è caricato; poi, se il torneo non c'è
-          // più (eliminato da un altro telefono), lo si dice.
-          ? tournaments.hasError &&
-                    (!tournaments.isLoading || tournaments.retrying)
-                ? ErrorRetry(
-                    message: friendlyError(
-                      tournaments.error!,
-                      action: 'Caricamento non riuscito',
-                    ),
-                    onRetry: () => ref.invalidate(tournamentsProvider),
-                  )
-                : tournaments.isLoading
-                ? const Center(child: GoldLoader())
-                : ErrorRetry(
-                    message: 'Torneo non trovato.',
-                    onRetry: () => ref.invalidate(tournamentsProvider),
-                  )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              children: [
-                if (t.imagePath != null) _TournamentPhoto(path: t.imagePath!),
-                AppCard(
-                  important: t.status == TournamentStatus.inCorso,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          TournamentTile(
-                            tournament: t,
-                            highlighted: t.status == TournamentStatus.inCorso,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  t.name.toUpperCase(),
-                                  style: const TextStyle(
-                                    fontFamily: sportFont,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: .6,
-                                    height: 1.15,
-                                  ),
-                                ),
-                                Text(
-                                  t.team.label,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: p.textSecondary,
-                                  ),
-                                ),
-                              ],
+      body: WideContentWidth(
+        child: t == null
+            // Lo spinner finché l'elenco non è caricato; poi, se il torneo non c'è
+            // più (eliminato da un altro telefono), lo si dice.
+            ? tournaments.hasError &&
+                      (!tournaments.isLoading || tournaments.retrying)
+                  ? ErrorRetry(
+                      message: friendlyError(
+                        tournaments.error!,
+                        action: 'Caricamento non riuscito',
+                      ),
+                      onRetry: () => ref.invalidate(tournamentsProvider),
+                    )
+                  : tournaments.isLoading
+                  ? const Center(child: GoldLoader())
+                  : ErrorRetry(
+                      message: 'Torneo non trovato.',
+                      onRetry: () => ref.invalidate(tournamentsProvider),
+                    )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                children: [
+                  if (t.imagePath != null) _TournamentPhoto(path: t.imagePath!),
+                  AppCard(
+                    important: t.status == TournamentStatus.inCorso,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            TournamentTile(
+                              tournament: t,
+                              highlighted: t.status == TournamentStatus.inCorso,
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _statusPill(context, t.status),
-                      ),
-                      if (t.organizer != null) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          'Organizzatore: ${t.organizer}',
-                          style: TextStyle(fontSize: 14, color: p.textMuted),
-                        ),
-                      ],
-                      if (t.startsOn != null)
-                        Text(
-                          t.endsOn == null
-                              ? 'Dal ${dates.format(t.startsOn!)}'
-                              : 'Dal ${dates.format(t.startsOn!)} al ${dates.format(t.endsOn!)}',
-                          style: TextStyle(fontSize: 14, color: p.textMuted),
-                        ),
-                      if (t.notes != null && t.notes!.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          t.notes!,
-                          style: const TextStyle(fontSize: 15, height: 1.4),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (t.url != null) ...[
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: () => _open(t.url!),
-                    icon: const Icon(Icons.open_in_new_rounded),
-                    label: const Text('Apri il sito del torneo'),
-                  ),
-                ],
-                const SizedBox(height: 22),
-                SectionLabel(
-                  'Classifica',
-                  trailing: isDirettivo
-                      ? TextButton.icon(
-                          // Solo con la classifica appena caricata: partire da un
-                          // elenco vuoto (o vecchio, mentre si rilegge) e salvare la
-                          // cancellerebbe.
-                          onPressed: standings.hasValue && !standings.isLoading
-                              ? () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => StandingsEditorPage(
-                                      tournamentId: t.id,
-                                      initial: standings.requireValue,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    t.name.toUpperCase(),
+                                    style: const TextStyle(
+                                      fontFamily: sportFont,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: .6,
+                                      height: 1.15,
                                     ),
                                   ),
-                                )
-                              : null,
-                          icon: const Icon(Icons.edit_note_rounded),
-                          label: const Text('Aggiorna'),
-                        )
-                      : null,
-                ),
-                const SizedBox(height: 8),
-                AsyncView(
-                  value: standings,
-                  onRetry: () => ref.invalidate(standingsProvider(t.id)),
-                  loading: const GoldBar(),
-                  data: (rows) => rows.isNotEmpty
-                      ? AppCard(
-                          padding: EdgeInsets.zero,
-                          child: StandingsTable(rows: rows),
-                        )
-                      : Text(
-                          'Classifica non inserita: si trova sul sito del torneo.',
-                          style: TextStyle(fontSize: 15, color: p.textMuted),
+                                  Text(
+                                    t.team.label,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: p.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                ),
-                if (matches.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _statusPill(context, t.status),
+                        ),
+                        if (t.organizer != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            'Organizzatore: ${t.organizer}',
+                            style: TextStyle(fontSize: 14, color: p.textMuted),
+                          ),
+                        ],
+                        if (t.startsOn != null)
+                          Text(
+                            t.endsOn == null
+                                ? 'Dal ${dates.format(t.startsOn!)}'
+                                : 'Dal ${dates.format(t.startsOn!)} al ${dates.format(t.endsOn!)}',
+                            style: TextStyle(fontSize: 14, color: p.textMuted),
+                          ),
+                        if (t.notes != null && t.notes!.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            t.notes!,
+                            style: const TextStyle(fontSize: 15, height: 1.4),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (t.url != null) ...[
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () => _open(t.url!),
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      label: const Text('Apri il sito del torneo'),
+                    ),
+                  ],
                   const SizedBox(height: 22),
-                  const SectionLabel('Partite'),
-                  const SizedBox(height: 10),
-                  MatchList(matches: matches),
+                  SectionLabel(
+                    'Classifica',
+                    trailing: isDirettivo
+                        ? TextButton.icon(
+                            // Solo con la classifica appena caricata: partire da un
+                            // elenco vuoto (o vecchio, mentre si rilegge) e salvare la
+                            // cancellerebbe.
+                            onPressed:
+                                standings.hasValue && !standings.isLoading
+                                ? () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => StandingsEditorPage(
+                                        tournamentId: t.id,
+                                        initial: standings.requireValue,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                            icon: const Icon(Icons.edit_note_rounded),
+                            label: const Text('Aggiorna'),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(height: 8),
+                  AsyncView(
+                    value: standings,
+                    onRetry: () => ref.invalidate(standingsProvider(t.id)),
+                    loading: const GoldBar(),
+                    data: (rows) => rows.isNotEmpty
+                        ? AppCard(
+                            padding: EdgeInsets.zero,
+                            child: StandingsTable(rows: rows),
+                          )
+                        : Text(
+                            'Classifica non inserita: si trova sul sito del torneo.',
+                            style: TextStyle(fontSize: 15, color: p.textMuted),
+                          ),
+                  ),
+                  if (matches.isNotEmpty) ...[
+                    const SizedBox(height: 22),
+                    const SectionLabel('Partite'),
+                    const SizedBox(height: 10),
+                    MatchList(matches: matches),
+                  ],
                 ],
-              ],
-            ),
+              ),
+      ),
     );
   }
 }
@@ -1090,35 +1094,37 @@ class _StandingsEditorPageState extends ConsumerState<StandingsEditorPage> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Aggiungi squadra'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-        children: [
-          Text(
-            'Punti e partite giocate si calcolano da vittorie, pareggi e sconfitte. '
-            "Tocca una riga per modificarla, tieni premuto per toglierla.",
-            style: TextStyle(fontSize: 15, color: context.pal.textMuted),
-          ),
-          const SizedBox(height: 12),
-          if (_rows.isNotEmpty) ...[
-            AppCard(
-              padding: EdgeInsets.zero,
-              child: StandingsTable(rows: sortStandings(_rows)),
+      body: WideContentWidth(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+          children: [
+            Text(
+              'Punti e partite giocate si calcolano da vittorie, pareggi e sconfitte. '
+              "Tocca una riga per modificarla, tieni premuto per toglierla.",
+              style: TextStyle(fontSize: 15, color: context.pal.textMuted),
             ),
-            const SizedBox(height: 8),
-          ],
-          for (final (i, r) in _rows.indexed)
-            ListTile(
-              title: Text(r.teamName),
-              subtitle: Text(
-                'V ${r.won} · N ${r.drawn} · P ${r.lost} · Gol ${r.goalsFor}-${r.goalsAgainst}',
+            const SizedBox(height: 12),
+            if (_rows.isNotEmpty) ...[
+              AppCard(
+                padding: EdgeInsets.zero,
+                child: StandingsTable(rows: sortStandings(_rows)),
               ),
-              trailing: r.isUs
-                  ? Icon(Icons.star_rounded, color: context.pal.accentText)
-                  : null,
-              onTap: () => _edit(i),
-              onLongPress: () => setState(() => _rows.removeAt(i)),
-            ),
-        ],
+              const SizedBox(height: 8),
+            ],
+            for (final (i, r) in _rows.indexed)
+              ListTile(
+                title: Text(r.teamName),
+                subtitle: Text(
+                  'V ${r.won} · N ${r.drawn} · P ${r.lost} · Gol ${r.goalsFor}-${r.goalsAgainst}',
+                ),
+                trailing: r.isUs
+                    ? Icon(Icons.star_rounded, color: context.pal.accentText)
+                    : null,
+                onTap: () => _edit(i),
+                onLongPress: () => setState(() => _rows.removeAt(i)),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -16,29 +16,41 @@ import 'chat_widgets.dart';
 
 /// Azione "Cerca nei messaggi" della barra in alto della scheda Chat (tavola 12).
 class ChatSearchButton extends StatelessWidget {
-  const ChatSearchButton({super.key});
+  const ChatSearchButton({super.key, this.onOpen});
+
+  /// Schermi larghi: la ricerca si chiude e il canale scelto si apre accanto
+  /// all'elenco. Senza, la conversazione si apre sopra la ricerca.
+  final ValueChanged<String>? onOpen;
 
   @override
   Widget build(BuildContext context) => IconButton(
     tooltip: 'Cerca nei messaggi',
     icon: const Icon(Icons.search_rounded, size: 22),
-    onPressed: () => showChatSearch(context),
+    onPressed: () async {
+      final open = onOpen;
+      final slug = await showChatSearch(context, pick: open != null);
+      if (slug != null) open?.call(slug);
+    },
   );
 }
 
-/// Apre la ricerca nei messaggi a schermo intero, sopra le schede.
-Future<void> showChatSearch(BuildContext context) =>
-    Navigator.of(context, rootNavigator: true).push<void>(
+/// Apre la ricerca nei messaggi a schermo intero, sopra le schede. Con [pick] il
+/// messaggio scelto chiude la ricerca e restituisce lo slug del suo canale.
+Future<String?> showChatSearch(BuildContext context, {bool pick = false}) =>
+    Navigator.of(context, rootNavigator: true).push<String>(
       MaterialPageRoute(
         settings: const RouteSettings(name: 'cerca-nei-messaggi'),
-        builder: (_) => const ChatSearchPage(),
+        builder: (_) => ChatSearchPage(pick: pick),
       ),
     );
 
 /// Ricerca nei messaggi dei canali che si vedono: canale, autore, data e il testo
 /// con la parola evidenziata; un tocco apre il canale.
 class ChatSearchPage extends ConsumerStatefulWidget {
-  const ChatSearchPage({super.key});
+  const ChatSearchPage({super.key, this.pick = false});
+
+  /// Il canale scelto non si apre qui sopra: lo riceve chi ha aperto la ricerca.
+  final bool pick;
 
   @override
   ConsumerState<ChatSearchPage> createState() => _ChatSearchPageState();
@@ -187,6 +199,7 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
                       channel: channels[m.channelId]!,
                       author: nameOf(m.authorId),
                       query: q,
+                      pick: widget.pick,
                     ),
                   ],
                 ],
@@ -206,17 +219,21 @@ class _SearchResult extends StatelessWidget {
     required this.channel,
     required this.author,
     required this.query,
+    required this.pick,
   });
   final ChatMessage message;
   final Channel channel;
   final String author;
   final String query;
+  final bool pick;
 
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
     return InkWell(
-      onTap: () => context.push('/chat/${channel.slug}'),
+      onTap: () => pick
+          ? Navigator.of(context).pop(channel.slug)
+          : context.push('/chat/${channel.slug}'),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Row(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/member_photo.dart';
 import '../../shared/silhouette.dart';
 import '../carte/special_cards_repository.dart';
@@ -249,24 +250,31 @@ class CardPortrait extends ConsumerWidget {
   }
 }
 
-/// Griglia di mini carte, tre per riga.
+/// Griglia di mini carte, tre per riga; dove c'è più spazio della colonna dei
+/// telefoni e dei tablet (schermi larghi) le carte per riga aumentano.
 class MiniCardGrid extends StatelessWidget {
   const MiniCardGrid({super.key, required this.members, required this.onTap});
   final List<Member> members;
   final void Function(Member) onTap;
 
+  /// Carte per riga in una griglia larga [width].
+  static int columnsFor(double width) =>
+      width <= ContentWidth.maxWidth ? 3 : (width / 200).floor().clamp(3, 6);
+
   @override
-  Widget build(BuildContext context) => GridView.builder(
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: 3,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 10,
-      childAspectRatio: MiniCard.width / MiniCard.height,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columnsFor(constraints.maxWidth),
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 10,
+        childAspectRatio: MiniCard.width / MiniCard.height,
+      ),
+      itemCount: members.length,
+      itemBuilder: (_, i) =>
+          MiniCard(member: members[i], onTap: () => onTap(members[i])),
     ),
-    itemCount: members.length,
-    itemBuilder: (_, i) =>
-        MiniCard(member: members[i], onTap: () => onTap(members[i])),
   );
 }

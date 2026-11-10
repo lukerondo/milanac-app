@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/providers.dart';
 import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show WideContentWidth;
 import '../../shared/async_view.dart';
 import '../../shared/ui.dart';
 import '../auth/gate_ui.dart';
@@ -172,27 +173,29 @@ class _StoryEditorPageState extends State<_StoryEditorPage> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Separa i paragrafi con una riga vuota. '
-              'Per il grassetto: **testo**.',
-              style: TextStyle(color: context.pal.textMuted, fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                maxLines: null,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-                textCapitalization: TextCapitalization.sentences,
+      body: WideContentWidth(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Separa i paragrafi con una riga vuota. '
+                'Per il grassetto: **testo**.',
+                style: TextStyle(color: context.pal.textMuted, fontSize: 14),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

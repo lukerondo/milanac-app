@@ -14,6 +14,7 @@ import '../../core/haptics.dart';
 import '../../core/local_flags.dart';
 import '../../core/teams.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show WideContentWidth;
 import '../../shared/async_view.dart';
 import '../../shared/gold_loader.dart';
 import '../../shared/member_photo.dart';
@@ -90,7 +91,8 @@ class PlayerCardPage extends StatelessWidget {
         child: GoldRule(),
       ),
     ),
-    body: PlayerCardView(memberId: memberId),
+    // Sugli schermi larghi una colonna leggibile al centro, come il tuo profilo.
+    body: WideContentWidth(child: PlayerCardView(memberId: memberId)),
   );
 }
 

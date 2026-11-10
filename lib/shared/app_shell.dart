@@ -14,7 +14,9 @@ import '../features/rosa/rosa_repository.dart';
 import '../features/walkout/celebrations.dart';
 import 'member_photo.dart';
 import 'sections.dart';
+import 'side_menu.dart';
 import 'ui.dart';
+import 'wide_layout.dart';
 
 /// Nome del club in alto nella Home e nel Club: dipende dalla squadra del membro
 /// (chi è solo in MILANAC FUTURO vede il nome della sua squadra).
@@ -25,7 +27,8 @@ String clubTitleFor(Profile? profile) {
       : 'MILANAC FUTURO PRO CLUB';
 }
 
-/// Struttura comune: la sezione sopra e le cinque schede sempre visibili in basso.
+/// Struttura comune: la sezione sopra e le cinque schede sempre visibili in basso;
+/// sugli schermi larghi le schede stanno nel menu laterale ([SideMenu]).
 class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.shell});
   final StatefulNavigationShell shell;
@@ -33,33 +36,62 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unread = ref.watch(chatUnreadProvider);
+    final wide = isWideLayout(context);
     Widget icon(MainTab t, IconData data) => t == MainTab.chat && unread > 0
         ? Badge(label: Text(unread > 99 ? '99+' : '$unread'), child: Icon(data))
         : Icon(data);
+    // Toccare la scheda già aperta riporta alla sua pagina iniziale.
+    void open(int i) =>
+        shell.goBranch(i, initialLocation: i == shell.currentIndex);
     return PopScope(
       // Indietro da un'altra scheda riporta alla Home prima di chiudere l'app.
       canPop: shell.currentIndex == 0,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && shell.currentIndex != 0) shell.goBranch(0);
       },
-      child: Scaffold(
-        body: Celebrations(child: shell),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: shell.currentIndex,
-          // Toccare la scheda già aperta riporta alla sua pagina iniziale.
-          onDestinationSelected: (i) =>
-              shell.goBranch(i, initialLocation: i == shell.currentIndex),
-          destinations: [
-            for (final t in MainTab.values)
-              NavigationDestination(
-                icon: icon(t, t.icon),
-                selectedIcon: icon(t, t.selectedIcon),
-                label: t.label,
-                tooltip: t == MainTab.chat && unread > 0
-                    ? 'Chat, $unread messaggi nuovi'
-                    : t.label,
-              ),
-          ],
+      child: WideSnackBars(
+        child: Scaffold(
+          body: Celebrations(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (wide)
+                  SideMenu(
+                    current: MainTab.values[shell.currentIndex],
+                    onSelect: (t) => open(t.index),
+                  ),
+                // La chiave tiene ferme le schede (e quello che c'è dentro) quando la
+                // finestra si allarga o si stringe e il menu compare o sparisce.
+                Expanded(
+                  key: const ValueKey('schede'),
+                  // Il margine del bordo sinistro dello schermo (tacca, angoli) lo
+                  // prende già il menu.
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeLeft: wide,
+                    child: shell,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          bottomNavigationBar: wide
+              ? null
+              : NavigationBar(
+                  selectedIndex: shell.currentIndex,
+                  onDestinationSelected: open,
+                  destinations: [
+                    for (final t in MainTab.values)
+                      NavigationDestination(
+                        icon: icon(t, t.icon),
+                        selectedIcon: icon(t, t.selectedIcon),
+                        label: t.label,
+                        tooltip: t == MainTab.chat && unread > 0
+                            ? 'Chat, $unread messaggi nuovi'
+                            : t.label,
+                      ),
+                  ],
+                ),
         ),
       ),
     );
@@ -67,19 +99,24 @@ class MainShell extends ConsumerWidget {
 }
 
 /// Cornice di una sezione: barra in alto (stemma o freccia indietro, titolo, musica,
-/// la tua foto) e contenuto a larghezza leggibile anche sui tablet.
+/// la tua foto) e contenuto a larghezza leggibile anche sui tablet. Sugli schermi
+/// larghi lo stemma, il nome del club e la tua foto stanno nel menu laterale.
 class SectionFrame extends ConsumerWidget {
   const SectionFrame({
     super.key,
     required this.path,
     required this.child,
     this.actions = const [],
+    this.maxWidth = ContentWidth.maxWidth,
   });
 
   /// Sezione di [appSections] (es. "/rosa").
   final String path;
   final Widget child;
   final List<Widget> actions;
+
+  /// Larghezza massima del contenuto (le griglie di carte ne usano di più).
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -88,7 +125,9 @@ class SectionFrame extends ConsumerWidget {
     final router = GoRouter.of(context);
     final canPop = router.canPop();
     final isTabRoot = parent == null;
-    final title = section.tab == MainTab.home && isTabRoot
+    final wide = isWideLayout(context);
+    // Il nome del club è il titolo della Home (su schermo largo è già nel menu).
+    final title = section.tab == MainTab.home && isTabRoot && !wide
         ? clubTitleFor(ref.watch(profileProvider).value)
         : section.title.toUpperCase();
     // La Sala Direttivo ha la barra d'oro pieno (tavola 26).
@@ -111,16 +150,19 @@ class SectionFrame extends ConsumerWidget {
           systemOverlayStyle: gold ? SystemUiOverlayStyle.dark : null,
           automaticallyImplyLeading: false,
           leading: isTabRoot
-              ? Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: Image.asset('assets/images/stemma_256.png'),
-                )
+              ? wide
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: Image.asset('assets/images/stemma_256.png'),
+                      )
               : IconButton(
                   tooltip: 'Indietro',
                   icon: const Icon(Icons.arrow_back_rounded),
                   onPressed: () => canPop ? context.pop() : context.go(parent),
                 ),
           leadingWidth: isTabRoot ? 52 : 56,
+          titleSpacing: isTabRoot && wide ? 24 : null,
           title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
           actions: [
             ...actions,
@@ -134,7 +176,8 @@ class SectionFrame extends ConsumerWidget {
                 onPressed: () =>
                     context.push('/impostazioni?sezione=notifiche'),
               ),
-            if (isTabRoot) const ProfileButton(),
+            if (isTabRoot && !wide) const ProfileButton(),
+            if (wide) const SizedBox(width: 8),
           ],
           bottom: gold
               ? null
@@ -149,7 +192,7 @@ class SectionFrame extends ConsumerWidget {
               ? null
               : const Align(alignment: Alignment.topCenter, child: GoldRule()),
         ),
-        body: ContentWidth(child: child),
+        body: ContentWidth(maxWidth: wide ? maxWidth : null, child: child),
       ),
     );
   }
@@ -197,25 +240,42 @@ class ProfileButton extends ConsumerWidget {
   }
 }
 
-/// Larghezza massima del contenuto: sui tablet le sezioni restano una colonna
-/// leggibile al centro; sui telefoni non cambia nulla.
+/// Larghezza massima del contenuto: sui tablet e sui computer le sezioni restano una
+/// colonna leggibile al centro; sui telefoni non cambia nulla.
 class ContentWidth extends StatelessWidget {
-  const ContentWidth({super.key, required this.child});
+  const ContentWidth({super.key, required this.child, double? maxWidth})
+    : width = maxWidth ?? ContentWidth.maxWidth;
   final Widget child;
+
+  /// Larghezza massima di questo contenuto (di solito [maxWidth]).
+  final double width;
 
   static const maxWidth = 720.0;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      if (constraints.maxWidth <= maxWidth) return child;
+      if (constraints.maxWidth <= width) return child;
       return Center(
         child: SizedBox(
-          width: maxWidth,
+          width: width,
           height: constraints.maxHeight,
           child: child,
         ),
       );
     },
+  );
+}
+
+/// Come [ContentWidth], ma solo sugli schermi larghi: per le pagine a schermo intero
+/// che sui telefoni e sui tablet occupano tutta la larghezza.
+class WideContentWidth extends StatelessWidget {
+  const WideContentWidth({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ContentWidth(
+    maxWidth: isWideLayout(context) ? null : double.infinity,
+    child: child,
   );
 }

@@ -8,8 +8,10 @@ import '../../core/auth/providers.dart';
 import '../../core/clock.dart';
 import '../../core/errors.dart';
 import '../../core/theme.dart';
+import '../../shared/app_shell.dart' show ContentWidth;
 import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
+import '../../shared/wide_layout.dart';
 import '../chat/chat_repository.dart';
 import '../chat/voice_player.dart' show formatSeconds;
 import '../rosa/member.dart';
@@ -201,49 +203,54 @@ class _VoiceRoomView extends ConsumerWidget {
                     ),
                   ),
                   Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
-                      children: [
-                        if (room == null)
-                          _Empty(channel: channel)
-                        else ...[
-                          for (var i = 0; i < sessions.length; i += 2) ...[
-                            if (i > 0) const SizedBox(height: 28),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(child: participant(sessions[i])),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: i + 1 < sessions.length
-                                      ? participant(sessions[i + 1])
-                                      : const SizedBox.shrink(),
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (opener != null) ...[
-                            const SizedBox(height: 28),
-                            Text(
-                              'Aperta da '
-                              '${opener.id == me ? 'te' : opener.displayName} '
-                              '${_ago(ref.read(clockProvider)().difference(room.openedAt))}',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: p.textMuted,
+                    // Sugli schermi larghi chi è nella stanza resta in una colonna
+                    // al centro, non sparso ai due lati dello schermo.
+                    child: ContentWidth(
+                      maxWidth: isWideLayout(context) ? 560 : double.infinity,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+                        children: [
+                          if (room == null)
+                            _Empty(channel: channel)
+                          else ...[
+                            for (var i = 0; i < sessions.length; i += 2) ...[
+                              if (i > 0) const SizedBox(height: 28),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: participant(sessions[i])),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: i + 1 < sessions.length
+                                        ? participant(sessions[i + 1])
+                                        : const SizedBox.shrink(),
+                                  ),
+                                ],
                               ),
+                            ],
+                            if (opener != null) ...[
+                              const SizedBox(height: 28),
+                              Text(
+                                'Aperta da '
+                                '${opener.id == me ? 'te' : opener.displayName} '
+                                '${_ago(ref.read(clockProvider)().difference(room.openedAt))}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: p.textMuted,
+                                ),
+                              ),
+                            ],
+                          ],
+                          if (error != null) ...[
+                            const SizedBox(height: 24),
+                            _ErrorBox(
+                              message: error,
+                              onRetry: () => notifier.enter(channel),
                             ),
                           ],
                         ],
-                        if (error != null) ...[
-                          const SizedBox(height: 24),
-                          _ErrorBox(
-                            message: error,
-                            onRetry: () => notifier.enter(channel),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                   Padding(
