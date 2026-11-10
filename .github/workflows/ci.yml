@@ -55,6 +55,11 @@ jobs:
           npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright-core@1.63.0
           NODE_PATH="$RUNNER_TEMP/pw/node_modules" CHROME_CHANNEL=chrome \
             node tools/web/test/notifiche_test.js
+      # Il modulo di candidatura del sito, con FormSubmit simulato: invio, nuovi tentativi, errori.
+      - name: Test modulo di candidatura
+        run: |
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" CHROME_CHANNEL=chrome \
+            node tools/web/test/modulo_test.js
       - name: Test raccoglitore notizie
         run: python3 -m unittest discover -s tools/news_fetcher/tests
       - name: Test strumenti iPhone

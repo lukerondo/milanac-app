@@ -85,6 +85,11 @@ arrivano come email in tabella a **milanacproclub@proton.me**, con risposta auto
 - **Attivazione, una volta sola**: alla prima candidatura inviata dal sito, FormSubmit manda a
   milanacproclub@proton.me un'email *"Activate form"*: va aperta e va premuto **Activate**. Da
   quel momento le candidature arrivano normalmente. Finché non si attiva, non arriva nulla.
+- **Se FormSubmit non risponde**: l'invio parte in background e il candidato resta sulla pagina.
+  Dopo un errore del server o della rete si riprova una volta da soli; se non va, compare un
+  messaggio con **Riprova** e un link che apre un'email al club già scritta con tutti i campi,
+  e il modulo resta compilato. Se il modulo non è ancora attivato lo dice. Si prova con
+  `node tools/web/test/modulo_test.js` (FormSubmit simulato, nessuna email inviata).
 - La risposta a una candidatura si fa con *Rispondi*: l'email del candidato è già il mittente a
   cui si risponde.
 - Protezione dallo spam: campo trappola nascosto; il captcha è disattivato per non interrompere
