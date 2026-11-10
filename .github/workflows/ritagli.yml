@@ -9,7 +9,8 @@ name: Ritagli
 # Secret: SUPABASE_SECRET_KEY (sb_secret_...), lo stesso del workflow Notizie.
 on:
   schedule:
-    - cron: "7,22,37,52 * * * *"
+    # Ogni 15 minuti, lontano dall'inizio dell'ora (quando GitHub è più carico).
+    - cron: "4-59/15 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
