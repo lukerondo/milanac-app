@@ -1,0 +1,110 @@
+name: TestFlight
+
+# L'app per iPhone su TestFlight: i ragazzi la installano dall'app TestFlight con un invito via
+# email o con il link pubblico, senza UDID e senza Diawi. Usa la stessa chiave API di App Store
+# Connect del workflow iPhone (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8): nessun secret in più.
+#
+# Una volta sola, a mano: l'app va creata su App Store Connect (bundle com.milanacproclub.milanac)
+# e per i tester esterni vanno compilate le "Informazioni sul test" (vedi docs/PUBBLICAZIONE.md,
+# "TestFlight"). Poi ogni giro: compila, carica la build con un numero nuovo, aspetta che Apple
+# la elabori, la mette nel gruppo "Club" e la manda alla revisione beta.
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Mac di GitHub (serve Xcode 26 o più recente)"
+        required: false
+        default: macos-26
+        type: choice
+        options: [macos-26, macos-15]
+  # Prima prova dal ramo di lavoro, quando cambia il workflow stesso.
+  push:
+    branches: ["claude/**"]
+    paths: [.github/workflows/testflight.yml, tools/ios/testflight.py]
+
+concurrency: testflight
+
+jobs:
+  testflight:
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v4
+      # App Store Connect accetta solo app compilate con l'SDK di iOS 26 (Xcode 26 o più
+      # recente): si sceglie l'Xcode più nuovo installato sul Mac di GitHub.
+      - name: Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then
+            echo "::error::Su questo Mac non c'è Xcode 26: rilancia scegliendo macos-26."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.7"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      - name: App e numero della build
+        id: asc
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install -q "pyjwt[crypto]==2.10.1"
+          "$RUNNER_TEMP/venv/bin/python" tools/ios/testflight.py prepara
+
+      # Senza togliere le estensioni di Agora come nell'IPA ad hoc: su TestFlight non c'è il
+      # limite dei 50 MB di Diawi, e l'app resta quella del pacchetto originale.
+      - name: Archivio
+        run: |
+          xcodebuild -version
+          flutter build ipa --release --no-codesign --build-number=${{ steps.asc.outputs.build }} \
+            --dart-define-from-file=env/prod.json
+
+      # Firma per l'App Store (certificato e profilo gestiti da Apple tramite la chiave API) e
+      # caricamento diretto su App Store Connect.
+      - name: Firma e caricamento
+        env:
+          TEAM: ${{ steps.asc.outputs.team }}
+        run: |
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath build/ios/testflight \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+          echo "Build ${{ steps.asc.outputs.build }} caricata su App Store Connect."
+
+      - name: Ai tester
+        env:
+          APP_ID: ${{ steps.asc.outputs.app }}
+          BUILD_NUMBER: ${{ steps.asc.outputs.build }}
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" tools/ios/testflight.py distribuisci
