@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -13,6 +13,8 @@ import '../../shared/async_view.dart';
 import '../../shared/gold_loader.dart';
 import '../../shared/ui.dart';
 import '../chat/chat_repository.dart';
+import '../chat/voice_file_io.dart'
+    if (dart.library.js_interop) '../chat/voice_file_web.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'board_model.dart';
@@ -66,9 +68,7 @@ class _ReplayPreviewPageState extends ConsumerState<ReplayPreviewPage> {
   void _deleteTemp() {
     final p = widget.audioPath;
     if (p == null) return;
-    try {
-      File(p).deleteSync();
-    } catch (_) {}
+    unawaited(discardRecording(p));
   }
 
   Future<void> _send(List<Channel> channels) async {

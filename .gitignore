@@ -55,3 +55,6 @@ __pycache__/
 
 # Web app compilata da tools/web/build_vercel.sh (la pubblica Vercel sotto /app/)
 /sito/app/
+
+# SDK Web di Agora, scaricato da tools/web/agora_sdk.sh
+/web/agora/

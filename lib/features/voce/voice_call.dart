@@ -157,18 +157,16 @@ class VoiceCall extends Notifier<VoiceCallState> {
       // Prima l'uscita dalla stanza di prima: il server la riceve prima dell'ingresso.
       await previous;
       if (stale()) return;
-      if (kIsWeb && !AppConfig.isDemo) {
-        throw const VoiceException(
-          'La stanza vocale funziona solo dall\'app sul telefono.',
-        );
-      }
       if (userId == null) {
         throw const VoiceException('Accedi per entrare nella stanza.');
       }
       if (!await _microphoneAllowed()) {
         throw const VoiceException(
-          'Serve il permesso del microfono: attivalo nelle impostazioni del '
-          'telefono e riprova.',
+          kIsWeb
+              ? 'Serve il permesso del microfono: consentilo dal lucchetto '
+                    'accanto all\'indirizzo della pagina e riprova.'
+              : 'Serve il permesso del microfono: attivalo nelle impostazioni '
+                    'del telefono e riprova.',
         );
       }
       if (stale()) return;

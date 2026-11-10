@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -160,7 +161,8 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
       data['channel'] != widget.channel.slug;
 
   static const _noMicrophone = kIsWeb
-      ? 'I vocali si registrano dall\'app sul telefono.'
+      ? 'Serve il permesso del microfono per registrare un vocale: consentilo '
+            'dal lucchetto accanto all\'indirizzo della pagina.'
       : 'Serve il permesso del microfono per registrare un vocale.';
 
   Channel get _channel => widget.channel;
@@ -401,6 +403,29 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     }
   }
 
+  /// Sul computer (browser o app per Mac) Invio manda il messaggio, come nelle chat da
+  /// scrivania; Maiusc+Invio va a capo. Sul telefono Invio resta "a capo".
+  KeyEventResult _enterSends(FocusNode node, KeyEvent event) {
+    const desktop = {
+      TargetPlatform.windows,
+      TargetPlatform.macOS,
+      TargetPlatform.linux,
+    };
+    final enter =
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (event is! KeyDownEvent ||
+        !enter ||
+        !desktop.contains(defaultTargetPlatform) ||
+        HardwareKeyboard.instance.isShiftPressed ||
+        // Si sta componendo un carattere (accenti, tastiere asiatiche).
+        _text.value.composing.isValid) {
+      return KeyEventResult.ignored;
+    }
+    _send();
+    return KeyEventResult.handled;
+  }
+
   /// Tocco sul microfono: il permesso si chiede qui, fuori dalla pressione lunga (il
   /// dialogo del sistema la interromperebbe e il vocale partirebbe a dito alzato).
   Future<void> _micTapped() async {
@@ -429,11 +454,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
       return;
     }
     if (!started) {
-      _notice(
-        kIsWeb
-            ? _noMicrophone
-            : 'Tocca il microfono per dare il permesso di registrare.',
-      );
+      _notice('Tocca il microfono per dare il permesso di registrare.');
       return;
     }
     if (!_pressing) {
@@ -898,28 +919,34 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                           )
                         : Semantics(
                             label: 'Messaggio',
-                            child: TextField(
-                              controller: _text,
-                              minLines: 1,
-                              maxLines: 5,
-                              maxLength: 2000,
-                              textCapitalization: TextCapitalization.sentences,
-                              style: TextStyle(fontSize: 16, color: p.text),
-                              decoration: InputDecoration(
-                                hintText: 'Scrivi un messaggio',
-                                counterText: '',
-                                isDense: true,
-                                filled: true,
-                                fillColor: p.surfaceHigh,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 11,
+                            child: Focus(
+                              // Con la tastiera del computer Invio manda il
+                              // messaggio e Maiusc+Invio va a capo.
+                              onKeyEvent: _enterSends,
+                              child: TextField(
+                                controller: _text,
+                                minLines: 1,
+                                maxLines: 5,
+                                maxLength: 2000,
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                style: TextStyle(fontSize: 16, color: p.text),
+                                decoration: InputDecoration(
+                                  hintText: 'Scrivi un messaggio',
+                                  counterText: '',
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: p.surfaceHigh,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 11,
+                                  ),
+                                  border: pill(p.borderStrong),
+                                  enabledBorder: pill(p.borderStrong),
+                                  focusedBorder: pill(p.chipBorder),
                                 ),
-                                border: pill(p.borderStrong),
-                                enabledBorder: pill(p.borderStrong),
-                                focusedBorder: pill(p.chipBorder),
+                                onSubmitted: (_) => _send(),
                               ),
-                              onSubmitted: (_) => _send(),
                             ),
                           ),
                   ),

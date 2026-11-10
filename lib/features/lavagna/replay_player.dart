@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -129,7 +129,8 @@ class ReplayPlayer extends ChangeNotifier
     final p = AudioPlayer();
     try {
       if (audioFile != null) {
-        await p.setFilePath(audioFile!);
+        // Nel browser la registrazione appena fatta è un indirizzo in memoria.
+        await (kIsWeb ? p.setUrl(audioFile!) : p.setFilePath(audioFile!));
       } else {
         await p.setUrl(audioUrl!);
       }

@@ -31,6 +31,9 @@ jobs:
       - name: Formattazione
         run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter test
+      # La stanza vocale nel browser: il motore Dart contro uno script finto, in Chrome.
+      - name: Test nel browser
+        run: flutter test --platform chrome test/web
       - name: Test raccoglitore notizie
         run: python3 -m unittest discover -s tools/news_fetcher/tests
       - name: Test strumenti iPhone

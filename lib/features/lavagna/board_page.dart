@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
@@ -21,6 +20,8 @@ import '../../shared/member_photo.dart';
 import '../../shared/ui.dart';
 import '../chat/chat_repository.dart' show maxReplaySeconds;
 import '../chat/voice_player.dart' show formatSeconds;
+import '../chat/voice_file_io.dart'
+    if (dart.library.js_interop) '../chat/voice_file_web.dart';
 import '../chat/voice_recorder.dart';
 import '../formazione/formation_repository.dart';
 import '../formazione/modules.dart';
@@ -1056,7 +1057,7 @@ class _BoardPageState extends ConsumerState<BoardPage>
     _focus.claim(AudioUse.registrazioneReplay);
     var ok = false;
     try {
-      ok = await _mic.start();
+      ok = await _mic.start(maxSeconds: maxReplaySeconds);
     } catch (_) {}
     if (!mounted) {
       // Pagina chiusa mentre il microfono si apriva: si butta tutto.
@@ -1069,7 +1070,8 @@ class _BoardPageState extends ConsumerState<BoardPage>
       setState(() => _micBusy = false);
       _notice(
         kIsWeb
-            ? 'La registrazione funziona dall\'app sul telefono.'
+            ? 'Serve il permesso del microfono per registrare il replay: '
+                  'consentilo dal lucchetto accanto all\'indirizzo della pagina.'
             : 'Serve il permesso del microfono per registrare il replay.',
       );
       return;
@@ -1121,11 +1123,7 @@ class _BoardPageState extends ConsumerState<BoardPage>
     _focus.release(AudioUse.registrazioneReplay);
     if (!mounted) {
       final path = audio?.path;
-      if (path != null && path.isNotEmpty) {
-        try {
-          File(path).deleteSync();
-        } catch (_) {}
-      }
+      if (path != null && path.isNotEmpty) unawaited(discardRecording(path));
       _mic.dispose();
       return;
     }

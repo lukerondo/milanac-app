@@ -20,6 +20,30 @@ const chatBucket = 'chat';
 const maxVoiceSeconds = 120;
 const maxReplaySeconds = 300;
 
+/// Estensione e tipo di un audio registrato, dai suoi primi byte: i telefoni registrano
+/// AAC in MP4, il browser anche WAV (e, dove non si è potuto scegliere, WebM o Ogg). Chi
+/// ascolta riconosce il formato dal nome del file e dal tipo.
+(String, String) audioFormatOf(Uint8List bytes) {
+  bool at(int offset, String tag) {
+    if (bytes.length < offset + tag.length) return false;
+    for (var i = 0; i < tag.length; i++) {
+      if (bytes[offset + i] != tag.codeUnitAt(i)) return false;
+    }
+    return true;
+  }
+
+  if (at(0, 'RIFF') && at(8, 'WAVE')) return ('wav', 'audio/wav');
+  if (at(0, 'OggS')) return ('ogg', 'audio/ogg');
+  if (bytes.length > 3 &&
+      bytes[0] == 0x1A &&
+      bytes[1] == 0x45 &&
+      bytes[2] == 0xDF &&
+      bytes[3] == 0xA3) {
+    return ('webm', 'audio/webm');
+  }
+  return ('m4a', 'audio/mp4');
+}
+
 /// Messaggi più recenti seguiti in tempo reale; i precedenti arrivano a pagine
 /// scorrendo in cima alla conversazione.
 const chatRecentLimit = 50;
@@ -761,7 +785,9 @@ class _SupabaseChatRepository extends ChatRepository {
         imagePath = await upload('$uid/$stamp.jpg', image, 'image/jpeg');
       }
       if (audio != null) {
-        audioPath = await upload('$uid/$stamp.m4a', audio, 'audio/mp4');
+        // Dal telefono è sempre AAC (.m4a); dal browser può essere anche WAV.
+        final (extension, type) = audioFormatOf(audio);
+        audioPath = await upload('$uid/$stamp.$extension', audio, type);
       }
     } catch (_) {
       // Il messaggio non parte: i file già caricati non servono più.

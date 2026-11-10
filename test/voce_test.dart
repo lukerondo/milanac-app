@@ -155,6 +155,32 @@ class _Call {
 void main() {
   setUpAll(() => initializeDateFormatting('it'));
 
+  test('nel browser: errori dell\'ingresso e della caduta in italiano', () {
+    expect(
+      voiceWebJoinMessage('PERMISSION_DENIED'),
+      contains('permesso del microfono'),
+    );
+    expect(voiceWebJoinMessage('NotAllowedError'), contains('lucchetto'));
+    expect(
+      voiceWebJoinMessage('DEVICE_NOT_FOUND'),
+      contains('Nessun microfono'),
+    );
+    expect(voiceWebJoinMessage('NOT_READABLE'), contains('occupato'));
+    expect(voiceWebJoinMessage('BROWSER_NON_ADATTO'), contains('browser'));
+    expect(voiceWebJoinMessage('SDK_MANCANTE'), contains('non si è caricata'));
+    expect(voiceWebJoinMessage('USCITO'), 'Sei uscito dalla stanza.');
+    // Una sigla sconosciuta resta visibile: serve a capire che cosa è successo.
+    expect(
+      voiceWebJoinMessage('CAN_NOT_GET_GATEWAY_SERVER'),
+      'La stanza non risponde (CAN_NOT_GET_GATEWAY_SERVER). Riprova.',
+    );
+    expect(voiceWebLostMessage('TOKEN_EXPIRE'), contains('biglietto'));
+    expect(voiceWebLostMessage('UID_BANNED'), contains('fatto uscire'));
+    expect(voiceWebLostMessage('UID_CONFLICT'), contains('altro dispositivo'));
+    expect(voiceWebLostMessage('NETWORK_ERROR'), contains('Connessione'));
+    expect(voiceWebLostMessage(''), contains('Connessione'));
+  });
+
   test('numero utente Agora: stabile, positivo e diverso tra profili', () {
     expect(agoraUidFor('demo'), agoraUidFor('demo'));
     expect(agoraUidFor('demo'), greaterThan(0));

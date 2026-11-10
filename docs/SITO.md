@@ -43,13 +43,23 @@ nel club accede con la sua email e la sua password.
   (vedi `docs/SETUP_SUPABASE.md`, "Password di iscrizione"). Vale anche per l'app sul telefono.
 - **Accesso e link delle email**: gli indirizzi della web app devono stare tra i *Redirect URLs*
   di Supabase. Li aggiunge da solo il workflow **Database** (`tools/db/auth_urls.py`).
-- **Cosa non c'è nel browser** (resta nell'app sul telefono): la stanza vocale, i messaggi
-  vocali e la registrazione dei replay, le notifiche, la musica scelta dal proprio dispositivo.
+- **Stanza vocale**: dal browser si entra nella stessa stanza dei telefoni (SDK Web di Agora,
+  `web/stanza_vocale.js`). Il browser chiede il permesso del microfono; l'audio esce da dove
+  dice il computer. L'SDK non sta nel repository: lo scarica `tools/web/agora_sdk.sh` quando
+  si compila (versione fissa, impronta controllata).
+- **Chat**: messaggi vocali e replay della lavagna si registrano anche dal browser. Dove il
+  browser sa registrare in AAC (Chrome ed Edge su Windows e Mac, Safari) il formato è quello
+  dell'app; altrimenti (Firefox, Linux) è WAV, che si ascolta ovunque ma pesa di più. Con la
+  tastiera del computer **Invio** manda il messaggio e **Maiusc+Invio** va a capo.
+- **Cosa non c'è nel browser** (resta nell'app sul telefono): le notifiche e la musica scelta
+  dal proprio dispositivo.
 - **Aggiornarla**: dopo ogni modifica all'app unita in `main` va ripubblicato il sito, come
   sopra. La web app non si aggiorna da sola finché Vercel non è collegato al repository.
 
 Per provarla in locale: `tools/web/build_vercel.sh`, poi `python3 -m http.server -d sito 8000`
-e apri <http://localhost:8000/app/>. Attenzione: è collegata al database vero.
+e apri <http://localhost:8000/app/>. Attenzione: è collegata al database vero. Con
+`flutter run -d chrome` serve prima, una volta, `tools/web/agora_sdk.sh` (per la stanza vocale).
+I test che girano nel browser: `flutter test --platform chrome test/web`.
 
 ## Il modulo di candidatura
 
