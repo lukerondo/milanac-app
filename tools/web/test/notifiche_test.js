@@ -70,6 +70,7 @@ async function aspetta(cosa, leggi, ms = 20000) {
     args: ['--no-sandbox'],
   });
   try {
+    console.log('Browser:', browser.version());
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto(origine + '/app/');
@@ -150,24 +151,32 @@ async function aspetta(cosa, leggi, ms = 20000) {
     // mandare gli altri, così l'ordine è certo.
     await aspetta('prima notifica di sistema', async () =>
       (await notifiche()).some((x) => x.body === 'Primo'));
+    // Un messaggio alla volta, aspettando la sua notifica: se uno manca si sa quale.
+    const attesa = (cosa, prova) => aspetta(cosa, async () => {
+      const n = await notifiche();
+      return n.some(prova) && n;
+    }).catch(async (e) => {
+      console.error('Notifiche viste:', JSON.stringify(await notifiche()), 'iscrizione:', JSON.stringify(esito));
+      throw e;
+    });
     await push({ title: 'Generale', body: 'Secondo', route: '/chat/generale', data: { channel: 'generale' } });
-    // Un indirizzo esterno come sezione non passa: si apre l'app. Un testo che non è
-    // JSON diventa una notifica con il nome del club.
+    await attesa('seconda notifica dello stesso canale', (x) => x.body === 'Secondo');
+    // Un indirizzo esterno come sezione non passa: si apre l'app.
     await push({ title: 'Strano', body: '', route: 'https://esempio.invalid/', data: {} });
+    await attesa('notifica con sezione non valida', (x) => x.title === 'Strano');
+    // Un testo che non è JSON diventa una notifica con il nome del club (stessa sezione
+    // della precedente, la Home: ne resta una sola).
     await cdp.send('ServiceWorker.deliverPushMessage', {
       origin: origine, registrationId: registrazione.registrationId, data: 'non è JSON',
     });
-    const mostrate = await aspetta('notifiche di sistema', async () => {
-      const n = await notifiche();
-      return n.length >= 2 && n.some((x) => x.body === 'Secondo') &&
-        n.some((x) => x.title === 'MILANAC Pro Club') && n;
-    });
-    assert.strictEqual(mostrate.length, 2);
+    const tutte = await attesa('notifica da un testo non JSON', (x) => x.title === 'MILANAC Pro Club');
+    // Solo le nostre: Chrome può aggiungerne una sua ("aggiornato in background").
+    const mostrate = tutte.filter((n) => ['Generale', 'Strano', 'MILANAC Pro Club'].includes(n.title));
+    assert.strictEqual(mostrate.length, 2, JSON.stringify(tutte));
     assert.deepStrictEqual(mostrate.find((n) => n.tag === '/chat/generale'), {
       title: 'Generale', body: 'Secondo', tag: '/chat/generale', data: { route: '/chat/generale' },
       icon: origine + '/app/icons/Icon-192.png',
     });
-    // Le due notifiche senza sezione valida portano entrambe alla Home: ne resta una.
     assert.deepStrictEqual(mostrate.find((n) => n.tag === '/').data, { route: '/' });
 
     // 5. Clic sulla notifica con l'app aperta: la sezione si apre lì.
