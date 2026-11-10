@@ -10,7 +10,7 @@ name: Ritagli
 on:
   schedule:
     # Ogni 15 minuti, lontano dall'inizio dell'ora (quando GitHub è più carico).
-    - cron: "4-59/15 * * * *"
+    - cron: "4,19,34,49 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
