@@ -1,7 +1,8 @@
 # Il sito del club (sito/)
 
 Il sito di MILANAC Pro Club è una sola pagina statica: `sito/index.html` con dentro stile e
-script, più le cartelle `img/`, `video/` e `audio/`. La pagina non ha niente da compilare. Le
+script, più le cartelle `img/`, `video/` e `audio/` (che contiene anche la colonna sonora
+dell'app, `canzoni_autoprodotte.mp3`: l'app la scarica da qui). La pagina non ha niente da compilare. Le
 animazioni (GSAP) e i caratteri (Google Fonts) arrivano da CDN gratuite.
 
 Sotto lo stesso indirizzo, in `/app/`, c'è la **web app**: la stessa app del telefono, nel
@@ -66,8 +67,10 @@ nel club accede con la sua email e la sua password.
   *Aggiungi alla schermata Home*). Su computer arrivano finché il browser è in esecuzione.
   Le chiavi le genera il workflow **Funzioni** (vedi `docs/SETUP_SUPABASE.md`, "Notifiche
   nel browser").
-- **Cosa non c'è nel browser** (resta nell'app sul telefono): la musica scelta dal proprio
-  dispositivo.
+- **Colonna sonora**: le canzoni autoprodotte del club si ascoltano anche nel browser, da
+  `sito/audio/canzoni_autoprodotte.mp3`; partono al primo tocco sulla pagina, perché i browser
+  non fanno partire l'audio da soli. Resta solo nell'app sul telefono la musica scelta dal
+  proprio dispositivo.
 - **Aggiornarla**: dopo ogni modifica all'app unita in `main` va ripubblicato il sito, come
   sopra. La web app non si aggiorna da sola finché Vercel non è collegato al repository.
 

@@ -27,7 +27,7 @@ scritta in **Flutter** con backend **Supabase** (piano gratuito).
 | C | Tattiche & Build (video dei creator per ruolo, schemi del Direttivo) | ✅ |
 | D | Chat a canali (Main, Presenze automatiche, Fantacalcio, Tattiche) | ✅ |
 | E | Tornei (link, classifica facoltativa, partite collegate) | ✅ |
-| – | Colonna sonora: musica di sottofondo scelta dal telefono, con muto | ✅ |
+| – | Colonna sonora: musica di sottofondo con muto; di partenza le **canzoni autoprodotte** del club (strumentali suonate da noi), oppure un file scelto dal telefono | ✅ |
 | – | Sala Direttivo, Impostazioni (dati e foto della carta), Home "Notizie dal mondo FC" con pannello Stasera | ✅ |
 | F | Voti dopo la partita, carta "Uomo partita", Squadra della settimana | ✅ |
 | G | Traguardi sbloccabili (badge su profilo e carta) e walkout stile FUT | ✅ |
@@ -72,6 +72,22 @@ del video; gli altri nomi sono quelli generati) e il montaggio sono degli script
 `tools/video/walkout/` (OpenCV + ffmpeg: `striscioni.py`, `nomi.py`, `monta.py`, lanciati da
 una cartella con il video in `in/` e i fotogrammi degli shot in `shots/`). La versione per i
 social (1080×1920) non sta nel repository. Se il video manca, l'intro resta su sfondo nero.
+
+## Colonna sonora del club
+
+`sito/audio/canzoni_autoprodotte.mp3` sono le **canzoni autoprodotte** del club: strumentali
+suonate da noi, un unico mp3 di 36 minuti (80 kbps, circa 22 MB, brani montati uno dopo l'altro).
+Sono la musica di sottofondo di partenza per tutti (Club → Colonna sonora); chi vuole sceglie
+invece un file dal telefono o toglie la musica, e il muto resta sempre in alto.
+
+Il file sta sul sito e non dentro l'app (APK e IPA crescerebbero di 22 MB, e l'IPA supererebbe i
+50 MB di Diawi): il telefono lo scarica la prima volta, di solito mentre scorre l'intro, e poi lo
+suona dal file anche senza rete; nella web app si ascolta dall'indirizzo e parte al primo tocco
+sulla pagina (i browser non fanno partire l'audio da soli). Per **cambiare le canzoni** basta
+sostituire l'mp3 con lo stesso nome e ripubblicare il sito: a ogni apertura l'app confronta il
+peso del file sul sito con quello della sua copia, scarica la versione nuova in silenzio e la
+suona dall'apertura successiva, senza aggiornare l'app. Il codice è in `lib/features/musica/`
+(`club_track.dart` per il download).
 
 ## Collegare Supabase (gratis)
 

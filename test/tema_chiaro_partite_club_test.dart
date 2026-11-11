@@ -149,7 +149,7 @@ void main() {
     expectLight(tester, find.text('Aggiungi un trofeo'));
 
     await goToSection(tester, 'Colonna sonora');
-    expectLight(tester, find.text('Nessuna musica scelta'));
+    expectLight(tester, find.text('Nessuna musica'));
     await c.read(soundtrackProvider.notifier).pickTrack();
     await tester.pumpAndSettle();
     expectLight(tester, find.text('Scelto dal tuo telefono'));

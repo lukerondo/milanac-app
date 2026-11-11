@@ -317,9 +317,12 @@ al posto della bozza, pubblicati come nuova versione da riaccettare (notifica `r
     senza segni di vita dell'app. Sul web la stanza non è disponibile.
 16. **Tornei** – foto o logo (caricati dal Direttivo), link al sito, squadra, stato,
     classifica facoltativa compilata dal Direttivo, partite collegate.
-17. **Colonna sonora** – ognuno sceglie un file audio dal proprio telefono (es. compilation
-    FIFA): suona in loop, muto sempre in alto. Nessuna canzone è inclusa nell'app (diritti);
-    playlist e video ufficiali su YouTube/Spotify condivisi come link.
+17. **Colonna sonora** – di partenza le canzoni autoprodotte del club (strumentali suonate da
+    noi, `sito/audio/canzoni_autoprodotte.mp3`): il telefono le scarica dal sito la prima volta
+    e poi le suona dal file, il browser le ascolta dall'indirizzo. In alternativa ognuno sceglie
+    un file audio dal proprio telefono (es. compilation FIFA) o toglie la musica. Suona in loop,
+    muto sempre in alto. Nessuna canzone di altri è inclusa nell'app (diritti); playlist e video
+    ufficiali su YouTube/Spotify condivisi come link.
 18. **Carte speciali** – al posto dei voti. Dal dettaglio di una partita con risultato il
     Direttivo sceglie un premiato per reparto (POR, DIF, CEN, ATT) per la **carta nero/oro
     della settimana**, con bonus da +1 a +5 sull'overall; la **blu elettrico** (+5) arriva da

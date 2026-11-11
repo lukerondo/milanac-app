@@ -12,6 +12,7 @@ import '../../shared/async_view.dart';
 import '../../shared/gold_loader.dart';
 import '../../shared/shared_links.dart';
 import '../../shared/ui.dart';
+import 'club_track.dart';
 import 'soundtrack.dart';
 
 /// Pulsante nella barra in alto (sempre scura): muto / riattiva la musica, in oro
@@ -40,10 +41,14 @@ class SoundtrackButton extends ConsumerWidget {
   }
 }
 
-/// Colonna sonora: il brano scelto dal telefono con i comandi, come la tavola, e
-/// sotto le playlist e i video del club.
+/// Colonna sonora: il lettore con le canzoni del club (o il file scelto dal
+/// telefono) e i comandi, e sotto le playlist e i video del club.
 class MusicaPage extends ConsumerWidget {
   const MusicaPage({super.key});
+
+  static const _clubOnPhone =
+      'si scarica una volta (circa 22 MB) e poi suona anche senza rete.';
+  static const _clubOnWeb = 'nel browser parte al primo tocco sulla pagina.';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -92,31 +97,45 @@ class MusicaPage extends ConsumerWidget {
       }
     }
 
+    final wide = OutlinedButton.styleFrom(
+      minimumSize: const Size.fromHeight(52),
+    );
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
         _PlayerCard(onPick: pick),
-        if (s.hasTrack) ...[
-          const SizedBox(height: 16),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-            ),
+        if (s.source != SoundtrackSource.none) const SizedBox(height: 16),
+        if (s.source == SoundtrackSource.file) ...[
+          OutlinedButton.icon(
+            style: wide,
+            onPressed: s.busy ? null : ctrl.useClubTrack,
+            icon: const Icon(Icons.queue_music_rounded),
+            label: const Text('Torna alla colonna sonora del club'),
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (s.source != SoundtrackSource.none) ...[
+          OutlinedButton.icon(
+            style: wide,
             onPressed: s.busy ? null : pick,
-            child: const Text('Scegli un altro file'),
+            icon: const Icon(Icons.library_music_rounded),
+            label: Text(
+              s.isClub ? 'Scegli un file dal telefono' : 'Scegli un altro file',
+            ),
           ),
           const SizedBox(height: 4),
           TextButton.icon(
             style: TextButton.styleFrom(foregroundColor: p.danger),
             onPressed: s.busy ? null : ctrl.removeTrack,
-            icon: const Icon(Icons.delete_outline_rounded),
-            label: const Text('Rimuovi la musica'),
+            icon: const Icon(Icons.music_off_rounded),
+            label: const Text('Togli la musica'),
           ),
         ],
         const SizedBox(height: 12),
         Text(
-          "La musica suona in sottofondo mentre usi l'app. Il pulsante per il "
-          'muto resta sempre in alto. Nessuna canzone è inclusa nell\'app.',
+          "La musica suona in sottofondo mentre usi l'app e il pulsante per il "
+          'muto resta sempre in alto. La colonna sonora del club sono canzoni '
+          'strumentali suonate da noi: ${kIsWeb ? _clubOnWeb : _clubOnPhone}',
           style: TextStyle(fontSize: 15, height: 1.5, color: p.textSecondary),
         ),
         const SizedBox(height: 24),
@@ -317,40 +336,50 @@ class _PlayerCardState extends ConsumerState<_PlayerCard> {
     // La card è sempre scura: comandi con la tavolozza scura anche nel tema chiaro.
     const dark = AppPalette.dark;
 
+    const title = TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      color: HeroText.primary,
+    );
+    const body = TextStyle(
+      fontSize: 15,
+      height: 1.4,
+      color: HeroText.secondary,
+    );
+    final gold = FilledButton.styleFrom(
+      backgroundColor: MilanacColors.gold,
+      foregroundColor: MilanacColors.ink,
+    );
+
     return AppCard(
       hero: true,
       radius: 20,
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 22),
       child: Column(
         children: [
-          const _Artwork(),
+          _Artwork(club: s.isClub),
           const SizedBox(height: 16),
-          if (!s.hasTrack) ...[
-            const Text(
-              'Nessuna musica scelta',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: HeroText.primary,
-              ),
-            ),
+          if (s.source == SoundtrackSource.none && !s.hasTrack) ...[
+            const Text('Nessuna musica', style: title),
             const SizedBox(height: 6),
             const Text(
-              'Scegli un file audio dal tuo telefono (per esempio la compilation '
-              'di canzoni FIFA che hai nei Download): suonerà in sottofondo '
-              "mentre usi l'app.",
+              'Rimetti la colonna sonora del club, le nostre canzoni '
+              'strumentali, o scegli un file audio dal tuo telefono (per esempio '
+              'la compilation di canzoni FIFA che hai nei Download).',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                height: 1.4,
-                color: HeroText.secondary,
-              ),
+              style: body,
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: MilanacColors.gold,
-                foregroundColor: MilanacColors.ink,
+              style: gold,
+              onPressed: s.busy ? null : ctrl.useClubTrack,
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: const Text('Ascolta la colonna sonora del club'),
+            ),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: MilanacColors.goldLight,
               ),
               onPressed: s.busy ? null : widget.onPick,
               icon: s.busy
@@ -361,6 +390,43 @@ class _PlayerCardState extends ConsumerState<_PlayerCard> {
                     )
                   : const Icon(Icons.library_music_rounded),
               label: const Text('Scegli il file audio'),
+            ),
+          ] else if (!s.hasTrack && s.downloadFailed) ...[
+            const Text(ClubTrack.title, style: title),
+            const SizedBox(height: 6),
+            const Text(
+              'La colonna sonora del club non si è scaricata. Controlla la '
+              'connessione e riprova.',
+              textAlign: TextAlign.center,
+              style: body,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              style: gold,
+              onPressed: ctrl.retryClubTrack,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Riprova'),
+            ),
+          ] else if (!s.hasTrack) ...[
+            const Text(ClubTrack.title, style: title),
+            const SizedBox(height: 2),
+            Text(
+              s.download == null
+                  ? 'Preparo la colonna sonora del club…'
+                  : 'Scarico la colonna sonora del club · '
+                        '${(s.download! * 100).floor()}%',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: HeroText.secondary),
+            ),
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                value: s.download,
+                minHeight: 4,
+                color: MilanacColors.goldLight,
+                backgroundColor: dark.borderStrong,
+              ),
             ),
           ] else ...[
             Text(
@@ -375,9 +441,12 @@ class _PlayerCardState extends ConsumerState<_PlayerCard> {
               ),
             ),
             const SizedBox(height: 2),
-            const Text(
-              'Scelto dal tuo telefono',
-              style: TextStyle(fontSize: 14, color: HeroText.secondary),
+            Text(
+              s.isClub
+                  ? 'La colonna sonora del club · suonata da noi'
+                  : 'Scelto dal tuo telefono',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: HeroText.secondary),
             ),
             const SizedBox(height: 16),
             ClipRRect(
@@ -489,9 +558,11 @@ class _RoundButton extends StatelessWidget {
   }
 }
 
-/// Copertina: righe d'oro su nero con la nota al centro (oggetto fisso, sempre scuro).
+/// Copertina: righe d'oro su nero con lo stemma (colonna sonora del club) o la nota
+/// al centro (oggetto fisso, sempre scuro).
 class _Artwork extends StatelessWidget {
-  const _Artwork();
+  const _Artwork({required this.club});
+  final bool club;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -505,19 +576,26 @@ class _Artwork extends StatelessWidget {
     child: CustomPaint(
       painter: const _StripesPainter(),
       child: Center(
-        child: Container(
-          width: 64,
-          height: 64,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            color: MilanacColors.gold,
-          ),
-          child: const Icon(
-            Icons.music_note_rounded,
-            size: 30,
-            color: MilanacColors.ink,
-          ),
-        ),
+        child: club
+            ? Image.asset(
+                'assets/images/stemma_256.png',
+                width: 84,
+                height: 84,
+                semanticLabel: 'Stemma MILANAC',
+              )
+            : Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: MilanacColors.gold,
+                ),
+                child: const Icon(
+                  Icons.music_note_rounded,
+                  size: 30,
+                  color: MilanacColors.ink,
+                ),
+              ),
       ),
     ),
   );
