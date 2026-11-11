@@ -7,7 +7,8 @@ name: TestFlight
 # Una volta sola, a mano: l'app va creata su App Store Connect (bundle com.milanacproclub.milanac)
 # e per i tester esterni vanno compilate le "Informazioni sul test" (vedi docs/PUBBLICAZIONE.md,
 # "TestFlight"). Poi ogni giro: compila, carica la build con un numero nuovo, aspetta che Apple
-# la elabori, la mette nel gruppo "Club" e la manda alla revisione beta.
+# la elabori, la mette nel gruppo "Club", scrive il "Cosa testare" e la manda alla revisione beta.
+# Con "build" si rimanda alla revisione una build già caricata, senza ricompilare.
 on:
   workflow_dispatch:
     inputs:
@@ -17,6 +18,16 @@ on:
         default: macos-26
         type: choice
         options: [macos-26, macos-15]
+      build:
+        description: "Solo distribuzione: numero di una build già caricata (vuoto = compila una build nuova)"
+        required: false
+        default: ""
+        type: string
+      novita:
+        description: "Testo «Cosa testare» per i tester (vuoto = testo standard dove manca)"
+        required: false
+        default: ""
+        type: string
   # Prima prova dal ramo di lavoro, quando cambia il workflow stesso.
   push:
     branches: ["claude/**"]
@@ -38,7 +49,9 @@ jobs:
       - uses: actions/checkout@v4
       # App Store Connect accetta solo app compilate con l'SDK di iOS 26 (Xcode 26 o più
       # recente): si sceglie l'Xcode più nuovo installato sul Mac di GitHub.
+      # Con "build" (solo distribuzione) compilazione e caricamento si saltano.
       - name: Xcode 26
+        if: ${{ !inputs.build }}
         run: |
           XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
           if [ -z "$XCODE" ]; then
@@ -49,11 +62,13 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
       - uses: subosito/flutter-action@v2
+        if: ${{ !inputs.build }}
         with:
           flutter-version: "3.47.7"
           channel: stable
           cache: true
       - run: flutter pub get
+        if: ${{ !inputs.build }}
 
       - name: App e numero della build
         id: asc
@@ -65,6 +80,7 @@ jobs:
       # Senza togliere le estensioni di Agora come nell'IPA ad hoc: su TestFlight non c'è il
       # limite dei 50 MB di Diawi, e l'app resta quella del pacchetto originale.
       - name: Archivio
+        if: ${{ !inputs.build }}
         run: |
           xcodebuild -version
           flutter build ipa --release --no-codesign --build-number=${{ steps.asc.outputs.build }} \
@@ -73,6 +89,7 @@ jobs:
       # Firma per l'App Store (certificato e profilo gestiti da Apple tramite la chiave API) e
       # caricamento diretto su App Store Connect.
       - name: Firma e caricamento
+        if: ${{ !inputs.build }}
         env:
           TEAM: ${{ steps.asc.outputs.team }}
         run: |
@@ -105,6 +122,7 @@ jobs:
       - name: Ai tester
         env:
           APP_ID: ${{ steps.asc.outputs.app }}
-          BUILD_NUMBER: ${{ steps.asc.outputs.build }}
+          BUILD_NUMBER: ${{ inputs.build || steps.asc.outputs.build }}
+          NOVITA: ${{ inputs.novita }}
         run: |
           "$RUNNER_TEMP/venv/bin/python" tools/ios/testflight.py distribuisci

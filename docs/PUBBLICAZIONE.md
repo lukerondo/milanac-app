@@ -155,8 +155,13 @@ dura 90 giorni. Il workflow **TestFlight** usa la stessa chiave API del workflow
    e la registrazione chiede la password di iscrizione).
 3. **GitHub → Actions → TestFlight → Run workflow**. Il workflow sceglie un numero di build
    nuovo, compila, carica, aspetta che Apple elabori la build (10-30 minuti), la mette nel gruppo
-   esterno **Club** (lo crea con il link pubblico attivo) e la manda alla revisione beta. La prima
-   revisione di solito richiede meno di un giorno, le successive spesso sono immediate.
+   esterno **Club** (lo crea con il link pubblico attivo), scrive il **Cosa testare** della build
+   (quello del campo *novita*, o un testo standard dove manca: per i tester esterni Apple lo
+   vuole) e la manda alla revisione beta. La prima revisione di solito richiede meno di un
+   giorno, le successive spesso sono immediate.
+   - Se Apple rifiuta la richiesta, il log dice **quali campi** mancano su App Store Connect (solo
+     i nomi, mai i valori). Dopo averli compilati si rilancia con **build** = il numero della
+     build già caricata: solo distribuzione, in un paio di minuti, senza ricompilare.
 4. **Il link**: TestFlight → gruppo **Club** → *Link pubblico* → copia e mandalo ai ragazzi. Si
    apre dall'iPhone, installa TestFlight se manca e poi MILANAC. Il workflow non lo stampa nei log
    (sono pubblici). In alternativa si aggiungono le email nel gruppo.

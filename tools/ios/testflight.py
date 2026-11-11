@@ -8,15 +8,16 @@ Due passi, chiamati dal workflow TestFlight:
                              uno più dell'ultima caricata. Scrive app e build in $GITHUB_OUTPUT.
   testflight.py distribuisci aspetta che Apple finisca di elaborare la build caricata, la mette
                              nel gruppo di tester esterni "Club" (lo crea se manca, con il link
-                             pubblico attivo) e la manda alla revisione beta di Apple. Se mancano
-                             le informazioni sul test lo dice e si ferma senza errore: la build è
-                             comunque pronta per i tester interni.
+                             pubblico attivo), scrive il "Cosa testare" della build (NOVITA, o un
+                             testo standard dove manca) e la manda alla revisione beta di Apple.
+                             Se mancano informazioni sul test dice quali campi (solo i nomi) e si
+                             ferma senza errore: la build è comunque pronta per i tester interni.
 
 Stampa solo nomi, numeri e stati: i log di GitHub Actions sono pubblici. Il link pubblico di
 TestFlight non si stampa (chi lo trova potrebbe iscriversi): si copia da App Store Connect.
 
 Variabili d'ambiente: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8; per "distribuisci" anche APP_ID e
-BUILD_NUMBER (dati da "prepara").
+BUILD_NUMBER (dati da "prepara", o il numero di una build già caricata) e, facoltativo, NOVITA.
 """
 from __future__ import annotations
 
@@ -93,25 +94,104 @@ def external_group(call: Call, pages: Pages, app_id: str) -> dict:
     }})["data"]
 
 
-def distribute(call: Call, pages: Pages, app_id: str, number: str, **wait) -> str:
+def what_to_test(call: Call, pages: Pages, build_id: str, locale: str, text: str,
+                 overwrite: bool = False) -> None:
+    """Il testo "Cosa testare" della build: per i tester esterni Apple lo vuole prima della
+    revisione beta. Si scrive dove manca (o ovunque, con [overwrite])."""
+    locs = pages(f"/builds/{build_id}/betaBuildLocalizations?limit=50")
+    if not locs:
+        call("POST", "/betaBuildLocalizations", {"data": {
+            "type": "betaBuildLocalizations",
+            "attributes": {"locale": locale, "whatsNew": text},
+            "relationships": {"build": {"data": {"type": "builds", "id": build_id}}},
+        }})
+        print(f"\"Cosa testare\" della build scritto ({locale}).")
+        return
+    for loc in locs:
+        if overwrite or not (loc["attributes"].get("whatsNew") or "").strip():
+            call("PATCH", f"/betaBuildLocalizations/{loc['id']}", {"data": {
+                "type": "betaBuildLocalizations", "id": loc["id"],
+                "attributes": {"whatsNew": text},
+            }})
+            print(f"\"Cosa testare\" della build scritto ({loc['attributes'].get('locale')}).")
+
+
+def _get(call: Call, path: str) -> dict:
+    """Una risorsa singola ({} se Apple non la dà)."""
+    try:
+        return call("GET", path, quiet=True).get("data") or {}
+    except ApiError:
+        return {}
+
+
+def missing_test_info(call: Call, pages: Pages, app_id: str, build: dict) -> list[str]:
+    """Le voci di App Store Connect che la revisione beta chiede e che sono vuote: solo i nomi
+    dei campi, mai i valori (i log sono pubblici)."""
+    missing = []
+    info = "TestFlight → Informazioni sul test"
+    locs = pages(f"/apps/{app_id}/betaAppLocalizations?limit=50")
+    if not locs:
+        missing.append(f"{info}: descrizione dell'app beta ed email per i commenti")
+    for loc in locs:
+        a, lang = loc["attributes"], loc["attributes"].get("locale", "?")
+        for key, label in (("description", "descrizione dell'app beta"),
+                           ("feedbackEmail", "email per i commenti"),
+                           ("privacyPolicyUrl", "URL dell'informativa sulla privacy")):
+            if not (a.get(key) or "").strip():
+                missing.append(f"{info} ({lang}): {label}")
+    a = _get(call, f"/apps/{app_id}/betaAppReviewDetail").get("attributes") or {}
+    review = f"{info} → Informazioni per la revisione beta"
+    for key, label in (("contactFirstName", "nome del contatto"),
+                       ("contactLastName", "cognome del contatto"),
+                       ("contactPhone", "telefono del contatto"),
+                       ("contactEmail", "email del contatto")):
+        if not (a.get(key) or "").strip():
+            missing.append(f"{review}: {label}")
+    if a.get("demoAccountRequired"):
+        for key, label in (("demoAccountName", "nome utente dell'account di prova"),
+                           ("demoAccountPassword", "password dell'account di prova")):
+            if not (a.get(key) or "").strip():
+                missing.append(f"{review}: {label}")
+    if build["attributes"].get("usesNonExemptEncryption") is None:
+        missing.append("Build: conformità all'esportazione (uso della crittografia) non indicata")
+    return missing
+
+
+WHATS_NEW = ("Nuova versione dell'app MILANAC: provala e segnala problemi o idee con "
+             "il pulsante Feedback di TestFlight.")
+
+
+def distribute(call: Call, pages: Pages, app_id: str, number: str, *, whats_new: str = "",
+               **wait) -> str:
     """Build nel gruppo esterno e alla revisione beta. Restituisce com'è andata, in breve."""
     build = wait_for_build(pages, app_id, number, **wait)
     group = external_group(call, pages, app_id)
     call("POST", f"/betaGroups/{group['id']}/relationships/builds",
          {"data": [{"type": "builds", "id": build["id"]}]})
     print(f"Build {number} nel gruppo \"{GROUP}\".")
+    locale = (_get(call, f"/apps/{app_id}").get("attributes") or {}).get("primaryLocale") or "it"
+    what_to_test(call, pages, build["id"], locale, whats_new.strip() or WHATS_NEW,
+                 overwrite=bool(whats_new.strip()))
+    missing = missing_test_info(call, pages, app_id, build)
     try:
         call("POST", "/betaAppReviewSubmissions", {"data": {
             "type": "betaAppReviewSubmissions",
             "relationships": {"build": {"data": {"type": "builds", "id": build["id"]}}},
         }}, quiet=True)
     except ApiError as e:
-        print(f"::warning::Revisione beta non richiesta (Apple ha risposto {e.code}): di solito "
-              "mancano le informazioni sul test in App Store Connect (TestFlight → Informazioni "
-              "sul test: email per i commenti, contatto e account di prova). Compilale e "
-              "rilancia il workflow; i tester interni la vedono già.")
+        if missing:
+            print(f"::warning::Revisione beta non richiesta (Apple ha risposto {e.code}). Su App "
+                  "Store Connect mancano: " + "; ".join(missing) + ". Compilali e rilancia il "
+                  f"workflow con \"build\" = {number} (solo distribuzione, senza ricompilare); "
+                  "i tester interni la vedono già.")
+        else:
+            print(f"::warning::Revisione beta non richiesta (Apple ha risposto {e.code}): le "
+                  "informazioni sul test risultano compilate, guarda il dettaglio qui sotto. "
+                  "I tester interni la vedono già.")
         print(e.detail[:300])
         return "nel gruppo, revisione non richiesta"
+    if missing:
+        print("Da controllare su App Store Connect: " + "; ".join(missing) + ".")
     print(f"Build {number} mandata alla revisione beta di Apple.")
     return "in revisione"
 
@@ -166,7 +246,8 @@ def main(argv: list[str]) -> int:
             with open(out, "a") as f:
                 f.write(f"app={app['id']}\nbuild={number}\nteam={team}\n")
         return 0
-    esito = distribute(call, pages, os.environ["APP_ID"], os.environ["BUILD_NUMBER"])
+    esito = distribute(call, pages, os.environ["APP_ID"], os.environ["BUILD_NUMBER"],
+                       whats_new=os.environ.get("NOVITA", ""))
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a") as f:
