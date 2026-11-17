@@ -643,10 +643,13 @@ void main() {
       await PhotoDiskCache.write('e/foto_1.jpg', bytes);
       await PhotoDiskCache.keepOnly({});
       expect(names(), ['d_foto_1.jpg']);
-      // La rosa cambia proprio mentre si salva la foto nuova: resta sul telefono.
-      for (var i = 0; i < 40; i++) {
+      // La rosa cambia proprio mentre si salva la foto nuova: resta sul telefono. Anche
+      // quando la pulizia parte un attimo prima della scrittura e incontra il file
+      // temporaneo nato nel frattempo (succedeva di rado: molti giri per accorgersene).
+      for (var i = 0; i < 400; i++) {
         final path = 'f/foto_$i.jpg';
         await Future.wait([
+          if (i.isOdd) PhotoDiskCache.keepOnly({path}),
           PhotoDiskCache.write(path, bytes),
           PhotoDiskCache.keepOnly({path}),
           PhotoDiskCache.keepOnly({path}),

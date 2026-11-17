@@ -135,10 +135,16 @@ class PhotoDiskCache {
     try {
       final dir = await directory();
       if (!await dir.exists()) return;
-      final keep = {...current, ..._addedAt.keys.where(recent)}.map(_name);
-      final names = {...keep, ..._writing};
+      final keep = {
+        ...current,
+        ..._addedAt.keys.where(recent),
+      }.map(_name).toSet();
       await for (final e in dir.list()) {
-        if (!names.contains(e.uri.pathSegments.last)) await _remove(e);
+        final name = e.uri.pathSegments.last;
+        // I file in scrittura si guardano adesso, non all'inizio: una foto che comincia
+        // a salvarsi durante la pulizia ha un file temporaneo che prima non c'era, e
+        // toglierlo la farebbe sparire senza errori.
+        if (!keep.contains(name) && !_writing.contains(name)) await _remove(e);
       }
     } catch (_) {}
   }
