@@ -1629,7 +1629,7 @@ reset role;
 do $$ begin
   assert (select body from messages where meta->>'type' = 'new_member'
           and meta->>'member' = '00000000-0000-0000-0000-0000000000a1')
-         like 'Nuovo ingresso: Rossi (Mario Rossi) · Giocatore · MILANAC · ATT.%', 'avviso del nuovo ingresso';
+         like 'Nuovo ingresso: Rossi (Mario Rossi) · Giocatore · MILANAC · ATT · overall 60.%', 'avviso del nuovo ingresso';
   assert (select c.slug from messages m join channels c on c.id = m.channel_id
           where m.meta->>'type' = 'new_member' and m.meta->>'member' = '00000000-0000-0000-0000-0000000000a1')
          = 'direttivo', 'nella Sala Direttivo';
@@ -1648,7 +1648,8 @@ reset role;
 do $$ begin
   assert (select body from messages where meta->>'type' = 'new_member'
           and meta->>'member' = '00000000-0000-0000-0000-0000000000ab')
-         = 'Nuovo ingresso: NUOVO (Nuovo Arrivato) · Giocatore · MILANAC FUTURO · DC. Se non lo conoscete, toglietelo dalla Rosa.',
+         = 'Nuovo ingresso: NUOVO (Nuovo Arrivato) · Giocatore · MILANAC FUTURO · DC · overall 60. '
+           'Controllate l''overall (si corregge dalla sua carta) e, se non lo conoscete, toglietelo dalla Rosa.',
     'avviso con nome, ruolo e squadra';
   assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 1, 'e la notifica al Direttivo';
 end $$;
@@ -2877,7 +2878,7 @@ do $$ begin
   assert not has_function_privilege('authenticated', 'public.signup_mode()', 'execute')
      and not has_function_privilege('authenticated', 'public.signup_origin()', 'execute')
      and not has_function_privilege('authenticated', 'public.signup_email_hash(text)', 'execute')
-     and not has_function_privilege('anon', 'public.complete_registration(text, text, int, text, text, text[], boolean, text, text[], text, int, text, jsonb, text)', 'execute'),
+     and not has_function_privilege('anon', 'public.complete_registration(text, text, int, text, text, text[], boolean, text, text[], text, int, text, jsonb, text, int, text)', 'execute'),
     'funzioni interne non chiamabili dalle app';
 end $$;
 
@@ -3045,3 +3046,99 @@ select pg_temp.expect_error(
 reset role;
 select pg_temp.as_user(null);
 delete from app_config where key = 'vapid_public_key';
+
+-- ================================================================ registrazione con overall (0042)
+-- Chi entra dichiara overall e stile di gioco alla registrazione; da membro l'overall lo
+-- cambia solo il Direttivo. 42a1 usa l'app di prima (non manda i parametri nuovi), 42a2 la nuova.
+reset role;
+select pg_temp.as_user(null);
+insert into app_config (key, value) values ('signup_mode', 'aperte');
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000042a1', 'vecchia42@example.com'),
+  ('00000000-0000-0000-0000-0000000042a2', 'nuova42@example.com');
+delete from net.calls;
+set role authenticated;
+-- App di prima: 13 o 14 parametri, come sempre. Overall 60, nessuno stile.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000042a1');
+do $$ begin
+  assert complete_registration('Olga', 'Vecchia', 1997, 'VECCHIA', null, array['milanac'], false, null, null, 'CC', 6, 'ps5', null)
+         = 'ok', 'app di prima: la registrazione riesce senza i parametri nuovi';
+  assert (select overall from profiles where id = auth.uid()) = 60, 'app di prima: overall 60';
+  assert (select play_style from profiles where id = auth.uid()) is null, 'app di prima: nessuno stile';
+  assert complete_registration('Olga', 'Vecchia', 1997, 'VECCHIA', null, array['milanac'], false, null, null, 'CC', 6, 'ps5', null, 'qualsiasi')
+         = 'ok', 'app di prima con la password del club: come prima';
+  assert (select overall from profiles where id = auth.uid()) = 60, 'resta 60';
+end $$;
+-- App nuova: overall fuori dall'intervallo della carta (40-99) e stile troppo lungo rifiutati.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000042a2');
+select pg_temp.expect_error(
+  $q$select complete_registration('Nina', 'Nuova', 2002, 'NUOVA', null, array['milanac'], false, null, null, 'ATT', 9, 'pc', null, null, 39, null)$q$,
+  'Overall non valido');
+select pg_temp.expect_error(
+  $q$select complete_registration('Nina', 'Nuova', 2002, 'NUOVA', null, array['milanac'], false, null, null, 'ATT', 9, 'pc', null, null, 100, null)$q$,
+  'Overall non valido');
+select pg_temp.expect_error(
+  $q$select complete_registration('Nina', 'Nuova', 2002, 'NUOVA', null, array['milanac'], false, null, null, 'ATT', 9, 'pc', null, null, 84, 'Uno stile di gioco troppo lungo')$q$,
+  'Stile di gioco troppo lungo');
+do $$ begin
+  assert (select registration_completed_at from profiles where id = auth.uid()) is null,
+    'con un overall non valido la registrazione non si salva';
+  -- Valido: salvato con lo stile (senza spazi attorno). I parametri hanno il nome, come dall'app.
+  assert complete_registration(
+           p_first_name => 'Nina', p_last_name => 'Nuova', p_birth_year => 2002, p_display_name => 'NUOVA',
+           p_motto => null, p_teams => array['milanac'], p_direttivo => false, p_direttivo_password => null,
+           p_direttivo_roles => '{}', p_field_position => 'ATT', p_shirt_number => 9, p_platform => 'pc',
+           p_face => null, p_club_password => '', p_overall => 84, p_play_style => ' Finalizzatore ')
+         = 'ok', 'app nuova: overall e stile accettati';
+  assert (select overall from profiles where id = auth.uid()) = 84, 'overall dichiarato salvato';
+  assert (select play_style from profiles where id = auth.uid()) = 'Finalizzatore', 'stile di gioco salvato';
+  -- Finché non è nel club (regolamento da accettare) può ancora correggerlo rifacendo il passo;
+  -- lo stile non rimandato resta quello di prima.
+  assert complete_registration('Nina', 'Nuova', 2002, 'NUOVA', null, array['milanac'], false, null, null, 'ATT', 9, 'pc', null, null, 86, null)
+         = 'ok', 'in attesa: la registrazione si può rifare';
+  assert (select overall from profiles where id = auth.uid()) = 86, 'overall corretto prima di entrare';
+  assert (select play_style from profiles where id = auth.uid()) = 'Finalizzatore', 'lo stile resta';
+end $$;
+-- Da solo, fuori dalla registrazione, l'overall non si tocca nemmeno in attesa.
+select pg_temp.expect_error($q$update profiles set overall = 99 where id = auth.uid()$q$, 'Solo il Direttivo');
+select accept_rules((select max(number) from rules_versions));
+-- Entrata nel club: l'overall lo cambia solo il Direttivo, né dalla carta né rifacendo la registrazione.
+select pg_temp.expect_error($q$update profiles set overall = 99 where id = auth.uid()$q$, 'Solo il Direttivo');
+select pg_temp.expect_error(
+  $q$select complete_registration('Nina', 'Nuova', 2002, 'NUOVA', null, array['milanac'], false, null, null, 'ATT', 9, 'pc', null, null, 99, null)$q$,
+  'Sei già nel club');
+-- Lo stile di gioco invece resta suo (carta).
+update profiles set play_style = 'Regista' where id = auth.uid();
+do $$ begin
+  assert (select club_role from profiles where id = auth.uid()) = 'giocatore', 'entrata nel club';
+  assert (select overall from profiles where id = auth.uid()) = 86, 'da membro l''overall non cambia';
+  assert (select play_style from profiles where id = auth.uid()) = 'Regista', 'lo stile lo cambia da sé';
+end $$;
+-- La Sala Direttivo lo sa, con l'overall dichiarato; e il Direttivo lo corregge.
+reset role;
+select pg_temp.as_user(null);
+do $$ begin
+  assert (select body from messages where meta->>'type' = 'new_member'
+          and meta->>'member' = '00000000-0000-0000-0000-0000000042a2')
+         = 'Nuovo ingresso: NUOVA (Nina Nuova) · Giocatore · MILANAC · ATT · overall 86. '
+           'Controllate l''overall (si corregge dalla sua carta) e, se non lo conoscete, toglietelo dalla Rosa.',
+    'avviso del nuovo ingresso con l''overall dichiarato';
+  assert (select count(*) from net.calls where body->>'kind' = 'chat_message') = 1, 'con la notifica al Direttivo';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+update profiles set overall = 80 where id = '00000000-0000-0000-0000-0000000042a2';
+do $$ begin
+  assert (select overall from profiles where id = '00000000-0000-0000-0000-0000000042a2') = 80,
+    'il Direttivo corregge l''overall dichiarato';
+end $$;
+reset role;
+select pg_temp.as_user(null);
+delete from app_config where key = 'signup_mode';
+do $$ begin
+  assert not has_function_privilege('anon', 'public.complete_registration(text, text, int, text, text, text[], boolean, text, text[], text, int, text, jsonb, text, int, text)', 'execute')
+     and has_function_privilege('authenticated', 'public.complete_registration(text, text, int, text, text, text[], boolean, text, text[], text, int, text, jsonb, text, int, text)', 'execute'),
+    'la registrazione nuova: solo per chi è collegato';
+  assert (select count(*) from pg_proc where proname = 'complete_registration') = 1,
+    'una sola versione di complete_registration (le app di prima usano i valori predefiniti)';
+end $$;
