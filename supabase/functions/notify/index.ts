@@ -418,7 +418,8 @@ async function chatPushes(db: SupabaseClient, messageId: string): Promise<Push[]
         : msg.kind === "system" ? `#${channel?.name ?? "chat"}` : `#${channel?.name ?? "chat"} · ${author}`,
       body: text.length > 140 ? text.slice(0, 137) + "…" : text,
       route: `/chat/${channel?.slug ?? ""}`,
-      data: { channel: channel?.slug ?? "" },
+      // L'id serve all'app aperta per non avvisare due volte (ha già il tempo reale).
+      data: { channel: channel?.slug ?? "", message: msg.id },
       always: official,
     }));
 }

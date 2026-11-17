@@ -2068,6 +2068,111 @@ do $$ begin
     'voti eliminati con il sondaggio';
 end $$;
 
+-- ================================================================ reazioni ai messaggi (0041)
+-- Si reagisce con un'emoji (anche composta), non con del testo.
+do $$ begin
+  assert valid_reaction('👍'), 'pollice';
+  assert valid_reaction('❤️'), 'cuore con il selettore';
+  assert valid_reaction('⚽'), 'pallone';
+  assert valid_reaction('🇮🇹'), 'bandiera';
+  assert valid_reaction('👍🏽'), 'tono della pelle';
+  assert valid_reaction('👨‍👩‍👧‍👦'), 'famiglia';
+  assert not valid_reaction('ok'), 'lettere';
+  assert not valid_reaction('👍 ok'), 'emoji e testo';
+  assert not valid_reaction('12'), 'numeri';
+  assert not valid_reaction('<b>'), 'markup';
+  assert not valid_reaction(''), 'vuota';
+  assert not valid_reaction(null), 'null';
+  assert not valid_reaction('🏽'), 'solo il tono della pelle';
+  assert not valid_reaction(repeat('👍', 13)), 'troppo lunga';
+end $$;
+
+-- Un messaggio nuovo nasce senza reazioni, anche se chi lo manda le scrive nel meta.
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a1');
+insert into messages (id, channel_id, body, meta)
+select '00000000-0000-0000-0000-0000000041b1', id, 'Stasera alle 21?',
+       '{"reactions": {"00000000-0000-0000-0000-0000000005a2": "👍"}, "altro": 1}'
+from channels where slug = 'milanac';
+do $$ begin
+  assert (select meta from messages where id = '00000000-0000-0000-0000-0000000041b1') = '{"altro": 1}',
+    'le reazioni scritte da chi manda il messaggio non restano';
+end $$;
+
+-- Una reazione a testa: la seconda sostituisce la prima; ognuno la sua.
+select react_message('00000000-0000-0000-0000-0000000041b1', '👍');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a2');
+select react_message('00000000-0000-0000-0000-0000000041b1', '🔥');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a1');
+do $$ begin
+  assert react_message('00000000-0000-0000-0000-0000000041b1', ' ❤️ ')->'reactions'
+         = '{"00000000-0000-0000-0000-0000000005a1": "❤️", "00000000-0000-0000-0000-0000000005a2": "🔥"}',
+    'la reazione nuova prende il posto di quella di prima';
+  assert (select meta->'altro' from messages where id = '00000000-0000-0000-0000-0000000041b1') = '1',
+    'il resto del meta non si tocca';
+end $$;
+select pg_temp.expect_error(
+  $q$select react_message('00000000-0000-0000-0000-0000000041b1', 'ciao')$q$, 'Reazione non valida');
+select pg_temp.expect_error(
+  $q$select react_message('00000000-0000-0000-0000-0000000041ff', '👍')$q$, 'Messaggio non trovato');
+-- Dall'app il messaggio non si modifica: le reazioni altrui non si toccano.
+update messages set meta = '{"reactions": {}}' where id = '00000000-0000-0000-0000-0000000041b1';
+do $$ begin
+  assert (select jsonb_object_keys(meta->'reactions') is not null from messages
+          where id = '00000000-0000-0000-0000-0000000041b1' limit 1), 'modifica diretta ignorata';
+end $$;
+-- Si toglie (null o vuoto); tolta l'ultima, nel meta non resta la chiave.
+select react_message('00000000-0000-0000-0000-0000000041b1', null);
+do $$ begin
+  assert (select meta->'reactions' from messages where id = '00000000-0000-0000-0000-0000000041b1')
+         = '{"00000000-0000-0000-0000-0000000005a2": "🔥"}', 'tolta solo la propria';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a2');
+do $$ begin
+  assert not (react_message('00000000-0000-0000-0000-0000000041b1', '') ? 'reactions'),
+    'senza reazioni la chiave sparisce';
+end $$;
+-- Chi non vede il canale (un giocatore del Futuro in quello della MILANAC) non reagisce.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a3');
+select pg_temp.expect_error(
+  $q$select react_message('00000000-0000-0000-0000-0000000041b1', '👍')$q$, 'Messaggio non trovato');
+-- Un sondaggio resta un sondaggio valido anche con le reazioni.
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a1');
+do $$ begin
+  assert valid_poll_meta(react_message('00000000-0000-0000-0000-0000000005b2', '👏')),
+    'reazione a un sondaggio';
+end $$;
+-- In Comunicazioni scrive solo il Direttivo, ma tutti possono reagire.
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+insert into messages (id, channel_id, body)
+select '00000000-0000-0000-0000-0000000041b2', id, 'Domani amichevole alle 22' from channels where slug = 'comunicazioni';
+select pg_temp.as_user('00000000-0000-0000-0000-0000000005a3');
+do $$ begin
+  assert react_message('00000000-0000-0000-0000-0000000041b2', '⚽')->'reactions'
+         = '{"00000000-0000-0000-0000-0000000005a3": "⚽"}', 'reazione in Comunicazioni';
+end $$;
+-- Ai messaggi automatici non si reagisce; chi non è nel club non reagisce a niente.
+reset role;
+insert into messages (id, channel_id, kind, body)
+select '00000000-0000-0000-0000-0000000041b3', id, 'system', 'Formazione pubblicata' from channels where slug = 'comunicazioni';
+set role authenticated;
+select pg_temp.expect_error(
+  $q$select react_message('00000000-0000-0000-0000-0000000041b3', '👍')$q$, 'non si può reagire');
+reset role;
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('00000000-0000-0000-0000-0000000041a1', 'attesa41@example.com', '{"provider": "google"}');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000041a1');
+select pg_temp.expect_error(
+  $q$select react_message('00000000-0000-0000-0000-0000000041b2', '👍')$q$, 'Messaggio non trovato');
+select pg_temp.as_user(null);
+select pg_temp.expect_error(
+  $q$select react_message('00000000-0000-0000-0000-0000000041b2', '👍')$q$, 'Messaggio non trovato');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d');
+delete from messages where id in ('00000000-0000-0000-0000-0000000041b1', '00000000-0000-0000-0000-0000000041b2');
+reset role;
+delete from messages where id = '00000000-0000-0000-0000-0000000041b3';
+
 -- ================================================================ promemoria partita (0031, 0034)
 -- Partite di lunedì 2 novembre 2026 alle 21:30 (ora italiana): m1 in calendario da giorni,
 -- m2 creata alle 21:00 (ha già avuto la sua notifica), un allenamento che non conta.

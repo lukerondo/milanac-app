@@ -438,6 +438,33 @@ class ChannelMessages extends StreamNotifier<ChannelHistory> {
     _emit();
   }
 
+  /// Reagisce al messaggio [id] con [emoji] (null: toglie la propria reazione). La
+  /// reazione si vede subito; se il server la rifiuta torna com'era e l'errore arriva
+  /// a chi ha chiamato.
+  Future<void> react(String id, String? emoji) async {
+    final userId = _userId;
+    final before = _known[id];
+    if (userId == null || before == null || before.isLocal || before.isSystem) {
+      return;
+    }
+    if (before.reactions[userId] == emoji) return;
+    final repo = ref.read(chatRepositoryProvider);
+    _known[id] = before.withReaction(userId, emoji);
+    _emit();
+    try {
+      final saved = await repo.react(before, emoji);
+      if (ref.mounted) updated(saved);
+    } catch (_) {
+      // Com'era, salvo le reazioni degli altri arrivate nel frattempo.
+      final now = _known[id];
+      if (ref.mounted && now != null) {
+        _known[id] = now.withReaction(userId, before.reactions[userId]);
+        _emit();
+      }
+      rethrow;
+    }
+  }
+
   /// Toglie dalla conversazione un messaggio non partito.
   void discard(String id) {
     if (!(_known[id]?.failed ?? false)) return;

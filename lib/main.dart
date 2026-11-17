@@ -14,6 +14,7 @@ import 'core/push/device_tokens.dart';
 import 'core/push/push_service.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
+import 'features/chat/chat_alerts.dart';
 import 'features/musica/soundtrack.dart';
 import 'shared/wide_layout.dart';
 
@@ -56,6 +57,8 @@ class MilanacApp extends ConsumerWidget {
     // Le notifiche del browser ascoltano da subito: un clic su una notifica apre la
     // sua sezione anche se l'app si sta ancora avviando.
     ref.listen(browserNotificationsProvider, (_, _) {});
+    // Avvisi dei messaggi nuovi mentre l'app è aperta (dal tempo reale della chat).
+    ref.listen(chatAlertsProvider, (_, _) {});
 
     // Musica di sottofondo: resta attiva per tutta la vita dell'app.
     ref.listen(soundtrackProvider, (_, _) {});

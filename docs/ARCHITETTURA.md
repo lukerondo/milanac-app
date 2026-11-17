@@ -303,7 +303,17 @@ al posto della bozza, pubblicati come nuova versione da riaccettare (notifica `r
     notturna). **Sondaggi** (icona accanto alla foto): domanda e da 2 a 10 risposte, una o
     più scelte; si vota toccando una risposta, le barre d'oro con le percentuali compaiono
     dopo il voto (o a sondaggio chiuso), "N voti" apre chi ha votato, "Ritira il voto";
-    chi l'ha creato o il Direttivo lo chiude dal menu a pressione lunga. Il **replay della lavagna** arriva come riquadro con il campo e il pulsante
+    chi l'ha creato o il Direttivo lo chiude dal menu a pressione lunga. **Reazioni**: in cima
+    al menu del messaggio (pressione lunga, o tasto destro con il mouse) otto emoji rapide e
+    "+" per tutte le altre; una a testa, compaiono sotto la bolla con il numero (la propria
+    evidenziata: un tocco la mette o la toglie, tenendo premuto si vede chi ha reagito). Si
+    reagisce anche in Comunicazioni. **Emoji**: la faccina nel campo di scrittura apre il
+    selettore (recenti e gruppi; sui telefoni al posto della tastiera, sul computer accanto);
+    un messaggio di sole emoji, fino a tre, si scrive più grande. **Avvisi con l'app aperta**:
+    i messaggi nuovi degli altri canali compaiono in basso con "Apri" anche senza notifiche
+    push (arrivano dal tempo reale; stesse regole delle push: niente per i propri messaggi, i
+    canali silenziati, la chat spenta salvo gli avvisi ufficiali, il canale che si sta
+    leggendo). Il **replay della lavagna** arriva come riquadro con il campo e il pulsante
     Play: si riproduce nell'app (audio più mosse, pochi KB, non è un video) e scade dopo 3
     giorni. Non letti, canali silenziabili, notifiche. **Stanza vocale** (Agora): le cuffie
     nella barra di ogni canale aprono la stanza a schermo intero (sempre scura): chi c'è
@@ -493,7 +503,11 @@ lasciano fuori. Sondaggi:
 chiuso, fuori elenco o doppi dove se ne sceglie una) e `close_poll(messaggio)` (chi l'ha
 creato o il Direttivo; scrive `closed_at` nel meta e lo restituisce); il vincolo
 `messages_poll_valid` controlla domanda e opzioni. Prima della migrazione l'app non crea
-sondaggi e lo dice.
+sondaggi e lo dice. Reazioni (migrazione `0041`): stanno nel meta del messaggio,
+`meta.reactions = {"<id>": "👍"}`, e le scrive solo `react_message(messaggio, emoji)` (null la
+toglie; un'emoji vera, controllata da `valid_reaction`; chi vede il canale; non sui messaggi
+automatici). Arrivano con il messaggio, anche in tempo reale, senza altre tabelle; un
+messaggio nuovo nasce senza reazioni anche se chi lo manda le scrive nel meta.
 
 Lavori automatici con **pg_cron**: `attendance_tick()` gira ogni minuto e, in ora italiana,
 alle 18:00 manda il promemoria a chi non ha risposto e alle 18:30 segna le assenze automatiche
