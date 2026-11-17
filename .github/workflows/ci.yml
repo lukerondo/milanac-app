@@ -55,6 +55,9 @@ jobs:
           npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright-core@1.63.0
           NODE_PATH="$RUNNER_TEMP/pw/node_modules" CHROME_CHANNEL=chrome \
             node tools/web/test/notifiche_test.js
+          # Lo stesso su un sistema che le notifiche non le sa tenere.
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" CHROME_CHANNEL=chrome SENZA_CENTRO_NOTIFICHE=1 \
+            node tools/web/test/notifiche_test.js
       # Il modulo di candidatura del sito, con FormSubmit simulato: invio, nuovi tentativi, errori.
       - name: Test modulo di candidatura
         run: |

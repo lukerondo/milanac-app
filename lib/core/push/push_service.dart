@@ -146,6 +146,7 @@ class PushService {
     Map<String, dynamic> data = const {},
   }) {
     if (shouldShowInApp != null && !shouldShowInApp!(data)) return;
+    if (_alreadyShown(data['message'] ?? '$title\n$body')) return;
     final route = data['route'];
     messengerKey.currentState?.showSnackBar(
       SnackBar(
@@ -160,6 +161,19 @@ class PushService {
             : SnackBarAction(label: 'Apri', onPressed: () => openRoute(route)),
       ),
     );
+  }
+
+  /// Lo stesso messaggio può arrivare per due strade (tempo reale della chat e
+  /// notifica push con l'app aperta): entro mezzo minuto si avvisa una volta sola.
+  final _shown = <Object, DateTime>{};
+  static const _sameAlertWindow = Duration(seconds: 30);
+
+  bool _alreadyShown(Object key) {
+    final now = DateTime.now();
+    _shown.removeWhere((_, at) => now.difference(at) > _sameAlertWindow);
+    if (_shown.containsKey(key)) return true;
+    _shown[key] = now;
+    return false;
   }
 
   void _open(RemoteMessage m) => openRoute(m.data['route']);

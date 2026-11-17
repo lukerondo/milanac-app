@@ -31,7 +31,6 @@ import '../rosa/rosa_repository.dart';
 import '../traguardi/achievements_view.dart';
 import '../walkout/celebrations.dart';
 import '../walkout/walkout_page.dart';
-import 'archetypes.dart';
 import 'card_colors.dart';
 import 'card_back.dart';
 import 'card_stats.dart';
@@ -839,9 +838,9 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
                   Expanded(
                     child: Slider(
                       value: _overall.toDouble(),
-                      min: 40,
-                      max: 99,
-                      divisions: 59,
+                      min: overallMin.toDouble(),
+                      max: overallMax.toDouble(),
+                      divisions: overallMax - overallMin,
                       label: '$_overall',
                       onChanged: (v) => setState(() => _overall = v.round()),
                     ),
@@ -881,41 +880,10 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
             _StatsEditor(position: _position, controllers: _stats),
             const SizedBox(height: 12),
             Text('Archetipo', style: Theme.of(context).textTheme.titleSmall),
-            for (final area in ArchetypeArea.values) ...[
-              const SizedBox(height: 8),
-              Text(
-                area.label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                  color: p.textMuted,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  for (final a in archetypes.where((a) => a.area == area))
-                    ChoiceChip(
-                      avatar: Icon(a.icon, size: 18),
-                      label: Text(a.name),
-                      showCheckmark: false,
-                      selected: archetypeOf(_style.text)?.name == a.name,
-                      onSelected: (on) => _style.text = on ? a.name : '',
-                    ),
-                ],
-              ),
-            ],
-            if (archetypeOf(_style.text) case final a?)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  a.description,
-                  style: TextStyle(fontSize: 14, color: p.textSecondary),
-                ),
-              ),
+            ArchetypePicker(
+              selected: _style.text,
+              onChanged: (name) => _style.text = name ?? '',
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _style,

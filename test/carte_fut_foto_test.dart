@@ -643,10 +643,13 @@ void main() {
       await PhotoDiskCache.write('e/foto_1.jpg', bytes);
       await PhotoDiskCache.keepOnly({});
       expect(names(), ['d_foto_1.jpg']);
-      // La rosa cambia proprio mentre si salva la foto nuova: resta sul telefono.
-      for (var i = 0; i < 40; i++) {
+      // La rosa cambia proprio mentre si salva la foto nuova: resta sul telefono. Anche
+      // quando la pulizia parte un attimo prima della scrittura e incontra il file
+      // temporaneo nato nel frattempo (succedeva di rado: molti giri per accorgersene).
+      for (var i = 0; i < 400; i++) {
         final path = 'f/foto_$i.jpg';
         await Future.wait([
+          if (i.isOdd) PhotoDiskCache.keepOnly({path}),
           PhotoDiskCache.write(path, bytes),
           PhotoDiskCache.keepOnly({path}),
           PhotoDiskCache.keepOnly({path}),
@@ -756,7 +759,7 @@ void main() {
         null,
       ),
     );
-    await goToPath(tester, '/registrazione?passo=3');
+    await goToPath(tester, '/registrazione?passo=2');
     expect(find.text('LA TUA FOTO'), findsOneWidget);
     expect(find.text('Scegli dalla galleria'), findsOneWidget);
 
@@ -788,6 +791,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(path(), startsWith('demo/foto_'));
     expect(find.text('Cambia foto'), findsOneWidget);
+    expect(find.text('Passo 2 di 3'), findsOneWidget);
+    // Al passo dopo la foto è già sulla carta che si compone.
+    await tester.tap(find.text('Avanti'));
+    await tester.pumpAndSettle();
     expect(find.text('Passo 3 di 3'), findsOneWidget);
+    expect(
+      tester.widget<FutCard>(find.byType(FutCard)).member.avatarPath,
+      path(),
+    );
   });
 }

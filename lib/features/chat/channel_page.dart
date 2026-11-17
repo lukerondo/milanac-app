@@ -39,6 +39,7 @@ import 'channel_messages.dart';
 import 'chat_desktop.dart';
 import 'chat_repository.dart';
 import 'chat_widgets.dart';
+import 'emoji_picker.dart';
 import 'poll.dart';
 import 'poll_widgets.dart';
 import 'voice_player.dart';
@@ -66,6 +67,15 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
   /// la finestra si allarga o si stringe e la pagina cambia disposizione.
   final _conversationKey = GlobalKey(debugLabel: 'conversazione');
 
+  /// Il selettore di emoji della conversazione è aperto: "indietro" chiude prima lui.
+  final _emojiOpen = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _emojiOpen.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final slug = widget.slug;
@@ -82,6 +92,7 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
               channel: channel,
               openVoice: widget.openVoice,
               embedded: wide,
+              emojiOpen: _emojiOpen,
             )
           : Scaffold(
               appBar: AppBar(
@@ -112,38 +123,49 @@ class _ChannelPageState extends ConsumerState<ChannelPage> {
               ),
             ),
     );
-    // Aperta da una notifica come unica pagina: indietro porta all'elenco dei canali
-    // invece di chiudere l'app.
-    return PopScope(
-      canPop: !(ModalRoute.of(context)?.isFirst ?? false),
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) context.go('/chat');
-      },
-      child: wide
-          ? WideSnackBars(
-              child: Scaffold(
-                body: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SideMenu(
-                      current: MainTab.chat,
-                      onSelect: (t) => context.go(t.path),
-                    ),
-                    Expanded(
-                      child: MediaQuery.removePadding(
-                        context: context,
-                        removeLeft: true,
-                        child: ChatDesktop(
-                          selectedSlug: slug,
-                          conversation: conversation,
-                        ),
+    // "Indietro" chiude prima il selettore di emoji. Aperta da una notifica come unica
+    // pagina, poi porta all'elenco dei canali invece di chiudere l'app.
+    final onlyPage = ModalRoute.of(context)?.isFirst ?? false;
+    final page = wide
+        ? WideSnackBars(
+            child: Scaffold(
+              body: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SideMenu(
+                    current: MainTab.chat,
+                    onSelect: (t) => context.go(t.path),
+                  ),
+                  Expanded(
+                    child: MediaQuery.removePadding(
+                      context: context,
+                      removeLeft: true,
+                      child: ChatDesktop(
+                        selectedSlug: slug,
+                        conversation: conversation,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            )
-          : conversation,
+            ),
+          )
+        : conversation;
+    return ValueListenableBuilder<bool>(
+      valueListenable: _emojiOpen,
+      builder: (context, emojiOpen, child) => PopScope(
+        canPop: !emojiOpen && !onlyPage,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          if (_emojiOpen.value) {
+            _emojiOpen.value = false;
+          } else {
+            context.go('/chat');
+          }
+        },
+        child: child!,
+      ),
+      child: page,
     );
   }
 }
@@ -168,9 +190,13 @@ class _ChannelView extends ConsumerStatefulWidget {
     required this.channel,
     required this.openVoice,
     required this.embedded,
+    required this.emojiOpen,
   });
   final Channel channel;
   final bool openVoice;
+
+  /// Il selettore di emoji è aperto (lo chiude anche "indietro", dalla pagina).
+  final ValueNotifier<bool> emojiOpen;
 
   /// Accanto all'elenco dei canali (schermi larghi): niente freccia "Indietro".
   final bool embedded;
@@ -182,6 +208,14 @@ class _ChannelView extends ConsumerStatefulWidget {
 class _ChannelViewState extends ConsumerState<_ChannelView> {
   final _text = TextEditingController();
   final _scroll = ScrollController();
+  final _inputFocus = FocusNode(debugLabel: 'chat-messaggio');
+
+  /// Il selettore di emoji aperto sotto la barra di scrittura.
+  bool get _emojiOpen => widget.emojiOpen.value;
+
+  void _emojiChanged() {
+    if (mounted) setState(() {});
+  }
 
   /// Quando compare la striscia "Connessione persa" la lista cambia posto tra i widget:
   /// con la chiave globale resta la stessa e non perde il punto in cui si era.
@@ -231,6 +265,7 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
     super.initState();
     _recorder = ref.read(voiceRecorderFactoryProvider)();
     _audioFocus = ref.read(audioFocusProvider.notifier);
+    widget.emojiOpen.addListener(_emojiChanged);
     PushService.instance.shouldShowInApp = _pushFilter;
     _text.addListener(() {
       final has = _text.text.trim().isNotEmpty;
@@ -267,6 +302,8 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
       });
     }
     _recorder.dispose();
+    widget.emojiOpen.removeListener(_emojiChanged);
+    _inputFocus.dispose();
     _text.dispose();
     _scroll.dispose();
     super.dispose();
@@ -332,6 +369,50 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
   void _notice(String text) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    }
+  }
+
+  /// Sul computer (browser o app per Mac) la tastiera è sempre lì: il selettore di emoji
+  /// le sta accanto invece di prenderne il posto.
+  static bool get _onDesktop => const {
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+    TargetPlatform.linux,
+  }.contains(defaultTargetPlatform);
+
+  /// Apre o chiude il selettore di emoji: sui telefoni prende il posto della tastiera.
+  void _toggleEmoji() {
+    widget.emojiOpen.value = !_emojiOpen;
+    if (!_emojiOpen) {
+      _inputFocus.requestFocus();
+    } else if (!_onDesktop) {
+      _inputFocus.unfocus();
+    }
+  }
+
+  /// Mette [emoji] dove sta il cursore (al posto del testo selezionato).
+  void _insertEmoji(String emoji) {
+    final value = _text.value;
+    final selection = value.selection;
+    final start = selection.isValid ? selection.start : value.text.length;
+    final end = selection.isValid ? selection.end : value.text.length;
+    final text = value.text.replaceRange(start, end, emoji);
+    if (text.characters.length > _maxMessageLength) return;
+    _text.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: start + emoji.length),
+    );
+  }
+
+  static const _maxMessageLength = 2000;
+
+  /// Reagisce a [m] con [emoji] (null: toglie la propria reazione).
+  Future<void> _react(ChatMessage m, String? emoji) async {
+    Haptics.tap();
+    try {
+      await _conversation.react(m.id, emoji);
+    } catch (e) {
+      _notice(friendlyError(e, action: 'Reazione non salvata'));
     }
   }
 
@@ -858,6 +939,11 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                           authorName: nameOf(m.authorId),
                           mine: mine,
                           showAuthor: !sameAuthor,
+                          myId: me?.id,
+                          nameOf: quotedName,
+                          onReact: m.isLocal || me == null
+                              ? null
+                              : (emoji) => _react(m, emoji),
                           quote: replyTo == null
                               ? null
                               : _Quote(
@@ -993,9 +1079,16 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                           onKeyEvent: _enterSends,
                           child: TextField(
                             controller: _text,
+                            focusNode: _inputFocus,
+                            // Sui telefoni la tastiera riprende il posto delle emoji.
+                            onTap: () {
+                              if (_emojiOpen && !_onDesktop) {
+                                widget.emojiOpen.value = false;
+                              }
+                            },
                             minLines: 1,
                             maxLines: 5,
-                            maxLength: 2000,
+                            maxLength: _maxMessageLength,
                             textCapitalization: TextCapitalization.sentences,
                             style: TextStyle(fontSize: 16, color: p.text),
                             decoration: InputDecoration(
@@ -1007,6 +1100,26 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 11,
+                              ),
+                              prefixIconConstraints: const BoxConstraints(
+                                minWidth: 44,
+                                minHeight: 40,
+                              ),
+                              prefixIcon: IconButton(
+                                tooltip: _emojiOpen
+                                    ? 'Chiudi le emoji'
+                                    : 'Emoji',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: _toggleEmoji,
+                                icon: Icon(
+                                  _emojiOpen && !_onDesktop
+                                      ? Icons.keyboard_rounded
+                                      : Icons.emoji_emotions_outlined,
+                                  size: 22,
+                                  color: _emojiOpen
+                                      ? p.accentText
+                                      : p.textSecondary,
+                                ),
                               ),
                               border: pill(p.borderStrong),
                               enabledBorder: pill(p.borderStrong),
@@ -1046,6 +1159,14 @@ class _ChannelViewState extends ConsumerState<_ChannelView> {
                 ),
             ],
           ),
+          if (_emojiOpen && !_recording)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: EmojiPanel(
+                height: math.min(264, MediaQuery.sizeOf(context).height * .38),
+                onPick: _insertEmoji,
+              ),
+            ),
         ],
       ),
     );
@@ -1547,6 +1668,9 @@ class _Bubble extends ConsumerWidget {
     required this.onDelete,
     required this.onRetry,
     required this.onDiscard,
+    required this.nameOf,
+    this.myId,
+    this.onReact,
     this.onClosePoll,
     this.quote,
   });
@@ -1572,22 +1696,43 @@ class _Bubble extends ConsumerWidget {
   /// Il messaggio citato (se risponde a un altro).
   final Widget? quote;
 
+  /// Chi è collegato (per evidenziare la sua reazione) e i nomi di chi ha reagito.
+  final String? myId;
+  final String Function(String? id) nameOf;
+
+  /// Reagisce con un'emoji (null: toglie la propria reazione); null se al messaggio
+  /// non si può reagire (non ancora partito).
+  final Future<void> Function(String? emoji)? onReact;
+
   Future<void> _actions(BuildContext context) async {
     final failed = message.failed;
     final reply = onReply;
+    final react = onReact;
     final canReply = reply != null && !message.isLocal;
     final canCopy = message.hasText;
     final canRemove = failed || canDelete;
     final closePoll = onClosePoll;
-    if (!failed && !canReply && !canCopy && !canRemove && closePoll == null) {
+    if (!failed &&
+        !canReply &&
+        !canCopy &&
+        !canRemove &&
+        closePoll == null &&
+        react == null) {
       return;
     }
+    final mineNow = message.reactions[myId];
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (c) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (react != null)
+              _QuickReactions(
+                selected: mineNow,
+                onPick: (emoji) => Navigator.pop(c, 'react:$emoji'),
+                onMore: () => Navigator.pop(c, 'react-more'),
+              ),
             if (failed)
               ListTile(
                 leading: const Icon(Icons.refresh_rounded),
@@ -1640,7 +1785,68 @@ class _Bubble extends ConsumerWidget {
       case 'delete':
         // Un messaggio non partito c'è solo qui: si toglie senza chiedere.
         failed ? onDiscard() : onDelete();
+      case 'react-more':
+        if (!context.mounted) return;
+        final emoji = await showEmojiSheet(context, title: 'Reagisci');
+        if (emoji != null) await react?.call(emoji);
+      case final String a when a.startsWith('react:'):
+        // La stessa di prima la toglie.
+        final emoji = a.substring('react:'.length);
+        await react?.call(emoji == mineNow ? null : emoji);
     }
+  }
+
+  /// Chi ha reagito e con che cosa; la propria reazione si toglie da qui.
+  Future<void> _whoReacted(BuildContext context) async {
+    final entries = message.reactions.entries.toList()
+      ..sort((a, b) {
+        if (a.key == myId) return -1;
+        if (b.key == myId) return 1;
+        return nameOf(a.key)
+            .toLowerCase()
+            .compareTo(nameOf(b.key).toLowerCase());
+      });
+    final remove = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(c).height * .6,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  entries.length == 1
+                      ? '1 reazione'
+                      : '${entries.length} reazioni',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: c.pal.text,
+                  ),
+                ),
+              ),
+              for (final e in entries)
+                ListTile(
+                  leading: Text(e.value, style: const TextStyle(fontSize: 24)),
+                  title: Text(nameOf(e.key)),
+                  subtitle: e.key == myId && onReact != null
+                      ? const Text('Tocca per toglierla')
+                      : null,
+                  onTap: e.key == myId && onReact != null
+                      ? () => Navigator.pop(c, true)
+                      : null,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (remove ?? false) await onReact?.call(null);
   }
 
   /// Ora (con l'orologio finché è in invio) oppure "Non inviato".
@@ -1698,6 +1904,11 @@ class _Bubble extends ConsumerWidget {
       ContentWidth.maxWidth,
     );
     final poll = ChatPoll.of(message);
+    final bigEmoji =
+        poll == null && !message.hasImage && !message.hasAudio && quote == null
+        ? emojiOnlyCount(message.body ?? '')
+        : 0;
+    final reactions = message.reactions;
     // Un sondaggio prende la bolla più larga, per le barre dei risultati.
     final maxWidth = screen * (poll != null ? .78 : (mine ? .70 : .67));
     final bubble = Container(
@@ -1796,7 +2007,12 @@ class _Bubble extends ConsumerWidget {
             else if (message.hasText)
               LinkText(
                 message.body!,
-                style: TextStyle(fontSize: 16, color: p.text, height: 1.3),
+                // Solo emoji (fino a tre): più grandi, come nelle altre chat.
+                style: TextStyle(
+                  fontSize: const [16.0, 44.0, 38.0, 32.0][bigEmoji],
+                  color: p.text,
+                  height: bigEmoji == 0 ? 1.3 : 1.15,
+                ),
                 linkColor: p.accentText,
               ),
             Align(
@@ -1842,12 +2058,198 @@ class _Bubble extends ConsumerWidget {
             const SizedBox(width: 8),
           ],
           Flexible(
-            child: GestureDetector(
-              onTap: message.failed ? onRetry : null,
-              onLongPress: () => _actions(context),
-              child: bubble,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: mine
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onTap: message.failed ? onRetry : null,
+                  onLongPress: () => _actions(context),
+                  // Con il mouse: tasto destro.
+                  onSecondaryTap: () => _actions(context),
+                  child: bubble,
+                ),
+                if (reactions.isNotEmpty)
+                  _Reactions(
+                    reactions: reactions,
+                    myId: myId,
+                    nameOf: nameOf,
+                    onReact: onReact,
+                    onWho: () => _whoReacted(context),
+                  ),
+              ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Le reazioni rapide in cima alle azioni di un messaggio: un tocco reagisce (quella
+/// già messa è evidenziata: toccarla la toglie), "+" apre tutte le emoji.
+class _QuickReactions extends StatelessWidget {
+  const _QuickReactions({
+    required this.selected,
+    required this.onPick,
+    required this.onMore,
+  });
+  final String? selected;
+  final ValueChanged<String> onPick;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    Widget button({
+      required Widget child,
+      required String label,
+      required VoidCallback onTap,
+      bool on = false,
+    }) => Semantics(
+      button: true,
+      selected: on,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 24,
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: on ? p.accentTint : null,
+            border: on ? Border.all(color: p.accentTintBorder) : null,
+          ),
+          child: child,
+        ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 10, 8, 6),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final emoji in quickReactions)
+              button(
+                label: 'Reagisci con $emoji',
+                on: emoji == selected,
+                onTap: () => onPick(emoji),
+                child: Text(emoji, style: const TextStyle(fontSize: 24)),
+              ),
+            button(
+              label: 'Altre emoji',
+              onTap: onMore,
+              child: Icon(Icons.add_rounded, color: p.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Le reazioni sotto una bolla: un'etichetta per emoji con quante persone l'hanno
+/// messa (la propria è evidenziata). Un tocco mette la stessa reazione o toglie la
+/// propria; tenendo premuto si vede chi ha reagito.
+class _Reactions extends StatelessWidget {
+  const _Reactions({
+    required this.reactions,
+    required this.myId,
+    required this.nameOf,
+    required this.onReact,
+    required this.onWho,
+  });
+  final Map<String, String> reactions;
+  final String? myId;
+  final String Function(String? id) nameOf;
+  final Future<void> Function(String? emoji)? onReact;
+  final VoidCallback onWho;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final byEmoji = <String, List<String>>{};
+    for (final e in reactions.entries) {
+      (byEmoji[e.value] ??= []).add(e.key);
+    }
+    // Le più messe per prime; a parità, sempre nello stesso ordine.
+    final groups = byEmoji.entries.toList()
+      ..sort((a, b) {
+        final byCount = b.value.length.compareTo(a.value.length);
+        return byCount != 0 ? byCount : a.key.compareTo(b.key);
+      });
+    final mineEmoji = reactions[myId];
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          for (final g in groups)
+            Builder(
+              builder: (context) {
+                final on = g.key == mineEmoji;
+                final react = onReact;
+                final names = [for (final id in g.value) nameOf(id)]..sort();
+                final onTap = react == null
+                    ? onWho
+                    : () => react(on ? null : g.key);
+                return Semantics(
+                  button: true,
+                  selected: on,
+                  label:
+                      '${g.key}, ${g.value.length == 1 ? '1 reazione' : '${g.value.length} reazioni'}',
+                  onTap: onTap,
+                  onLongPress: onWho,
+                  excludeSemantics: true,
+                  child: Tooltip(
+                    message: names.join(', '),
+                    // Con il dito: tenendo premuto si apre l'elenco, non il fumetto.
+                    triggerMode: TooltipTriggerMode.manual,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: onTap,
+                      onLongPress: onWho,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: on ? p.accentTint : p.surfaceHigh,
+                          border: Border.all(
+                            color: on ? p.accentTintBorder : p.border,
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(g.key, style: const TextStyle(fontSize: 15)),
+                            const SizedBox(width: 5),
+                            Text(
+                              '${g.value.length}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: on ? p.accentText : p.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );

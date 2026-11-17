@@ -8,7 +8,7 @@ import '../../core/errors.dart';
 import '../../core/teams.dart';
 import '../rosa/member.dart';
 
-/// I dati raccolti nei tre passi della registrazione.
+/// I dati raccolti nei tre passi della registrazione (dati, foto, giocatore).
 class RegistrationData {
   const RegistrationData({
     required this.firstName,
@@ -24,6 +24,8 @@ class RegistrationData {
     required this.shirtNumber,
     required this.platform,
     this.clubPassword = '',
+    this.overall,
+    this.playStyle,
   });
 
   final String firstName;
@@ -43,6 +45,13 @@ class RegistrationData {
   /// (login social, account nati prima della regola). Vuota se non serve.
   final String clubPassword;
 
+  /// L'overall dichiarato da chi entra (quello del suo giocatore in Pro Clubs): vale
+  /// solo alla registrazione, poi lo cambia il Direttivo. null = lo decide il server (60).
+  final int? overall;
+
+  /// Lo stile di gioco scelto (un archetipo), o null.
+  final String? playStyle;
+
   Map<String, dynamic> toParams() => {
     'p_first_name': firstName,
     'p_last_name': lastName,
@@ -58,12 +67,21 @@ class RegistrationData {
     'p_field_position': fieldPosition,
     'p_shirt_number': shirtNumber,
     'p_platform': platform?.name,
-    // Il volto disegnato non c'è più: la foto si carica a parte (passo 3). Il
+    // Il volto disegnato non c'è più: la foto si carica a parte (passo 2). Il
     // parametro resta per la firma della funzione sul server.
     'p_face': null,
     'p_club_password': clubPassword,
+    'p_overall': overall,
+    'p_play_style': playStyle,
   };
 }
+
+/// I parametri che le versioni precedenti di `complete_registration` non conoscono,
+/// dal più recente: se il database non è ancora aggiornato si riprova togliendoli.
+const _newerParams = [
+  ['p_overall', 'p_play_style'],
+  ['p_club_password'],
+];
 
 abstract class RegistrationRepository {
   /// Salva i dati (funzione `complete_registration`); il ruolo arriva accettando il regolamento.
@@ -87,15 +105,16 @@ class _SupabaseRegistrationRepository implements RegistrationRepository {
     final client = _ref.read(supabaseProvider);
     final params = data.toParams();
     Object? result;
-    try {
-      result = await client.rpc('complete_registration', params: params);
-    } catch (e) {
-      // Database non ancora aggiornato (senza la password del club): come prima.
-      if (!isMissingFunction(e)) rethrow;
-      result = await client.rpc(
-        'complete_registration',
-        params: {...params}..remove('p_club_password'),
-      );
+    for (var older = 0; ; older++) {
+      try {
+        result = await client.rpc('complete_registration', params: params);
+        break;
+      } catch (e) {
+        // Database non ancora aggiornato (senza overall e stile, o ancora prima senza
+        // la password del club): come prima, senza quei parametri.
+        if (!isMissingFunction(e) || older >= _newerParams.length) rethrow;
+        _newerParams[older].forEach(params.remove);
+      }
     }
     // Le password sbagliate non sono errori del database (così i tentativi restano
     // contati per il limite di 5 ogni 15 minuti): arrivano come risposta.
@@ -159,7 +178,7 @@ class RegistrationError extends AppError {
 String friendlyRegistrationError(Object e) =>
     friendlyError(e, action: 'Salvataggio non riuscito');
 
-/// Password del Direttivo sbagliata, o troppi tentativi: si torna al passo 2 sul campo.
+/// Password del Direttivo sbagliata, o troppi tentativi: si resta al passo 3 sul campo.
 bool isDirettivoPasswordError(Object e) =>
     friendlyRegistrationError(e)
         .toLowerCase()

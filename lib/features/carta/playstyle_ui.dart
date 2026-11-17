@@ -205,6 +205,69 @@ class ArchetypeCard extends StatelessWidget {
   }
 }
 
+/// Scelta dell'archetipo (lo stile di gioco della carta): i proposti divisi per reparto,
+/// uno solo acceso; un secondo tocco lo toglie. Sotto, cosa fa quello scelto. Lo usano
+/// l'editor della carta e la registrazione.
+class ArchetypePicker extends StatelessWidget {
+  const ArchetypePicker({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  /// Lo stile di gioco attuale (un archetipo, un testo libero o niente).
+  final String? selected;
+
+  /// Il nome dell'archetipo scelto, o null se è stato tolto.
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final chosen = archetypeOf(selected);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final area in ArchetypeArea.values) ...[
+          const SizedBox(height: 8),
+          Text(
+            area.label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: p.textMuted,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              for (final a in archetypes.where((a) => a.area == area))
+                ChoiceChip(
+                  avatar: Icon(a.icon, size: 18),
+                  label: Text(a.name),
+                  showCheckmark: false,
+                  selected: chosen?.name == a.name,
+                  onSelected: (on) => onChanged(on ? a.name : null),
+                ),
+            ],
+          ),
+        ],
+        if (chosen != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              chosen.description,
+              style: TextStyle(fontSize: 14, color: p.textSecondary),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Scelta dei PlayStyle nell'editor della carta: un tocco lo aggiunge, il secondo lo
 /// fa diventare PlayStyle+ (oro), il terzo lo toglie. Al massimo [maxPlayStyles], di
 /// cui [maxPlayStylesPlus] "+": oltre lo dice.

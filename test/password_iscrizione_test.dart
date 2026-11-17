@@ -136,36 +136,33 @@ void main() {
     expect(find.text('Password dimenticata?'), findsOneWidget);
   });
 
-  /// Passo 1 della registrazione, già compilato.
+  /// Passo 1 della registrazione (i dati essenziali), già compilato.
   Future<void> fillWho(WidgetTester tester) async {
     await tester.enterText(labeledField('Nome'), 'Mario');
     await tester.enterText(labeledField('Cognome'), 'Rossi');
     await tester.enterText(labeledField('Anno di nascita'), '1995');
-    await tester.enterText(
-      labeledField('Nome sulla maglia e sulla carta'),
-      'ROSSI',
-    );
   }
 
-  /// Dal passo 2 fino a "Completa la registrazione".
+  /// Dal passo 2 (la foto, saltata) al passo 3 (nome sulla carta e ruolo), fino a
+  /// "Completa la registrazione".
   Future<void> finish(WidgetTester tester) async {
+    await tester.tap(find.text('Avanti'));
+    await tester.pumpAndSettle();
+    final list = find
+        .descendant(
+          of: find.byKey(const ValueKey('step-3')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final name = labeledField('Nome sulla maglia e sulla carta');
+    await tester.scrollUntilVisible(name, 150, scrollable: list);
+    await tester.enterText(name, 'ROSSI');
     final position = find.byType(DropdownButtonFormField<String>);
-    await tester.scrollUntilVisible(
-      position,
-      150,
-      scrollable: find
-          .descendant(
-            of: find.byKey(const ValueKey('step-2')),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
+    await tester.scrollUntilVisible(position, 150, scrollable: list);
     await tester.pumpAndSettle();
     await tester.tap(position);
     await tester.pumpAndSettle();
     await tester.tap(find.text(positionLabel('ATT')).last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Avanti'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Completa la registrazione'));
     await tester.pumpAndSettle();
@@ -211,13 +208,14 @@ void main() {
       expect(repo.last, isNull);
       await clearToast(tester);
 
-      // Giusta: la registrazione arriva in fondo.
+      // Giusta: la registrazione arriva in fondo (foto e giocatore sono già a posto).
       await tester.enterText(field, _club);
       await tester.pump();
       await tester.tap(find.text('Avanti'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Avanti'));
       await tester.pumpAndSettle();
+      expect(find.text('Passo 3 di 3'), findsOneWidget);
       await tester.tap(find.text('Completa la registrazione'));
       await tester.pumpAndSettle();
       expect(repo.last?.clubPassword, _club);

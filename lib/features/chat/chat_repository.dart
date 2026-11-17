@@ -52,6 +52,13 @@ const chatPageSize = 50;
 /// I link firmati di foto e vocali valgono 6 ore: si rinnovano prima che scadano.
 const chatImageUrlLifetime = Duration(hours: 5);
 
+/// Le reazioni proposte subito sopra le azioni di un messaggio (le altre dal "+").
+const quickReactions = ['👍', '❤️', '😂', '😮', '😢', '🔥', '⚽', '👏'];
+
+/// Server non ancora aggiornato (manca react_message).
+const reactionsMissing =
+    'Le reazioni arrivano con il prossimo aggiornamento: riprova tra poco.';
+
 /// Ricerca nei messaggi: dalle 2 lettere in su, gli ultimi 50 risultati.
 const chatSearchMinLength = 2;
 const chatSearchLimit = 50;
@@ -205,6 +212,32 @@ class ChatMessage {
 
   /// Sondaggio con le opzioni (vedi [ChatPoll.of]).
   bool get isPoll => meta['type'] == 'poll';
+
+  /// Reazioni al messaggio (meta.reactions): id di chi ha reagito → la sua emoji, una
+  /// a testa. Quello che non è un testo si ignora.
+  Map<String, String> get reactions {
+    final raw = meta['reactions'];
+    if (raw is! Map) return const {};
+    return {
+      for (final e in raw.entries)
+        if (e.key case final String who)
+          if (e.value case final String emoji when emoji.isNotEmpty) who: emoji,
+    };
+  }
+
+  /// Copia con la reazione di [userId] cambiata (null o vuota: tolta), come la
+  /// salverà il server: si mostra subito, prima della risposta.
+  ChatMessage withReaction(String userId, String? emoji) {
+    final next = {...reactions}..remove(userId);
+    if (emoji != null && emoji.isNotEmpty) next[userId] = emoji;
+    return copyWith(
+      meta: {
+        for (final e in meta.entries)
+          if (e.key != 'reactions') e.key: e.value,
+        if (next.isNotEmpty) 'reactions': next,
+      },
+    );
+  }
 
   /// Tipo del messaggio automatico (formation, special_cards...); vuoto se manca.
   String get systemType {
@@ -437,6 +470,14 @@ abstract class ChatRepository {
   /// aggiornato.
   Future<ChatMessage> closePoll(ChatMessage message);
 
+  /// Mette [emoji] come reazione di chi è collegato a [message] (al posto di quella
+  /// di prima; null la toglie) e restituisce il messaggio aggiornato.
+  Future<ChatMessage> react(ChatMessage message, String? emoji);
+
+  /// I messaggi nuovi di tutti i canali che si vedono, in tempo reale: per gli avvisi
+  /// con l'app aperta. Una sola sottoscrizione per tutta l'app.
+  Stream<ChatMessage> watchIncoming();
+
   /// Chiude gli stream interni.
   void dispose() {}
 }
@@ -568,6 +609,12 @@ class _SupabaseChatRepository extends ChatRepository {
   );
   RealtimeChannel? _deletionsChannel;
   var _deletionsTopic = 0;
+  late final _incoming = StreamController<ChatMessage>.broadcast(
+    onListen: _listenIncoming,
+    onCancel: _stopIncoming,
+  );
+  RealtimeChannel? _incomingChannel;
+  var _incomingTopic = 0;
 
   SupabaseClient get _client => _ref.read(supabaseProvider);
 
@@ -576,6 +623,8 @@ class _SupabaseChatRepository extends ChatRepository {
     _refreshOverview.close();
     _stopDeletions();
     _deletions.close();
+    _stopIncoming();
+    _incoming.close();
   }
 
   static List<ChatMessage> _parse(List<Map<String, dynamic>> rows) => [
@@ -675,6 +724,49 @@ class _SupabaseChatRepository extends ChatRepository {
 
   @override
   Stream<String> watchDeletions() => _deletions.stream;
+
+  /// Gli inserimenti in tutti i canali: il database consegna a ognuno solo i messaggi
+  /// dei canali che può leggere (le stesse regole delle letture).
+  void _listenIncoming() {
+    _incomingChannel = _client
+        .channel('chat-nuovi-${_incomingTopic++}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'messages',
+          callback: (payload) {
+            final m = ChatMessage.tryFromMap(payload.newRecord);
+            if (m != null && !_incoming.isClosed) _incoming.add(m);
+          },
+        )
+        .subscribe();
+  }
+
+  void _stopIncoming() {
+    final channel = _incomingChannel;
+    _incomingChannel = null;
+    if (channel != null) unawaited(channel.unsubscribe());
+  }
+
+  @override
+  Stream<ChatMessage> watchIncoming() => _incoming.stream;
+
+  @override
+  Future<ChatMessage> react(ChatMessage m, String? emoji) async {
+    try {
+      final meta = await _client.rpc(
+        'react_message',
+        params: {'p_message': m.id, 'p_emoji': emoji},
+      );
+      return meta is Map
+          ? m.copyWith(meta: Map<String, dynamic>.from(meta))
+          : (await message(m.id) ?? m);
+    } on PostgrestException catch (e) {
+      // Server non ancora aggiornato: lo si dice, invece di un errore tecnico.
+      if (e.code == 'PGRST202') throw const AppError(reactionsMissing);
+      rethrow;
+    }
+  }
 
   Future<Map<String, ChannelOverview>> _overview() async {
     final rows = await _client.rpc('chat_overview') as List;
@@ -997,6 +1089,9 @@ class DemoChatRepository extends ChatRepository {
         channelId: 'c-main',
         authorId: 'p2',
         body: 'Stasera tutti in lobby alle 21:15!',
+        meta: const {
+          'reactions': {'p3': '👍', 'p4': '👍', 'p6': '🔥'},
+        },
         createdAt: now.subtract(const Duration(hours: 3)),
       ),
       ChatMessage(
@@ -1137,6 +1232,9 @@ class DemoChatRepository extends ChatRepository {
 
   /// Qualcosa è cambiato: si ricalcola il riepilogo dei canali.
   final _changes = StreamController<void>.broadcast();
+
+  /// Messaggi appena inseriti (come l'abbonamento agli inserimenti di tutti i canali).
+  final _inserted = StreamController<ChatMessage>.broadcast();
   var _next = 100;
 
   List<ChatMessage> _of(String channelId) =>
@@ -1155,9 +1253,16 @@ class DemoChatRepository extends ChatRepository {
       _messages[i] = m;
     } else {
       _messages.add(m);
+      if (realtime && !_inserted.isClosed) _inserted.add(m);
     }
     if (realtime && !_rows.isClosed) _rows.add(m);
     _changed();
+  }
+
+  /// Solo demo e test: [userId] reagisce con [emoji] (null: toglie) al messaggio [id].
+  void reactElsewhere(String id, String userId, String? emoji) {
+    final m = _messages.where((m) => m.id == id).firstOrNull;
+    if (m != null) _saved(m.withReaction(userId, emoji));
   }
 
   void _remove(String id, {required bool realtime}) {
@@ -1463,6 +1568,23 @@ class DemoChatRepository extends ChatRepository {
     return closed;
   }
 
+  /// Chi usa la demo (l'id del profilo di esempio).
+  static const demoUserId = 'demo';
+
+  @override
+  Future<ChatMessage> react(ChatMessage m, String? emoji) async {
+    final current = _messages.where((x) => x.id == m.id).firstOrNull;
+    if (current == null || current.isSystem) {
+      throw const AppError('Messaggio non trovato.');
+    }
+    final next = current.withReaction(demoUserId, emoji);
+    _saved(next);
+    return next;
+  }
+
+  @override
+  Stream<ChatMessage> watchIncoming() => _inserted.stream;
+
   @override
   void dispose() {
     _rows.close();
@@ -1470,5 +1592,6 @@ class DemoChatRepository extends ChatRepository {
     _changes.close();
     _voteChanges.close();
     _messageOnly.close();
+    _inserted.close();
   }
 }
