@@ -92,17 +92,30 @@ void main() {
 
     await go(tester, c, '/registrazione?passo=2');
     expectLight(tester, find.text('Passo 2 di 3'));
-    await tester.tap(find.text('Direttivo'));
-    await tester.pumpAndSettle();
-    await scrollToEnd(tester, find.byType(Scrollable).first);
-    expectLight(tester, find.text('Passo 2 di 3'));
-
-    await go(tester, c, '/login');
-    await go(tester, c, '/registrazione?passo=3');
-    expectLight(tester, find.text('Passo 3 di 3'));
     expectLight(tester, find.text('LA TUA FOTO'));
     await scrollToEnd(tester, find.byType(Scrollable).first);
     expectLight(tester, find.text('Scegli dalla galleria'));
+    expectLight(tester, find.text('Avanti'));
+
+    // Il giocatore: la carta resta quella del gioco (scura), il resto è chiaro.
+    await go(tester, c, '/login');
+    await go(tester, c, '/registrazione?passo=3');
+    expectLight(tester, find.text('Passo 3 di 3'));
+    expectLight(tester, find.text('IL TUO GIOCATORE'));
+    await tester.scrollUntilVisible(
+      find.text('Direttivo'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('step-3')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.tap(find.text('Direttivo'));
+    await tester.pumpAndSettle();
+    await scrollToEnd(tester, find.byType(Scrollable).first);
+    expectLight(tester, find.text('Il tuo motto (facoltativo)'));
     expectLight(tester, find.text('Completa la registrazione'));
 
     // Account sospeso: in demo la pagina di blocco rimanda alla Home, la si apre da sola.

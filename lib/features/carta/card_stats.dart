@@ -185,8 +185,22 @@ int goalsIn(String? scorers, Member m, [Iterable<Member>? players]) =>
 String _norm(String s) =>
     s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
+/// L'overall di una carta va da [overallMin] a [overallMax] (lo stesso limite del database).
+const overallMin = 40, overallMax = 99;
+
 /// Livello della carta in base all'overall, come le carte di FUT.
-enum CardTier { vuota, bronzo, argento, oro, rossonera }
+enum CardTier {
+  vuota('Senza overall'),
+  bronzo('Bronzo'),
+  argento('Argento'),
+  oro('Oro'),
+  rossonera('Rossonera');
+
+  const CardTier(this.label);
+
+  /// Nome del livello ("Oro"), per dirlo a parole accanto alla carta.
+  final String label;
+}
 
 CardTier tierOf(int? overall) => switch (overall) {
   null => CardTier.vuota,

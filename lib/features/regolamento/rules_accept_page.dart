@@ -14,6 +14,7 @@ import '../../core/theme.dart';
 import '../../shared/async_view.dart';
 import '../../shared/ui.dart';
 import '../auth/gate_ui.dart';
+import '../walkout/celebrations.dart';
 import 'rules_reader.dart';
 import 'rules_repository.dart';
 
@@ -159,6 +160,9 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
       );
       return;
     }
+    // Chi non è ancora nel club entra adesso: l'ultimo passo è il walkout con la sua
+    // carta (chi accetta una versione nuova da membro non lo rivede).
+    final entering = !(ref.read(profileProvider).value?.isApproved ?? false);
     setState(() => _saving = true);
     try {
       await ref.read(rulesRepositoryProvider).accept(version.number);
@@ -191,6 +195,7 @@ class _RulesAcceptPageState extends ConsumerState<RulesAcceptPage> {
     Haptics.medium();
     messenger.hideCurrentMaterialBanner();
     if (!mounted) return;
+    if (entering) ref.read(entranceProvider.notifier).begin();
     // Il router apre la Home appena il profilo riletto ha la versione accettata, senza
     // aspettare il tempo reale; in demo andiamo noi.
     ref.invalidate(profileProvider);

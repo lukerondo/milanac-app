@@ -38,28 +38,48 @@ con un unico codice.
 
 ### Registrazione (nuova app)
 
-Dopo il primo accesso l'utente completa tre passi, salvati dalla funzione `complete_registration`:
+Dopo il primo accesso il percorso d'ingresso è: i dati essenziali, la foto, il proprio giocatore,
+il regolamento e, appena dentro, il **walkout** con la propria carta. I tre passi li salva la
+funzione `complete_registration`:
 
-1. **Chi sei**: nome, cognome, anno di nascita (li vedono solo l'interessato e il Direttivo:
-   stanno nella tabella riservata `profile_private`), **nome sulla carta**
-   (è il nome mostrato in tutta l'app: `display_name`), motto.
-2. **Squadra e ruolo**: MILANAC o MILANAC FUTURO (entrambe solo per il Direttivo); "Faccio parte
-   del Direttivo" richiede la **password del club** (solo l'hash bcrypt sta in `app_config`,
-   si cambia dall'app con `set_direttivo_password`) e almeno un ruolo dell'organigramma del
-   regolamento (Presidente, Fondatore, Capitano, Vice-capitano, Resp. Comunicazioni e
-   Marketing, Resp. Tecnico/Tattico, Resp. Reclutamento, Resp. Tornei e Amichevoli, Resp.
-   Presenze, Resp. IT; migrazione `0034`); ruolo in campo, numero, piattaforma.
-3. **La tua foto** (facoltativa, si può caricare dopo): una foto vera dalla galleria, inquadrata
+1. **I tuoi dati**: solo l'essenziale. Nome, cognome e anno di nascita (li vedono solo
+   l'interessato e il Direttivo: stanno nella tabella riservata `profile_private`) e, per chi
+   non l'ha data creando l'account, la password di iscrizione al club.
+2. **La tua foto** (facoltativa, si può caricare dopo): una foto vera dalla galleria, inquadrata
    nel riquadro 4:5 della carta (sposta e allarga con due dita), salvata come JPEG 720×900 in
    `avatars/<id>/foto_<ms>.jpg` (`profiles.avatar_path`) e caricata subito, prima della fine
    della registrazione. È l'unica immagine del membro nell'app: carta, rosa, chat, walkout e
-   PDF; senza foto la **sagoma grigia** come in FUT. Il volto disegnato non c'è più (la
-   colonna `face` e il parametro `p_face`, sempre null, restano per le app vecchie).
+   PDF; senza foto l'**omino del club**. Il volto disegnato non c'è più (la colonna `face` e il
+   parametro `p_face`, sempre null, restano per le app vecchie).
+3. **Il tuo giocatore**: la carta si compone mentre si sceglie (sul telefono in testa al passo,
+   sugli schermi larghi ferma accanto ai campi). **Nome sulla carta** (è il nome mostrato in
+   tutta l'app: `display_name`), **overall**, ruolo in campo, numero, **stile di gioco** (un
+   archetipo, facoltativo: `play_style`), squadra (MILANAC o MILANAC FUTURO, entrambe solo per
+   il Direttivo), piattaforma e motto. "Direttivo" richiede la **password del club** (solo
+   l'hash bcrypt sta in `app_config`, si cambia dall'app con `set_direttivo_password`) e almeno
+   un ruolo dell'organigramma del regolamento (Presidente, Fondatore, Capitano, Vice-capitano,
+   Resp. Comunicazioni e Marketing, Resp. Tecnico/Tattico, Resp. Reclutamento, Resp. Tornei e
+   Amichevoli, Resp. Presenze, Resp. IT; migrazione `0034`).
+
+**L'overall lo dichiara chi entra** (migrazione `0042`): è quello del suo giocatore in Pro Clubs,
+da 40 a 99 come sulla carta, e parte da 75. Vale solo qui: `complete_registration` lo accetta
+finché il profilo è `pending`, poi lo cambia soltanto il Direttivo (trigger
+`prevent_self_role_change`), che lo legge nell'avviso del nuovo ingresso e lo corregge dalla
+carta. I parametri `p_overall` e `p_play_style` sono facoltativi: le app già installate non li
+mandano e per loro resta tutto com'era (overall 60, nessuno stile).
 
 Il profilo resta `pending` finché non si **accetta il regolamento** (`accept_rules`): da lì il ruolo
 richiesto diventa effettivo. Non serve nessuna approvazione del Direttivo: ogni nuovo ingresso
-compare però nella Sala Direttivo (messaggio con nome, ruolo e squadra, che arriva anche come
-notifica) e il Direttivo può togliere dalla Rosa chi non conosce (`active = false`).
+compare però nella Sala Direttivo (messaggio con nome, ruolo, squadra e overall dichiarato, che
+arriva anche come notifica) e il Direttivo può togliere dalla Rosa chi non conosce
+(`active = false`).
+
+**Il walkout è l'ultimo passo.** Accettato il regolamento parte l'ingresso (`entranceProvider`,
+in `lib/features/walkout/celebrations.dart`): la Home resta coperta ("Prepariamo la tua carta")
+finché la rosa non ha portato la carta di chi è entrato, poi il pacchetto si apre e solo dopo si
+vede la Home. Se i dati non arrivano entro 8 secondi la copertura se ne va e il walkout parte
+appena arrivano. Si vede una volta sola per telefono; i walkout per l'overall che sale e per le
+carte speciali restano com'erano.
 
 ## 3. Ruoli e permessi
 

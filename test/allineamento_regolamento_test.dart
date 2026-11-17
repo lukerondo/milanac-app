@@ -335,13 +335,22 @@ void main() {
       await tester.enterText(labeledField('Nome'), 'Mario');
       await tester.enterText(labeledField('Cognome'), 'Rossi');
       await tester.enterText(labeledField('Anno di nascita'), '1995');
-      await tester.enterText(
-        labeledField('Nome sulla maglia e sulla carta'),
-        'Rossi',
-      );
       await tester.tap(find.text('Avanti'));
       await tester.pumpAndSettle();
       expect(find.text('Passo 2 di 3'), findsOneWidget);
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+      expect(find.text('Passo 3 di 3'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Direttivo'),
+        150,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('step-3')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       await tester.tap(find.text('Direttivo'));
       await tester.pumpAndSettle();
       Rect? previous;

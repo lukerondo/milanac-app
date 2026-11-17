@@ -19,6 +19,8 @@ import 'walkout_fx.dart';
 /// esplode la luce del colore della carta, poi il walkout (bandiera, ruolo, stemma) e la
 /// carta che gira. [previousOverall] valorizzato = "overall aumentato", altrimenti
 /// "benvenuto". [caption] è la frase sotto la carta (es. perché è arrivata la speciale).
+/// [immediate] lo fa comparire senza dissolvenza: serve quando sopra c'è già una
+/// copertura che se ne va (l'ingresso nel club, vedi `Celebrations`).
 Future<void> showWalkout(
   BuildContext context, {
   required Member member,
@@ -27,10 +29,13 @@ Future<void> showWalkout(
   CardSpecial? special,
   int bonus = 0,
   String? caption,
+  bool immediate = false,
 }) => Navigator.of(context, rootNavigator: true).push(
   PageRouteBuilder<void>(
     opaque: true,
-    transitionDuration: const Duration(milliseconds: 400),
+    transitionDuration: immediate
+        ? Duration.zero
+        : const Duration(milliseconds: 400),
     pageBuilder: (_, _, _) => WalkoutPage(
       member: member,
       stats: stats,

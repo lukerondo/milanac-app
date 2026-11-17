@@ -17,14 +17,24 @@ import '../../shared/gold_loader.dart';
 import '../../shared/member_photo.dart';
 import '../../shared/silhouette.dart';
 import '../../shared/ui.dart';
+import '../../shared/wide_layout.dart';
 import '../auth/gate_ui.dart';
+import '../carta/card_colors.dart';
+import '../carta/card_stats.dart';
+import '../carta/fut_card.dart';
+import '../carta/playstyle_ui.dart';
 import '../foto/photo_frame.dart';
 import '../rosa/member.dart';
 import '../rosa/rosa_repository.dart';
 import 'registration_repository.dart';
 
-/// Registrazione in tre passi: chi sei, squadra e ruolo, la tua foto.
-/// Alla fine il profilo è completo; manca solo l'accettazione del regolamento.
+/// Overall proposto a chi si registra, prima che lo regoli sul proprio giocatore.
+const registrationStartingOverall = 75;
+
+/// Registrazione in tre passi: i tuoi dati (l'essenziale), la tua foto, il tuo giocatore
+/// (nome sulla carta, overall, ruolo, stile, squadra) con la carta che si compone mentre
+/// si sceglie. Alla fine il profilo è completo: resta il regolamento da accettare, e
+/// appena dentro parte il walkout con la propria carta.
 class RegistrationPage extends ConsumerStatefulWidget {
   const RegistrationPage({super.key, this.initialStep = 1});
 
@@ -41,17 +51,26 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   bool _saving = false;
   bool _prefilled = false;
 
-  // Passo 1. La password del club la scrive solo chi non l'ha data creando l'account.
+  // Passo 1: l'essenziale. La password del club la scrive solo chi non l'ha data
+  // creando l'account.
   final _clubPassword = TextEditingController();
   bool _clubHidden = true;
   String? _clubError;
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
-  final _cardName = TextEditingController();
-  final _motto = TextEditingController();
   final _birthYear = TextEditingController();
 
-  // Passo 2.
+  // Passo 2: la foto caricata (facoltativa: si può mettere anche dopo).
+  String? _photoPath;
+  bool _uploading = false;
+
+  // Passo 3: il giocatore, come sarà sulla carta.
+  final _cardName = TextEditingController();
+  final _motto = TextEditingController();
+  int _overall = registrationStartingOverall;
+
+  /// Lo stile di gioco (un archetipo), o null se non scelto.
+  String? _style;
   Set<Team> _teams = {Team.milanac};
   bool _direttivo = false;
   final _password = TextEditingController();
@@ -63,10 +82,6 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
   String? _position;
   final _number = TextEditingController();
   GamePlatform? _platform;
-
-  // Passo 3: la foto caricata (facoltativa: si può mettere anche dopo).
-  String? _photoPath;
-  bool _uploading = false;
 
   @override
   void dispose() {
@@ -101,6 +116,10 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     _platform = GamePlatform.values.asNameMap()[p.platform];
     if (p.shirtNumber != null) _number.text = '${p.shirtNumber}';
     _photoPath = p.avatarPath;
+    // Chi riprende una registrazione lasciata a metà ritrova anche l'overall.
+    if (p.overall case final overall?) {
+      _overall = overall.clamp(overallMin, overallMax);
+    }
   }
 
   void _toast(String text) =>
@@ -123,19 +142,14 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
         if (year < 1940 || year > DateTime.now().year - 8) {
           return 'Anno di nascita non valido.';
         }
+      case 1:
+        // La foto è facoltativa; se sta salendo si aspetta che finisca.
+        if (_uploading) return 'Aspetta che la foto finisca di caricarsi.';
+      case 2:
         final card = _cardName.text.trim();
         if (card.length < 2) return 'Scegli il nome da mettere sulla carta.';
         if (card.length > 14) {
           return 'Il nome sulla carta può avere al massimo 14 caratteri.';
-        }
-        if (_motto.text.length > 80) return 'Il motto è troppo lungo.';
-      case 1:
-        if (_teams.isEmpty) return 'Scegli la tua squadra.';
-        if (_direttivo) {
-          if (_password.text.isEmpty) {
-            return 'Inserisci la password del Direttivo.';
-          }
-          if (_roles.isEmpty) return 'Scegli almeno un ruolo nel Direttivo.';
         }
         if (_position == null) return 'Scegli il tuo ruolo in campo.';
         final n = _number.text.trim();
@@ -145,6 +159,14 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
             return 'Il numero di maglia va da 1 a 99.';
           }
         }
+        if (_teams.isEmpty) return 'Scegli la tua squadra.';
+        if (_direttivo) {
+          if (_password.text.isEmpty) {
+            return 'Inserisci la password del Direttivo.';
+          }
+          if (_roles.isEmpty) return 'Scegli almeno un ruolo nel Direttivo.';
+        }
+        if (_motto.text.length > 80) return 'Il motto è troppo lungo.';
     }
     return null;
   }
@@ -192,10 +214,12 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     shirtNumber: int.tryParse(_number.text.trim()),
     platform: _platform,
     clubPassword: _clubPassword.text,
+    overall: _overall,
+    playStyle: _style,
   );
 
   Future<void> _complete() async {
-    for (final s in [0, 1]) {
+    for (final s in [0, 1, 2]) {
       final error = _validateStep(s);
       if (error != null) {
         _toast(error);
@@ -218,12 +242,12 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
         _pages.jumpToPage(0);
         ref.invalidate(mySignupGateProvider);
       } else if (isDirettivoPasswordError(e)) {
-        // Si torna al passo 2, sul campo della password.
+        // Si resta al passo 3, con l'errore sul campo della password.
         setState(() {
-          _step = 1;
+          _step = 2;
           _passwordError = friendlyRegistrationError(e);
         });
-        _pages.jumpToPage(1);
+        _pages.jumpToPage(2);
       }
       _toast(friendlyRegistrationError(e));
       return;
@@ -314,7 +338,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
                     child: PageView(
                       controller: _pages,
                       physics: const NeverScrollableScrollPhysics(),
-                      children: [_stepWho(), _stepTeam(), _stepPhoto()],
+                      children: [_stepWho(), _stepPhoto(), _stepPlayer()],
                     ),
                   ),
                   BottomActionBar(
@@ -397,8 +421,8 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
       const _Legend(
         'Chi sei?',
         text:
-            'Nome e cognome li vede solo il Direttivo. Nella rosa, in chat e '
-            'sulla carta compare il nome che scegli qui sotto.',
+            'Nome, cognome e anno di nascita li vede solo il Direttivo. Il nome '
+            'con cui compari nel club lo scegli tra poco, sulla tua carta.',
       ),
       Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -438,180 +462,17 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
             FilteringTextInputFormatter.digitsOnly,
             LengthLimitingTextInputFormatter(4),
           ],
-          textInputAction: TextInputAction.next,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _next(),
           decoration: const InputDecoration(hintText: 'Es. 1998'),
         ),
       ),
-      const SizedBox(height: 14),
-      LabeledField(
-        label: 'Nome sulla maglia e sulla carta',
-        child: TextField(
-          controller: _cardName,
-          maxLength: 14,
-          textCapitalization: TextCapitalization.characters,
-          textInputAction: TextInputAction.next,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            hintText: 'Es. ROSSI, IL DIAVOLO, MARIO10',
-          ),
-        ),
-      ),
-      _CardNamePreview(name: _cardName.text, photoPath: _photoPath),
-      const SizedBox(height: 14),
-      LabeledField(
-        label: 'Il tuo motto (facoltativo)',
-        help: 'Compare sotto la tua carta.',
-        child: TextField(
-          controller: _motto,
-          maxLength: 80,
-          textCapitalization: TextCapitalization.sentences,
-        ),
+      const SizedBox(height: 16),
+      const _Help(
+        'Poi la tua foto e il tuo giocatore: in fondo ti aspetta la tua carta.',
       ),
     ]);
   }
-
-  Widget _stepTeam() => _frame(2, [
-    _Legend(
-      'In quale squadra giochi?',
-      text: _direttivo ? 'Chi è del Direttivo può stare in entrambe.' : null,
-    ),
-    Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (i, t) in Team.values.indexed) ...[
-          if (i > 0) const SizedBox(width: 10),
-          Expanded(
-            child: _TeamCard(
-              team: t,
-              selected: _teams.contains(t),
-              onTap: () => setState(() {
-                if (!_direttivo) {
-                  _teams = {t};
-                  return;
-                }
-                final next = {..._teams};
-                next.contains(t) ? next.remove(t) : next.add(t);
-                if (next.isNotEmpty) _teams = next;
-              }),
-            ),
-          ),
-        ],
-      ],
-    ),
-    const SizedBox(height: 18),
-    const _SmallLabel('Entri come'),
-    const SizedBox(height: 8),
-    SegmentedTabs(
-      labels: const ['Giocatore', 'Direttivo'],
-      selected: _direttivo ? 1 : 0,
-      onSelected: (i) => setState(() {
-        _direttivo = i == 1;
-        if (!_direttivo) _teams = {_teams.first};
-      }),
-    ),
-    const SizedBox(height: 8),
-    const _Help('Per il Direttivo serve la password del club.'),
-    if (_direttivo) ...[
-      const SizedBox(height: 14),
-      LabeledField(
-        label: 'Password del Direttivo',
-        child: TextField(
-          controller: _password,
-          obscureText: _hidden,
-          onChanged: (_) {
-            if (_passwordError != null) setState(() => _passwordError = null);
-          },
-          decoration: InputDecoration(
-            errorText: _passwordError,
-            errorMaxLines: 3,
-            suffixIcon: ShowPasswordButton(
-              hidden: _hidden,
-              onPressed: () => setState(() => _hidden = !_hidden),
-            ),
-          ),
-        ),
-      ),
-      const SizedBox(height: 14),
-      const _SmallLabel('Ruoli nel Direttivo'),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final r in DirettivoRole.values)
-            ChoicePill(
-              label: r.label,
-              selected: _roles.contains(r),
-              onTap: () => setState(
-                () => _roles.contains(r) ? _roles.remove(r) : _roles.add(r),
-              ),
-            ),
-        ],
-      ),
-    ],
-    const SizedBox(height: 18),
-    Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 2,
-          child: LabeledField(
-            label: 'Ruolo in campo',
-            child: DropdownButtonFormField<String>(
-              initialValue: _position,
-              isExpanded: true,
-              hint: const Text('Scegli'),
-              items: [
-                for (final p in fieldPositions)
-                  DropdownMenuItem(
-                    value: p,
-                    child: Text(
-                      positionLabel(p),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged: (v) => setState(() => _position = v),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: LabeledField(
-            label: 'Numero',
-            child: TextField(
-              controller: _number,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(2),
-              ],
-            ),
-          ),
-        ),
-      ],
-    ),
-    const SizedBox(height: 18),
-    const _SmallLabel('Piattaforma'),
-    const SizedBox(height: 8),
-    Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final p in GamePlatform.values)
-          ChoicePill(
-            label: p.label,
-            selected: _platform == p,
-            onTap: () => setState(() => _platform = _platform == p ? null : p),
-          ),
-      ],
-    ),
-    const SizedBox(height: 8),
-    const _Help(
-      'Con la piattaforma ricevi gli avvisi sugli aggiornamenti di console e gioco.',
-    ),
-  ]);
 
   /// Sceglie la foto dalla galleria, la fa inquadrare e la carica subito (prima della
   /// fine della registrazione: dopo si passa al regolamento).
@@ -634,7 +495,7 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
     }
   }
 
-  Widget _stepPhoto() => _frame(3, [
+  Widget _stepPhoto() => _frame(2, [
     const _Legend(
       'La tua foto',
       text:
@@ -670,12 +531,258 @@ class _RegistrationPageState extends ConsumerState<RegistrationPage> {
         ),
       ),
     ),
-    if (_photoPath == null)
-      const _Help(
-        'Se ora non ce l\'hai, puoi caricarla dopo: intanto sulla carta c\'è la '
-        'sagoma grigia.',
-      ),
+    const SizedBox(height: 12),
+    _Help(
+      _photoPath == null
+          ? 'Se ora non ce l\'hai vai avanti: la carichi dopo, e intanto sulla '
+                'carta c\'è l\'omino del club.'
+          : 'Al prossimo passo la vedi sulla tua carta.',
+    ),
   ]);
+
+  /// La carta come sarà, con quello che è stato scelto finora.
+  Member _previewMember(Profile? profile) => Member(
+    id: profile?.id ?? 'anteprima',
+    displayName: _cardName.text.trim().isEmpty
+        ? 'IL TUO NOME'
+        : _cardName.text.trim(),
+    role: ClubRole.giocatore,
+    joinedAt: DateTime.now(),
+    teams: _teams,
+    overall: _overall,
+    fieldPosition: _position,
+    shirtNumber: int.tryParse(_number.text.trim()),
+    playStyle: _style,
+    platform: _platform,
+    avatarPath: _photoPath,
+  );
+
+  void _setOverall(int value) {
+    final next = value.clamp(overallMin, overallMax);
+    if (next != _overall) setState(() => _overall = next);
+  }
+
+  Widget _stepPlayer() {
+    final wide = isWideLayout(context);
+    // La carta come sarà, mentre la si compone: foto, nome, overall e ruolo.
+    final preview = FutCard(
+      member: _previewMember(ref.watch(profileProvider).value),
+    );
+    final fields = <Widget>[
+      const _Legend(
+        'Il tuo giocatore',
+        text:
+            'È la tua carta nel club: si compone qui mentre scegli nome, overall '
+            'e ruolo.',
+      ),
+      if (!wide) ...[
+        Center(child: SizedBox(width: 176, child: preview)),
+        const SizedBox(height: 18),
+      ],
+      LabeledField(
+        label: 'Nome sulla maglia e sulla carta',
+        help: 'È il nome con cui compari nella rosa e in chat.',
+        child: TextField(
+          controller: _cardName,
+          maxLength: 14,
+          textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.done,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            hintText: 'Es. ROSSI, IL DIAVOLO, MARIO10',
+          ),
+        ),
+      ),
+      const SizedBox(height: 14),
+      _OverallField(value: _overall, onChanged: _setOverall),
+      const SizedBox(height: 18),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: LabeledField(
+              label: 'Ruolo in campo',
+              child: DropdownButtonFormField<String>(
+                initialValue: _position,
+                isExpanded: true,
+                hint: const Text('Scegli'),
+                items: [
+                  for (final p in fieldPositions)
+                    DropdownMenuItem(
+                      value: p,
+                      child: Text(
+                        positionLabel(p),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _position = v),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: LabeledField(
+              label: 'Numero',
+              child: TextField(
+                controller: _number,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(2),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 18),
+      const _SmallLabel('Stile di gioco (facoltativo)'),
+      const SizedBox(height: 2),
+      const _Help(
+        'L\'archetipo del tuo giocatore. Statistiche e PlayStyle li aggiungi '
+        'dopo, dalla tua carta.',
+      ),
+      ArchetypePicker(
+        selected: _style,
+        onChanged: (name) => setState(() => _style = name),
+      ),
+      const SizedBox(height: 24),
+      _Legend(
+        'In quale squadra giochi?',
+        text: _direttivo ? 'Chi è del Direttivo può stare in entrambe.' : null,
+      ),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (i, t) in Team.values.indexed) ...[
+            if (i > 0) const SizedBox(width: 10),
+            Expanded(
+              child: _TeamCard(
+                team: t,
+                selected: _teams.contains(t),
+                onTap: () => setState(() {
+                  if (!_direttivo) {
+                    _teams = {t};
+                    return;
+                  }
+                  final next = {..._teams};
+                  next.contains(t) ? next.remove(t) : next.add(t);
+                  if (next.isNotEmpty) _teams = next;
+                }),
+              ),
+            ),
+          ],
+        ],
+      ),
+      const SizedBox(height: 18),
+      const _SmallLabel('Entri come'),
+      const SizedBox(height: 8),
+      SegmentedTabs(
+        labels: const ['Giocatore', 'Direttivo'],
+        selected: _direttivo ? 1 : 0,
+        onSelected: (i) => setState(() {
+          _direttivo = i == 1;
+          if (!_direttivo) _teams = {_teams.first};
+        }),
+      ),
+      const SizedBox(height: 8),
+      const _Help('Per il Direttivo serve la password del club.'),
+      if (_direttivo) ...[
+        const SizedBox(height: 14),
+        LabeledField(
+          label: 'Password del Direttivo',
+          child: TextField(
+            controller: _password,
+            obscureText: _hidden,
+            onChanged: (_) {
+              if (_passwordError != null) setState(() => _passwordError = null);
+            },
+            decoration: InputDecoration(
+              errorText: _passwordError,
+              errorMaxLines: 3,
+              suffixIcon: ShowPasswordButton(
+                hidden: _hidden,
+                onPressed: () => setState(() => _hidden = !_hidden),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        const _SmallLabel('Ruoli nel Direttivo'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final r in DirettivoRole.values)
+              ChoicePill(
+                label: r.label,
+                selected: _roles.contains(r),
+                onTap: () => setState(
+                  () => _roles.contains(r) ? _roles.remove(r) : _roles.add(r),
+                ),
+              ),
+          ],
+        ),
+      ],
+      const SizedBox(height: 18),
+      const _SmallLabel('Piattaforma'),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final p in GamePlatform.values)
+            ChoicePill(
+              label: p.label,
+              selected: _platform == p,
+              onTap: () =>
+                  setState(() => _platform = _platform == p ? null : p),
+            ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      const _Help(
+        'Con la piattaforma ricevi gli avvisi sugli aggiornamenti di console e gioco.',
+      ),
+      const SizedBox(height: 18),
+      LabeledField(
+        label: 'Il tuo motto (facoltativo)',
+        help: 'Compare sotto la tua carta.',
+        child: TextField(
+          controller: _motto,
+          maxLength: 80,
+          textCapitalization: TextCapitalization.sentences,
+        ),
+      ),
+    ];
+    if (!wide) return _frame(3, fields);
+    // Schermo largo: la carta resta ferma a sinistra, i campi scorrono accanto.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 840),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 28, 8, 0),
+              child: SizedBox(width: 248, child: preview),
+            ),
+            Expanded(
+              child: ListView(
+                key: const ValueKey('step-3'),
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                children: fields,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// La foto appena caricata, o l'omino del club.
@@ -723,7 +830,7 @@ class _StepHeader extends StatelessWidget {
   const _StepHeader({required this.step});
   final int step;
 
-  static const _titles = ['Dati', 'Squadra e ruolo', 'Foto'];
+  static const _titles = ['I tuoi dati', 'La tua foto', 'Il tuo giocatore'];
 
   @override
   Widget build(BuildContext context) {
@@ -907,52 +1014,102 @@ class _TeamCard extends StatelessWidget {
   }
 }
 
-/// Anteprima del nome come apparirà sulla carta (con la foto, se già caricata).
-class _CardNamePreview extends ConsumerWidget {
-  const _CardNamePreview({required this.name, required this.photoPath});
-  final String name;
-  final String? photoPath;
+/// L'overall dichiarato da chi entra: meno e più per il valore esatto, la barra per
+/// spostarsi in fretta. Stesso intervallo della carta (lo slider del Direttivo).
+class _OverallField extends StatelessWidget {
+  const _OverallField({required this.value, required this.onChanged});
+  final int value;
+  final ValueChanged<int> onChanged;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final text = name.trim().isEmpty
-        ? 'IL TUO NOME'
-        : name.trim().toUpperCase();
-    return AppCard(
-      hero: true,
-      radius: 14,
-      padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
-      child: Row(
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final tier = tierOf(value);
+    return MergeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ClipOval(
-            child: SizedBox.square(
-              dimension: 40,
-              child: switch (photoOf(ref, photoPath, cacheWidth: 120)) {
-                final photo? => Image(
-                  image: photo,
-                  fit: BoxFit.cover,
-                  alignment: photoAlignment,
-                ),
-                null => const PlayerOmino(
-                  background: MilanacColors.surfaceHigh,
-                ),
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: sportFont,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2,
-                color: HeroText.accent,
+          const _SmallLabel('Overall'),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              IconButton.outlined(
+                tooltip: 'Abbassa l\'overall',
+                onPressed: value > overallMin
+                    ? () {
+                        Haptics.tap();
+                        onChanged(value - 1);
+                      }
+                    : null,
+                icon: const Icon(Icons.remove_rounded),
               ),
-            ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      '$value',
+                      key: const ValueKey('overall-valore'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: sportFont,
+                        fontSize: 36,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                        color: p.text,
+                      ),
+                    ),
+                    // Il livello della carta a parole, con il suo colore: si legge
+                    // anche quando la carta è scorsa via.
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: CardColors.tier(tier),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Carta ${tier.label}',
+                          key: const ValueKey('overall-livello'),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: p.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              IconButton.outlined(
+                tooltip: 'Alza l\'overall',
+                onPressed: value < overallMax
+                    ? () {
+                        Haptics.tap();
+                        onChanged(value + 1);
+                      }
+                    : null,
+                icon: const Icon(Icons.add_rounded),
+              ),
+            ],
+          ),
+          Slider(
+            key: const ValueKey('overall'),
+            value: value.toDouble(),
+            min: overallMin.toDouble(),
+            max: overallMax.toDouble(),
+            divisions: overallMax - overallMin,
+            label: '$value',
+            onChanged: (v) => onChanged(v.round()),
+          ),
+          const _Help(
+            'È l\'overall del tuo giocatore in Pro Clubs. Il Direttivo lo vede e '
+            'può correggerlo.',
           ),
         ],
       ),

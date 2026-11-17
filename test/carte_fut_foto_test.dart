@@ -756,7 +756,7 @@ void main() {
         null,
       ),
     );
-    await goToPath(tester, '/registrazione?passo=3');
+    await goToPath(tester, '/registrazione?passo=2');
     expect(find.text('LA TUA FOTO'), findsOneWidget);
     expect(find.text('Scegli dalla galleria'), findsOneWidget);
 
@@ -788,6 +788,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(path(), startsWith('demo/foto_'));
     expect(find.text('Cambia foto'), findsOneWidget);
+    expect(find.text('Passo 2 di 3'), findsOneWidget);
+    // Al passo dopo la foto è già sulla carta che si compone.
+    await tester.tap(find.text('Avanti'));
+    await tester.pumpAndSettle();
     expect(find.text('Passo 3 di 3'), findsOneWidget);
+    expect(
+      tester.widget<FutCard>(find.byType(FutCard)).member.avatarPath,
+      path(),
+    );
   });
 }
