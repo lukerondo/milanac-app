@@ -119,7 +119,7 @@ async function compilaEInvia(page) {
     let s = await aspetta('ringraziamento', async () => { const x = await stato(c.page); return x.grazie && x; });
     assert.strictEqual(s.modulo, false);
     assert.strictEqual(c.richieste.length, 1);
-    assert.strictEqual(c.richieste[0].url, 'https://formsubmit.co/ajax/milanacproclub@proton.me');
+    assert.strictEqual(c.richieste[0].url, 'https://formsubmit.co/ajax/milanacproclub@gmail.com');
     assert.strictEqual(c.richieste[0].metodo, 'POST');
     assert.match(c.richieste[0].corpo, /name="Piattaforme"\r\n\r\nPC\r\n/);
     assert.doesNotMatch(c.richieste[0].corpo, /name="Piattaforma"\r\n/);
@@ -142,7 +142,7 @@ async function compilaEInvia(page) {
     assert.match(s.nota, /Riprova/);
     assert.strictEqual(s.nome, 'Mario Prova');
     assert.strictEqual(s.occupato, false);
-    assert.match(s.mail, /^mailto:milanacproclub@proton\.me\?subject=/);
+    assert.match(s.mail, /^mailto:milanacproclub@gmail\.com\?subject=/);
     const corpo = decodeURIComponent(s.mail.split('&body=')[1]);
     assert.match(corpo, /Nome: Mario Prova/);
     assert.match(corpo, /EA ID: MarioEA/);
