@@ -83,10 +83,10 @@ delle notifiche si prova con `node tools/web/test/notifiche_test.js` (Playwright
 ## Il modulo di candidatura
 
 Il modulo usa [FormSubmit](https://formsubmit.co) (gratuito, senza registrazione): le candidature
-arrivano come email in tabella a **milanacproclub@proton.me**, con risposta automatica al candidato.
+arrivano come email in tabella a **milanacproclub@gmail.com**, con risposta automatica al candidato.
 
 - **Attivazione, una volta sola**: alla prima candidatura inviata dal sito, FormSubmit manda a
-  milanacproclub@proton.me un'email *"Activate form"*: va aperta e va premuto **Activate**. Da
+  milanacproclub@gmail.com un'email *"Activate form"*: va aperta e va premuto **Activate**. Da
   quel momento le candidature arrivano normalmente. Finché non si attiva, non arriva nulla.
 - **Se FormSubmit non risponde**: l'invio parte in background e il candidato resta sulla pagina.
   Dopo un errore del server o della rete si riprova una volta da soli; se non va, compare un
